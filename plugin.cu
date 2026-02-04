@@ -347,8 +347,6 @@ __global__ void kernel_physics_update(float *pos_y, int count, float delta_time)
         return;
 
     float y = pos_y[idx];
-    if (y <= 0.0f)
-        return;
 
     y -= 9.81f * delta_time;
     pos_y[idx] = (y < 0.0f) ? 0.0f : y;
