@@ -42,11 +42,13 @@ void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z);
 #define INDEX_BITS 14
 #define INDEX_MASK 0x3FFF
 
-static inline uint16_t get_entity_id(uint32_t entity) {
+static inline uint16_t get_entity_id(uint32_t entity)
+{
     return entity & INDEX_MASK;
 }
 
-static inline uint32_t get_entity_generation(uint32_t entity) {
+static inline uint32_t get_entity_generation(uint32_t entity)
+{
     return entity >> INDEX_BITS;
 }
 

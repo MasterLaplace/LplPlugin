@@ -25,26 +25,27 @@ typedef std::atomic<bool> atomic_bool;
 #define MAX_ENTITIES 10000
 #define MAX_ID 1000000
 
-#define RING_SIZE 4096 // Puissance de 2 pour utiliser un masque binaire rapide
+#define RING_SIZE 4096      // Puissance de 2 pour utiliser un masque binaire rapide
 #define MAX_PACKET_SIZE 256 // Taille max d'un paquet binaire
 
 #define INDEX_BITS 14
 #define INDEX_MASK 0x3FFF // (1 << 14) - 1
 
-
 // Macro pour vérifier les erreurs CUDA (Indispensable pour le debug)
-#define CUDA_CHECK(call) \
-    do { \
-        cudaError_t err = call; \
-        if (err != cudaSuccess) { \
+#define CUDA_CHECK(call)                                                                     \
+    do                                                                                       \
+    {                                                                                        \
+        cudaError_t err = call;                                                              \
+        if (err != cudaSuccess)                                                              \
+        {                                                                                    \
             printf("[CUDA ERROR] %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
-            exit(1); \
-        } \
+            exit(1);                                                                         \
+        }                                                                                    \
     } while (0)
 
 typedef enum {
     COMP_TRANSFORM = 1, // 3 floats (x, y, z)
-    COMP_HEALTH    = 2  // 1 int
+    COMP_HEALTH = 2     // 1 int
 } ComponentID;
 
 typedef struct {
@@ -61,17 +62,17 @@ typedef struct {
 // --- ECS DATA ---//
 // Au lieu de tableaux statiques, on a des pointeurs vers la RAM épinglée.
 // [0] = Buffer A, [1] = Buffer B
-float* ecs_pos_x[2];
-float* ecs_pos_y[2];
-float* ecs_pos_z[2];
-int* ecs_health[2];
+float *ecs_pos_x[2];
+float *ecs_pos_y[2];
+float *ecs_pos_z[2];
+int *ecs_health[2];
 
 // POINTEURS GPU (Device Pointers)
 // Ce sont les adresses que le GPU utilisera pour lire la même mémoire que le CPU (Zero-Copy)
-float* d_ecs_pos_x[2];
-float* d_ecs_pos_y[2];
-float* d_ecs_pos_z[2];
-int* d_ecs_health[2];
+float *d_ecs_pos_x[2];
+float *d_ecs_pos_y[2];
+float *d_ecs_pos_z[2];
+int *d_ecs_health[2];
 
 // --- CORE SYSTEMS ---//
 // Table d'indirection
@@ -123,7 +124,7 @@ static void dispatch_packet(DynamicPacket *pkt)
     uint32_t current_w = atomic_load(&write_idx);
     uint8_t *cursor = pkt->data;
 
-    uint32_t public_id = *(uint32_t*)cursor;
+    uint32_t public_id = *(uint32_t *)cursor;
     cursor += sizeof(uint32_t);
 
     uint32_t internal_index = sparse_lookup[public_id];
@@ -136,26 +137,31 @@ static void dispatch_packet(DynamicPacket *pkt)
         uint8_t component_id = *cursor;
         ++cursor;
 
-        switch (component_id)
+        switch (component_id) {
+        case COMP_TRANSFORM:
         {
-            case COMP_TRANSFORM: {
-                float x = *(float*)cursor; cursor += sizeof(float);
-                float y = *(float*)cursor; cursor += sizeof(float);
-                float z = *(float*)cursor; cursor += sizeof(float);
+            float x = *(float *)cursor;
+            cursor += sizeof(float);
+            float y = *(float *)cursor;
+            cursor += sizeof(float);
+            float z = *(float *)cursor;
+            cursor += sizeof(float);
 
-                ecs_pos_x[current_w][internal_index] = x;
-                ecs_pos_y[current_w][internal_index] = y;
-                ecs_pos_z[current_w][internal_index] = z;
-                break;
-            }
-            case COMP_HEALTH: {
-                int hp = *(int*)cursor; cursor += sizeof(int);
-                ecs_health[current_w][internal_index] = hp;
-                break;
-            }
-            default:
-                printf("[WARNING] dispatch_packet: unknown component_id(%d)\n", (uint32_t)component_id);
-                break;
+            ecs_pos_x[current_w][internal_index] = x;
+            ecs_pos_y[current_w][internal_index] = y;
+            ecs_pos_z[current_w][internal_index] = z;
+            break;
+        }
+        case COMP_HEALTH:
+        {
+            int hp = *(int *)cursor;
+            cursor += sizeof(int);
+            ecs_health[current_w][internal_index] = hp;
+            break;
+        }
+        default:
+            printf("[WARNING] dispatch_packet: unknown component_id(%d)\n", (uint32_t)component_id);
+            break;
         }
     }
 
@@ -189,14 +195,14 @@ extern void server_init()
     atomic_store(&free_count, MAX_ENTITIES);
 
     size_t float_size = MAX_ENTITIES * sizeof(float);
-    size_t int_size   = MAX_ENTITIES * sizeof(int);
+    size_t int_size = MAX_ENTITIES * sizeof(int);
 
     for (uint32_t i = 0u; i < 2u; ++i)
     {
-        alloc_pinned_buffer((void**)&ecs_pos_x[i], (void**)&d_ecs_pos_x[i], float_size);
-        alloc_pinned_buffer((void**)&ecs_pos_y[i], (void**)&d_ecs_pos_y[i], float_size);
-        alloc_pinned_buffer((void**)&ecs_pos_z[i], (void**)&d_ecs_pos_z[i], float_size);
-        alloc_pinned_buffer((void**)&ecs_health[i], (void**)&d_ecs_health[i], int_size);
+        alloc_pinned_buffer((void **)&ecs_pos_x[i], (void **)&d_ecs_pos_x[i], float_size);
+        alloc_pinned_buffer((void **)&ecs_pos_y[i], (void **)&d_ecs_pos_y[i], float_size);
+        alloc_pinned_buffer((void **)&ecs_pos_z[i], (void **)&d_ecs_pos_z[i], float_size);
+        alloc_pinned_buffer((void **)&ecs_health[i], (void **)&d_ecs_health[i], int_size);
     }
 }
 
@@ -258,7 +264,7 @@ extern bool is_entity_valid(uint32_t smart_id)
 
 extern void swap_buffers()
 {
-    uint32_t old_w  = atomic_load(&write_idx);
+    uint32_t old_w = atomic_load(&write_idx);
     uint32_t next_w = old_w ^ 1u;
     atomic_store(&write_idx, next_w);
 
