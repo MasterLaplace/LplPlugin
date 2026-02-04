@@ -1,10 +1,26 @@
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-
+#ifdef __CUDACC__
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#endif
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdio.h>
+
+#ifdef __cplusplus
+#include <atomic>
+using std::atomic;
+typedef std::atomic<unsigned int> atomic_uint;
+typedef std::atomic<bool> atomic_bool;
+#define atomic_load(ptr) (ptr)->load(std::memory_order_relaxed)
+#define atomic_store(ptr, val) (ptr)->store(val, std::memory_order_relaxed)
+#define atomic_fetch_add(ptr, val) (ptr)->fetch_add(val, std::memory_order_relaxed)
+#define atomic_fetch_sub(ptr, val) (ptr)->fetch_sub(val, std::memory_order_relaxed)
+#define atomic_exchange(ptr, val) (ptr)->exchange(val, std::memory_order_relaxed)
+#else
+#include <stdatomic.h>
+#endif
 
 #define MAX_ENTITIES 10000
 #define MAX_ID 1000000
@@ -59,7 +75,7 @@ int* d_ecs_health[2];
 
 // --- CORE SYSTEMS ---//
 // Table d'indirection
-static uint32_t sparse_lookup[MAX_ID] = {[0 ... MAX_ID-1] = UINT32_MAX};
+static uint32_t sparse_lookup[MAX_ID]; // = {[0 ... MAX_ID-1] = UINT32_MAX};
 // Table de generation des entitées
 static uint16_t entity_generations[MAX_ENTITIES] = {0};
 
@@ -157,8 +173,15 @@ static void dispatch_packet(DynamicPacket *pkt)
 }
 
 // --- PUBLIC API ---//
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern void server_init()
 {
+    for (uint32_t index = 0u; index < MAX_ID; ++index)
+        sparse_lookup[index] = UINT32_MAX;
+
     uint32_t value = MAX_ENTITIES;
     for (uint32_t index = 0u; index < MAX_ENTITIES; ++index)
         free_indices[index] = --value;
@@ -306,3 +329,7 @@ extern void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z)
     *dev_y = d_ecs_pos_y[read_i];
     *dev_z = d_ecs_pos_z[read_i];
 }
+
+#ifdef __cplusplus
+}
+#endif
