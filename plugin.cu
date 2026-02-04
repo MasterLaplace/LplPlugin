@@ -59,6 +59,35 @@ typedef struct {
     atomic_uint tail;
 } NetworkRingBuffer;
 
+typedef struct {
+    cudaEvent_t start_event;
+    cudaEvent_t stop_event;
+} Chronos;
+
+/**
+ * @brief Core Structure contenant toutes les structures de données principales
+ * pour la gestion des entités.
+ *
+ * @param sparse_lookup Table d'indirection.
+ * @param entity_generations Table de génération des entités.
+ * @param dirty_stack Pile des entités "dirty" (modifiées cette frame).
+ * @param dirty_count Compteur atomique du nombre d'entités "dirty".
+ * @param is_dirty Bitset pour savoir si une entité est "dirty" ou pas.
+ * @param free_indices Pile des indices libres pour la création d'entités.
+ * @param free_count Compteur atomique du nombre d'indices libres.
+ * @param write_idx Index du buffer d'écriture actuel.
+ */
+typedef struct {
+    uint32_t sparse_lookup[MAX_ID];
+    uint16_t entity_generations[MAX_ENTITIES];
+    uint32_t dirty_stack[MAX_ENTITIES];
+    atomic_uint dirty_count;
+    atomic_bool is_dirty[MAX_ENTITIES];
+    uint32_t free_indices[MAX_ENTITIES];
+    atomic_uint free_count;
+    atomic_uint write_idx;
+} Core;
+
 // --- ECS DATA ---//
 // Au lieu de tableaux statiques, on a des pointeurs vers la RAM épinglée.
 // [0] = Buffer A, [1] = Buffer B
@@ -75,22 +104,12 @@ float *d_ecs_pos_z[2];
 int *d_ecs_health[2];
 
 // --- CORE SYSTEMS ---//
-// Table d'indirection
-static uint32_t sparse_lookup[MAX_ID]; // = {[0 ... MAX_ID-1] = UINT32_MAX};
-// Table de generation des entitées
-static uint16_t entity_generations[MAX_ENTITIES] = {0};
-
-static uint32_t dirty_stack[MAX_ENTITIES];
-static atomic_uint dirty_count = 0u;
-
-// Bitset pour savoir si une entité est déjà marquée "sale"
-static atomic_bool is_dirty[MAX_ENTITIES];
-
-static uint32_t free_indices[MAX_ENTITIES];
-static atomic_uint free_count = 0u;
-
-// Index du buffer, "prêt" pour l'écriture ou pas, 0 ou 1
-static atomic_uint write_idx = 0u;
+static Core core = {
+    .entity_generations = {0},
+    .dirty_count = 0u,
+    .free_count = 0u,
+    .write_idx = 0u
+};
 
 // --- PRIVATE SYSTEMS ---//
 static inline uint16_t get_entity_id(uint32_t entity)
@@ -119,15 +138,27 @@ static void alloc_pinned_buffer(void **host, void **device, size_t size)
     memset(*host, 0, size);
 }
 
+__global__ void kernel_physics_update(float *pos_y, int count, float delta_time)
+{
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= count)
+        return;
+
+    float y = pos_y[idx];
+
+    y -= 9.81f * delta_time;
+    pos_y[idx] = (y < 0.0f) ? 0.0f : y;
+}
+
 static void dispatch_packet(DynamicPacket *pkt)
 {
-    uint32_t current_w = atomic_load(&write_idx);
+    uint32_t current_w = atomic_load(&core.write_idx);
     uint8_t *cursor = pkt->data;
 
     uint32_t public_id = *(uint32_t *)cursor;
     cursor += sizeof(uint32_t);
 
-    uint32_t internal_index = sparse_lookup[public_id];
+    uint32_t internal_index = core.sparse_lookup[public_id];
 
     if (internal_index >= MAX_ENTITIES)
         return (void)printf("[ERROR] dispatch_packet: internal_index(%d) >= MAX_ENTITIES(%d)\n", internal_index, MAX_ENTITIES);
@@ -167,12 +198,12 @@ static void dispatch_packet(DynamicPacket *pkt)
 
     // On tente de marquer l'entité comme "dirty"
     // Si c'était 'false', c'est qu'on est le premier à la marquer cette frame !
-    if (atomic_exchange(&is_dirty[internal_index], true) == false)
+    if (atomic_exchange(&core.is_dirty[internal_index], true) == false)
     {
-        uint32_t pos = atomic_fetch_add(&dirty_count, 1);
+        uint32_t pos = atomic_fetch_add(&core.dirty_count, 1);
 
         if (pos < MAX_ENTITIES)
-            dirty_stack[pos] = internal_index;
+            core.dirty_stack[pos] = internal_index;
         else
             printf("[WARNING] dispatch_packet: dirty_count(%d) < MAX_ENTITIES(%d)\n", pos, MAX_ENTITIES);
     }
@@ -186,13 +217,13 @@ extern "C" {
 extern void server_init()
 {
     for (uint32_t index = 0u; index < MAX_ID; ++index)
-        sparse_lookup[index] = UINT32_MAX;
+        core.sparse_lookup[index] = UINT32_MAX;
 
     uint32_t value = MAX_ENTITIES;
     for (uint32_t index = 0u; index < MAX_ENTITIES; ++index)
-        free_indices[index] = --value;
+        core.free_indices[index] = --value;
 
-    atomic_store(&free_count, MAX_ENTITIES);
+    atomic_store(&core.free_count, MAX_ENTITIES);
 
     size_t float_size = MAX_ENTITIES * sizeof(float);
     size_t int_size = MAX_ENTITIES * sizeof(int);
@@ -219,15 +250,15 @@ extern void server_cleanup()
 
 extern uint32_t create_entity(uint32_t public_id)
 {
-    uint32_t pos = atomic_fetch_sub(&free_count, 1u);
+    uint32_t pos = atomic_fetch_sub(&core.free_count, 1u);
     if (pos == 0 || pos - 1u >= MAX_ENTITIES)
         return printf("[ERROR] create_entity: pos(%d) == 0 || (pos - 1u)(%d) >= MAX_ENTITIES(%d)\n", pos, (pos - 1u), MAX_ENTITIES), UINT32_MAX;
 
-    uint32_t internal_index = free_indices[pos - 1u];
-    uint32_t generation = entity_generations[internal_index];
+    uint32_t internal_index = core.free_indices[pos - 1u];
+    uint32_t generation = core.entity_generations[internal_index];
     uint32_t smart_id = (generation << INDEX_BITS) | internal_index;
 
-    sparse_lookup[public_id] = internal_index;
+    core.sparse_lookup[public_id] = internal_index;
     return smart_id;
 }
 
@@ -236,18 +267,18 @@ extern void destroy_entity(uint32_t public_id)
     if (public_id >= MAX_ID)
         return (void)printf("[ERROR] destroy_entity: public_id(%d) >= MAX_ID(%d)\n", public_id, MAX_ID);
 
-    uint32_t internal_index = sparse_lookup[public_id];
+    uint32_t internal_index = core.sparse_lookup[public_id];
 
     if (internal_index >= MAX_ENTITIES)
         return (void)printf("[ERROR] destroy_entity: internal_index(%d) >= MAX_ENTITIES(%d)\n", internal_index, MAX_ENTITIES);
 
-    sparse_lookup[public_id] = UINT32_MAX;
-    entity_generations[public_id]++;
+    core.sparse_lookup[public_id] = UINT32_MAX;
+    core.entity_generations[public_id]++;
 
-    uint32_t pos = atomic_fetch_add(&free_count, 1);
+    uint32_t pos = atomic_fetch_add(&core.free_count, 1);
 
     if (pos < MAX_ENTITIES)
-        free_indices[pos] = internal_index;
+        core.free_indices[pos] = internal_index;
     else
         printf("[ERROR] destroy_entity: pos(%d) >= MAX_ENTITIES(%d)\n", pos, MAX_ENTITIES);
 }
@@ -259,20 +290,20 @@ extern bool is_entity_valid(uint32_t smart_id)
 
     if (index >= MAX_ENTITIES)
         return false;
-    return entity_generations[index] == gen;
+    return core.entity_generations[index] == gen;
 }
 
 extern void swap_buffers()
 {
-    uint32_t old_w = atomic_load(&write_idx);
+    uint32_t old_w = atomic_load(&core.write_idx);
     uint32_t next_w = old_w ^ 1u;
-    atomic_store(&write_idx, next_w);
+    atomic_store(&core.write_idx, next_w);
 
-    uint32_t count = atomic_load(&dirty_count);
+    uint32_t count = atomic_load(&core.dirty_count);
 
     for (uint32_t stack_index = 0u; stack_index < count; ++stack_index)
     {
-        uint32_t entity_index = dirty_stack[stack_index];
+        uint32_t entity_index = core.dirty_stack[stack_index];
 
         ecs_pos_x[next_w][entity_index] = ecs_pos_x[old_w][entity_index];
         ecs_pos_y[next_w][entity_index] = ecs_pos_y[old_w][entity_index];
@@ -280,10 +311,10 @@ extern void swap_buffers()
 
         ecs_health[next_w][entity_index] = ecs_health[old_w][entity_index];
 
-        atomic_store(&is_dirty[entity_index], false);
+        atomic_store(&core.is_dirty[entity_index], false);
     }
 
-    atomic_store(&dirty_count, 0u);
+    atomic_store(&core.dirty_count, 0u);
 
     // Ici, on enverrait normalement un signal au GPU pour lui dire :
     // "Hé, tu peux lire le buffer qui vient d'être rempli !"
@@ -305,7 +336,7 @@ extern void consume_packets(NetworkRingBuffer *ring)
 
 extern void get_render_pointers(float **out_x, float **out_y, float **out_z)
 {
-    uint32_t read_i = atomic_load(&write_idx) ^ 1u;
+    uint32_t read_i = atomic_load(&core.write_idx) ^ 1u;
 
     if (!out_x || !out_y || !out_z)
         return (void)printf("[ERROR] get_render_pointers: !out_x(%p) || !out_y(%p) || !out_z(%p)\n", out_x, out_y, out_z);
@@ -317,7 +348,7 @@ extern void get_render_pointers(float **out_x, float **out_y, float **out_z)
 
 extern void get_health_pointer(int **out_health)
 {
-    uint32_t read_i = atomic_load(&write_idx) ^ 1u;
+    uint32_t read_i = atomic_load(&core.write_idx) ^ 1u;
 
     if (!out_health)
         return (void)printf("[ERROR] get_health_pointer: !out_health(%p)\n", out_health);
@@ -326,7 +357,7 @@ extern void get_health_pointer(int **out_health)
 
 extern void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z)
 {
-    uint32_t read_i = atomic_load(&write_idx) ^ 1u;
+    uint32_t read_i = atomic_load(&core.write_idx) ^ 1u;
 
     if (!dev_x || !dev_y || !dev_z)
         return (void)printf("[ERROR] get_gpu_pointers: !dev_x(%p) || !dev_y(%p) || !dev_z(%p)\n", dev_x, dev_y, dev_z);
@@ -336,25 +367,9 @@ extern void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z)
     *dev_z = d_ecs_pos_z[read_i];
 }
 
-#ifdef __cplusplus
-}
-#endif
-
-__global__ void kernel_physics_update(float *pos_y, int count, float delta_time)
+extern void run_physics_gpu(float delta_time)
 {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= count)
-        return;
-
-    float y = pos_y[idx];
-
-    y -= 9.81f * delta_time;
-    pos_y[idx] = (y < 0.0f) ? 0.0f : y;
-}
-
-extern "C" void run_physics_gpu(float delta_time)
-{
-    uint32_t write_i = atomic_load(&write_idx);
+    uint32_t write_i = atomic_load(&core.write_idx);
 
     int threadsPerBlock = 256;
 
@@ -363,3 +378,7 @@ extern "C" void run_physics_gpu(float delta_time)
     kernel_physics_update<<<blocksPerGrid, threadsPerBlock>>>(d_ecs_pos_y[write_i], MAX_ENTITIES, delta_time);
     cudaDeviceSynchronize();
 }
+
+#ifdef __cplusplus
+}
+#endif
