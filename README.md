@@ -40,3 +40,12 @@
 - [ ] Moteur de rendu NeRF (Neural Radiance Fields).
 - [ ] Audio Spatial (Propagation physique du son).
 - [ ] Interface Cerveau-Machine (Lecture signaux EEG/EMG).
+
+## BUILD & RUN
+
+```sh
+gcc-12 -c main.c -o main.o -O3
+nvcc -ccbin gcc-12 -c plugin.cu -o plugin.o -O3
+nvcc -ccbin gcc-12 main.o plugin.o -o engine -lpthread -lm
+./engine
+```
