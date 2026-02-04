@@ -1,3 +1,8 @@
+// --- LAPLACE PLUGIN SYSTEM --- //
+// File: lpl_kmod.c
+// Description: Module kernel pour intercepter les paquets réseau et communiquer avec le plugin
+// Auteur: MasterLaplace
+
 #include <linux/module.h>       // Nécessaire pour tous les modules
 #include <linux/kernel.h>       // Pour KERN_INFO, printk, etc.
 #include <linux/netfilter.h>    // La structure des hooks Netfilter
@@ -30,6 +35,8 @@ uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf
 
 static int lpl_open(struct inode *inode, struct file *file)
 {
+    if (k_ring_buffer)
+        return -EEXIST;
     k_ring_buffer = kzalloc(sizeof(NetworkRingBuffer), GFP_KERNEL);
     if (!k_ring_buffer)
         return -ENOMEM;
