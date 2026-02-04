@@ -13,18 +13,20 @@
 
 ## 3. État d'Avancement (Current State)
 ### Modules Implémentés
-*   **Core Engine (`plugin.c`)** :
+*   **Core Engine (`plugin.cu`)** :
     *   Gestionnaire ECS bas niveau (Sparse Sets, Generations).
     *   **Ring Buffer** atomique pour l'ingestion réseau sans allocation.
     *   **Double Buffering** pour la synchronisation CPU/GPU sans Mutex bloquants.
-*   **Simulation Loop (`main.c`)** : Threading réseau vs rendu, stress tests.
+    *   **Pinned Memory** (Mapped Zero-Copy) pour transfert PCIe optimisé.
+    *   Kernel CUDA pour physics (gravité).
+*   **Simulation Loop (`main.c`)** : Threading réseau vs rendu, stress tests, consommation paquets dynamiques.
 
 ## 4. Roadmap Technique
-### Phase 1 : Fondations (Actuel)
+### Phase 1 : Fondations (✅ Complétée)
 - [x] Preuve de concept ECS + Ring Buffer.
-- [ ] Kernel CUDA basique.
-- [ ] Optimisation du transfert CPU -> GPU (Pinned Memory / Unified Memory).
-- [ ] Gestion des "Race Conditions" entre écriture réseau et lecture GPU.
+- [x] Kernel CUDA basique (`kernel_physics_update` - Gravité sur GPU).
+- [x] Optimisation du transfert CPU -> GPU (Pinned Memory avec `cudaHostAllocMapped`).
+- [x] Gestion des "Race Conditions" (Atomic operations, Double Buffering, Sparse Lookup).
 
 ### Phase 2 : Kernel & Hardware
 - [ ] Développement d'un module Kernel (LKM) pour l'injection directe des paquets dans le Ring Buffer.
