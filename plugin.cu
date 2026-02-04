@@ -339,3 +339,29 @@ extern void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z)
 #ifdef __cplusplus
 }
 #endif
+
+__global__ void kernel_physics_update(float *pos_y, int count, float delta_time)
+{
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= count)
+        return;
+
+    float y = pos_y[idx];
+    if (y <= 0.0f)
+        return;
+
+    y -= 9.81f * delta_time;
+    pos_y[idx] = (y < 0.0f) ? 0.0f : y;
+}
+
+extern "C" void run_physics_gpu(float delta_time)
+{
+    uint32_t write_i = atomic_load(&write_idx);
+
+    int threadsPerBlock = 256;
+
+    int blocksPerGrid = (MAX_ENTITIES + threadsPerBlock - 1) / threadsPerBlock;
+
+    kernel_physics_update<<<blocksPerGrid, threadsPerBlock>>>(d_ecs_pos_y[write_i], MAX_ENTITIES, delta_time);
+    cudaDeviceSynchronize();
+}

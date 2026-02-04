@@ -37,6 +37,7 @@ void consume_packets(NetworkRingBuffer *ring);
 void get_render_pointers(float **out_x, float **out_y, float **out_z);
 void get_health_pointer(int **out_health);
 void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z);
+void run_physics_gpu(float delta_time);
 
 // Inline helpers (exposés pour main.c)
 #define INDEX_BITS 14

@@ -88,21 +88,21 @@ int main()
 
     int frame = 0;
     float *gpu_x, *gpu_y, *gpu_z;
-    int *gpu_hp; // Pointeur pour lire la vie
+    int *gpu_hp;
 
     while (frame < 100)
     {
         consume_packets(&ring_buffer);
+        run_physics_gpu(0.016f); // dt ~ 16ms
         swap_buffers();
 
         get_render_pointers(&gpu_x, &gpu_y, &gpu_z);
-        get_health_pointer(&gpu_hp); // Récupération du buffer de vie
+        get_health_pointer(&gpu_hp);
 
         uint16_t real_index = get_entity_id(player_handle);
 
         if (frame % 5 == 0 && is_entity_valid(player_handle))
         {
-            // Affiche la position ET la vie, prouvant que les 2 composants passent
             printf("Frame %3d | Pos: [%5.2f, %5.2f] | HP: %3d | Gen: %d\n",
                    frame, gpu_x[real_index], gpu_y[real_index], gpu_hp[real_index], get_entity_generation(player_handle));
         }
