@@ -1,123 +1,105 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h> // Pour les threads
-#include <unistd.h>  // Pour usleep()
-#include <math.h>    // Pour faire bouger les entités avec sin()
+#include <pthread.h>
+#include <unistd.h>
+#include <math.h>
 
-#include "plugin.c"
+#include "plugin.c" // Inclusion directe pour l'exemple
 
-// --- VARIABLES GLOBALES POUR LA SIMULATION ---
 NetworkRingBuffer ring_buffer = {0};
 volatile bool running = true;
 
-// Fonction utilitaire pour "créer" une entité (l'inverse de destroy)
-// Dans un vrai moteur, ce serait une fonction 'create_entity'
-uint32_t spawn_entity(uint32_t public_id)
-{
-    // 2. On récupère l'index interne disponible
+// Fonction helper pour spawn
+uint32_t spawn_entity(uint32_t public_id) {
     uint32_t internal = create_entity(public_id);
-
     printf("[SERVER] Spawned Entity ID %d -> Internal Index %d\n", public_id, internal);
     return internal;
 }
 
-// --- LE THREAD RÉSEAU (Producteur) ---
-// Simule la réception de paquets depuis Internet
-void* network_thread_func(void* arg)
-{
-    printf("[NETWORK] Thread démarré.\n");
+// --- THREAD RÉSEAU (Producteur Dynamique) ---
+void* network_thread_func(void* arg) {
+    printf("[NETWORK] Thread démarré (Mode Dynamique).\n");
 
     float time = 0.0f;
-    uint32_t target_id = 42; // L'ID public du joueur qu'on va bouger
+    uint32_t target_id = 42;
 
     while (running) {
-        // 1. Simulation de données (le joueur fait des cercles)
-        time += 0.01f;
-        EntityPacket pkt;
-        pkt.entity_id = target_id;
-        pkt.pos_x = cosf(time) * 10.0f; // Oscille entre -10 et 10
-        pkt.pos_y = sinf(time) * 10.0f;
-        pkt.pos_z = 0.0f;
+        time += 0.05f;
 
-        // 2. Écriture dans le Ring Buffer (Lock-Free)
+        // 1. Préparation du paquet directement dans le Ring Buffer (Zero Copy à l'écriture aussi !)
+        // On récupère l'index où écrire
         uint32_t head = atomic_load(&ring_buffer.head);
         uint32_t tail = atomic_load(&ring_buffer.tail);
         uint32_t next_head = (head + 1) & (RING_SIZE - 1);
 
-        // Si le buffer n'est pas plein...
         if (next_head != tail) {
-            ring_buffer.packets[head] = pkt;
+            DynamicPacket* pkt = &ring_buffer.packets[head];
+            uint8_t* cursor = pkt->data;
 
-            // On s'assure que l'écriture du paquet est finie avant de bouger la tête
+            // A. Écriture de l'ID (4 bytes)
+            *(uint32_t*)cursor = target_id;
+            cursor += sizeof(uint32_t);
+
+            // B. Écriture du composant TRANSFORM (Tag + 3 floats)
+            *cursor = COMP_TRANSFORM; cursor++;
+            *(float*)cursor = cosf(time) * 10.0f; cursor += sizeof(float); // X
+            *(float*)cursor = sinf(time) * 10.0f; cursor += sizeof(float); // Y
+            *(float*)cursor = 0.0f;               cursor += sizeof(float); // Z
+
+            // C. Écriture du composant HEALTH (Tag + 1 int)
+            // On fait varier la vie pour le fun
+            *cursor = COMP_HEALTH; cursor++;
+            *(int*)cursor = (int)(50 + sinf(time*2.0f) * 50); cursor += sizeof(int);
+
+            // D. Finalisation
+            pkt->size = cursor - pkt->data; // Calcul de la taille réelle utilisée
+
+            // Validation de l'écriture
             atomic_store(&ring_buffer.head, next_head);
-        } else {
-            // Drop packet (le réseau va trop vite pour le CPU !)
-            // printf("Packet Dropped!\n");
         }
 
-        // Simulation de latence réseau (1ms)
-        usleep(1000);
+        usleep(16000); // ~60hz d'envoi
     }
     return NULL;
 }
 
-// --- LE MAIN (Consommateur / Moteur de Rendu) ---
-int main()
-{
-    printf("=== Démarrage du Moteur SAO ===\n");
+// --- MAIN (Moteur de Rendu) ---
+int main() {
+    printf("=== Démarrage du Moteur SAO (Dynamic) ===\n");
 
-    // 1. Initialisation de la mémoire
     init_server();
 
-    // 3. On fait apparaître notre joueur (ID 42)
-    spawn_entity(42);
+    uint32_t player_handle = spawn_entity(42);
 
-    // 4. Lancement du thread réseau
     pthread_t net_thread;
-    if (pthread_create(&net_thread, NULL, network_thread_func, NULL) != 0) {
-        perror("Erreur thread");
-        return 1;
-    }
+    if (pthread_create(&net_thread, NULL, network_thread_func, NULL) != 0) return 1;
 
-    // 5. La Boucle de Jeu (Game Loop)
     int frame = 0;
-    float* gpu_x = NULL;
-    float* gpu_y = NULL;
-    float* gpu_z = NULL;
+    float *gpu_x, *gpu_y, *gpu_z;
+    int *gpu_hp; // Pointeur pour lire la vie
 
-    while (frame < 200) { // On simule 200 frames
-
-        // --- ÉTAPE A : Lecture du Réseau ---
-        // Vide le tampon et met à jour le buffer "Back" (caché)
+    while (frame < 100) {
         consume_packets(&ring_buffer);
-
-        // --- ÉTAPE B : Synchronisation ---
-        // Échange les buffers Back <-> Front
         swap_buffers();
 
-        // --- ÉTAPE C : Préparation Rendu (Zero Copy) ---
-        // Récupère les pointeurs vers les données stables
         get_render_pointers(&gpu_x, &gpu_y, &gpu_z);
+        get_health_pointer(&gpu_hp); // Récupération du buffer de vie
 
-        // --- ÉTAPE D : Simulation Rendu GPU ---
-        // On lit les données comme le ferait la carte graphique
-        // On doit retrouver l'index interne du joueur 42 pour l'afficher
-        uint32_t internal_id = sparse_lookup[42];
+        uint16_t real_index = get_entity_id(player_handle);
 
-        if (frame % 10 == 0) { // On affiche toutes les 10 frames pour pas spammer
-            printf("Frame %3d | Buffer Lect: %p | Entity 42 Pos: [%.2f, %.2f]\n",
-                   frame, (void*)gpu_x, gpu_x[internal_id], gpu_y[internal_id]);
+        if (frame % 5 == 0 && is_entity_valid(player_handle)) {
+            // Affiche la position ET la vie, prouvant que les 2 composants passent
+            printf("Frame %3d | Pos: [%5.2f, %5.2f] | HP: %3d | Gen: %d\n",
+                   frame, gpu_x[real_index], gpu_y[real_index], gpu_hp[real_index], get_entity_generation(player_handle));
         }
 
-        // Simulation 60 FPS (16ms)
         usleep(16000);
         frame++;
     }
 
     running = false;
     pthread_join(net_thread, NULL);
-    printf("=== Arrêt du Moteur ===\n");
-
+    printf("=== Arrêt ===\n");
     return 0;
 }
 
