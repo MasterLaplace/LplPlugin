@@ -6,7 +6,8 @@
 #include <linux/ip.h>           // Pour struct iphdr (En-tête IP)
 #include <linux/udp.h>          // Pour struct udphdr (En-tête UDP)
 #include <linux/fs.h>
-#include <stdint.h>
+
+#include "plugin.h"
 
 static void *k_ring_buffer = NULL;
 
@@ -29,16 +30,21 @@ uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf
 
 static int lpl_open(struct inode *inode, struct file *file)
 {
-    k_ring_buffer = kzalloc(4096, GFP_KERNEL);
+    k_ring_buffer = kzalloc(sizeof(NetworkRingBuffer), GFP_KERNEL);
     if (!k_ring_buffer)
-        return -1;
+        return -ENOMEM;
+    return 0;
 }
+
 static int lpl_release(struct inode *inode, struct file *file)
 {
     if (!k_ring_buffer)
-        return;
+        return -EFAULT;
     kfree(k_ring_buffer);
+    k_ring_buffer = NULL;
+    return 0;
 }
+
 static int lpl_mmap(struct file *file, struct vm_area_struct *vma);
 
 static const struct file_operations lpl_fops = {
