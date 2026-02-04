@@ -99,12 +99,12 @@ int main()
         get_render_pointers(&gpu_x, &gpu_y, &gpu_z);
         get_health_pointer(&gpu_hp);
 
-        uint16_t real_index = get_entity_id(player_handle);
+        uint16_t i = get_entity_id(player_handle);
 
         if (frame % 5 == 0 && is_entity_valid(player_handle))
         {
-            printf("Frame %3d | Pos: [%5.2f, %5.2f] | HP: %3d | Gen: %d\n",
-                   frame, gpu_x[real_index], gpu_y[real_index], gpu_hp[real_index], get_entity_generation(player_handle));
+            printf("Frame %3d | Pos: [%5.2f, %5.2f, %5.2f] | HP: %3d | Gen: %d\n",
+                   frame, gpu_x[i], gpu_y[i], gpu_z[i], gpu_hp[i], get_entity_generation(player_handle));
         }
 
         usleep(16000);
