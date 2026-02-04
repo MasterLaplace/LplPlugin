@@ -54,6 +54,9 @@ typedef struct
 #elif defined(MODULE)
 typedef atomic_t atomic_uint;
 typedef atomic_t atomic_bool;
+typedef unsigned int uint32_t;
+typedef unsigned short uint16_t;
+typedef unsigned char uint8_t;
 #else
 #include <stdatomic.h>
 #include <stdbool.h>
