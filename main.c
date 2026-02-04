@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <math.h>
 
-#include "plugin.c" // Inclusion directe pour l'exemple
+#include "plugin.h"
 
 NetworkRingBuffer ring_buffer = {0};
 volatile bool running = true;
@@ -67,7 +67,7 @@ void* network_thread_func(void* arg) {
 int main() {
     printf("=== Démarrage du Moteur SAO (Dynamic) ===\n");
 
-    init_server();
+    server_init();
 
     uint32_t player_handle = spawn_entity(42);
 
@@ -99,6 +99,7 @@ int main() {
 
     running = false;
     pthread_join(net_thread, NULL);
+    server_cleanup();
     printf("=== Arrêt ===\n");
     return 0;
 }
