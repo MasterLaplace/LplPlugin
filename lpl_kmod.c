@@ -16,14 +16,14 @@
 
 static void *k_ring_buffer = NULL;
 
-uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
+unsigned int hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
     struct iphdr *ip = ip_hdr(skb);
 
     if (ip->protocol != IPPROTO_UDP)
         return NF_ACCEPT;
 
-    struct udphdr *udp = (struct udphdr *)(uint8_t*)ip + (ip->ihl * 4);
+    struct udphdr *udp = (struct udphdr *)(unsigned char*)ip + (ip->ihl * 4u);
     if (ntohs(udp->dest) == 7777u)
     {
         printk(KERN_INFO "LPL: Packet intercepted!\n");
@@ -52,7 +52,15 @@ static int lpl_release(struct inode *inode, struct file *file)
     return 0;
 }
 
-static int lpl_mmap(struct file *file, struct vm_area_struct *vma);
+static int lpl_mmap(struct file *file, struct vm_area_struct *vma)
+{
+    if (!k_ring_buffer)
+        return -EFAULT;
+    if (remap_pfn_range(vma, vma->vm_start, virt_to_phys(k_ring_buffer) >> PAGE_SHIFT,
+                        sizeof(NetworkRingBuffer), vma->vm_page_prot))
+        return -EAGAIN;
+    return 0;
+}
 
 static const struct file_operations lpl_fops = {
     .owner = THIS_MODULE,

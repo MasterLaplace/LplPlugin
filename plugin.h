@@ -27,6 +27,11 @@ typedef std::atomic<bool> atomic_bool;
 #include <stdatomic.h>
 #endif
 
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
 // Macro pour vérifier les erreurs CUDA (Indispensable pour le debug)
 #define CUDA_CHECK(call)                                           \
     do                                                             \
@@ -51,12 +56,11 @@ typedef atomic_t atomic_uint;
 typedef atomic_t atomic_bool;
 #else
 #include <stdatomic.h>
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#endif
 
 #define MAX_ENTITIES 10000
 #define MAX_ID 1000000
