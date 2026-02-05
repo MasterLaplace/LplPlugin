@@ -241,9 +241,8 @@ void consume_packets(NetworkRingBuffer *ring)
     {
         dispatch_packet(&ring->packets[tail]);
         tail = (tail + 1u) & (RING_SIZE - 1u);
+        atomic_store(&ring->tail, tail);
     }
-
-    atomic_store(&ring->tail, tail);
 }
 
 void get_render_pointers(float **out_x, float **out_y, float **out_z)

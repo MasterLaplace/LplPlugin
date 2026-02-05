@@ -2,12 +2,34 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <math.h>
 
 #include "plugin.h"
 
-NetworkRingBuffer ring_buffer = {0};
+NetworkRingBuffer *ring_buffer = NULL;
 volatile bool running = true;
+
+void setup_kernel_link()
+{
+    int fd = open("/dev/lpl_driver", O_RDWR);
+    if (fd < 0)
+    {
+        perror("[ERROR] setup_kernel_link: Impossible d'ouvrir /dev/lpl_driver");
+        exit(1);
+    }
+
+    ring_buffer = (NetworkRingBuffer *)mmap(NULL, sizeof(NetworkRingBuffer), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ring_buffer == MAP_FAILED)
+    {
+        perror("[ERROR] setup_kernel_link: Erreur de mappage mémoire");
+        close(fd);
+        exit(1);
+    }
+
+    printf("[SYSTEM] setup_kernel_link: Driver connecté. Ring Buffer mappé à %p\n", ring_buffer);
+}
 
 // Fonction helper pour spawn
 uint32_t spawn_entity(uint32_t public_id)
@@ -31,13 +53,13 @@ void *network_thread_func(void *arg)
 
         // 1. Préparation du paquet directement dans le Ring Buffer (Zero Copy à l'écriture aussi !)
         // On récupère l'index où écrire
-        uint32_t head = atomic_load(&ring_buffer.head);
-        uint32_t tail = atomic_load(&ring_buffer.tail);
+        uint32_t head = atomic_load(&ring_buffer->head);
+        uint32_t tail = atomic_load(&ring_buffer->tail);
         uint32_t next_head = (head + 1) & (RING_SIZE - 1);
 
         if (next_head != tail)
         {
-            DynamicPacket *pkt = &ring_buffer.packets[head];
+            DynamicPacket *pkt = &ring_buffer->packets[head];
             uint8_t *cursor = pkt->data;
 
             // A. Écriture de l'ID (4 bytes)
@@ -65,7 +87,7 @@ void *network_thread_func(void *arg)
             pkt->size = cursor - pkt->data; // Calcul de la taille réelle utilisée
 
             // Validation de l'écriture
-            atomic_store(&ring_buffer.head, next_head);
+            atomic_store(&ring_buffer->head, next_head);
         }
 
         usleep(16000); // ~60hz d'envoi
@@ -79,6 +101,7 @@ int main()
     printf("=== Démarrage du Moteur SAO (Dynamic) ===\n");
 
     server_init();
+    setup_kernel_link();
 
     uint32_t player_handle = spawn_entity(42);
 
@@ -92,7 +115,7 @@ int main()
 
     while (frame < 100)
     {
-        consume_packets(&ring_buffer);
+        consume_packets(ring_buffer);
         run_physics_gpu(0.016f); // dt ~ 16ms
         swap_buffers();
 
