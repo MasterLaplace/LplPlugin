@@ -19,7 +19,11 @@
     *   **Double Buffering** pour la synchronisation CPU/GPU sans Mutex bloquants.
     *   **Pinned Memory** (Mapped Zero-Copy) pour transfert PCIe optimisé.
     *   Kernel CUDA pour physics (gravité).
-*   **Simulation Loop (`main.c`)** : Threading réseau vs rendu, stress tests, consommation paquets dynamiques.
+*   **Simulation Loop (`main.c`)** : Consommation des paquets dynamiques via **/dev/lpl_driver**, mmap du Ring Buffer kernel.
+*   **Kernel Module (`lpl_kmod.c`)** :
+    *   Hook Netfilter UDP (port 7777) → écriture directe dans le Ring Buffer.
+    *   Char device + mmap pour exposition Zero-Copy côté userland.
+*   **Build** : `Makefile` unifié (driver + app).
 
 ## 4. Roadmap Technique
 ### Phase 1 : Fondations (✅ Complétée)
@@ -29,7 +33,7 @@
 - [x] Gestion des "Race Conditions" (Atomic operations, Double Buffering, Sparse Lookup).
 
 ### Phase 2 : Kernel & Hardware
-- [ ] Développement d'un module Kernel (LKM) pour l'injection directe des paquets dans le Ring Buffer.
+- [x] Développement d'un module Kernel (LKM) pour l'injection directe des paquets dans le Ring Buffer.
 - [ ] Implémentation du **GPUDirect** (NIC -> GPU sans passer par RAM CPU).
 - [ ] Gestionnaire de mémoire custom (Slab Allocator).
 
