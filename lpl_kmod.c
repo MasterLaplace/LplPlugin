@@ -3,6 +3,7 @@
 // Description: Module kernel pour intercepter les paquets réseau et communiquer avec le plugin
 // Auteur: MasterLaplace
 
+#include <linux/init.h>
 #include <linux/module.h>         // Nécessaire pour tous les modules
 #include <linux/kernel.h>         // Pour KERN_INFO, printk, etc.
 #include <linux/netfilter.h>      // La structure des hooks Netfilter
@@ -11,10 +12,19 @@
 #include <linux/ip.h>             // Pour struct iphdr (En-tête IP)
 #include <linux/udp.h>            // Pour struct udphdr (En-tête UDP)
 #include <linux/fs.h>
+#include <linux/device.h> // Indispensable pour class_create/device_create
+#include <linux/err.h>    // Pour IS_ERR et PTR_ERR
 
 #include "plugin.h"
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("MasterLaplace");
+MODULE_DESCRIPTION("Laplace Kernel Module for Zero-Copy Network Ingestion");
+
 static void *k_ring_buffer = NULL;
+int driver_id = 0;
+struct class *lpl_class = NULL;
+struct device *instance = NULL;
 
 uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
@@ -87,3 +97,67 @@ static const struct file_operations lpl_fops = {
     .release = lpl_release,
     .mmap = lpl_mmap
 };
+
+static const struct nf_hook_ops lpl_nf_ops = {
+    .hook = hook_get_engine_packet,
+    .pf = NFPROTO_IPV4,
+    .hooknum = NF_INET_PRE_ROUTING,
+    .priority = NF_IP_PRI_FIRST
+};
+
+static int __init lpl_init(void)
+{
+    if ((driver_id = register_chrdev(0, "lpl_driver", &lpl_fops)) < 0)
+    {
+        pr_err("LPL: Failed to register char device\n");
+        return driver_id;
+    }
+
+    if (IS_ERR(lpl_class = class_create("lpl")))
+    {
+        unregister_chrdev(driver_id, "lpl_driver");
+        pr_err("LPL: Failed to create class\n");
+        return PTR_ERR(lpl_class);
+    }
+
+    if (IS_ERR(instance = device_create(lpl_class, instance, MKDEV(driver_id, 0), NULL, "lpl_driver")))
+    {
+        device_destroy(lpl_class, MKDEV(driver_id, 0));
+        class_destroy(lpl_class);
+        unregister_chrdev(driver_id, "lpl_driver");
+        pr_err("LPL: Failed to creat instance\n");
+        return PTR_ERR(instance);
+    }
+
+    int result = 0;
+    if ((result = nf_register_net_hook(&init_net, &lpl_nf_ops)) < 0)
+    {
+        device_destroy(lpl_class, MKDEV(driver_id, 0));
+        class_destroy(lpl_class);
+        unregister_chrdev(driver_id, "lpl_driver");
+        pr_err("LPL: Failed to register net hook\n");
+        return result;
+    }
+
+    pr_info("LPL: Module loaded successfully. Driver ID: %d\n", driver_id);
+    return 0;
+}
+
+static void __exit lpl_exit(void)
+{
+    nf_unregister_net_hook(&init_net, &lpl_nf_ops);
+    device_destroy(lpl_class, MKDEV(driver_id, 0));
+    class_destroy(lpl_class);
+    unregister_chrdev(driver_id, "lpl_driver");
+
+    if (k_ring_buffer)
+    {
+        kfree(k_ring_buffer);
+        k_ring_buffer = NULL;
+    }
+
+    pr_info("LPL: Module unloaded\n");
+}
+
+module_init(lpl_init);
+module_exit(lpl_exit);
