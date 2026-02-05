@@ -241,8 +241,9 @@ void consume_packets(NetworkRingBuffer *ring)
     {
         dispatch_packet(&ring->packets[tail]);
         tail = (tail + 1u) & (RING_SIZE - 1u);
-        atomic_store(&ring->tail, tail);
     }
+
+    atomic_store(&ring->tail, tail);
 }
 
 void get_render_pointers(float **out_x, float **out_y, float **out_z)
@@ -283,9 +284,31 @@ void run_physics_gpu(float delta_time)
     uint32_t write_i = atomic_load(&core.write_idx);
 
     int threadsPerBlock = 256;
-
     int blocksPerGrid = (MAX_ENTITIES + threadsPerBlock - 1) / threadsPerBlock;
+
+#ifdef LPL_MONITORING
+    CUDA_CHECK(cudaEventRecord(chrono.start_event, 0));
+#endif
 
     kernel_physics_update<<<blocksPerGrid, threadsPerBlock>>>(d_ecs_pos_y[write_i], MAX_ENTITIES, delta_time);
     cudaDeviceSynchronize();
+
+#ifdef LPL_MONITORING
+    CUDA_CHECK(cudaEventRecord(chrono.stop_event, 0));
+    CUDA_CHECK(cudaEventSynchronize(chrono.stop_event));
+
+    float milliseconds = 0;
+    CUDA_CHECK(cudaEventElapsedTime(&milliseconds, chrono.start_event, chrono.stop_event));
+
+    // Log GPU performance tous les 100 frames seulement
+    static int log_counter = 0;
+    if (log_counter++ % 100 == 0)
+    {
+        printf("[GPU] run_physics_gpu: %.3f ms (%.0f µs) | %d entities | %.2f M entities/sec\n",
+               milliseconds,
+               milliseconds * 1000.0f,
+               MAX_ENTITIES,
+               (float)MAX_ENTITIES / milliseconds / 1000.0f);
+    }
+#endif
 }

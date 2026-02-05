@@ -56,9 +56,6 @@ typedef struct
 #include <linux/atomic.h>
 
 typedef atomic_t atomic_uint;
-typedef unsigned int uint32_t;
-typedef unsigned short uint16_t;
-typedef unsigned char uint8_t;
 #else
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -75,6 +72,18 @@ typedef unsigned char uint8_t;
 
 #define INDEX_BITS 14
 #define INDEX_MASK 0x3FFF // (1 << 14) - 1
+
+#ifdef LPL_MONITORING
+typedef struct {
+    uint64_t packets_sent;
+    uint64_t packets_received;
+    uint64_t total_latency_ns;
+    uint64_t min_latency_ns;
+    uint64_t max_latency_ns;
+    uint64_t frame_count;
+    uint64_t start_time_ns;
+} PerfMetrics;
+#endif
 
 /**
  * @brief IDs de composants pour le format de paquet dynamique.
