@@ -34,9 +34,13 @@ clean:
 
 install:
 	sudo insmod lpl_kmod.ko
+	sudo chmod 666 /dev/lpl_driver
 
 uninstall:
 	sudo rmmod lpl_kmod
+
+run:
+	./engine
 
 logs:
 	dmesg | tail -20

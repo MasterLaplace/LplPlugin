@@ -46,8 +46,7 @@
 ## BUILD & RUN
 
 ```sh
-gcc-12 -c main.c -o main.o -O3
-nvcc -ccbin gcc-12 -c plugin.cu -o plugin.o -O3
-nvcc -ccbin gcc-12 main.o plugin.o -o engine -lpthread -lm
-./engine
+make
+make install
+make run
 ```
