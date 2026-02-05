@@ -120,6 +120,7 @@ static const struct nf_hook_ops lpl_nf_ops = {
 static int __init lpl_init(void)
 {
     pr_info("[LPL] ========== Module Init ==========\n");
+    int result = 0;
 
     if ((driver_id = register_chrdev(0, "lpl_driver", &lpl_fops)) < 0)
     {
@@ -129,33 +130,32 @@ static int __init lpl_init(void)
 
     if (IS_ERR(lpl_class = class_create("lpl")))
     {
-        unregister_chrdev(driver_id, "lpl_driver");
         pr_err("[LPL] Failed to create class\n");
-        return PTR_ERR(lpl_class);
+        result = PTR_ERR(lpl_class);
+        goto error_chrdev;
     }
 
     if (IS_ERR(instance = device_create(lpl_class, instance, MKDEV(driver_id, 0), NULL, "lpl_driver")))
     {
-        device_destroy(lpl_class, MKDEV(driver_id, 0));
-        class_destroy(lpl_class);
-        unregister_chrdev(driver_id, "lpl_driver");
         pr_err("[LPL] Failed to create device instance\n");
-        return PTR_ERR(instance);
+        result = PTR_ERR(instance);
+        goto error_class;
     }
 
-    int result = 0;
     if ((result = nf_register_net_hook(&init_net, &lpl_nf_ops)) < 0)
     {
-        device_destroy(lpl_class, MKDEV(driver_id, 0));
-        class_destroy(lpl_class);
-        unregister_chrdev(driver_id, "lpl_driver");
         pr_err("[LPL] Failed to register Netfilter hook\n");
-        return result;
+        goto error_device;
     }
 
     pr_info("[LPL] Netfilter hook registered (NF_INET_PRE_ROUTING, port 7777)\n");
     pr_info("[LPL] ===== Module Loaded Successfully =====\n");
     return 0;
+
+error_device: device_destroy(lpl_class, MKDEV(driver_id, 0));
+error_class: class_destroy(lpl_class);
+error_chrdev: unregister_chrdev(driver_id, "lpl_driver");
+    return result;
 }
 
 static void __exit lpl_exit(void)
