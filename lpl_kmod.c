@@ -22,11 +22,11 @@ MODULE_AUTHOR("MasterLaplace");
 MODULE_DESCRIPTION("Laplace Kernel Module for Zero-Copy Network Ingestion");
 
 static void *k_ring_buffer = NULL;
-int driver_id = 0;
-struct class *lpl_class = NULL;
-struct device *instance = NULL;
+static int driver_id = 0;
+static struct class *lpl_class = NULL;
+static struct device *instance = NULL;
 
-uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
+static uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
     struct iphdr *ip = ip_hdr(skb);
 
