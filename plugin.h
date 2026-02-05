@@ -52,8 +52,10 @@ typedef struct
 } Chronos;
 
 #elif defined(MODULE)
+#include <linux/types.h>
+#include <linux/atomic.h>
+
 typedef atomic_t atomic_uint;
-typedef atomic_t atomic_bool;
 typedef unsigned int uint32_t;
 typedef unsigned short uint16_t;
 typedef unsigned char uint8_t;

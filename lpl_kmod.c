@@ -23,14 +23,33 @@ uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const struct nf
     if (ip->protocol != IPPROTO_UDP)
         return NF_ACCEPT;
 
-    struct udphdr *udp = (struct udphdr *)(uint8_t *)ip + (ip->ihl * 4u);
-    if (ntohs(udp->dest) == 7777u)
-    {
-        printk(KERN_INFO "LPL: Packet intercepted!\n");
-        // Code ...
+    uint32_t ip_len = ip->ihl * 4u;
+    struct udphdr *udp = (struct udphdr *)(uint8_t *)ip + ip_len;
+    if (ntohs(udp->dest) != 7777u || !k_ring_buffer)
+        return NF_ACCEPT;
+
+    NetworkRingBuffer *ring = (NetworkRingBuffer *)k_ring_buffer;
+    uint32_t payload_len = ntohs(udp->len) - sizeof(struct udphdr);
+
+    if (payload_len > MAX_PACKET_SIZE)
+        return printk(KERN_WARNING "LPL: Packet too big (%u)\n", payload_len), NF_DROP;
+
+    uint32_t head = atomic_read(&ring->head);
+    uint32_t tail = atomic_read(&ring->tail);
+    uint32_t next_head = (head + 1u) & (RING_SIZE - 1u);
+
+    if (next_head == tail)
         return NF_DROP;
-    }
-    return NF_ACCEPT;
+
+    DynamicPacket *pkt = &ring->packets[head];
+
+    if (skb_copy_bits(skb, ip_len + sizeof(struct udphdr), pkt->data, payload_len) < 0)
+        return NF_DROP;
+
+    pkt->size = (uint16_t)payload_len;
+    atomic_set(&ring->head, next_head);
+
+    return NF_DROP;
 }
 
 static int lpl_open(struct inode *inode, struct file *file)
