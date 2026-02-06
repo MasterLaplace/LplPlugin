@@ -4,16 +4,16 @@
 // Auteur: MasterLaplace
 
 #include <linux/init.h>
-#include <linux/module.h>         // Nécessaire pour tous les modules
-#include <linux/kernel.h>         // Pour KERN_INFO, printk, etc.
-#include <linux/netfilter.h>      // La structure des hooks Netfilter
-#include <linux/netfilter_ipv4.h> // Pour les constantes IPv4 (NF_INET_PRE_ROUTING)
-#include <linux/skbuff.h>         // La structure critique : struct sk_buff
-#include <linux/ip.h>             // Pour struct iphdr (En-tête IP)
-#include <linux/udp.h>            // Pour struct udphdr (En-tête UDP)
-#include <linux/fs.h>
-#include <linux/device.h> // Indispensable pour class_create/device_create
-#include <linux/err.h>    // Pour IS_ERR et PTR_ERR
+#include <linux/module.h>         // MODULE_LICENSE, MODULE_AUTHOR, MODULE_DESCRIPTION, module_init, module_exit
+#include <linux/kernel.h>         // KERN_INFO, printk, pr_info, pr_err
+#include <linux/netfilter.h>      // struct nf_hook_ops, NF_INET_PRE_ROUTING, NF_IP_PRI_FIRST
+#include <linux/netfilter_ipv4.h> // NF_INET_PRE_ROUTING, nf_register_net_hook, nf_unregister_net_hook, struct nf_hook_state
+#include <linux/skbuff.h>         // struct sk_buff, skb_copy_bits
+#include <linux/ip.h>             // struct iphdr, ip_hdr
+#include <linux/udp.h>            // struct udphdr, ntohs
+#include <linux/fs.h>             // struct file_operations, register_chrdev, unregister_chrdev
+#include <linux/device.h>         //  class_create, device_create
+#include <linux/err.h>            //  IS_ERR, PTR_ERR
 
 #include "plugin.h"
 
