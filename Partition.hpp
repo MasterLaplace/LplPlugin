@@ -77,7 +77,7 @@ public:
         for (uint64_t index = 0u; index < _ids.size(); ++index)
         {
             _positions[index] += _velocities[index] * deltatime;
-            if (!_bound.contains(_positions[index]))
+            if (_bound.contains(_positions[index]))
                 continue;
 
             out_migrating.push_back({
@@ -96,7 +96,7 @@ public:
                 _positions[index] = _positions[last];
                 _rotations[index] = _rotations[last];
                 _velocities[index] = _velocities[last];
-                _masses[index] = _masses[index];
+                _masses[index] = _masses[last];
             }
 
             _ids.pop_back();
