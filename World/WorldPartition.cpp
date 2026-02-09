@@ -1,9 +1,9 @@
 /**
- * @file world_partition.cpp
- * @brief Implementation of WorldPartition system
+ * @file WorldPartition.cpp
+ * @brief ThreadPool implementation for WorldPartition
  *
  * @author @MasterLaplace
- * @version 4.0
+ * @version 5.0
  * @date 2025-11-19
  */
 
@@ -11,12 +11,9 @@
 
 namespace Optimizing::World {
 
-// ============================================================================
-// ThreadPool Implementation
-// ============================================================================
-
 ThreadPool::ThreadPool(size_t threads) : _stop(false)
 {
+    _workers.reserve(threads);
     for (size_t i = 0; i < threads; ++i)
     {
         _workers.emplace_back([this] {
@@ -28,9 +25,7 @@ ThreadPool::ThreadPool(size_t threads) : _stop(false)
                     _condition.wait(lock, [this] { return _stop || !_tasks.empty(); });
 
                     if (_stop && _tasks.empty())
-                    {
                         return;
-                    }
 
                     task = std::move(_tasks.front());
                     _tasks.pop();
@@ -50,6 +45,8 @@ void ThreadPool::shutdown()
 {
     {
         std::unique_lock<std::mutex> lock(_queueMutex);
+        if (_stop)
+            return;  // Guard against double shutdown
         _stop = true;
     }
     _condition.notify_all();
@@ -57,16 +54,14 @@ void ThreadPool::shutdown()
     for (std::thread &worker : _workers)
     {
         if (worker.joinable())
-        {
             worker.join();
-        }
     }
 }
 
 void ThreadPool::waitIdle()
 {
     std::unique_lock<std::mutex> lock(_queueMutex);
-    _condition.wait(lock, [this]() { return _tasks.empty() && _active.load(std::memory_order_relaxed) == 0; });
+    _condition.wait(lock, [this] { return _tasks.empty() && _active.load(std::memory_order_relaxed) == 0; });
 }
 
 } // namespace Optimizing::World
