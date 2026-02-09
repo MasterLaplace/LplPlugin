@@ -68,11 +68,18 @@ public:
     {
         LocalGuard guard(_locker);
 
-        for (uint64_t entity = 0u; entity < _ids.size(); ++entity)
+        for (uint64_t index = 0u; index < _ids.size(); ++index)
         {
-            _positions[entity] += _velocities[entity] * deltatime;
-            if (!_bound.contains(_positions[entity]))
+            _positions[index] += _velocities[index] * deltatime;
+            if (!_bound.contains(_positions[index]))
                 continue;
+
+            EntitySnapshot moved_entity;
+            moved_entity.id = _ids[index];
+            moved_entity.position = _positions[index];
+            moved_entity.id = _ids[index];
+            moved_entity.id = _ids[index];
+            moved_entity.id = _ids[index];
         }
     }
 
