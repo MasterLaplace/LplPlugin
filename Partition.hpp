@@ -23,6 +23,7 @@ public:
     };
 
 public:
+    Partition() noexcept : _bound({{0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}}), _active(false) {}
     Partition(Vec3 position, float size) noexcept : _bound({
         {position.x, std::numeric_limits<float>::lowest(), position.z},
         {position.x + size, std::numeric_limits<float>::max(), position.z + size}
@@ -64,9 +65,14 @@ public:
         _masses[index]
     }; }
 
-    void physicsTick(float deltatime) noexcept
+    [[nodiscard]] size_t getEntityCount() const noexcept {
+        return _ids.size();
+    }
+
+    void physicsTick(float deltatime, std::vector<EntitySnapshot> &out_migrating) noexcept
     {
         LocalGuard guard(_locker);
+        std::vector<EntitySnapshot> moved;
 
         for (uint64_t index = 0u; index < _ids.size(); ++index)
         {
@@ -74,12 +80,32 @@ public:
             if (!_bound.contains(_positions[index]))
                 continue;
 
-            EntitySnapshot moved_entity;
-            moved_entity.id = _ids[index];
-            moved_entity.position = _positions[index];
-            moved_entity.id = _ids[index];
-            moved_entity.id = _ids[index];
-            moved_entity.id = _ids[index];
+            out_migrating.push_back({
+                _ids[index],
+                _positions[index],
+                _rotations[index],
+                _velocities[index],
+                _masses[index]
+            });
+
+            size_t last = _ids.size() - 1ul;
+
+            if (index != last)
+            {
+                _ids[index] = _ids[last];
+                _positions[index] = _positions[last];
+                _rotations[index] = _rotations[last];
+                _velocities[index] = _velocities[last];
+                _masses[index] = _masses[index];
+            }
+
+            _ids.pop_back();
+            _positions.pop_back();
+            _rotations.pop_back();
+            _velocities.pop_back();
+            _masses.pop_back();
+
+            --index;
         }
     }
 

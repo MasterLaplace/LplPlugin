@@ -51,9 +51,7 @@ namespace std {
 template <typename T>
 class FlatAtomicsHashMap {
 private:
-    static constexpr bool NO_PLACE_LEFT = false;
     static constexpr bool ALREADY_EXISTS = false;
-    static constexpr std::nullptr_t NO_SUCH_KEY = nullptr;
     static constexpr bool SUCCESS = true;
 
 private:
@@ -114,13 +112,13 @@ public:
      * @brief Inserts an object into the map using Move Semantics.
      * Thread-Safe.
      */
-    [[nodiscard]] bool insert(const uint64_t key, T &&chunk)
+    T *insert(const uint64_t key, T &&chunk)
     {
         uint32_t slotIndex;
         {
             std::lock_guard<std::mutex> lock(_allocMutex);
             if (_freeIndices.empty())
-                return NO_PLACE_LEFT;
+                return nullptr;
 
             slotIndex = _freeIndices.back();
             _freeIndices.pop_back();
@@ -128,11 +126,13 @@ public:
 
         _pool[slotIndex] = std::move(chunk);
         if (linkKeyToSlot(key, slotIndex))
-            return SUCCESS;
+            return &_pool[slotIndex];
 
-        std::lock_guard<std::mutex> lock(_allocMutex);
-        _freeIndices.push_back(slotIndex);
-        return ALREADY_EXISTS;
+        {
+            std::lock_guard<std::mutex> lock(_allocMutex);
+            _freeIndices.push_back(slotIndex);
+        }
+        return get(key);
     }
 
     /**
@@ -182,7 +182,7 @@ public:
         uint64_t raw = _map[index].data.load(std::memory_order_acquire);
 
         if (raw == EMPTY)
-            return NO_SUCH_KEY;
+            return nullptr;
 
         if (raw == TOMBSTONE)
         {
@@ -200,6 +200,20 @@ public:
 
         index = (index + 1u) & _capacityMask;
     goto get_loop;
+    }
+
+    template <typename Callable>
+    void forEach(Callable &&func)
+    {
+        for (uint64_t index = 0u; index <= _capacityMask; ++index)
+        {
+            uint64_t raw = _map[index].data.load(std::memory_order_acquire);
+
+            if (raw == EMPTY || raw == TOMBSTONE)
+                continue;
+
+            func(_pool[PackedEntry::extract_pool_index(raw)]);
+        }
     }
 
 private:
