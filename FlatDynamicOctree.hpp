@@ -22,7 +22,7 @@ private:
 
 public:
     FlatDynamicOctree(const BoundaryBox &worldBounds, uint8_t maxDepth = 8u, uint32_t leafCapacity = 32u)
-        : _WORLD_BOUND(worldBounds), _MAX_DEPTH(maxDepth), _LEAF_CAPACITY(leafCapacity), _WORLD_BOUND_SIZE(_WORLD_BOUND.max - _WORLD_BOUND.min) {};
+        : _WORLD_BOUND(worldBounds), _WORLD_BOUND_SIZE(_WORLD_BOUND.max - _WORLD_BOUND.min), _MAX_DEPTH(maxDepth), _LEAF_CAPACITY(leafCapacity) {};
     ~FlatDynamicOctree() = default;
 
     FlatDynamicOctree(FlatDynamicOctree&&) = default;
@@ -105,7 +105,7 @@ private:
 
     void recurseBuild(int nodeIdx, uint32_t start, uint32_t end, uint8_t depth, uint64_t code)
     {
-        int count = end - start;
+        uint32_t count = end - start;
 
         if (count <= _LEAF_CAPACITY || depth >= _MAX_DEPTH)
         {

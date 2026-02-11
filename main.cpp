@@ -17,7 +17,8 @@
 #include <arpa/inet.h>
 #include <time.h>
 
-#include "plugin.h"
+#include "Engine.cuh"
+#include "WorldPartition.hpp"
 
 NetworkRingBuffer *ring_buffer = NULL;
 volatile bool running = true;
@@ -50,7 +51,7 @@ void setup_kernel_link()
 
     printf("[SYSTEM] setup_kernel_link: Driver connecté. Ring Buffer mappé à %p\n", ring_buffer);
     printf("[SYSTEM] Ring Buffer size: %zu bytes\n", sizeof(NetworkRingBuffer));
-    printf("[SYSTEM] Initial head=%u, tail=%u\n", atomic_load(&ring_buffer->head), atomic_load(&ring_buffer->tail));
+    printf("[SYSTEM] Initial head=%u, tail=%u\n", lpl_atomic_load(&ring_buffer->head), lpl_atomic_load(&ring_buffer->tail));
 }
 
 // --- THREAD CLIENT UDP (Producteur) ---
@@ -147,17 +148,34 @@ void *udp_client_thread(void *arg)
     return NULL;
 }
 
-// --- MAIN (Moteur de Rendu) ---
+// --- MAIN (Moteur Unifié WorldPartition) ---
 int main()
 {
-    printf("=== Démarrage du Moteur SAO (High-Performance Mode) ===\n");
+    printf("=== Démarrage du Moteur LplPlugin (Unified WorldPartition) ===\n");
 
-    server_init();
+    // 1. Initialiser le contexte CUDA
+    engine_init();
+
+    // 2. Setup kernel link (mmap ring buffer)
     setup_kernel_link();
 
-    uint32_t player_handle = create_entity(42);
-    printf("[SERVER] Spawned Entity ID 42 -> Internal Index %d\n", get_entity_id(player_handle));
+    // 3. Créer le monde
+    WorldPartition world;
 
+    // 4. Pré-enregistrer l'entité joueur (ID 42)
+    Partition::EntitySnapshot player{};
+    player.id = 42;
+    player.position = {0.f, 10.f, 0.f};
+    player.rotation = {0.f, 0.f, 0.f, 1.f};
+    player.velocity = {0.f, 0.f, 0.f};
+    player.mass = 1.0f;
+    player.force = {0.f, 0.f, 0.f};
+    player.size = {1.f, 2.f, 1.f};
+    player.health = 100;
+    uint32_t player_handle = world.addEntity(player);
+    printf("[WORLD] Entity #42 registered (handle: 0x%X)\n", player_handle);
+
+    // 5. Lancer le thread client UDP (producteur de paquets)
     pthread_t client_thread;
     if (pthread_create(&client_thread, NULL, udp_client_thread, NULL) != 0)
     {
@@ -166,10 +184,8 @@ int main()
     }
 
     int frame = 0;
-    float *gpu_x, *gpu_y, *gpu_z;
-    int *gpu_hp;
 
-    printf("\n[MAIN] Démarrage de la boucle render...\n\n");
+    printf("\n[MAIN] Démarrage de la boucle simulation...\n\n");
 
     metrics.start_time_ns = get_time_ns();
     metrics.min_latency_ns = UINT64_MAX;
@@ -183,15 +199,12 @@ int main()
     {
         uint64_t frame_start = get_time_ns();
 
-        // 1. Consommation des paquets depuis le Ring Buffer du kernel
-        uint32_t tail_before = atomic_load(&ring_buffer->tail);
-
+        // 1. Consommer les paquets réseau → WorldPartition
+        uint32_t tail_before = lpl_atomic_load(&ring_buffer->tail);
         uint64_t consume_start = get_time_ns();
-        consume_packets(ring_buffer);
+        engine_consume_packets(ring_buffer, world);
         uint64_t consume_end = get_time_ns();
-
-        uint32_t tail_after = atomic_load(&ring_buffer->tail);
-
+        uint32_t tail_after = lpl_atomic_load(&ring_buffer->tail);
         uint32_t packets_consumed = (tail_after - tail_before) & (RING_SIZE - 1);
 
         if (packets_consumed > 0)
@@ -199,7 +212,6 @@ int main()
             metrics.packets_received += packets_consumed;
             uint64_t consume_time_us = (consume_end - consume_start) / 1000;
 
-            // Log tous les 20 frames (pour ne pas polluer)
             if (frame % 20 == 0)
             {
                 printf("[RING] Frame %3d: Consommé %u pkt | Temps: %lu µs | Total reçu: %lu\n",
@@ -208,32 +220,30 @@ int main()
             }
         }
 
-        // 2. Simulation physics sur GPU
+        // 2. Physique GPU + migration inter-chunk
         uint64_t gpu_start = get_time_ns();
-        run_physics_gpu(0.016f); // dt ~ 16ms
+        engine_physics_tick(world, 0.016f);
         uint64_t gpu_end = get_time_ns();
 
-        // 3. Synchronisation double buffering
-        swap_buffers();
-
-        // 4. Récupération des pointeurs render
-        get_render_pointers(&gpu_x, &gpu_y, &gpu_z);
-        get_health_pointer(&gpu_hp);
-
-        uint16_t i = get_entity_id(player_handle);
-
-        // Log render tous les 20 frames
-        if (frame % 20 == 0 && is_entity_valid(player_handle))
+        // 3. Lecture de l'état de l'entité pour le "rendu"
+        if (frame % 20 == 0)
         {
-            uint64_t gpu_time_us = (gpu_end - gpu_start) / 1000;
-            printf("[RENDER] Frame %3d | Pos: [%5.2f, %5.2f, %5.2f] | HP: %3d | GPU: %lu µs\n",
-                   frame, gpu_x[i], gpu_y[i], gpu_z[i], gpu_hp[i], (unsigned long)gpu_time_us);
+            int localIdx = -1;
+            Partition *chunk = world.findEntity(42, localIdx);
+            if (chunk && localIdx >= 0)
+            {
+                auto ent = chunk->getEntity(static_cast<size_t>(localIdx));
+                uint64_t gpu_time_us = (gpu_end - gpu_start) / 1000;
+                printf("[RENDER] Frame %3d | Pos: [%5.2f, %5.2f, %5.2f] | HP: %3d | GPU: %lu µs\n",
+                       frame, ent.position.x, ent.position.y, ent.position.z,
+                       ent.health, (unsigned long)gpu_time_us);
+            }
         }
 
+        // 4. Timing de la frame
         uint64_t frame_end = get_time_ns();
         uint64_t frame_time = frame_end - frame_start;
 
-        // Track frame time
         metrics.total_latency_ns += frame_time;
         if (frame_time < metrics.min_latency_ns) metrics.min_latency_ns = frame_time;
         if (frame_time > metrics.max_latency_ns) metrics.max_latency_ns = frame_time;
@@ -256,7 +266,7 @@ int main()
     running = false;
     pthread_join(client_thread, NULL);
 
-    server_cleanup();
+    engine_cleanup();
 
     // === RAPPORT DE PERFORMANCE FINAL ===
     uint64_t total_time_ms = (get_time_ns() - metrics.start_time_ns) / 1000000;

@@ -2,9 +2,15 @@
 
 #include <cstdint>
 
+#ifdef __CUDACC__
+#define LPL_HD __host__ __device__
+#else
+#define LPL_HD
+#endif
+
 namespace Morton {
 
-[[nodiscard]] constexpr inline uint32_t part1by1(uint32_t x) noexcept
+[[nodiscard]] LPL_HD constexpr inline uint32_t part1by1(uint32_t x) noexcept
 {
     x &= 0x0000ffffU;
     x = (x | (x << 8u)) & 0x00FF00FFU;
@@ -14,12 +20,12 @@ namespace Morton {
     return x;
 }
 
-[[nodiscard]] constexpr inline uint32_t encode2D(uint32_t x, uint32_t y) noexcept
+[[nodiscard]] LPL_HD constexpr inline uint32_t encode2D(uint32_t x, uint32_t y) noexcept
 {
     return (part1by1(y) << 1) | part1by1(x);
 }
 
-[[nodiscard]] constexpr inline uint64_t part1by2(uint64_t x) noexcept
+[[nodiscard]] LPL_HD constexpr inline uint64_t part1by2(uint64_t x) noexcept
 {
     x &= 0x001fffffULL;
     x = (x | (x << 32)) & 0x001f00000000ffffULL;
@@ -30,7 +36,7 @@ namespace Morton {
     return x;
 }
 
-[[nodiscard]] constexpr inline uint64_t encode3D(uint32_t x, uint32_t y, uint32_t z) noexcept
+[[nodiscard]] LPL_HD constexpr inline uint64_t encode3D(uint32_t x, uint32_t y, uint32_t z) noexcept
 {
     return (part1by2(z) << 2) | (part1by2(y) << 1) | part1by2(x);
 }

@@ -1,9 +1,11 @@
-// --- LAPLACE PLUGIN SYSTEM --- //
-// File: plugin.cu
-// Description: Implémentation du plugin côté serveur (GPU)
+// --- LAPLACE ENGINE --- //
+// File: Engine.cu
+// Description: Implémentation du moteur côté serveur (GPU)
 // Auteur: MasterLaplace
 
-#include "plugin.h"
+#include "Engine.cuh"
+#include "WorldPartition.hpp"
+#include "Math.hpp"
 
 // --- ECS DATA ---//
 // Au lieu de tableaux statiques, on a des pointeurs vers la RAM épinglée.
@@ -28,6 +30,10 @@ static Core core = {
     .write_idx = 0u
 };
 static Chronos chrono;
+
+// --- GPU Physics Timing ---
+static cudaEvent_t g_physStart, g_physStop;
+static bool g_physEventsCreated = false;
 
 // --- PRIVATE SYSTEMS ---//
 
@@ -59,9 +65,37 @@ __global__ void kernel_physics_update(float *pos_y, int count, float delta_time)
     pos_y[idx] = (y < 0.0f) ? 0.0f : y;
 }
 
+// --- NEW: Chunk-based physics kernel (Vec3 SoA) ---
+
+/**
+ * @brief Kernel de physique par chunk.
+ * Applique la gravité + intégration Euler semi-implicite sur les vecteurs SoA.
+ * Identique à Partition::physicsTick mais exécuté massivement en parallèle sur le GPU.
+ */
+__global__ void kernel_physics_tick(
+    Vec3 *positions, Vec3 *velocities, Vec3 *forces, float *masses,
+    uint32_t count, float dt)
+{
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= count)
+        return;
+
+    // Gravité
+    forces[idx] = Vec3{0.0f, -9.81f * masses[idx], 0.0f};
+
+    // Euler semi-implicite : v += a*dt, puis p += v*dt
+    if (masses[idx] > 0.0001f)
+    {
+        float invMass = 1.0f / masses[idx];
+        velocities[idx] += forces[idx] * invMass * dt;
+    }
+
+    positions[idx] += velocities[idx] * dt;
+}
+
 static void dispatch_packet(DynamicPacket *pkt)
 {
-    uint32_t current_w = atomic_load(&core.write_idx);
+    uint32_t current_w = lpl_atomic_load(&core.write_idx);
     uint8_t *cursor = pkt->data;
 
     uint32_t public_id = *(uint32_t *)cursor;
@@ -107,9 +141,9 @@ static void dispatch_packet(DynamicPacket *pkt)
 
     // On tente de marquer l'entité comme "dirty"
     // Si c'était 'false', c'est qu'on est le premier à la marquer cette frame !
-    if (atomic_exchange(&core.is_dirty[internal_index], true) == false)
+    if (lpl_atomic_exchange(&core.is_dirty[internal_index], true) == false)
     {
-        uint32_t pos = atomic_fetch_add(&core.dirty_count, 1);
+        uint32_t pos = lpl_atomic_fetch_add(&core.dirty_count, 1);
 
         if (pos < MAX_ENTITIES)
             core.dirty_stack[pos] = internal_index;
@@ -129,7 +163,7 @@ void server_init()
     for (uint32_t index = 0u; index < MAX_ENTITIES; ++index)
         core.free_indices[index] = --value;
 
-    atomic_store(&core.free_count, MAX_ENTITIES);
+    lpl_atomic_store(&core.free_count, MAX_ENTITIES);
 
     size_t float_size = MAX_ENTITIES * sizeof(float);
     size_t int_size = MAX_ENTITIES * sizeof(int);
@@ -162,7 +196,7 @@ void server_cleanup()
 
 uint32_t create_entity(uint32_t public_id)
 {
-    uint32_t pos = atomic_fetch_sub(&core.free_count, 1u);
+    uint32_t pos = lpl_atomic_fetch_sub(&core.free_count, 1u);
     if (pos == 0 || pos - 1u >= MAX_ENTITIES)
         return printf("[ERROR] create_entity: pos(%d) == 0 || (pos - 1u)(%d) >= MAX_ENTITIES(%d)\n", pos, (pos - 1u), MAX_ENTITIES), UINT32_MAX;
 
@@ -187,7 +221,7 @@ void destroy_entity(uint32_t public_id)
     core.sparse_lookup[public_id] = UINT32_MAX;
     core.entity_generations[internal_index]++;
 
-    uint32_t pos = atomic_fetch_add(&core.free_count, 1);
+    uint32_t pos = lpl_atomic_fetch_add(&core.free_count, 1);
 
     if (pos < MAX_ENTITIES)
         core.free_indices[pos] = internal_index;
@@ -207,11 +241,11 @@ bool is_entity_valid(uint32_t smart_id)
 
 void swap_buffers()
 {
-    uint32_t old_w = atomic_load(&core.write_idx);
+    uint32_t old_w = lpl_atomic_load(&core.write_idx);
     uint32_t next_w = old_w ^ 1u;
-    atomic_store(&core.write_idx, next_w);
+    lpl_atomic_store(&core.write_idx, next_w);
 
-    uint32_t count = atomic_load(&core.dirty_count);
+    uint32_t count = lpl_atomic_load(&core.dirty_count);
 
     for (uint32_t stack_index = 0u; stack_index < count; ++stack_index)
     {
@@ -223,10 +257,10 @@ void swap_buffers()
 
         ecs_health[next_w][entity_index] = ecs_health[old_w][entity_index];
 
-        atomic_store(&core.is_dirty[entity_index], false);
+        lpl_atomic_store(&core.is_dirty[entity_index], false);
     }
 
-    atomic_store(&core.dirty_count, 0u);
+    lpl_atomic_store(&core.dirty_count, 0u);
 
     // Ici, on enverrait normalement un signal au GPU pour lui dire :
     // "Hé, tu peux lire le buffer qui vient d'être rempli !"
@@ -234,8 +268,8 @@ void swap_buffers()
 
 void consume_packets(NetworkRingBuffer *ring)
 {
-    uint32_t tail = atomic_load(&ring->tail);
-    uint32_t head = atomic_load(&ring->head);
+    uint32_t tail = lpl_atomic_load(&ring->tail);
+    uint32_t head = lpl_atomic_load(&ring->head);
 
     while (tail != head)
     {
@@ -243,12 +277,12 @@ void consume_packets(NetworkRingBuffer *ring)
         tail = (tail + 1u) & (RING_SIZE - 1u);
     }
 
-    atomic_store(&ring->tail, tail);
+    lpl_atomic_store(&ring->tail, tail);
 }
 
 void get_render_pointers(float **out_x, float **out_y, float **out_z)
 {
-    uint32_t read_i = atomic_load(&core.write_idx) ^ 1u;
+    uint32_t read_i = lpl_atomic_load(&core.write_idx) ^ 1u;
 
     if (!out_x || !out_y || !out_z)
         return (void)printf("[ERROR] get_render_pointers: !out_x(%p) || !out_y(%p) || !out_z(%p)\n", out_x, out_y, out_z);
@@ -260,7 +294,7 @@ void get_render_pointers(float **out_x, float **out_y, float **out_z)
 
 void get_health_pointer(int **out_health)
 {
-    uint32_t read_i = atomic_load(&core.write_idx) ^ 1u;
+    uint32_t read_i = lpl_atomic_load(&core.write_idx) ^ 1u;
 
     if (!out_health)
         return (void)printf("[ERROR] get_health_pointer: !out_health(%p)\n", out_health);
@@ -269,7 +303,7 @@ void get_health_pointer(int **out_health)
 
 void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z)
 {
-    uint32_t read_i = atomic_load(&core.write_idx) ^ 1u;
+    uint32_t read_i = lpl_atomic_load(&core.write_idx) ^ 1u;
 
     if (!dev_x || !dev_y || !dev_z)
         return (void)printf("[ERROR] get_gpu_pointers: !dev_x(%p) || !dev_y(%p) || !dev_z(%p)\n", dev_x, dev_y, dev_z);
@@ -281,7 +315,7 @@ void get_gpu_pointers(float **dev_x, float **dev_y, float **dev_z)
 
 void run_physics_gpu(float delta_time)
 {
-    uint32_t write_i = atomic_load(&core.write_idx);
+    uint32_t write_i = lpl_atomic_load(&core.write_idx);
 
     int threadsPerBlock = 256;
     int blocksPerGrid = (MAX_ENTITIES + threadsPerBlock - 1) / threadsPerBlock;
@@ -311,4 +345,187 @@ void run_physics_gpu(float delta_time)
                (float)MAX_ENTITIES / milliseconds / 1000.0f);
     }
 #endif
+}
+
+// ==========================================================================
+// NEW UNIFIED GPU API (WorldPartition-based)
+// ==========================================================================
+
+void engine_init()
+{
+    // Création d'événements pour le timing GPU
+    if (!g_physEventsCreated)
+    {
+        CUDA_CHECK(cudaEventCreate(&g_physStart));
+        CUDA_CHECK(cudaEventCreate(&g_physStop));
+        g_physEventsCreated = true;
+    }
+}
+
+void engine_cleanup()
+{
+    if (g_physEventsCreated)
+    {
+        CUDA_CHECK(cudaEventDestroy(g_physStart));
+        CUDA_CHECK(cudaEventDestroy(g_physStop));
+        g_physEventsCreated = false;
+    }
+}
+
+void engine_physics_tick(WorldPartition &world, float dt)
+{
+    static constexpr int THREADS_PER_BLOCK = 256;
+
+#ifdef LPL_MONITORING
+    CUDA_CHECK(cudaEventRecord(g_physStart, 0));
+#endif
+
+    // Phase 1 : Lancement des kernels GPU par chunk
+    world.forEachChunk([&](Partition &partition) {
+        uint32_t count = static_cast<uint32_t>(partition.getEntityCount());
+        if (count == 0u)
+            return;
+
+        // Obtenir les device pointers depuis la pinned memory
+        Vec3  *d_pos = nullptr, *d_vel = nullptr, *d_forces = nullptr;
+        float *d_masses = nullptr;
+
+        CUDA_CHECK(cudaHostGetDevicePointer(&d_pos,    partition.getPositionsData(),  0));
+        CUDA_CHECK(cudaHostGetDevicePointer(&d_vel,    partition.getVelocitiesData(), 0));
+        CUDA_CHECK(cudaHostGetDevicePointer(&d_forces, partition.getForcesData(),     0));
+        CUDA_CHECK(cudaHostGetDevicePointer(&d_masses, partition.getMassesData(),     0));
+
+        int blocks = (count + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+        kernel_physics_tick<<<blocks, THREADS_PER_BLOCK>>>(d_pos, d_vel, d_forces, d_masses, count, dt);
+    });
+
+    // Synchronisation GPU — toutes les entités de tous les chunks ont été mises à jour
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+#ifdef LPL_MONITORING
+    CUDA_CHECK(cudaEventRecord(g_physStop, 0));
+    CUDA_CHECK(cudaEventSynchronize(g_physStop));
+
+    float ms = 0;
+    CUDA_CHECK(cudaEventElapsedTime(&ms, g_physStart, g_physStop));
+
+    static int log_counter = 0;
+    if (log_counter++ % 100 == 0)
+        printf("[GPU] engine_physics_tick: %.3f ms\n", ms);
+#endif
+
+    // Phase 2 : Migration inter-chunk (CPU)
+    world.migrateEntities();
+}
+
+// ==========================================================================
+// NETWORK → WORLDPARTITION PIPELINE (Phase 4)
+// ==========================================================================
+
+/**
+ * @brief Dispatch un paquet réseau vers le WorldPartition.
+ * - Entité existante : mise à jour des composants en place.
+ * - Entité inconnue : création automatique avec les composants du paquet.
+ */
+static void dispatch_packet_world(DynamicPacket *pkt, WorldPartition &world)
+{
+    uint8_t *cursor = pkt->data;
+    uint32_t public_id = *(uint32_t *)cursor;
+    cursor += sizeof(uint32_t);
+
+    // Cherche l'entité dans le monde
+    int localIdx = -1;
+    Partition *chunk = world.findEntity(public_id, localIdx);
+
+    if (chunk && localIdx >= 0)
+    {
+        // Entité existante → mise à jour des composants en place
+        while (cursor < pkt->data + pkt->size)
+        {
+            uint8_t comp = *cursor++;
+            switch (comp)
+            {
+            case COMP_TRANSFORM: {
+                Vec3 pos{*(float *)(cursor), *(float *)(cursor + 4), *(float *)(cursor + 8)};
+                cursor += 12;
+                chunk->setPosition(static_cast<uint32_t>(localIdx), pos);
+                break;
+            }
+            case COMP_HEALTH: {
+                int32_t hp = *(int32_t *)(cursor);
+                cursor += 4;
+                chunk->setHealth(static_cast<uint32_t>(localIdx), hp);
+                break;
+            }
+            case COMP_VELOCITY: {
+                Vec3 vel{*(float *)(cursor), *(float *)(cursor + 4), *(float *)(cursor + 8)};
+                cursor += 12;
+                chunk->setVelocity(static_cast<uint32_t>(localIdx), vel);
+                break;
+            }
+            case COMP_MASS: {
+                float m = *(float *)(cursor);
+                cursor += 4;
+                chunk->setMass(static_cast<uint32_t>(localIdx), m);
+                break;
+            }
+            default:
+                printf("[WARNING] dispatch_packet_world: unknown component_id(%d)\n", comp);
+                return;
+            }
+        }
+    }
+    else
+    {
+        // Nouvelle entité → parser en snapshot puis ajouter au monde
+        Partition::EntitySnapshot snap{};
+        snap.id = public_id;
+        snap.rotation = {0.f, 0.f, 0.f, 1.f};
+        snap.mass = 1.0f;
+        snap.size = {1.f, 1.f, 1.f};
+        snap.health = 100;
+
+        while (cursor < pkt->data + pkt->size)
+        {
+            uint8_t comp = *cursor++;
+            switch (comp)
+            {
+            case COMP_TRANSFORM:
+                snap.position = {*(float *)(cursor), *(float *)(cursor + 4), *(float *)(cursor + 8)};
+                cursor += 12;
+                break;
+            case COMP_HEALTH:
+                snap.health = *(int32_t *)(cursor);
+                cursor += 4;
+                break;
+            case COMP_VELOCITY:
+                snap.velocity = {*(float *)(cursor), *(float *)(cursor + 4), *(float *)(cursor + 8)};
+                cursor += 12;
+                break;
+            case COMP_MASS:
+                snap.mass = *(float *)(cursor);
+                cursor += 4;
+                break;
+            default:
+                printf("[WARNING] dispatch_packet_world: unknown component_id(%d) for new entity %u\n", comp, public_id);
+                return;
+            }
+        }
+
+        world.addEntity(snap);
+    }
+}
+
+void engine_consume_packets(NetworkRingBuffer *ring, WorldPartition &world)
+{
+    uint32_t tail = lpl_atomic_load(&ring->tail);
+    uint32_t head = lpl_atomic_load(&ring->head);
+
+    while (tail != head)
+    {
+        dispatch_packet_world(&ring->packets[tail], world);
+        tail = (tail + 1u) & (RING_SIZE - 1u);
+    }
+
+    lpl_atomic_store(&ring->tail, tail);
 }

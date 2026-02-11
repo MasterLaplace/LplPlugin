@@ -31,6 +31,7 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <algorithm>
 #if __cpp_lib_bit_cast >= 201806L
 #include <bit>
 #else
@@ -104,6 +105,8 @@ public:
 
         for (uint32_t index = 0u; index < maxChunks; ++index)
             _freeIndices.push_back((maxChunks - 1u) - index);
+
+        _activeSlots.reserve(maxChunks);
     }
 
     ~FlatAtomicsHashMap() = default;
@@ -126,7 +129,11 @@ public:
 
         _pool[slotIndex] = std::move(chunk);
         if (linkKeyToSlot(key, slotIndex))
+        {
+            std::lock_guard<std::mutex> lock(_allocMutex);
+            _activeSlots.push_back(slotIndex);
             return &_pool[slotIndex];
+        }
 
         {
             std::lock_guard<std::mutex> lock(_allocMutex);
@@ -163,6 +170,8 @@ public:
             uint32_t poolIndex = PackedEntry::extract_pool_index(raw);
             std::lock_guard<std::mutex> lock(_allocMutex);
             _freeIndices.push_back(poolIndex);
+            auto it = std::find(_activeSlots.begin(), _activeSlots.end(), poolIndex);
+            if (it != _activeSlots.end()) { *it = _activeSlots.back(); _activeSlots.pop_back(); }
             return;
         }
 
@@ -205,15 +214,9 @@ public:
     template <typename Callable>
     void forEach(Callable &&func)
     {
-        for (uint64_t index = 0u; index <= _capacityMask; ++index)
-        {
-            uint64_t raw = _map[index].data.load(std::memory_order_acquire);
-
-            if (raw == EMPTY || raw == TOMBSTONE)
-                continue;
-
-            func(_pool[PackedEntry::extract_pool_index(raw)]);
-        }
+        std::lock_guard<std::mutex> lock(_allocMutex);
+        for (uint32_t poolIdx : _activeSlots)
+            func(_pool[poolIdx]);
     }
 
 private:
@@ -250,5 +253,6 @@ private:
     std::unique_ptr<PackedEntry[]> _map;
     std::unique_ptr<T[]> _pool;
     std::vector<uint32_t> _freeIndices;
-    std::mutex _allocMutex;
+    std::vector<uint32_t> _activeSlots;
+    mutable std::mutex _allocMutex;
 };

@@ -15,7 +15,7 @@
 #include <linux/device.h>         //  class_create, device_create
 #include <linux/err.h>            //  IS_ERR, PTR_ERR
 
-#include "plugin.h"
+#include "lpl_protocol.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MasterLaplace");

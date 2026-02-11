@@ -2,15 +2,15 @@
 
 #include "FlatAtomicsHashMap.hpp"
 #include "Partition.hpp"
+#include "EntityRegistry.hpp"
 #include "Morton.hpp"
 #include <cmath>
 
 class WorldPartition {
 public:
-    WorldPartition() noexcept : _partitions(WORLD_CAPACITY), _chunkSize(255.f)
+    WorldPartition() : _partitions(WORLD_CAPACITY), _chunkSize(255.f)
     {
         _transitQueue.reserve(1024u);
-        _entityToChunk.assign(1000000u, INVALID_CHUNK_KEY);
     }
 
     [[nodiscard]] Partition *getChunk(const Vec3 &position) const
@@ -23,28 +23,111 @@ public:
         return _partitions.get(chunkKey);
     }
 
-    void addEntity(const Partition::EntitySnapshot &entity)
+    /**
+     * @brief Ajoute une entité dans le monde.
+     * @return Smart handle (generation | slot), ou UINT32_MAX en cas d'échec.
+     */
+    uint32_t addEntity(const Partition::EntitySnapshot &entity)
     {
         uint64_t key = getChunkKey(entity.position);
         Partition *partition = getOrCreateChunk(entity.position, key);
         if (!partition)
-            return;
+            return UINT32_MAX;
 
         partition->addEntity(entity);
-        updateEntityChunk(entity.id, key);
+        return _registry.registerEntity(entity.id, key);
     }
 
-    void updateEntityChunk(const uint32_t entityId, const uint64_t newChunkKey) noexcept
+    /**
+     * @brief Supprime une entité du monde par son ID public.
+     * @return L'EntitySnapshot retiré (id=0 si non trouvé).
+     */
+    Partition::EntitySnapshot removeEntity(uint32_t publicId)
     {
-        if (entityId < _entityToChunk.size())
-            _entityToChunk[entityId] = newChunkKey;
+        uint64_t chunkKey = _registry.getChunkKey(publicId);
+        if (chunkKey == EntityRegistry::INVALID_CHUNK)
+            return {};
+
+        Partition *partition = _partitions.get(chunkKey);
+        if (!partition)
+            return {};
+
+        auto snapshot = partition->removeEntityById(publicId);
+        _registry.unregisterEntity(publicId);
+        return snapshot;
+    }
+
+    /**
+     * @brief Localise une entité par son ID public.
+     * @param[out] outLocalIndex Index local dans le chunk (-1 si non trouvé).
+     * @return Partition contenant l'entité, ou nullptr.
+     */
+    [[nodiscard]] Partition *findEntity(uint32_t publicId, int &outLocalIndex) const
+    {
+        uint64_t chunkKey = _registry.getChunkKey(publicId);
+        if (chunkKey == EntityRegistry::INVALID_CHUNK)
+        {
+            outLocalIndex = -1;
+            return nullptr;
+        }
+
+        Partition *partition = _partitions.get(chunkKey);
+        if (!partition)
+        {
+            outLocalIndex = -1;
+            return nullptr;
+        }
+
+        outLocalIndex = partition->findEntityIndex(publicId);
+        return partition;
     }
 
     [[nodiscard]] uint64_t getEntityChunkKey(const uint32_t entityId) const noexcept
     {
-        return (entityId < _entityToChunk.size()) ? _entityToChunk[entityId] : INVALID_CHUNK_KEY;
+        return _registry.getChunkKey(entityId);
     }
 
+    [[nodiscard]] bool isEntityRegistered(uint32_t publicId) const noexcept
+    {
+        return _registry.isRegistered(publicId);
+    }
+
+    [[nodiscard]] const EntityRegistry &getRegistry() const noexcept { return _registry; }
+    [[nodiscard]] EntityRegistry &getRegistry() noexcept { return _registry; }
+
+    /**
+     * @brief Itère sur tous les chunks actifs.
+     */
+    template <typename Func>
+    void forEachChunk(Func &&func)
+    {
+        _partitions.forEach(std::forward<Func>(func));
+    }
+
+    /**
+     * @brief Vérifie les bornes et réinsère les entités migrantes.
+     * Appeler après la physique GPU (qui a déjà mis à jour positions/velocités).
+     */
+    void migrateEntities()
+    {
+        _transitQueue.clear();
+        _partitions.forEach([&](Partition &partition) {
+            partition.checkAndMigrate(_transitQueue);
+        });
+        for (const auto &entity : _transitQueue)
+        {
+            uint64_t key = getChunkKey(entity.position);
+            if (Partition *partition = getOrCreateChunk(entity.position, key))
+            {
+                partition->addEntity(entity);
+                _registry.updateChunkKey(entity.id, key);
+            }
+        }
+    }
+
+    /**
+     * @brief Physique CPU + migration (chemin sans GPU).
+     */
     void step(float deltatime)
     {
         _transitQueue.clear();
@@ -57,7 +140,7 @@ public:
             if (Partition *partition = getOrCreateChunk(entity.position, key))
             {
                 partition->addEntity(entity);
-                updateEntityChunk(entity.id, key);
+                _registry.updateChunkKey(entity.id, key);
             }
         }
     }
@@ -83,14 +166,15 @@ private:
         float gridX = std::floor(position.x / _chunkSize) * _chunkSize;
         float gridZ = std::floor(position.z / _chunkSize) * _chunkSize;
 
-        return _partitions.insert(key, Partition{{gridX, 0.f, gridZ}, _chunkSize});
+        Partition newPartition({gridX, 0.f, gridZ}, _chunkSize);
+        newPartition.reserve(256);
+        return _partitions.insert(key, std::move(newPartition));
     }
 
 private:
     static constexpr uint64_t WORLD_CAPACITY = 1ULL << 16ul;
-    static constexpr uint64_t INVALID_CHUNK_KEY = std::numeric_limits<uint64_t>::max();
     FlatAtomicsHashMap<Partition> _partitions;
+    EntityRegistry _registry;
     std::vector<Partition::EntitySnapshot> _transitQueue;
-    std::vector<uint64_t> _entityToChunk;
     float _chunkSize;
 };
