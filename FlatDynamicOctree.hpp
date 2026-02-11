@@ -171,10 +171,10 @@ private:
             func(_sortedRefs[node.entityStart + index].index);
 
         if (node.firstChild != -1)
-    {
-        for (int index = 0; index < 8; ++index)
-            queryRecurse(node.firstChild + index, searchArea, func);
-    }
+        {
+            for (int index = 0; index < 8; ++index)
+                queryRecurse(node.firstChild + index, searchArea, func);
+        }
     }
 
 private:
