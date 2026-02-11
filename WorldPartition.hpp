@@ -18,18 +18,24 @@ public:
         return _partitions.get(getChunkKey(position));
     }
 
-    [[nodiscard]] Partition *addPartition(const Vec3 &position)
+    void addEntity(const Partition::EntitySnapshot &entity)
     {
-        return getOrCreateChunk(position, getChunkKey(position));
+        uint64_t key = getChunkKey(entity.position);
+        Partition *partition = getOrCreateChunk(entity.position, key);
+        if (!partition)
+            return;
+
+        partition->addEntity(entity);
+        updateEntityChunk(entity.id, key);
     }
 
-    void updateEntityChunk(uint32_t entityId, uint64_t newChunkKey) noexcept
+    void updateEntityChunk(const uint32_t entityId, const uint64_t newChunkKey) noexcept
     {
         if (entityId < _entityToChunk.size())
             _entityToChunk[entityId] = newChunkKey;
     }
 
-    [[nodiscard]] uint64_t getEntityChunkKey(uint32_t entityId) const noexcept
+    [[nodiscard]] uint64_t getEntityChunkKey(const uint32_t entityId) const noexcept
     {
         return (entityId < _entityToChunk.size()) ? _entityToChunk[entityId] : INVALID_CHUNK_KEY;
     }
@@ -62,7 +68,7 @@ private:
         return Morton::encode2D(static_cast<uint32_t>(ux), static_cast<uint32_t>(uz));
     }
 
-    Partition *getOrCreateChunk(const Vec3 &position, uint64_t key)
+    Partition *getOrCreateChunk(const Vec3 &position, const uint64_t key)
     {
         Partition *partition = _partitions.get(key);
 

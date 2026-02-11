@@ -19,4 +19,20 @@ namespace Morton {
     return (part1by1(y) << 1) | part1by1(x);
 }
 
+[[nodiscard]] constexpr inline uint64_t part1by2(uint64_t x) noexcept
+{
+    x &= 0x001fffffULL;
+    x = (x | (x << 32)) & 0x001f00000000ffffULL;
+    x = (x | (x << 16)) & 0x001f0000ff0000ffULL;
+    x = (x | (x << 8))  & 0x100f00f00f00f00fULL;
+    x = (x | (x << 4))  & 0x10c30c30c30c30c3ULL;
+    x = (x | (x << 2))  & 0x1249249249249249ULL;
+    return x;
+}
+
+[[nodiscard]] constexpr inline uint64_t encode3D(uint32_t x, uint32_t y, uint32_t z) noexcept
+{
+    return (part1by2(z) << 2) | (part1by2(y) << 1) | part1by2(x);
+}
+
 } // Morton
