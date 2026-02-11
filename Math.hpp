@@ -5,6 +5,7 @@ struct Vec3 {
 
     [[nodiscard]] Vec3 operator+(const Vec3 other) const noexcept { return Vec3{x + other.x, y + other.y, z + other.z}; }
     [[nodiscard]] Vec3 operator-(const Vec3 other) const noexcept { return Vec3{x - other.x, y - other.y, z - other.z}; }
+    [[nodiscard]] Vec3 operator/(const Vec3 other) const noexcept { return Vec3{x / other.x, y / other.y, z / other.z}; }
     [[nodiscard]] Vec3 operator+(const float s) const noexcept { return Vec3{x + s, y + s, z + s}; }
     void operator+=(const Vec3 other) noexcept { x += other.x, y += other.y, z += other.z; }
     [[nodiscard]] Vec3 operator*(const float s) const noexcept { return Vec3{x * s, y * s, z * s}; }

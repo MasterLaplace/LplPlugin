@@ -30,7 +30,7 @@ CUDA Kernels (physics on GPU)
 - `lpl_kmod.c`: Linux kernel module with Netfilter hook
 - `main.c`: Userspace simulation loop
 - `plugin.cu`: ECS implementation + CUDA physics kernels
-- `World/`: Spatial partitioning (Octree, Morton codes)
+- `World/`: Spatial partitioning (Octree, Morton codes) (obsolete, being refactored)
 
 ## Current Performance
 
@@ -89,6 +89,17 @@ Dynamic format supporting variable components per entity:
 - **Kernel:** Static ring buffer, atomic head/tail (lockless)
 - **Userspace:** Pinned memory (`cudaHostAllocMapped`) for PCIe optimization
 - **GPU:** Double buffering with atomic swaps
+
+### World Partitioning System *(in integration)*
+High-performance entity management layer for MMO-scale simulations:
+- **WorldPartition:** Chunk orchestrator with Morton-encoded spatial hashing
+- **Partition:** Per-chunk ECS with SoA storage (cache-friendly for GPU transfer)
+- **FlatAtomicsHashMap:** Lock-free chunk storage with wait-free reads
+- **Migration System:** Automatic entity transfer between chunks (swap-and-pop)
+- **Spatial Indexing:** Dynamic octree for region queries
+
+**Current Status:**  
+Core implementation complete (WorldPartition.hpp, Partition.hpp, FlatDynamicOctree.hpp). Integration with the CUDA plugin pipeline is in progress—some components may be ported to GPU kernels for parallel processing.
 
 ## Roadmap
 

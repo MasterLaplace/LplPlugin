@@ -85,7 +85,20 @@ public:
         return _ids.size();
     }
 
-    void physicsTick(float deltatime, std::vector<EntitySnapshot> &out_migrating) noexcept
+    [[nodiscard]] uint32_t getEntityId(const size_t index) const noexcept {
+        return _ids[index];
+    }
+
+    [[nodiscard]] int findEntityIndex(const uint32_t id) const noexcept {
+        for (size_t index = 0u; index < _ids.size(); ++index)
+        {
+            if (_ids[index] == id)
+                return static_cast<int>(index);
+        }
+        return -1;
+    }
+
+    void physicsTick(const float deltatime, std::vector<EntitySnapshot> &out_migrating) noexcept
     {
         LocalGuard guard(_locker);
 
@@ -139,7 +152,7 @@ public:
 
     void updateSpatialIndex()
     {
-        _octree.rebuild(_positions.size(), [&](uint32_t index){
+        _octree.rebuild(_positions.size(), [&](const uint32_t index){
             return BoundaryBox{_positions[index] - (_sizes[index] * 0.5f), _positions[index] + (_sizes[index] * 0.5f)};
         });
     }

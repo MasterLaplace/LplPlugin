@@ -18,6 +18,11 @@ public:
         return _partitions.get(getChunkKey(position));
     }
 
+    [[nodiscard]] Partition *getChunk(const uint64_t chunkKey) const
+    {
+        return _partitions.get(chunkKey);
+    }
+
     void addEntity(const Partition::EntitySnapshot &entity)
     {
         uint64_t key = getChunkKey(entity.position);
