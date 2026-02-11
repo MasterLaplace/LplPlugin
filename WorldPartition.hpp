@@ -10,6 +10,7 @@ public:
     WorldPartition() noexcept : _partitions(WORLD_CAPACITY), _chunkSize(255.f)
     {
         _transitQueue.reserve(1024u);
+        _entityToChunk.assign(1000000u, INVALID_CHUNK_KEY);
     }
 
     [[nodiscard]] Partition *getChunk(const Vec3 &position) const
@@ -19,7 +20,18 @@ public:
 
     [[nodiscard]] Partition *addPartition(const Vec3 &position)
     {
-        return getOrCreateChunk(position);
+        return getOrCreateChunk(position, getChunkKey(position));
+    }
+
+    void updateEntityChunk(uint32_t entityId, uint64_t newChunkKey) noexcept
+    {
+        if (entityId < _entityToChunk.size())
+            _entityToChunk[entityId] = newChunkKey;
+    }
+
+    [[nodiscard]] uint64_t getEntityChunkKey(uint32_t entityId) const noexcept
+    {
+        return (entityId < _entityToChunk.size()) ? _entityToChunk[entityId] : INVALID_CHUNK_KEY;
     }
 
     void step(float deltatime)
@@ -30,8 +42,12 @@ public:
         });
         for (const auto &entity : _transitQueue)
         {
-            if (Partition *partition = getOrCreateChunk(entity.position))
+            uint64_t key = getChunkKey(entity.position);
+            if (Partition *partition = getOrCreateChunk(entity.position, key))
+            {
                 partition->addEntity(entity);
+                updateEntityChunk(entity.id, key);
+            }
         }
     }
 
@@ -46,9 +62,8 @@ private:
         return Morton::encode2D(static_cast<uint32_t>(ux), static_cast<uint32_t>(uz));
     }
 
-    Partition *getOrCreateChunk(const Vec3 &position)
+    Partition *getOrCreateChunk(const Vec3 &position, uint64_t key)
     {
-        uint64_t key = getChunkKey(position);
         Partition *partition = _partitions.get(key);
 
         if (partition)
@@ -62,7 +77,9 @@ private:
 
 private:
     static constexpr uint64_t WORLD_CAPACITY = 1ULL << 16ul;
+    static constexpr uint64_t INVALID_CHUNK_KEY = std::numeric_limits<uint64_t>::max();
     FlatAtomicsHashMap<Partition> _partitions;
     std::vector<Partition::EntitySnapshot> _transitQueue;
+    std::vector<uint64_t> _entityToChunk;
     float _chunkSize;
 };

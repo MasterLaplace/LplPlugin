@@ -185,7 +185,7 @@ void destroy_entity(uint32_t public_id)
         return (void)printf("[ERROR] destroy_entity: internal_index(%d) >= MAX_ENTITIES(%d)\n", internal_index, MAX_ENTITIES);
 
     core.sparse_lookup[public_id] = UINT32_MAX;
-    core.entity_generations[public_id]++;
+    core.entity_generations[internal_index]++;
 
     uint32_t pos = atomic_fetch_add(&core.free_count, 1);
 

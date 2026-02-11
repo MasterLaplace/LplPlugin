@@ -15,7 +15,7 @@ public:
     };
 
     struct EntitySnapshot {
-        uint64_t id;
+        uint32_t id;
         Vec3 position;
         Quat rotation;
         Vec3 velocity;
@@ -110,7 +110,7 @@ public:
     }
 
 private:
-    std::vector<uint64_t> _ids;
+    std::vector<uint32_t> _ids;
     std::vector<Vec3> _positions;
     std::vector<Quat> _rotations;
     std::vector<Vec3> _velocities;
