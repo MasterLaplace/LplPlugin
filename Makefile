@@ -42,13 +42,19 @@ server: server.cpp WorldPartition.hpp Partition.hpp FlatAtomicsHashMap.hpp \
         EntityRegistry.hpp
 	$(CXX) -O3 -std=c++20 -Wall -pthread -o server server.cpp
 
+# --- Visual 3D Demo (OpenGL, interactive camera) ---
+visual3d: visual3d.cpp WorldPartition.hpp Partition.hpp FlatAtomicsHashMap.hpp \
+          Math.hpp Morton.hpp SpinLock.hpp PinnedAllocator.hpp FlatDynamicOctree.hpp \
+          EntityRegistry.hpp
+	$(CXX) -O3 -std=c++20 -Wall -pthread -o visual3d visual3d.cpp -lglfw -lGLEW -lGL -lm
+
 # ============================================================
 #  Utils
 # ============================================================
 
 clean:
 	rm -f /tmp/lpl_kernel_build 2>/dev/null; true
-	rm -f *.o engine server *.ko
+	rm -f *.o engine server visual3d *.ko
 
 install:
 	sudo insmod lpl_kmod.ko
