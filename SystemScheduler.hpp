@@ -25,6 +25,8 @@
 #include <vector>
 #include <algorithm>
 #include <cstdio>
+#include <latch>
+#include "ThreadPool.hpp"
 
 class WorldPartition; // Forward declaration
 
@@ -170,7 +172,7 @@ public:
      * @brief Exécute tous les systèmes en respectant le DAG.
      *
      * Chaque stage est exécuté séquentiellement.
-     * Les systèmes d'un même stage sont parallélisables (mais exécutés séquentiellement pour l'instant).
+     * Les systèmes d'un même stage sont parallélisables.
      * Après tous les stages, appelle world.swapBuffers().
      */
     void tick(WorldPartition &world, float dt)
@@ -180,9 +182,22 @@ public:
 
         for (const auto &stage : _stages)
         {
-            // TODO: paralléliser les systèmes d'un même stage (threads / CUDA streams)
-            for (uint32_t sysIdx : stage)
-                _systems[sysIdx].tick(world, dt);
+            if (stage.size() > 1u)
+            {
+                std::latch sync(static_cast<ptrdiff_t>(stage.size()));
+                for (uint32_t sysIdx : stage)
+                {
+                    _pool.enqueue([&world, dt, sysIdx, this, &sync]() {
+                        _systems[sysIdx].tick(world, dt);
+                        sync.count_down();
+                    });
+                }
+                sync.wait();
+            }
+            else if (!stage.empty())
+            {
+                _systems[stage[0]].tick(world, dt);
+            }
         }
     }
 
@@ -267,5 +282,6 @@ private:
 private:
     std::vector<SystemDescriptor> _systems;
     std::vector<std::vector<uint32_t>> _stages; ///< Chaque stage = liste d'indices dans _systems
+    ThreadPool _pool;
     bool _scheduleDirty = false;
 };
