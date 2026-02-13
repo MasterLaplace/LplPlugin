@@ -3,14 +3,54 @@
 #include "FlatAtomicsHashMap.hpp"
 #include "Partition.hpp"
 #include "EntityRegistry.hpp"
+#include "PhysicsGPU.cuh"
 #include "Morton.hpp"
 #include <cmath>
+#include <cstring>
 
 class WorldPartition {
 public:
-    WorldPartition() : _partitions(WORLD_CAPACITY), _chunkSize(255.f)
+    WorldPartition() : _partitions(WORLD_CAPACITY), _chunkSize(255.f), _writeIdx(0u)
     {
         _transitQueue.reserve(1024u);
+    }
+
+    // ─── Double Buffer API ─────────────────────────────────────────
+
+    /** @brief Index du write buffer courant (0 ou 1). */
+    [[nodiscard]] uint32_t getWriteIdx() const noexcept
+    {
+        return _writeIdx.load(std::memory_order_acquire);
+    }
+
+    /** @brief Index du read buffer courant (stable pour le rendu). */
+    [[nodiscard]] uint32_t getReadIdx() const noexcept
+    {
+        return _writeIdx.load(std::memory_order_acquire) ^ 1u;
+    }
+
+    /**
+     * @brief Bascule le double buffer.
+     *
+     * 1. Copie les données hot (pos, vel, forces) du write buffer → read buffer
+     *    (pour que le nouveau write buffer démarre avec l'état à jour).
+     * 2. Toggle writeIdx (atomique, acquire-release).
+     *
+     * Après l'appel :
+     *   - L'ancien write buffer devient le read buffer (snapshot stable pour le rendu)
+     *   - Le nouveau write buffer contient une copie des dernières données
+     */
+    void swapBuffers()
+    {
+        uint32_t oldW = _writeIdx.load(std::memory_order_acquire);
+
+        // Copie hot data : write → read (pour initialiser le nouveau write buffer)
+        _partitions.forEach([oldW](Partition &p) {
+            p.syncBuffers(oldW);
+        });
+
+        // Toggle atomique : l'ancien read buffer (maintenant synchronisé) devient write
+        _writeIdx.fetch_xor(1u, std::memory_order_acq_rel);
     }
 
     [[nodiscard]] Partition *getChunk(const Vec3 &position) const
@@ -52,7 +92,7 @@ public:
         if (!partition)
             return {};
 
-        auto snapshot = partition->removeEntityById(publicId);
+        auto snapshot = partition->removeEntityById(publicId, getWriteIdx());
         _registry.unregisterEntity(publicId);
         return snapshot;
     }
@@ -105,35 +145,66 @@ public:
     }
 
     /**
-     * @brief Vérifie les bornes et réinsère les entités migrantes.
-     * Appeler après la physique GPU (qui a déjà mis à jour positions/velocités).
-     */
-    void migrateEntities()
-    {
-        _transitQueue.clear();
-        _partitions.forEach([&](Partition &partition) {
-            partition.checkAndMigrate(_transitQueue);
-        });
-        for (const auto &entity : _transitQueue)
-        {
-            uint64_t key = getChunkKey(entity.position);
-            if (Partition *partition = getOrCreateChunk(entity.position, key))
-            {
-                partition->addEntity(entity);
-                _registry.updateChunkKey(entity.id, key);
-            }
-        }
-    }
-
-    /**
-     * @brief Physique CPU + migration (chemin sans GPU).
+     * @brief Step physique + migration inter-chunk.
+     *
+     * Sélectionne automatiquement le backend :
+     *   - GPU : cudaHostGetDevicePointer → launch_physics_kernel → gpu_sync
+     *   - CPU : Partition::physicsTick (fallback si compilé sans nvcc)
+     *
+     * Écrit dans le write buffer. Appeler swapBuffers() ensuite.
      */
     void step(float deltatime)
     {
+        uint32_t wIdx = getWriteIdx();
         _transitQueue.clear();
-        _partitions.forEach([&](Partition &partition){
-            partition.physicsTick(deltatime, _transitQueue);
+
+#if defined(__CUDACC__)
+        // ─── GPU path ───────────────────────────────────────────────
+
+#ifdef LPL_MONITORING
+        gpu_timer_start();
+#endif
+
+        // Phase 1 : Lancement des kernels par chunk (pas de sync intermédiaire)
+        _partitions.forEach([&](Partition &partition) {
+            uint32_t count = static_cast<uint32_t>(partition.getEntityCount());
+            if (count == 0u)
+                return;
+
+            Vec3  *d_pos = nullptr, *d_vel = nullptr, *d_forces = nullptr;
+            float *d_masses = nullptr;
+
+            CUDA_CHECK(cudaHostGetDevicePointer(&d_pos,    partition.getPositionsData(wIdx),  0));
+            CUDA_CHECK(cudaHostGetDevicePointer(&d_vel,    partition.getVelocitiesData(wIdx), 0));
+            CUDA_CHECK(cudaHostGetDevicePointer(&d_forces, partition.getForcesData(wIdx),     0));
+            CUDA_CHECK(cudaHostGetDevicePointer(&d_masses, partition.getMassesData(),          0));
+
+            launch_physics_kernel(d_pos, d_vel, d_forces, d_masses, count, deltatime);
         });
+
+        // Phase 2 : Sync unique après tous les kernels
+        gpu_sync();
+
+#ifdef LPL_MONITORING
+        float ms = gpu_timer_stop();
+        static int log_counter = 0;
+        if (log_counter++ % 100 == 0)
+            printf("[GPU] WorldPartition::step: %.3f ms\n", ms);
+#endif
+
+        // Phase 3 : Migration inter-chunk (CPU)
+        _partitions.forEach([&](Partition &partition) {
+            partition.checkAndMigrate(_transitQueue, wIdx);
+        });
+
+#else
+        // ─── CPU fallback ───────────────────────────────────────────
+        _partitions.forEach([&](Partition &partition){
+            partition.physicsTick(deltatime, _transitQueue, wIdx);
+        });
+#endif
+
+        // Réinsertion des entités migrantes
         for (const auto &entity : _transitQueue)
         {
             uint64_t key = getChunkKey(entity.position);
@@ -177,4 +248,5 @@ private:
     EntityRegistry _registry;
     std::vector<Partition::EntitySnapshot> _transitQueue;
     float _chunkSize;
+    std::atomic<uint32_t> _writeIdx; ///< 0 ou 1 — index du write buffer global
 };

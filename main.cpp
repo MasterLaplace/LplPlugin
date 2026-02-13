@@ -1,306 +1,419 @@
-// --- LAPLACE MAIN SERVER EXAMPLE --- //
-// File: main.c
-// Description: Exemple de moteur côté serveur utilisant le plugin pour la communication réseau et la simulation GPU
-// Note: Ce code à été partiellement généré par Copilot et édité par MasterLaplace pour démontrer les capacités du plugin
+// --- LAPLACE DEDICATED TEST SERVER --- //
+// TEMPORARY TEST SERVER — will be replaced by production architecture
+// File: main.cpp
+// Description: Serveur autoritaire avec broadcast UDP vers les clients visual3d.
+//              Reçoit les inputs clients, applique la physique, broadcast l'état.
 // Auteur: MasterLaplace & Copilot
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <math.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <cstring>
+#include <random>
+#include <vector>
 #include <pthread.h>
-#include <string.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <unistd.h>
 
-#include "Engine.cuh"
+#include "PhysicsGPU.cuh"
+#include "NetworkDispatch.hpp"
 #include "WorldPartition.hpp"
+#include "SystemScheduler.hpp"
+#include "SpinLock.hpp"
 
-NetworkRingBuffer *ring_buffer = NULL;
-volatile bool running = true;
-static PerfMetrics metrics = {0};
+// ─── Global State ─────────────────────────────────────────────
 
-// Obtenir un timestamp haute résolution en nanosecondes
+static NetworkRingBuffer *g_ringBuffer = nullptr;
+static volatile bool running = true;
+static int g_serverSock = -1;
+static std::atomic<uint32_t> g_nextEntityId{100}; // IDs 1-99 reserved for NPCs
+
+// ─── Signal Handler (Ctrl+C) ─────────────────────────────────
+
+static void sigint_handler(int) { running = false; }
+
+// ─── Client Management ───────────────────────────────────────
+
+struct ClientInfo {
+    sockaddr_in addr;
+    uint32_t entityId;
+};
+
+static std::vector<ClientInfo> g_clients;
+static SpinLock g_clientsLock;
+
+// ─── Message Queues (recv thread → main thread) ──────────────
+
+struct PendingConnect {
+    sockaddr_in addr;
+    socklen_t addrLen;
+};
+
+struct PendingInput {
+    uint32_t entityId;
+    Vec3 direction;
+};
+
+static std::vector<PendingConnect> g_connectQueue;
+static SpinLock g_connectLock;
+
+static std::vector<PendingInput> g_inputQueue;
+static SpinLock g_inputLock;
+
+// ─── Timing ───────────────────────────────────────────────────
+
 static inline uint64_t get_time_ns()
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-void setup_kernel_link()
+// ─── UDP Receive Thread ──────────────────────────────────────
+
+static void *udp_receive_thread(void * /*arg*/)
 {
-    int fd = open("/dev/lpl_driver", O_RDWR);
-    if (fd < 0)
+    uint8_t buf[MAX_PACKET_SIZE];
+
+    while (running)
     {
-        perror("[ERROR] setup_kernel_link: Impossible d'ouvrir /dev/lpl_driver");
-        exit(1);
-    }
+        sockaddr_in clientAddr{};
+        socklen_t addrLen = sizeof(clientAddr);
+        ssize_t n = recvfrom(g_serverSock, buf, sizeof(buf), 0,
+                             reinterpret_cast<sockaddr *>(&clientAddr), &addrLen);
+        if (n <= 0)
+            continue;
 
-    ring_buffer = (NetworkRingBuffer *)mmap(NULL, sizeof(NetworkRingBuffer), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (ring_buffer == MAP_FAILED)
-    {
-        perror("[ERROR] setup_kernel_link: Erreur de mappage mémoire");
-        close(fd);
-        exit(1);
-    }
-
-    printf("[SYSTEM] setup_kernel_link: Driver connecté. Ring Buffer mappé à %p\n", ring_buffer);
-    printf("[SYSTEM] Ring Buffer size: %zu bytes\n", sizeof(NetworkRingBuffer));
-    printf("[SYSTEM] Initial head=%u, tail=%u\n", lpl_atomic_load(&ring_buffer->head), lpl_atomic_load(&ring_buffer->tail));
-}
-
-// --- THREAD CLIENT UDP (Producteur) ---
-void *udp_client_thread(void *arg)
-{
-    printf("[CLIENT] Thread démarré. Envoi de paquets UDP à haute fréquence...\n");
-
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
-        perror("[ERROR] socket()");
-        return NULL;
-    }
-
-    // Optimisations socket
-    int sendbuf_size = 256 * 1024; // 256KB send buffer
-    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sendbuf_size, sizeof(sendbuf_size));
-
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(7777);
-    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
-
-    int frame = 0;
-    uint64_t total_sent = 0;
-    uint64_t batch_start = get_time_ns();
-
-    // HAUTE FRÉQUENCE : 1000 paquets/sec (1ms intervalle)
-    const int TOTAL_PACKETS = 1000;
-    const uint64_t INTERVAL_NS = 1000000; // 1ms en nanosecondes
-
-    while (running && frame < TOTAL_PACKETS)
-    {
-        // Construit un paquet binaire
-        uint8_t payload[256];
-        uint8_t *cursor = payload;
-
-        // 1. ID d'entité (4 bytes)
-        uint32_t entity_id = 42;
-        *(uint32_t *)cursor = entity_id;
-        cursor += sizeof(uint32_t);
-
-        // 2. Composant TRANSFORM (Tag + 3 floats)
-        *cursor = COMP_TRANSFORM;
-        cursor++;
-        *(float *)cursor = cosf(frame * 0.01f) * 10.0f;
-        cursor += sizeof(float);
-        *(float *)cursor = sinf(frame * 0.01f) * 10.0f;
-        cursor += sizeof(float);
-        *(float *)cursor = 0.5f;
-        cursor += sizeof(float);
-
-        // 3. Composant HEALTH (Tag + 1 int)
-        *cursor = COMP_HEALTH;
-        cursor++;
-        *(int *)cursor = 50 + (int)(30.0f * sinf(frame * 0.02f));
-        cursor += sizeof(int);
-
-        uint16_t payload_size = cursor - payload;
-
-        // Envoie le paquet
-        ssize_t sent = sendto(sock, payload, payload_size, 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-        if (sent > 0)
+        switch (buf[0])
         {
-            total_sent++;
-            metrics.packets_sent++;
-
-            // Log tous les 100 paquets seulement (pour ne pas polluer)
-            if (frame % 100 == 0)
-            {
-                uint64_t elapsed_ms = (get_time_ns() - batch_start) / 1000000;
-                float throughput = (float)frame / ((float)elapsed_ms / 1000.0f);
-                printf("[CLIENT] Frame %4d: %lu paquets envoyés | Throughput: %.0f pkt/s\n",
-                       frame, (unsigned long)total_sent, throughput);
-            }
+        case MSG_CONNECT: {
+            LocalGuard lock(g_connectLock);
+            g_connectQueue.push_back({clientAddr, addrLen});
+            break;
         }
-
-        // Sleep précis avec nanosleep
-        struct timespec sleep_time;
-        sleep_time.tv_sec = 0;
-        sleep_time.tv_nsec = INTERVAL_NS;
-        nanosleep(&sleep_time, NULL);
-
-        frame++;
+        case MSG_INPUT: {
+            if (n < 17) break; // 1B type + 4B id + 12B direction
+            PendingInput inp;
+            inp.entityId = *reinterpret_cast<uint32_t *>(buf + 1);
+            inp.direction = {
+                *reinterpret_cast<float *>(buf + 5),
+                *reinterpret_cast<float *>(buf + 9),
+                *reinterpret_cast<float *>(buf + 13)
+            };
+            LocalGuard lock(g_inputLock);
+            g_inputQueue.push_back(inp);
+            break;
+        }
+        default:
+            break;
+        }
     }
 
-    uint64_t total_time_ms = (get_time_ns() - batch_start) / 1000000;
-    printf("[CLIENT] Thread terminé: %lu paquets en %lu ms (%.2f pkt/s)\n",
-           (unsigned long)total_sent, (unsigned long)total_time_ms,
-           (float)total_sent / ((float)total_time_ms / 1000.0f));
-
-    close(sock);
-    return NULL;
+    return nullptr;
 }
 
-// --- MAIN (Moteur Unifié WorldPartition) ---
+// ─── Broadcast State to All Clients ──────────────────────────
+
+/**
+ * @brief Sérialise l'état du monde (read buffer) et l'envoie à tous les clients.
+ *
+ * Format MSG_STATE : [1B MSG_STATE][2B entityCount][{4B id, 12B pos, 12B size, 4B hp}×N]
+ * 32 bytes par entité → ~43 entités par paquet de 1400 bytes.
+ * Si plus d'entités, plusieurs paquets sont envoyés.
+ */
+static void broadcast_state(WorldPartition &world)
+{
+    std::vector<ClientInfo> clients;
+    {
+        LocalGuard lock(g_clientsLock);
+        clients = g_clients;
+    }
+    if (clients.empty())
+        return;
+
+    uint32_t readIdx = world.getReadIdx();
+
+    constexpr size_t MAX_UDP = 1400;
+    constexpr size_t HDR_SIZE = 3;        // 1B type + 2B count
+    constexpr size_t ENT_SIZE = 32;       // 4+12+12+4
+    uint8_t pkt[MAX_UDP];
+    uint16_t count = 0;
+    uint8_t *cursor = pkt + HDR_SIZE;
+
+    auto flush = [&]() {
+        if (count == 0)
+            return;
+        pkt[0] = MSG_STATE;
+        *reinterpret_cast<uint16_t *>(pkt + 1) = count;
+        size_t pktSize = static_cast<size_t>(cursor - pkt);
+        for (const auto &c : clients)
+            sendto(g_serverSock, pkt, pktSize, 0,
+                   reinterpret_cast<const sockaddr *>(&c.addr), sizeof(c.addr));
+        cursor = pkt + HDR_SIZE;
+        count = 0;
+    };
+
+    world.forEachChunk([&](Partition &p) {
+        for (size_t i = 0; i < p.getEntityCount(); ++i)
+        {
+            if (static_cast<size_t>(cursor - pkt) + ENT_SIZE > MAX_UDP)
+                flush();
+
+            auto ent = p.getEntity(i, readIdx);
+
+            *reinterpret_cast<uint32_t *>(cursor) = p.getEntityId(i);
+            cursor += 4;
+            *reinterpret_cast<float *>(cursor + 0) = ent.position.x;
+            *reinterpret_cast<float *>(cursor + 4) = ent.position.y;
+            *reinterpret_cast<float *>(cursor + 8) = ent.position.z;
+            cursor += 12;
+            *reinterpret_cast<float *>(cursor + 0) = ent.size.x;
+            *reinterpret_cast<float *>(cursor + 4) = ent.size.y;
+            *reinterpret_cast<float *>(cursor + 8) = ent.size.z;
+            cursor += 12;
+            *reinterpret_cast<int32_t *>(cursor) = ent.health;
+            cursor += 4;
+            count++;
+        }
+    });
+
+    flush();
+}
+
+// ─── MAIN ─────────────────────────────────────────────────────
+
 int main()
 {
-    printf("=== Démarrage du Moteur LplPlugin (Unified WorldPartition) ===\n");
+    signal(SIGINT, sigint_handler);
+    printf("=== LplPlugin Test Server (TEMPORARY) ===\n\n");
 
-    // 1. Initialiser le contexte CUDA
-    engine_init();
+    // 1. GPU init
+    gpu_init();
 
-    // 2. Setup kernel link (mmap ring buffer)
-    setup_kernel_link();
+    // 2. Kernel ring buffer (optional — skip if driver not loaded)
+    g_ringBuffer = network_init();
+    if (!g_ringBuffer)
+        printf("[WARN] Driver non disponible, ring buffer désactivé.\n\n");
 
-    // 3. Créer le monde
-    WorldPartition world;
-
-    // 4. Pré-enregistrer l'entité joueur (ID 42)
-    Partition::EntitySnapshot player{};
-    player.id = 42;
-    player.position = {0.f, 10.f, 0.f};
-    player.rotation = {0.f, 0.f, 0.f, 1.f};
-    player.velocity = {0.f, 0.f, 0.f};
-    player.mass = 1.0f;
-    player.force = {0.f, 0.f, 0.f};
-    player.size = {1.f, 2.f, 1.f};
-    player.health = 100;
-    uint32_t player_handle = world.addEntity(player);
-    printf("[WORLD] Entity #42 registered (handle: 0x%X)\n", player_handle);
-
-    // 5. Lancer le thread client UDP (producteur de paquets)
-    pthread_t client_thread;
-    if (pthread_create(&client_thread, NULL, udp_client_thread, NULL) != 0)
+    // 3. UDP server socket
+    g_serverSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (g_serverSock < 0)
     {
-        perror("[ERROR] pthread_create");
+        perror("[FATAL] socket()");
+        gpu_cleanup();
         return 1;
     }
 
-    int frame = 0;
+    sockaddr_in serverAddr{};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(7777);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    printf("\n[MAIN] Démarrage de la boucle simulation...\n\n");
+    if (bind(g_serverSock, reinterpret_cast<sockaddr *>(&serverAddr), sizeof(serverAddr)) < 0)
+    {
+        perror("[FATAL] bind()");
+        close(g_serverSock);
+        gpu_cleanup();
+        return 1;
+    }
 
-    metrics.start_time_ns = get_time_ns();
-    metrics.min_latency_ns = UINT64_MAX;
-    metrics.max_latency_ns = 0;
+    // Timeout pour recvfrom (permet un shutdown propre)
+    struct timeval tv{0, 100000}; // 100ms
+    setsockopt(g_serverSock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    // Durée du test : 2 secondes à 60Hz = ~120 frames
-    const int MAX_FRAMES = 120;
-    const uint64_t FRAME_TIME_NS = 16666666; // ~60Hz (16.666ms)
+    // 4. Créer le monde avec des NPCs
+    WorldPartition world;
+    {
+        std::mt19937 rng(42);
+        std::uniform_real_distribution<float> posDist(-500.f, 500.f);
+        std::uniform_real_distribution<float> velDist(-20.f, 20.f);
+        std::uniform_real_distribution<float> sizeDist(1.5f, 5.f);
 
-    while (frame < MAX_FRAMES && running)
+        for (uint32_t i = 1; i <= 50; ++i)
+        {
+            Partition::EntitySnapshot npc{};
+            npc.id = i;
+            npc.position = {posDist(rng), 10.f, posDist(rng)};
+            npc.rotation = {0.f, 0.f, 0.f, 1.f};
+            npc.velocity = {velDist(rng), 0.f, velDist(rng)};
+            npc.mass = 1.f;
+            npc.size = {sizeDist(rng), sizeDist(rng) * 1.2f, sizeDist(rng)};
+            npc.health = 100;
+            world.addEntity(npc);
+        }
+        printf("[WORLD] 50 NPC entities spawned\n");
+    }
+
+    // 5. SystemScheduler ECS
+    SystemScheduler scheduler;
+
+    // Système : Kernel ring buffer (si driver disponible)
+    if (g_ringBuffer)
+    {
+        NetworkRingBuffer *ring = g_ringBuffer;
+        scheduler.registerSystem({
+            "RingConsume", -20,
+            [ring](WorldPartition &w, float /*dt*/) {
+                network_consume_packets(ring, w);
+            },
+            {
+                {ComponentId::Position, AccessMode::Write},
+                {ComponentId::Velocity, AccessMode::Write},
+                {ComponentId::Health,   AccessMode::Write},
+                {ComponentId::Mass,     AccessMode::Write},
+                {ComponentId::Size,     AccessMode::Write},
+            }
+        });
+    }
+
+    // Système : Process connexions + inputs clients
+    scheduler.registerSystem({
+        "ClientIO", -10,
+        [&](WorldPartition &w, float /*dt*/) {
+            // ── Connexions ──
+            std::vector<PendingConnect> connects;
+            {
+                LocalGuard lock(g_connectLock);
+                std::swap(connects, g_connectQueue);
+            }
+
+            for (auto &c : connects)
+            {
+                uint32_t id = g_nextEntityId.fetch_add(1u);
+
+                Partition::EntitySnapshot ent{};
+                ent.id = id;
+                ent.position = {0.f, 10.f, 0.f};
+                ent.rotation = {0.f, 0.f, 0.f, 1.f};
+                ent.velocity = {0.f, 0.f, 0.f};
+                ent.mass = 1.f;
+                ent.force = {0.f, 0.f, 0.f};
+                ent.size = {1.f, 2.f, 1.f};
+                ent.health = 100;
+                w.addEntity(ent);
+
+                // Répondre MSG_WELCOME
+                uint8_t pkt[5];
+                pkt[0] = MSG_WELCOME;
+                *reinterpret_cast<uint32_t *>(pkt + 1) = id;
+                sendto(g_serverSock, pkt, 5, 0,
+                       reinterpret_cast<sockaddr *>(&c.addr), c.addrLen);
+
+                {
+                    LocalGuard lock(g_clientsLock);
+                    g_clients.push_back({c.addr, id});
+                }
+
+                char ip[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &c.addr.sin_addr, ip, sizeof(ip));
+                printf("[SERVER] Client %s:%d connecté → Entity #%u\n",
+                       ip, ntohs(c.addr.sin_port), id);
+            }
+
+            // ── Inputs joueurs ──
+            std::vector<PendingInput> inputs;
+            {
+                LocalGuard lock(g_inputLock);
+                std::swap(inputs, g_inputQueue);
+            }
+
+            uint32_t writeIdx = w.getWriteIdx();
+            for (auto &inp : inputs)
+            {
+                int localIdx = -1;
+                Partition *chunk = w.findEntity(inp.entityId, localIdx);
+                if (chunk && localIdx >= 0)
+                {
+                    constexpr float PLAYER_SPEED = 50.0f;
+                    Vec3 vel = inp.direction * PLAYER_SPEED;
+                    chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, writeIdx);
+                }
+            }
+        },
+        {
+            {ComponentId::Position, AccessMode::Write},
+            {ComponentId::Velocity, AccessMode::Write},
+            {ComponentId::Health,   AccessMode::Write},
+            {ComponentId::Mass,     AccessMode::Write},
+            {ComponentId::Size,     AccessMode::Write},
+        }
+    });
+
+    // Système : Physique
+    scheduler.registerSystem({
+        "Physics", 0,
+        [](WorldPartition &w, float dt) {
+            w.step(dt);
+        },
+        {
+            {ComponentId::Position, AccessMode::Write},
+            {ComponentId::Velocity, AccessMode::Write},
+            {ComponentId::Forces,   AccessMode::Write},
+            {ComponentId::Mass,     AccessMode::Read},
+        }
+    });
+
+    scheduler.buildSchedule();
+    scheduler.printSchedule();
+
+    // 6. Lancer le thread de réception UDP
+    pthread_t recvThread;
+    if (pthread_create(&recvThread, nullptr, udp_receive_thread, nullptr) != 0)
+    {
+        perror("[FATAL] pthread_create");
+        close(g_serverSock);
+        if (g_ringBuffer) network_cleanup(g_ringBuffer);
+        gpu_cleanup();
+        return 1;
+    }
+
+    // 7. Boucle principale (infinie — Ctrl+C pour arrêter)
+    printf("\n[SERVER] Écoute sur UDP 0.0.0.0:7777. Ctrl+C pour arrêter.\n\n");
+
+    constexpr uint64_t FRAME_TIME_NS = 16666666; // ~60Hz
+    constexpr float DT = 1.f / 60.f;
+    uint64_t frameCount = 0;
+
+    while (running)
     {
         uint64_t frame_start = get_time_ns();
 
-        // 1. Consommer les paquets réseau → WorldPartition
-        uint32_t tail_before = lpl_atomic_load(&ring_buffer->tail);
-        uint64_t consume_start = get_time_ns();
-        engine_consume_packets(ring_buffer, world);
-        uint64_t consume_end = get_time_ns();
-        uint32_t tail_after = lpl_atomic_load(&ring_buffer->tail);
-        uint32_t packets_consumed = (tail_after - tail_before) & (RING_SIZE - 1);
+        // Tick ECS : RingConsume → ClientIO → Physics
+        scheduler.tick(world, DT);
 
-        if (packets_consumed > 0)
+        // Swap buffers : rend les résultats de la physique visibles au read buffer
+        world.swapBuffers();
+
+        // Broadcast l'état du monde à tous les clients (depuis le read buffer)
+        broadcast_state(world);
+
+        frameCount++;
+        if (frameCount % 300 == 0)
         {
-            metrics.packets_received += packets_consumed;
-            uint64_t consume_time_us = (consume_end - consume_start) / 1000;
-
-            if (frame % 20 == 0)
-            {
-                printf("[RING] Frame %3d: Consommé %u pkt | Temps: %lu µs | Total reçu: %lu\n",
-                       frame, packets_consumed, (unsigned long)consume_time_us,
-                       (unsigned long)metrics.packets_received);
-            }
+            LocalGuard lock(g_clientsLock);
+            printf("[SERVER] Frame %lu | Clients: %zu | NPCs: 50\n",
+                   static_cast<unsigned long>(frameCount), g_clients.size());
         }
 
-        // 2. Physique GPU + migration inter-chunk
-        uint64_t gpu_start = get_time_ns();
-        engine_physics_tick(world, 0.016f);
-        uint64_t gpu_end = get_time_ns();
-
-        // 3. Lecture de l'état de l'entité pour le "rendu"
-        if (frame % 20 == 0)
+        // Maintenir 60Hz
+        uint64_t elapsed = get_time_ns() - frame_start;
+        if (elapsed < FRAME_TIME_NS)
         {
-            int localIdx = -1;
-            Partition *chunk = world.findEntity(42, localIdx);
-            if (chunk && localIdx >= 0)
-            {
-                auto ent = chunk->getEntity(static_cast<size_t>(localIdx));
-                uint64_t gpu_time_us = (gpu_end - gpu_start) / 1000;
-                printf("[RENDER] Frame %3d | Pos: [%5.2f, %5.2f, %5.2f] | HP: %3d | GPU: %lu µs\n",
-                       frame, ent.position.x, ent.position.y, ent.position.z,
-                       ent.health, (unsigned long)gpu_time_us);
-            }
+            struct timespec ts{0, static_cast<long>(FRAME_TIME_NS - elapsed)};
+            nanosleep(&ts, nullptr);
         }
-
-        // 4. Timing de la frame
-        uint64_t frame_end = get_time_ns();
-        uint64_t frame_time = frame_end - frame_start;
-
-        metrics.total_latency_ns += frame_time;
-        if (frame_time < metrics.min_latency_ns) metrics.min_latency_ns = frame_time;
-        if (frame_time > metrics.max_latency_ns) metrics.max_latency_ns = frame_time;
-        metrics.frame_count++;
-
-        // Sleep pour maintenir 60Hz
-        if (frame_time < FRAME_TIME_NS)
-        {
-            struct timespec sleep_time;
-            uint64_t sleep_ns = FRAME_TIME_NS - frame_time;
-            sleep_time.tv_sec = 0;
-            sleep_time.tv_nsec = sleep_ns;
-            nanosleep(&sleep_time, NULL);
-        }
-
-        frame++;
     }
 
-    printf("\n[MAIN] Attente de la fin du thread client...\n");
-    running = false;
-    pthread_join(client_thread, NULL);
-
-    engine_cleanup();
-
-    // === RAPPORT DE PERFORMANCE FINAL ===
-    uint64_t total_time_ms = (get_time_ns() - metrics.start_time_ns) / 1000000;
-    float avg_latency_us = (float)metrics.total_latency_ns / (float)metrics.frame_count / 1000.0f;
-
-    printf("\n");
-    printf("# RAPPORT DE PERFORMANCE FINAL\n");
-    printf("\n");
-    printf("### STATISTIQUES RÉSEAU\n");
-    printf("---\n");
-    printf("- Paquets envoyés     : %lu\n", (unsigned long)metrics.packets_sent);
-    printf("- Paquets reçus       : %lu\n", (unsigned long)metrics.packets_received);
-    printf("- Paquets perdus      : %lu (%.2f%%)\n",
-           (unsigned long)(metrics.packets_sent - metrics.packets_received),
-           100.0f * (float)(metrics.packets_sent - metrics.packets_received) / (float)metrics.packets_sent);
-    printf("- Throughput réseau   : %.2f pkt/s\n\n",
-           (float)metrics.packets_received / ((float)total_time_ms / 1000.0f));
-
-    printf("### PERFORMANCE FRAME\n");
-    printf("---\n");
-    printf("- Frames totales      : %lu\n", (unsigned long)metrics.frame_count);
-    printf("- Temps total         : %lu ms\n", (unsigned long)total_time_ms);
-    printf("- Framerate réel      : %.2f fps\n",
-           (float)metrics.frame_count / ((float)total_time_ms / 1000.0f));
-    printf("- Frame time (avg)    : %.2f µs\n", avg_latency_us);
-    printf("- Frame time (min)    : %.2f µs\n", (float)metrics.min_latency_ns / 1000.0f);
-    printf("- Frame time (max)    : %.2f µs\n\n", (float)metrics.max_latency_ns / 1000.0f);
-
-    printf("**OBJECTIF:** <16.666ms par frame (60 FPS)\n");
-    if (avg_latency_us < 16666.0f)
-        printf("**OBJECTIF ATTEINT:** (%.2f µs < 16666 µs)\n", avg_latency_us);
-    else
-        printf("**OBJECTIF NON ATTEINT:** (%.2f µs > 16666 µs)\n", avg_latency_us);
-
-    printf("\n=== Arrêt ===\n");
+    // 8. Shutdown
+    printf("\n[SERVER] Arrêt en cours...\n");
+    pthread_join(recvThread, nullptr);
+    close(g_serverSock);
+    if (g_ringBuffer) network_cleanup(g_ringBuffer);
+    gpu_cleanup();
+    printf("[SERVER] Terminé.\n");
     return 0;
 }

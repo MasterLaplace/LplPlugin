@@ -32,7 +32,10 @@ typedef std::atomic<bool> atomic_bool;
 
 // --- Shared Protocol Constants ---
 #define RING_SIZE 4096       // Puissance de 2 pour utiliser un masque binaire rapide
-#define MAX_PACKET_SIZE 256  // Taille max d'un paquet binaire
+#define MAX_PACKET_SIZE 256  // Taille max d'un payload binaire
+
+// --- Ring Buffer Message Types ---
+#define RING_MSG_DYNAMIC 0x01
 
 // --- Shared Protocol Types ---
 
@@ -43,16 +46,28 @@ typedef enum {
     COMP_TRANSFORM = 1,
     COMP_HEALTH    = 2,
     COMP_VELOCITY  = 3,
-    COMP_MASS      = 4
+    COMP_MASS      = 4,
+    COMP_SIZE      = 5
 } ComponentID;
+
+/* --- Message Types for Server<->Client UDP Communication ---
+ * These are for direct UDP between server and visual clients,
+ * NOT for the kernel ring buffer (which uses ComponentID format).
+ */
+#define MSG_CONNECT  0x10  /* Client->Server: [1B type]                                      */
+#define MSG_WELCOME  0x11  /* Server->Client: [1B type][4B entityId]                          */
+#define MSG_INPUT    0x12  /* Client->Server: [1B type][4B entityId][12B direction(Vec3)]     */
+#define MSG_STATE    0x13  /* Server->Client: [1B type][2B count][{4B id,12B pos,12B size,4B hp}xN] */
 
 /**
  * @brief Paquet réseau à taille variable.
- * Format: [EntityID(4B)][CompID(1B)][Data...]...
+ * Header: [MsgType(1B)][PayloadSize(2B)]
+ * Payload: [EntityID(4B)][CompID(1B)][Data...]...
  */
 typedef struct {
+    uint8_t msgType;
+    uint16_t size; // Taille du payload (data)
     uint8_t data[MAX_PACKET_SIZE];
-    uint16_t size;
 } DynamicPacket;
 
 /**

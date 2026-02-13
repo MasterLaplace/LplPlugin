@@ -30,8 +30,8 @@
 #include <atomic>
 #include <memory>
 #include <vector>
-#include <mutex>
 #include <algorithm>
+#include "SpinLock.hpp"
 #if __cpp_lib_bit_cast >= 201806L
 #include <bit>
 #else
@@ -119,7 +119,7 @@ public:
     {
         uint32_t slotIndex;
         {
-            std::lock_guard<std::mutex> lock(_allocMutex);
+            LocalGuard lock(_allocLock);
             if (_freeIndices.empty())
                 return nullptr;
 
@@ -130,13 +130,13 @@ public:
         _pool[slotIndex] = std::move(chunk);
         if (linkKeyToSlot(key, slotIndex))
         {
-            std::lock_guard<std::mutex> lock(_allocMutex);
+            LocalGuard lock(_allocLock);
             _activeSlots.push_back(slotIndex);
             return &_pool[slotIndex];
         }
 
         {
-            std::lock_guard<std::mutex> lock(_allocMutex);
+            LocalGuard lock(_allocLock);
             _freeIndices.push_back(slotIndex);
         }
         return get(key);
@@ -168,7 +168,7 @@ public:
         {
             _map[index].data.store(TOMBSTONE, std::memory_order_release);
             uint32_t poolIndex = PackedEntry::extract_pool_index(raw);
-            std::lock_guard<std::mutex> lock(_allocMutex);
+            LocalGuard lock(_allocLock);
             _freeIndices.push_back(poolIndex);
             auto it = std::find(_activeSlots.begin(), _activeSlots.end(), poolIndex);
             if (it != _activeSlots.end()) { *it = _activeSlots.back(); _activeSlots.pop_back(); }
@@ -214,8 +214,13 @@ public:
     template <typename Callable>
     void forEach(Callable &&func)
     {
-        std::lock_guard<std::mutex> lock(_allocMutex);
-        for (uint32_t poolIdx : _activeSlots)
+        // Copie des indices sous verrou, itération sans verrou
+        std::vector<uint32_t> snapshot;
+        {
+            LocalGuard lock(_allocLock);
+            snapshot = _activeSlots;
+        }
+        for (uint32_t poolIdx : snapshot)
             func(_pool[poolIdx]);
     }
 
@@ -254,5 +259,5 @@ private:
     std::unique_ptr<T[]> _pool;
     std::vector<uint32_t> _freeIndices;
     std::vector<uint32_t> _activeSlots;
-    mutable std::mutex _allocMutex;
+    mutable SpinLock _allocLock;
 };

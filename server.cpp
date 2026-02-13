@@ -50,6 +50,7 @@ int main() {
 
         // A. Mise à jour du monde
         world.step(dt);
+        world.swapBuffers();  // Rend les résultats visibles au read buffer
 
         // B. Inspection via l'index EntityID → ChunkKey
         for (uint32_t entityId : {1u, 2u}) {
@@ -75,7 +76,7 @@ int main() {
                 continue;
             }
 
-            auto entity = chunk->getEntity(static_cast<size_t>(idx));
+            auto entity = chunk->getEntity(static_cast<size_t>(idx), world.getReadIdx());
             std::cout << "   Entity #" << entityId << " : pos=" << entity.position
                       << " vel=" << entity.velocity
                       << " | Chunk=0x" << std::hex << chunkKey << std::dec

@@ -2,6 +2,7 @@
 
 #include "Math.hpp"
 #include "Morton.hpp"
+#include "PinnedAllocator.hpp"
 #include <algorithm>
 
 class FlatDynamicOctree {
@@ -67,6 +68,18 @@ public:
             return;
         queryRecurse(0, searchArea, func);
     }
+
+    // ─── GPU Data Exposure ─────────────────────────────────────
+
+    /** @brief Pointeur brut vers les nœuds (POD, transférable GPU). */
+    [[nodiscard]] const FlatNode *getNodesData() const noexcept { return _nodes.data(); }
+    [[nodiscard]] FlatNode *getNodesData() noexcept { return _nodes.data(); }
+    [[nodiscard]] uint32_t getNodeCount() const noexcept { return static_cast<uint32_t>(_nodes.size()); }
+
+    /** @brief Pointeur brut vers les références d'entités (POD, transférable GPU). */
+    [[nodiscard]] const EntityRef *getRefsData() const noexcept { return _sortedRefs.data(); }
+    [[nodiscard]] EntityRef *getRefsData() noexcept { return _sortedRefs.data(); }
+    [[nodiscard]] uint32_t getRefCount() const noexcept { return static_cast<uint32_t>(_sortedRefs.size()); }
 
 private:
     void runRadixSort(const uint32_t count)
@@ -178,9 +191,9 @@ private:
     }
 
 private:
-    std::vector<FlatNode> _nodes;
-    std::vector<EntityRef> _sortedRefs;
-    std::vector<EntityRef> _tempRefs;
+    std::vector<FlatNode, PinnedAllocator<FlatNode>> _nodes;
+    std::vector<EntityRef, PinnedAllocator<EntityRef>> _sortedRefs;
+    std::vector<EntityRef, PinnedAllocator<EntityRef>> _tempRefs;
     BoundaryBox _WORLD_BOUND;
     Vec3 _WORLD_BOUND_SIZE;
     uint8_t _MAX_DEPTH;

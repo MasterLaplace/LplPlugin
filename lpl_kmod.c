@@ -59,6 +59,7 @@ static uint32_t hook_get_engine_packet(void *priv, struct sk_buff *skb, const st
     if (skb_copy_bits(skb, ip_len + sizeof(struct udphdr), pkt->data, payload_len) < 0)
         return printk(KERN_WARNING "[LPL] skb_copy_bits failed\n"), NF_DROP;
 
+    pkt->msgType = RING_MSG_DYNAMIC;
     pkt->size = (uint16_t)payload_len;
     atomic_set(&ring->head, next_head);
 
