@@ -56,7 +56,7 @@ public:
     {
         {
             std::unique_lock<std::mutex> lock(_mutex);
-            if (!active)
+            if (!_active)
                 return;
             _tasks.emplace(std::forward<Func>(func));
         }

@@ -234,10 +234,9 @@ public:
     {
         LocalGuard guard(_locker);
 
-        // Pass 1: Intégration physique (in-place sur le write buffer)
         for (size_t i = 0; i < _ids.size(); ++i)
         {
-            _forces[writeIdx][i] = Vec3{0.0f, -9.81f * _masses[i], 0.0f};
+            _forces[writeIdx][i] += Vec3{0.0f, -9.81f * _masses[i], 0.0f};
             if (_masses[i] > 0.0001f)
             {
                 Vec3 acceleration = _forces[writeIdx][i] * (1.0f / _masses[i]);
@@ -246,9 +245,43 @@ public:
             _positions[writeIdx][i] += _velocities[writeIdx][i] * deltatime;
             if (_positions[writeIdx][i].y < 0.f)
                 _positions[writeIdx][i] = Vec3{_positions[writeIdx][i].x, 0.f, _positions[writeIdx][i].z};
+            _forces[writeIdx][i] = Vec3{0.f, 0.f, 0.f};
         }
 
-        // Pass 2: Bounds check + migration (backward pour éviter invalidation d'index)
+        _octree.rebuild(_positions[writeIdx].size(), [&](const uint32_t index){
+            return BoundaryBox{
+                _positions[writeIdx][index] - (_sizes[index] * 0.5f),
+                _positions[writeIdx][index] + (_sizes[index] * 0.5f)
+            };
+        });
+
+        for (size_t i = 0; i < _ids.size(); ++i)
+        {
+            _octree.query(BoundaryBox{
+                _positions[writeIdx][i] - (_sizes[i] * 0.5f),
+                _positions[writeIdx][i] + (_sizes[i] * 0.5f)
+            }, [&](const uint32_t index) {
+                if (i == index) return;
+                Vec3 delta = _positions[writeIdx][i] - _positions[writeIdx][index];
+                Vec3 absDelta = Vec3{std::fabs(delta.x), std::fabs(delta.y), std::fabs(delta.z)};
+                Vec3 minDist = (_sizes[i] * 0.5f) + (_sizes[index] * 0.5f);
+
+                if (absDelta < minDist)
+                {
+                    float distSq = delta.magnitudeSquared();
+
+                    if (distSq < 0.0001f)
+                    {
+                        delta = Vec3{0.0f, 1.0f, 0.0f};
+                        distSq = 1.0f;
+                    }
+
+                    Vec3 repulsion = delta * (50.0f / (distSq + 0.1f));
+                    _forces[writeIdx][i] += repulsion;
+                }
+            });
+        }
+
         for (int64_t i = static_cast<int64_t>(_ids.size()) - 1; i >= 0; --i)
         {
             if (_bound.contains(_positions[writeIdx][i]))
