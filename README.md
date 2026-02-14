@@ -2,6 +2,17 @@
 
 Low-latency real-time simulation engine using zero-copy architecture from NIC to GPU, with spatial partitioning for MMO-scale worlds.
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Core Components](#core-components)
+4. [Build & Run](#build--run)
+5. [Technical Details](#technical-details)
+6. [Performance](#performance)
+7. [Roadmap](#roadmap)
+8. [License](#license)
+
 ## Overview
 
 LplPlugin is a high-performance engine designed to minimize latency in networked real-time simulations. It combines a Linux kernel module for zero-copy UDP packet ingestion with a WorldPartition system that spatially organizes entities into Morton-encoded chunks.
