@@ -14,7 +14,8 @@ NVCC_AVAILABLE := $(shell command -v $(NVCC) 2>/dev/null)
 
 WORLD_HEADERS = WorldPartition.hpp Partition.hpp FlatAtomicsHashMap.hpp \
                 EntityRegistry.hpp Math.hpp Morton.hpp SpinLock.hpp \
-                PinnedAllocator.hpp FlatDynamicOctree.hpp
+                PinnedAllocator.hpp FlatDynamicOctree.hpp \
+				SystemScheduler.hpp ThreadPool.hpp
 
 # ============================================================
 #  Targets
@@ -41,7 +42,7 @@ main.o: main.cpp PhysicsGPU.cuh NetworkDispatch.hpp SystemScheduler.hpp \
 	$(CXX) -O3 -std=c++20 -Wall -pthread -c main.cpp -o main.o
 
 NetworkDispatch.o: NetworkDispatch.cpp NetworkDispatch.hpp lpl_protocol.h \
-        $(WORLD_HEADERS) Math.hpp PhysicsGPU.cuh
+        $(WORLD_HEADERS) PhysicsGPU.cuh
 	$(CXX) -O3 -std=c++20 -Wall -pthread -c NetworkDispatch.cpp -o NetworkDispatch.o
 else
 engine: main.o PhysicsGPU.o NetworkDispatch.o
@@ -55,27 +56,19 @@ PhysicsGPU.o: PhysicsGPU.cu PhysicsGPU.cuh Math.hpp
 	$(NVCC) $(NVCC_FLAGS) -c PhysicsGPU.cu -o PhysicsGPU.o
 
 NetworkDispatch.o: NetworkDispatch.cpp NetworkDispatch.hpp lpl_protocol.h \
-        $(WORLD_HEADERS) Math.hpp PhysicsGPU.cuh
+        $(WORLD_HEADERS) PhysicsGPU.cuh
 	$(NVCC) $(NVCC_FLAGS) -x cu -c NetworkDispatch.cpp -o NetworkDispatch.o
 endif
-
-# --- WorldPartition standalone demo (CPU-only, no CUDA) ---
-server_demo: server.cpp $(WORLD_HEADERS)
-	$(CXX) -O3 -std=c++20 -Wall -pthread -o server_demo server.cpp
 
 # --- Benchmark (CPU performance testing) ---
 benchmark: benchmark.cpp $(WORLD_HEADERS)
 	$(CXX) -O3 -march=native -std=c++20 -Wall -pthread -o benchmark benchmark.cpp
 
-# --- Visual Demo (terminal-based, no dependencies) ---
-visual: visual.cpp $(WORLD_HEADERS)
-	$(CXX) -O3 -std=c++20 -Wall -pthread -o visual visual.cpp
-
 # --- Visual 3D Client (connects to engine server via UDP) ---
-visual3d: visual3d.cpp lpl_protocol.h $(WORLD_HEADERS)
-	$(CXX) -O3 -std=c++20 -Wall -pthread -o visual3d visual3d.cpp -lglfw -lGLEW -lGL -lm
+visual: visual.cpp lpl_protocol.h $(WORLD_HEADERS)
+	$(CXX) -O3 -std=c++20 -Wall -pthread -o visual visual.cpp -lglfw -lGLEW -lGL -lm
 
-client: visual3d
+client: visual
 
 # ============================================================
 #  Utils
@@ -83,7 +76,7 @@ client: visual3d
 
 clean:
 	rm -f /tmp/lpl_kernel_build 2>/dev/null; true
-	rm -f *.o engine server_demo benchmark visual visual3d *.ko
+	rm -f *.o engine benchmark visual visual *.ko
 
 install:
 	sudo insmod lpl_kmod.ko
@@ -98,4 +91,4 @@ run:
 logs:
 	dmesg | tail -20
 
-.PHONY: all driver engine server_demo client clean install uninstall run logs
+.PHONY: all driver engine client clean install uninstall run logs
