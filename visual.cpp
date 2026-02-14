@@ -674,5 +674,3 @@ int main(int argc, char *argv[])
     glfwTerminate();
     return 0;
 }
-
-// BUILD: g++ -std=c++20 -O3 -o visual3d visual3d.cpp -lglfw -lGLEW -lGL -lm -lpthread
