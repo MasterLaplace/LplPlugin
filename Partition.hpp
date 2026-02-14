@@ -326,71 +326,6 @@ public:
     }
 
     /**
-     * @brief Vérifie les bornes et extrait les entités migrantes.
-     * Utilisé après la physique GPU. Le write buffer contient les positions mises à jour.
-     * Swap-and-pop sur les DEUX buffers pour maintenir la cohérence.
-     *
-     * @param writeIdx Index du write buffer (positions à checker).
-     */
-    void checkAndMigrate(std::vector<EntitySnapshot> &out_migrating, uint32_t writeIdx) noexcept
-    {
-        LocalGuard guard(_locker);
-
-        if (_ids.empty())
-            return;
-
-        for (int64_t i = static_cast<int64_t>(_ids.size()) - 1u; i >= 0u; --i)
-        {
-            if (_bound.contains(_positions[writeIdx][i]))
-                continue;
-
-            out_migrating.push_back({
-                _ids[i], _positions[writeIdx][i], _rotations[i],
-                _velocities[writeIdx][i], _masses[i], _forces[writeIdx][i], _sizes[i], _health[i]
-            });
-
-            uint32_t removedId = _ids[i];
-            if (removedId < _sparseCapacity)
-                _sparseToLocal[removedId] = INVALID_INDEX;
-
-            size_t last = _ids.size() - 1u;
-            if (static_cast<size_t>(i) != last)
-            {
-                uint32_t movedId = _ids[last];
-                _ids[i] = _ids[last];
-                for (uint8_t b = 0u; b < 2u; ++b)
-                {
-                    _positions[b][i] = _positions[b][last];
-                    _velocities[b][i] = _velocities[b][last];
-                    _forces[b][i] = _forces[b][last];
-                }
-                _rotations[i] = _rotations[last];
-                _masses[i] = _masses[last];
-                _sizes[i] = _sizes[last];
-                _health[i] = _health[last];
-                _sleeping[i] = _sleeping[last];
-                _sleepCounter[i] = _sleepCounter[last];
-                if (movedId < _sparseCapacity)
-                    _sparseToLocal[movedId] = static_cast<uint32_t>(i);
-            }
-
-            _ids.pop_back();
-            for (uint8_t b = 0u; b < 2u; ++b)
-            {
-                _positions[b].pop_back();
-                _velocities[b].pop_back();
-                _forces[b].pop_back();
-            }
-            _rotations.pop_back();
-            _masses.pop_back();
-            _sizes.pop_back();
-            _health.pop_back();
-            _sleeping.pop_back();
-            _sleepCounter.pop_back();
-        }
-    }
-
-    /**
      * @brief Copie les données hot du write buffer vers l'autre buffer.
      * Appelé par WorldPartition::swapBuffers() AVANT le toggle de writeIdx.
      * Après copie + toggle, le nouveau write buffer a les données à jour.
@@ -634,8 +569,11 @@ private:
      *
      * @param writeIdx Index du write buffer (positions à checker).
      */
-    void checkAndMigrate(std::vector<EntitySnapshot> &out_migrating, uint32_t writeIdx) noexcept
+    void checkAndMigrate(std::vector<EntitySnapshot> &out_migrating, uint32_t writeIdx)
     {
+        if (_ids.empty())
+            return;
+
         for (int64_t i = static_cast<int64_t>(_ids.size()) - 1u; i >= 0u; --i)
         {
             if (_sleeping[i])
@@ -652,8 +590,8 @@ private:
             uint32_t removedId = _ids[i];
             if (removedId < _sparseCapacity)
                 _sparseToLocal[removedId] = INVALID_INDEX;
-            size_t last = _ids.size() - 1u;
 
+            size_t last = _ids.size() - 1u;
             if (static_cast<size_t>(i) != last)
             {
                 uint32_t movedId = _ids[last];
