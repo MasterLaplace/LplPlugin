@@ -31,6 +31,8 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
+#include <future>
+#include <thread>
 #include "SpinLock.hpp"
 #if __cpp_lib_bit_cast >= 201806L
 #include <bit>
@@ -222,6 +224,98 @@ public:
         }
         for (uint32_t poolIdx : snapshot)
             func(_pool[poolIdx]);
+    }
+
+    /**
+     * @brief Parallel iteration over active slots using a ThreadPool.
+     * 
+     * @tparam ThreadPoolType Type of the thread pool (must implement enqueue).
+     * @tparam Callable Function to execute. Signature: void(T&, uint32_t batchIdx) or void(T&).
+     * @param pool The thread pool to use.
+     * @param func The function to execute.
+     * @param minPerThread Minimum number of items per thread to avoid overhead.
+     */
+    template <typename ThreadPoolType, typename Callable>
+    void forEachParallel(ThreadPoolType &pool, Callable &&func, uint32_t minPerThread = 64u)
+    {
+        std::vector<uint32_t> snapshot;
+        {
+            LocalGuard lock(_allocLock);
+            snapshot = _activeSlots;
+        }
+
+        const size_t totalItems = snapshot.size();
+        if (totalItems == 0u)
+            return;
+
+        uint32_t nThreads = std::thread::hardware_concurrency();
+        if (nThreads == 0u)
+            nThreads = 1u;
+
+        uint32_t nBatches = nThreads;
+        if (totalItems < nBatches * minPerThread)
+        {
+            nBatches = static_cast<uint32_t>((totalItems + minPerThread - 1u) / minPerThread);
+            if (nBatches == 0u)
+                nBatches = 1u;
+        }
+
+        const size_t batchSize = (totalItems + nBatches - 1u) / nBatches;
+        if (nBatches == 1u)
+        {
+            for (size_t i = 0u; i < totalItems; ++i)
+            {
+                if constexpr (std::is_invocable_v<Callable, T&, uint32_t>)
+                    func(_pool[snapshot[i]], 0u);
+                else
+                    func(_pool[snapshot[i]]);
+            }
+            return;
+        }
+
+        std::vector<std::future<void>> futures;
+        futures.reserve(nBatches);
+
+        for (uint32_t b = 0u; b < nBatches; ++b)
+        {
+            size_t start = b * batchSize;
+            size_t end = std::min(start + batchSize, totalItems);
+            
+            if (start >= end)
+                break;
+
+            futures.emplace_back(pool.enqueue([this, start, end, b, &snapshot, &func]() {
+                for (size_t i = start; i < end; ++i)
+                {
+                    if constexpr (std::is_invocable_v<Callable, T&, uint32_t>)
+                        func(_pool[snapshot[i]], b);
+                    else
+                        func(_pool[snapshot[i]]);
+                }
+            }));
+        }
+
+        for (auto &f : futures)
+            f.wait();
+    }
+
+    /**
+     * @brief Copie les indices actifs du pool (thread-safe).
+     * Utilisé par le ThreadPool pour distribuer les chunks aux workers.
+     */
+    void snapshotActiveSlots(std::vector<uint32_t> &out)
+    {
+        LocalGuard lock(_allocLock);
+        out = _activeSlots;
+    }
+
+    /**
+     * @brief Accès direct à un élément du pool par son index.
+     * Le poolIndex doit provenir de snapshotActiveSlots().
+     */
+    [[nodiscard]] T &getByPoolIndex(uint32_t poolIdx) noexcept
+    {
+        return _pool[poolIdx];
     }
 
 private:

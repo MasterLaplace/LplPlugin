@@ -5,12 +5,12 @@
 #include "EntityRegistry.hpp"
 #include "PhysicsGPU.cuh"
 #include "Morton.hpp"
-#include <cmath>
+#include "ThreadPool.hpp"
 #include <cstring>
 
 class WorldPartition {
 public:
-    WorldPartition() : _partitions(WORLD_CAPACITY), _chunkSize(255.f), _writeIdx(0u)
+    WorldPartition() : _partitions(WORLD_CAPACITY), _chunkSize(1000.f), _writeIdx(0u), _threadPool()
     {
         _transitQueue.reserve(1024u);
     }
@@ -136,6 +136,36 @@ public:
     [[nodiscard]] EntityRegistry &getRegistry() noexcept { return _registry; }
 
     /**
+     * @brief Compte le nombre total d'entités dans tous les chunks.
+     */
+    [[nodiscard]] int getEntityCount() noexcept
+    {
+        int total = 0;
+        _partitions.forEach([&](Partition &p) {
+            total += static_cast<int>(p.getEntityCount());
+        });
+        return total;
+    }
+
+    /**
+     * @brief Compte le nombre de chunks actifs.
+     */
+    [[nodiscard]] int getChunkCount() noexcept
+    {
+        int count = 0;
+        _partitions.forEach([&](Partition &) { count++; });
+        return count;
+    }
+
+    /**
+     * @brief Compte le nombre d'entités dans la transit queue (migration en cours).
+     */
+    [[nodiscard]] size_t getTransitCount() const noexcept
+    {
+        return _transitQueue.size();
+    }
+
+    /**
      * @brief Itère sur tous les chunks actifs.
      */
     template <typename Func>
@@ -159,8 +189,48 @@ public:
         _transitQueue.clear();
 
 #if defined(__CUDACC__)
-        // ─── GPU path ───────────────────────────────────────────────
+        stepGPU(deltatime, wIdx);
+#else
+        stepCPU(deltatime, wIdx);
+#endif
 
+        flushTransitQueue();
+        runGC();
+    }
+
+private:
+    [[nodiscard]] uint64_t getChunkKey(const Vec3 &position) const noexcept
+    {
+        auto x = static_cast<int>(std::floor(position.x / _chunkSize));
+        auto z = static_cast<int>(std::floor(position.z / _chunkSize));
+        const uint64_t bias = 1ULL << (20ul);
+        uint64_t ux = static_cast<uint64_t>(static_cast<int64_t>(x) + static_cast<int64_t>(bias));
+        uint64_t uz = static_cast<uint64_t>(static_cast<int64_t>(z) + static_cast<int64_t>(bias));
+        return Morton::encode2D(static_cast<uint32_t>(ux), static_cast<uint32_t>(uz));
+    }
+
+    Partition *getOrCreateChunk(const Vec3 &position, const uint64_t key)
+    {
+        Partition *partition = _partitions.get(key);
+
+        if (partition)
+            return partition;
+
+        float gridX = std::floor(position.x / _chunkSize) * _chunkSize;
+        float gridZ = std::floor(position.z / _chunkSize) * _chunkSize;
+
+        Partition newPartition({gridX, 0.f, gridZ}, _chunkSize);
+        newPartition.reserve(256);
+        newPartition.setMortonKey(key);
+        return _partitions.insert(key, std::move(newPartition));
+    }
+
+#if defined(__CUDACC__)
+    /**
+     * @brief Step physique pour le GPU.
+     */
+    void stepGPU(const float deltatime, const uint32_t wIdx)
+    {
 #ifdef LPL_MONITORING
         gpu_timer_start();
 #endif
@@ -196,15 +266,30 @@ public:
         _partitions.forEach([&](Partition &partition) {
             partition.checkAndMigrate(_transitQueue, wIdx);
         });
-
-#else
-        // ─── CPU fallback ───────────────────────────────────────────
-        _partitions.forEach([&](Partition &partition){
-            partition.physicsTick(deltatime, _transitQueue, wIdx);
-        });
+    }
 #endif
 
-        // Réinsertion des entités migrantes
+    /**
+     * @brief Step physique pour le fallback CPU.
+     */
+    void stepCPU(const float deltatime, const uint32_t wIdx)
+    {
+        const uint32_t nWorkers = std::max(1u, std::thread::hardware_concurrency());
+        std::vector<std::vector<Partition::EntitySnapshot>> localTransits(nWorkers);
+
+        _partitions.forEachParallel(_threadPool, [&](Partition &partition, uint32_t batchIdx) {
+            partition.physicsTick(deltatime, localTransits[batchIdx % nWorkers], wIdx);
+        });
+
+        for (auto &lt : localTransits)
+            _transitQueue.insert(_transitQueue.end(), lt.begin(), lt.end());
+    }
+
+    /**
+     * @brief Réinsère les entités migrantes dans leurs nouveaux chunks après le step physique.
+     */
+    void flushTransitQueue()
+    {
         for (const auto &entity : _transitQueue)
         {
             uint64_t key = getChunkKey(entity.position);
@@ -216,37 +301,36 @@ public:
         }
     }
 
-private:
-    [[nodiscard]] uint64_t getChunkKey(const Vec3 &position) const noexcept
+    /**
+     * @brief Supprime les chunks vides pour libérer de la mémoire
+     */
+    void runGC()
     {
-        auto x = static_cast<int>(std::floor(position.x / _chunkSize));
-        auto z = static_cast<int>(std::floor(position.z / _chunkSize));
-        const uint64_t bias = 1ULL << (20ul);
-        uint64_t ux = static_cast<uint64_t>(static_cast<int64_t>(x) + static_cast<int64_t>(bias));
-        uint64_t uz = static_cast<uint64_t>(static_cast<int64_t>(z) + static_cast<int64_t>(bias));
-        return Morton::encode2D(static_cast<uint32_t>(ux), static_cast<uint32_t>(uz));
-    }
+        if (++_gcCounter >= GC_INTERVAL_FRAMES)
+        {
+            _gcCounter = 0u;
 
-    Partition *getOrCreateChunk(const Vec3 &position, const uint64_t key)
-    {
-        Partition *partition = _partitions.get(key);
+            // Collecte des clés des chunks vides
+            std::vector<uint64_t> emptyKeys;
+            _partitions.forEach([&](Partition &p) {
+                if (p.getEntityCount() == 0u && p.getMortonKey() != 0u)
+                    emptyKeys.push_back(p.getMortonKey());
+            });
 
-        if (partition)
-            return partition;
-
-        float gridX = std::floor(position.x / _chunkSize) * _chunkSize;
-        float gridZ = std::floor(position.z / _chunkSize) * _chunkSize;
-
-        Partition newPartition({gridX, 0.f, gridZ}, _chunkSize);
-        newPartition.reserve(256);
-        return _partitions.insert(key, std::move(newPartition));
+            // Suppression hors de l'itération forEach
+            for (uint64_t key : emptyKeys)
+                _partitions.remove(key);
+        }
     }
 
 private:
     static constexpr uint64_t WORLD_CAPACITY = 1ULL << 16ul;
+    static constexpr uint32_t GC_INTERVAL_FRAMES = 1u; ///< GC chaque frame (scan léger sur les chunks actifs)
     FlatAtomicsHashMap<Partition> _partitions;
     EntityRegistry _registry;
     std::vector<Partition::EntitySnapshot> _transitQueue;
     float _chunkSize;
     std::atomic<uint32_t> _writeIdx; ///< 0 ou 1 — index du write buffer global
+    uint32_t _gcCounter = 0u;          ///< compteur de frames pour le GC périodique
+    ThreadPool _threadPool;
 };

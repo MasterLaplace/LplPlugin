@@ -187,7 +187,7 @@ public:
                 std::latch sync(static_cast<ptrdiff_t>(stage.size()));
                 for (uint32_t sysIdx : stage)
                 {
-                    _pool.enqueue([&world, dt, sysIdx, this, &sync]() {
+                    _pool.enqueueDetached([&world, dt, sysIdx, this, &sync]() {
                         _systems[sysIdx].tick(world, dt);
                         sync.count_down();
                     });

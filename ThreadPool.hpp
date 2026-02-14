@@ -6,6 +6,7 @@
 #include <queue>
 #include <thread>
 #include <vector>
+#include <future>
 
 class ThreadPool {
 public:
@@ -51,14 +52,38 @@ public:
         }
     }
 
-    template <typename Func>
-    void enqueue(Func &&func)
+    template <typename Func, typename... Args>
+    auto enqueue(Func&& func, Args&&... args)
+        -> std::future<typename std::invoke_result<Func, Args...>::type>
     {
+        using ReturnType = typename std::invoke_result<Func, Args...>::type;
+
+        auto task = std::make_shared<std::packaged_task<ReturnType()>>(
+            std::bind(std::forward<Func>(func), std::forward<Args>(args)...)
+        );
+
+        std::future<ReturnType> res = task->get_future();
         {
             std::unique_lock<std::mutex> lock(_mutex);
             if (!_active)
-                return;
-            _tasks.emplace(std::forward<Func>(func));
+                throw std::runtime_error("enqueue on stopped ThreadPool");
+
+            _tasks.emplace([task]() { (*task)(); });
+        }
+        _condition.notify_one();
+        return res;
+    }
+
+    template <typename Func, typename... Args>
+    void enqueueDetached(Func&& func, Args&&... args)
+    {
+        auto task = std::bind(std::forward<Func>(func), std::forward<Args>(args)...);
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            if (!_active)
+                throw std::runtime_error("enqueue on stopped ThreadPool");
+
+            _tasks.emplace(std::move(task));
         }
         _condition.notify_one();
     }

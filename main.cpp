@@ -331,6 +331,7 @@ int main()
                     constexpr float PLAYER_SPEED = 50.0f;
                     Vec3 vel = inp.direction * PLAYER_SPEED;
                     chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, writeIdx);
+                    chunk->wakeEntity(static_cast<uint32_t>(localIdx));
                 }
             }
         },
@@ -346,8 +347,24 @@ int main()
     // Système : Physique
     scheduler.registerSystem({
         "Physics", 0,
-        [](WorldPartition &w, float dt) {
+        [&](WorldPartition &w, float dt) {
+            static uint64_t totalTime = 0;
+            static uint64_t count = 0;
+
+            uint64_t t0 = get_time_ns();
             w.step(dt);
+            uint64_t t1 = get_time_ns();
+
+            totalTime += (t1 - t0);
+            count++;
+
+            if (count % 60 == 0)
+            {
+                double avgMs = static_cast<double>(totalTime) / 60.0 / 1000000.0;
+                printf("[PERF] Physics Step Avg: %.3f ms | Entities: %d | Chunks: %d | Transit: %zu\n",
+                       avgMs, w.getEntityCount(), w.getChunkCount(), w.getTransitCount());
+                totalTime = 0;
+            }
         },
         {
             {ComponentId::Position, AccessMode::Write},
@@ -395,8 +412,9 @@ int main()
         if (frameCount % 300 == 0)
         {
             LocalGuard lock(g_clientsLock);
-            printf("[SERVER] Frame %lu | Clients: %zu | NPCs: 50\n",
-                   static_cast<unsigned long>(frameCount), g_clients.size());
+            printf("[SERVER] Frame %lu | Clients: %zu | Entities: %d | Chunks: %d\n",
+                   static_cast<unsigned long>(frameCount), g_clients.size(),
+                   world.getEntityCount(), world.getChunkCount());
         }
 
         // Maintenir 60Hz

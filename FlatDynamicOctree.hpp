@@ -3,6 +3,7 @@
 #include "Math.hpp"
 #include "Morton.hpp"
 #include "PinnedAllocator.hpp"
+#include <vector>
 #include <algorithm>
 
 class FlatDynamicOctree {
@@ -32,11 +33,27 @@ public:
     FlatDynamicOctree(const FlatDynamicOctree&) = delete;
     FlatDynamicOctree& operator=(const FlatDynamicOctree&) = delete;
 
+    /**
+     * @brief Construit ou reconstruit l'octree à partir d'un ensemble d'entités.
+     *
+     * @note Heuristique simple : on suppose que le nombre d'entités est relativement
+     * stable entre les reconstructions, pour éviter des reallocations coûteuses.
+     * Si le nombre d'entités dépasse la capacité actuelle, les buffers internes sont
+     * redimensionnés (doublés) pour accommoder la croissance.
+     *
+     * @tparam GetBoundCallBack  Fonction callback qui prend un index d'entité et retourne sa BoundaryBox (pour construire l'octree)
+     * @param count  Nombre d'entités à indexer
+     * @param func  Callback pour obtenir la BoundaryBox d'une entité à partir de son index (dans le buffer source)
+     */
     template <typename GetBoundCallBack>
     void rebuild(const uint32_t count, GetBoundCallBack &&func)
     {
         _nodes.clear();
         _sortedRefs.clear();
+
+        if (_sortedRefs.capacity() < count) _sortedRefs.reserve(count);
+        if (_tempRefs.capacity() < count) _tempRefs.reserve(count);
+        if (_nodes.capacity() < count) _nodes.reserve(count);
 
         for (uint32_t index = 0u; index < count; ++index)
         {

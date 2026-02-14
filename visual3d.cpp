@@ -150,7 +150,7 @@ static void drawCube(const glm::vec3 &center, const glm::vec3 &halfSize, const g
 
 static void drawChunkGrid()
 {
-    constexpr float CHUNK_SIZE = 255.f;
+    constexpr float CHUNK_SIZE = 1000.f;
 
     // Ground grid
     glColor3f(0.3f, 0.3f, 0.3f);
@@ -333,7 +333,6 @@ static void applyNetworkUpdates()
             chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, readIdx);
             chunk->setSize(static_cast<uint32_t>(localIdx), u.size);
             chunk->setHealth(static_cast<uint32_t>(localIdx), u.health);
-            printf("Ok_update %d|%d\n", u.id, localIdx);
         }
         else
         {
@@ -347,7 +346,6 @@ static void applyNetworkUpdates()
             snap.size = u.size;
             snap.health = u.health;
             state.world.addEntity(snap);
-            printf("Ok_new %d\n", u.id);
         }
     }
 }
@@ -629,6 +627,7 @@ int main(int argc, char *argv[])
                 Vec3 vel = inputDir * PLAYER_SPEED;
                 uint32_t writeIdx = state.world.getWriteIdx();
                 chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, writeIdx);
+                chunk->wakeEntity(static_cast<uint32_t>(localIdx));
             }
         }
 
