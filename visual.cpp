@@ -30,6 +30,7 @@
 #include "lpl_protocol.h" // MSG_*, MAX_PACKET_SIZE
 #include "Math.hpp"        // Vec3
 #include "WorldPartition.hpp"
+#include "Network.hpp"
 
 // ─── Camera ───────────────────────────────────────────────────
 
@@ -62,14 +63,10 @@ struct ServerHistory {
 
 struct ClientState {
     WorldPartition world;
-    std::unordered_map<uint32_t, ServerHistory> history;
-    std::vector<NetEntityUpdate> pendingUpdates;
-    std::mutex pendingMutex;
     Camera camera;
+    Network network;
     uint32_t myEntityId = 0;
-    std::atomic<bool> connected{false};
-    int sock = -1;
-    sockaddr_in serverAddr{};
+    bool connected = false;
 };
 
 static ClientState state;
@@ -188,76 +185,6 @@ static void drawChunkGrid()
     glEnd();
 }
 
-// ─── Network Thread ───────────────────────────────────────────
-
-static void networkThread()
-{
-    uint8_t buf[1400];
-
-    while (running)
-    {
-        sockaddr_in from{};
-        socklen_t fromLen = sizeof(from);
-        ssize_t n = recvfrom(state.sock, buf, sizeof(buf), 0,
-                             reinterpret_cast<sockaddr *>(&from), &fromLen);
-        if (n <= 0)
-            continue;
-
-        switch (buf[0])
-        {
-        case MSG_WELCOME: {
-            if (n >= 5)
-            {
-                state.myEntityId = *reinterpret_cast<uint32_t *>(buf + 1);
-                state.connected = true;
-                std::cout << "[CLIENT] Connecte au serveur! Mon entite: #"
-                          << state.myEntityId << "\n";
-            }
-            break;
-        }
-        case MSG_STATE: {
-            if (n < 3) break;
-            uint16_t count = *reinterpret_cast<uint16_t *>(buf + 1);
-            uint8_t *cursor = buf + 3;
-            double t = nowSeconds();
-
-            std::vector<NetEntityUpdate> local;
-            local.reserve(count);
-
-            for (uint16_t i = 0; i < count && (cursor - buf) + 32 <= n; ++i)
-            {
-                uint32_t id = *reinterpret_cast<uint32_t *>(cursor);
-                cursor += 4;
-                Vec3 pos{
-                    *reinterpret_cast<float *>(cursor + 0),
-                    *reinterpret_cast<float *>(cursor + 4),
-                    *reinterpret_cast<float *>(cursor + 8)
-                };
-                cursor += 12;
-                Vec3 size{
-                    *reinterpret_cast<float *>(cursor + 0),
-                    *reinterpret_cast<float *>(cursor + 4),
-                    *reinterpret_cast<float *>(cursor + 8)
-                };
-                cursor += 12;
-                int32_t health = *reinterpret_cast<int32_t *>(cursor);
-                cursor += 4;
-
-                local.push_back({id, pos, size, health, t});
-            }
-
-            if (!local.empty())
-            {
-                std::lock_guard<std::mutex> lock(state.pendingMutex);
-                state.pendingUpdates.insert(state.pendingUpdates.end(), local.begin(), local.end());
-            }
-            break;
-        }
-        default:
-            break;
-        }
-    }
-}
 
 // ─── Input Helpers ───────────────────────────────────────────
 
@@ -282,72 +209,7 @@ static void sendInput(const Vec3 &dir)
     if (!state.connected || state.myEntityId == 0)
         return;
 
-    uint8_t pkt[17]; // 1B type + 4B id + 12B direction
-    pkt[0] = MSG_INPUT;
-    *reinterpret_cast<uint32_t *>(pkt + 1) = state.myEntityId;
-    *reinterpret_cast<float *>(pkt + 5)  = dir.x;
-    *reinterpret_cast<float *>(pkt + 9)  = dir.y;
-    *reinterpret_cast<float *>(pkt + 13) = dir.z;
-
-    sendto(state.sock, pkt, 17, 0,
-           reinterpret_cast<sockaddr *>(&state.serverAddr), sizeof(state.serverAddr));
-}
-
-// ─── World Sync ───────────────────────────────────────────────
-
-static void applyNetworkUpdates()
-{
-    std::vector<NetEntityUpdate> updates;
-    {
-        std::lock_guard<std::mutex> lock(state.pendingMutex);
-        std::swap(updates, state.pendingUpdates);
-    }
-
-    if (updates.empty())
-        return;
-
-    uint32_t writeIdx = state.world.getWriteIdx();
-    uint32_t readIdx = state.world.getReadIdx();
-
-    for (const auto &u : updates)
-    {
-        Vec3 vel{0.f, 0.f, 0.f};
-        auto &hist = state.history[u.id];
-        if (hist.valid)
-        {
-            double dt = u.time - hist.time;
-            if (dt > 0.0001)
-                vel = (u.pos - hist.pos) * static_cast<float>(1.0 / dt);
-        }
-        hist.pos = u.pos;
-        hist.time = u.time;
-        hist.valid = true;
-
-        int localIdx = -1;
-        Partition *chunk = state.world.findEntity(u.id, localIdx);
-        if (chunk && localIdx >= 0)
-        {
-            chunk->setPosition(static_cast<uint32_t>(localIdx), u.pos, writeIdx);
-            chunk->setPosition(static_cast<uint32_t>(localIdx), u.pos, readIdx);
-            chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, writeIdx);
-            chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, readIdx);
-            chunk->setSize(static_cast<uint32_t>(localIdx), u.size);
-            chunk->setHealth(static_cast<uint32_t>(localIdx), u.health);
-        }
-        else
-        {
-            Partition::EntitySnapshot snap{};
-            snap.id = u.id;
-            snap.position = u.pos;
-            snap.rotation = {0.f, 0.f, 0.f, 1.f};
-            snap.velocity = vel;
-            snap.force = {0.f, 0.f, 0.f};
-            snap.mass = 1.0f;
-            snap.size = u.size;
-            snap.health = u.health;
-            state.world.addEntity(snap);
-        }
-    }
+    state.network.send_input(state.myEntityId, dir);
 }
 
 // ─── Update Camera ────────────────────────────────────────────
@@ -533,25 +395,14 @@ static GLFWwindow *initWindow()
 
 static bool initNetwork(const char *serverIp, uint16_t serverPort)
 {
-    state.sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (state.sock < 0)
+    if (!state.network.network_init())
     {
-        perror("[ERROR] socket()");
+        printf("[FATAL] Network init failed (driver missing?)\n");
         return false;
     }
 
-    state.serverAddr.sin_family = AF_INET;
-    state.serverAddr.sin_port = htons(serverPort);
-    inet_pton(AF_INET, serverIp, &state.serverAddr.sin_addr);
-
-    // Timeout pour recvfrom (shutdown propre)
-    struct timeval tv{0, 100000}; // 100ms
-    setsockopt(state.sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    // Envoyer MSG_CONNECT
-    uint8_t pkt[1] = {MSG_CONNECT};
-    sendto(state.sock, pkt, 1, 0,
-           reinterpret_cast<sockaddr *>(&state.serverAddr), sizeof(state.serverAddr));
+    state.network.set_server_info(serverIp, serverPort);
+    state.network.send_connect(serverIp, serverPort);
 
     std::cout << "[CLIENT] MSG_CONNECT envoye a " << serverIp << ":" << serverPort << "\n";
     return true;
@@ -579,15 +430,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // 3. Start network thread
-    std::thread netThread(networkThread);
-
     std::cout << "[CLIENT] En attente de MSG_WELCOME du serveur...\n"
               << "  WASD    : deplacer l'entite\n"
               << "  Fleches : orienter la camera\n"
               << "  ESC     : quitter\n\n";
 
-    // 4. Main loop
+    // 3. Main loop
     double lastFrameTime = nowSeconds();
 
     while (!glfwWindowShouldClose(window) && running)
@@ -597,7 +445,13 @@ int main(int argc, char *argv[])
         lastFrameTime = currentTime;
 
         // Sync server updates
-        applyNetworkUpdates();
+        state.network.network_consume_packets(state.world);
+
+        if (!state.connected && state.network.is_connected()) {
+            state.connected = true;
+            state.myEntityId = state.network.get_local_entity_id();
+            std::cout << "[CLIENT] Connected (synced with Network class) Entity: " << state.myEntityId << "\n";
+        }
 
         // Ensure local player exists for prediction
         if (state.connected && state.myEntityId != 0 &&
@@ -667,10 +521,9 @@ int main(int argc, char *argv[])
         glfwPollEvents();
     }
 
-    // 5. Cleanup
+    // 4. Cleanup
     running = false;
-    netThread.join();
-    close(state.sock);
+    state.network.network_cleanup();
     glfwTerminate();
     return 0;
 }

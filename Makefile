@@ -15,7 +15,8 @@ NVCC_AVAILABLE := $(shell command -v $(NVCC) 2>/dev/null)
 WORLD_HEADERS = WorldPartition.hpp Partition.hpp FlatAtomicsHashMap.hpp \
                 EntityRegistry.hpp Math.hpp Morton.hpp SpinLock.hpp \
                 PinnedAllocator.hpp FlatDynamicOctree.hpp \
-				SystemScheduler.hpp ThreadPool.hpp
+				SystemScheduler.hpp ThreadPool.hpp Network.hpp \
+				lpl_protocol.h
 
 # ============================================================
 #  Targets
@@ -34,30 +35,21 @@ driver:
 
 # --- Engine (NIC → GPU pipeline with ECS SystemScheduler) ---
 ifeq ($(NVCC_AVAILABLE),)
-engine: main.o NetworkDispatch.o
-	$(CXX) -O3 -std=c++20 -Wall -pthread -o engine main.o NetworkDispatch.o -lpthread -lm
+engine: main.o
+	$(CXX) -O3 -std=c++20 -Wall -pthread -o engine main.o -lpthread -lm
 
-main.o: main.cpp PhysicsGPU.cuh NetworkDispatch.hpp SystemScheduler.hpp \
-        lpl_protocol.h $(WORLD_HEADERS)
+main.o: main.cpp PhysicsGPU.cuh lpl_protocol.h $(WORLD_HEADERS)
 	$(CXX) -O3 -std=c++20 -Wall -pthread -c main.cpp -o main.o
 
-NetworkDispatch.o: NetworkDispatch.cpp NetworkDispatch.hpp lpl_protocol.h \
-        $(WORLD_HEADERS) PhysicsGPU.cuh
-	$(CXX) -O3 -std=c++20 -Wall -pthread -c NetworkDispatch.cpp -o NetworkDispatch.o
 else
-engine: main.o PhysicsGPU.o NetworkDispatch.o
-	$(NVCC) $(NVCC_FLAGS) -o engine main.o PhysicsGPU.o NetworkDispatch.o -lpthread -lm
+engine: main.o PhysicsGPU.o
+	$(NVCC) $(NVCC_FLAGS) -o engine main.o PhysicsGPU.o -lpthread -lm
 
-main.o: main.cpp PhysicsGPU.cuh NetworkDispatch.hpp SystemScheduler.hpp \
-        lpl_protocol.h $(WORLD_HEADERS)
+main.o: main.cpp PhysicsGPU.cuh $(WORLD_HEADERS)
 	$(NVCC) $(NVCC_FLAGS) -x cu -c main.cpp -o main.o
 
 PhysicsGPU.o: PhysicsGPU.cu PhysicsGPU.cuh Math.hpp
 	$(NVCC) $(NVCC_FLAGS) -c PhysicsGPU.cu -o PhysicsGPU.o
-
-NetworkDispatch.o: NetworkDispatch.cpp NetworkDispatch.hpp lpl_protocol.h \
-        $(WORLD_HEADERS) PhysicsGPU.cuh
-	$(NVCC) $(NVCC_FLAGS) -x cu -c NetworkDispatch.cpp -o NetworkDispatch.o
 endif
 
 # --- Benchmark (CPU performance testing) ---

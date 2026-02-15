@@ -7,35 +7,21 @@
 #ifndef LPL_PROTOCOL_H
 #define LPL_PROTOCOL_H
 
-#if defined(MODULE)
-// --- Linux Kernel Context ---
+#ifdef __KERNEL__
 #include <linux/types.h>
-#include <linux/atomic.h>
-
-typedef atomic_t atomic_uint;
-
+#include <asm/barrier.h>
 #else
-// --- C++ Userspace Context ---
-#include <atomic>
-#include <cstdint>
+#include <stdint.h>
 
-typedef std::atomic<unsigned int> atomic_uint;
-typedef std::atomic<bool> atomic_bool;
-
-#define lpl_atomic_load(ptr)          (ptr)->load(std::memory_order_relaxed)
-#define lpl_atomic_store(ptr, val)    (ptr)->store(val, std::memory_order_relaxed)
-#define lpl_atomic_fetch_add(ptr, val) (ptr)->fetch_add(val, std::memory_order_relaxed)
-#define lpl_atomic_fetch_sub(ptr, val) (ptr)->fetch_sub(val, std::memory_order_relaxed)
-#define lpl_atomic_exchange(ptr, val)  (ptr)->exchange(val, std::memory_order_relaxed)
-
+#define smp_load_acquire(p) __atomic_load_n(p, __ATOMIC_ACQUIRE)
+#define smp_store_release(p, v) __atomic_store_n(p, v, __ATOMIC_RELEASE)
 #endif
 
 // --- Shared Protocol Constants ---
-#define RING_SIZE 4096       // Puissance de 2 pour utiliser un masque binaire rapide
+#define RING_SLOTS 4096      // Puissance de 2 pour utiliser un masque binaire rapide
 #define MAX_PACKET_SIZE 256  // Taille max d'un payload binaire
-
-// --- Ring Buffer Message Types ---
-#define RING_MSG_DYNAMIC 0x01
+#define LPL_DEVICE_NAME "lpl_driver"
+#define LPL_CLASS_NAME  "lpl"
 
 // --- Shared Protocol Types ---
 
@@ -59,24 +45,49 @@ typedef enum {
 #define MSG_INPUT    0x12  /* Client->Server: [1B type][4B entityId][12B direction(Vec3)]     */
 #define MSG_STATE    0x13  /* Server->Client: [1B type][2B count][{4B id,12B pos,12B size,4B hp}xN] */
 
+typedef struct {
+    uint32_t head;
+    uint32_t tail;
+} RingHeader;
+
 /**
  * @brief Paquet réseau à taille variable.
- * Header: [MsgType(1B)][PayloadSize(2B)]
+ * Header: [type(1B)][PayloadSize(2B)]
  * Payload: [EntityID(4B)][CompID(1B)][Data...]...
  */
 typedef struct {
-    uint8_t msgType;
-    uint16_t size; // Taille du payload (data)
+    uint32_t src_ip;
+    uint16_t src_port;
+    uint16_t length;
     uint8_t data[MAX_PACKET_SIZE];
-} DynamicPacket;
+} RxPacket;
+
+typedef struct {
+    uint32_t dst_ip;
+    uint16_t dst_port;
+    uint16_t length;
+    uint8_t data[MAX_PACKET_SIZE];
+} TxPacket;
 
 /**
  * @brief Ring buffer lockless partagé entre kernel et userspace via mmap.
  */
 typedef struct {
-    DynamicPacket packets[RING_SIZE];
-    atomic_uint head;
-    atomic_uint tail;
-} NetworkRingBuffer;
+    RingHeader idx;
+    RxPacket packets[RING_SLOTS];
+} RxRingBuffer;
+
+typedef struct {
+    RingHeader idx;
+    TxPacket packets[RING_SLOTS];
+} TxRingBuffer;
+
+typedef struct {
+    RxRingBuffer rx;
+    TxRingBuffer tx;
+} LplSharedMemory;
+
+#define LPL_IOC_MAGIC 'k'
+#define LPL_IOC_KICK_TX _IO(LPL_IOC_MAGIC, 1)
 
 #endif // LPL_PROTOCOL_H
