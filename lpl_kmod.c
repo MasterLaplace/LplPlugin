@@ -14,6 +14,8 @@
 #include <linux/fs.h>             // struct file_operations, register_chrdev, unregister_chrdev
 #include <linux/device.h>         //  class_create, device_create
 #include <linux/err.h>            //  IS_ERR, PTR_ERR
+#include <linux/socket.h>
+#include <linux/in.h>
 
 #include <linux/slab.h>
 #include <linux/uaccess.h>
@@ -73,7 +75,7 @@ static int tx_thread_fn(void *data)
         tail = smp_load_acquire(&ring->idx.tail);
         head = ring->idx.head;
 
-        wait_event_interruptible(tx_wq, (head != tail) || kthread_should_stop());
+        wait_event_interruptible(tx_wq, (head != smp_load_acquire(&ring->idx.tail)) || kthread_should_stop());
 
         if (kthread_should_stop())
             break;
@@ -101,21 +103,21 @@ static uint32_t hook_ingest_packet(void *priv, struct sk_buff *skb, const struct
 
     uint32_t ip_len = ip->ihl * 4u;
     struct udphdr *udp = (struct udphdr *)((uint8_t *)ip + ip_len);
-    if (ntohs(udp->dest) != 7777u || !shm)
+    if (!shm || ntohs(udp->dest) != LPL_PORT)
         return NF_ACCEPT;
 
     RxRingBuffer *ring = &shm->rx;
     uint32_t payload_len = ntohs(udp->len) - sizeof(struct udphdr);
 
     if (payload_len > MAX_PACKET_SIZE)
-        return printk(KERN_WARNING "[LPL] Packet too big (%u > %u)\n", payload_len, MAX_PACKET_SIZE), NF_DROP;
+        return NF_DROP;
 
     uint32_t tail = smp_load_acquire(&ring->idx.tail);
     uint32_t head = ring->idx.head;
     uint32_t next_head = (head + 1u) & (RING_SLOTS - 1u);
 
     if (next_head == tail)
-        return printk(KERN_WARNING "[LPL] Ring buffer FULL (head=%u, tail=%u)\n", head, tail), NF_DROP;
+        return NF_DROP;
 
     RxPacket *pkt = &ring->packets[head];
     pkt->src_ip = ip->saddr;
@@ -123,7 +125,7 @@ static uint32_t hook_ingest_packet(void *priv, struct sk_buff *skb, const struct
     pkt->length = payload_len;
 
     if (skb_copy_bits(skb, ip_len + sizeof(struct udphdr), pkt->data, payload_len) < 0)
-        return printk(KERN_WARNING "[LPL] skb_copy_bits failed\n"), NF_DROP;
+        return NF_DROP;
 
     smp_store_release(&ring->idx.head, next_head);
     return NF_DROP;
@@ -141,12 +143,16 @@ static int lpl_release(struct inode *inode, struct file *file)
 
 static int lpl_mmap(struct file *file, struct vm_area_struct *vma)
 {
-    if ((vma->vm_end - vma->vm_start) > sizeof(LplSharedMemory))
+    unsigned long length = vma->vm_end - vma->vm_start;
+    unsigned long process_size = PAGE_ALIGN(sizeof(LplSharedMemory));
+
+    if (length > process_size)
         return -EINVAL;
+
     return remap_vmalloc_range(vma, shm, 0);
 }
 
-static long lpl_ioctl(struct file *file, uint32_t cmd, uint64_t arg)
+static long lpl_ioctl(struct file *file, uint32_t cmd, unsigned long arg)
 {
     if (cmd != LPL_IOC_KICK_TX)
         return -EINVAL;
@@ -177,6 +183,8 @@ static int __init lpl_init(void)
     shm = (LplSharedMemory *)vmalloc_user(sizeof(LplSharedMemory));
     if (!shm)
         return -ENOMEM;
+
+    memset(shm, 0, sizeof(LplSharedMemory));
 
     init_waitqueue_head(&tx_wq);
 
@@ -220,7 +228,7 @@ static int __init lpl_init(void)
         goto error_nf;
     }
 
-    pr_info("[LPL] Netfilter hook registered (NF_INET_PRE_ROUTING, port 7777)\n");
+    pr_info("[LPL] Netfilter hook registered (NF_INET_PRE_ROUTING, port %d)\n", LPL_PORT);
     pr_info("[LPL] ===== Module Loaded Successfully =====\n");
     return 0;
 

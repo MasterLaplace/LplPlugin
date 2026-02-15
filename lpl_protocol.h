@@ -22,6 +22,7 @@
 #define MAX_PACKET_SIZE 256  // Taille max d'un payload binaire
 #define LPL_DEVICE_NAME "lpl_driver"
 #define LPL_CLASS_NAME  "lpl"
+#define LPL_PORT        7777u
 
 // --- Shared Protocol Types ---
 
@@ -48,6 +49,7 @@ typedef enum {
 typedef struct {
     uint32_t head;
     uint32_t tail;
+    uint32_t _pad[6];
 } RingHeader;
 
 /**

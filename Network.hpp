@@ -1,6 +1,5 @@
-// --- LAPLACE NETWORK DISPATCH --- //
 // File: Network.hpp
-// Description: Routage des paquets réseau + gestion du driver kernel
+// Description: Routage des paquets réseau + gestion du driver kernel OU socket standard
 // Auteur: MasterLaplace
 
 #pragma once
@@ -13,12 +12,17 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <cstring>
-
-#include "lpl_protocol.h"
-#include "WorldPartition.hpp"
 #include <vector>
 #include <algorithm>
 #include <iostream>
+
+#ifdef LPL_USE_SOCKET
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+#endif
+
+#include "lpl_protocol.h"
+#include "WorldPartition.hpp"
 
 class Network {
 public:
@@ -69,11 +73,89 @@ public:
     };
 
 public:
-    /**
-     * @brief Ouvre /dev/lpl_driver et mmap le ring buffer partagé.
-     *
-     * @return Pointeur vers le NetworkRingBuffer mappé, ou nullptr en cas d'erreur.
-     */
+#ifdef LPL_USE_SOCKET
+    // --- MODE SOCKET STANDARD (CLIENT TEST) ---
+
+    bool network_init()
+    {
+        _sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (_sockfd < 0) {
+            perror("[ERROR] network_init: Socket creation failed");
+            return false;
+        }
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        addr.sin_port = 0; // Ephemeral port
+
+        if (bind(_sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+            perror("[ERROR] network_init: Bind failed");
+            close(_sockfd);
+            return false;
+        }
+
+        // Get assigned port
+        socklen_t len = sizeof(addr);
+        if (getsockname(_sockfd, (struct sockaddr*)&addr, &len) == 0) {
+            printf("[NET] Socket UDP init sur le port %d (Mode CLIENT)\n", ntohs(addr.sin_port));
+        }
+
+        // Non-blocking mode
+        int flags = fcntl(_sockfd, F_GETFL, 0);
+        fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
+
+        return true;
+    }
+
+    void network_cleanup()
+    {
+        if (_sockfd >= 0) {
+            close(_sockfd);
+            _sockfd = -1;
+        }
+    }
+
+    void network_consume_packets(WorldPartition &world)
+    {
+        if (_sockfd < 0) return;
+
+        uint8_t buffer[MAX_PACKET_SIZE];
+        struct sockaddr_in src_addr;
+        socklen_t addr_len = sizeof(src_addr);
+
+        while (true)
+        {
+            ssize_t len = recvfrom(_sockfd, buffer, MAX_PACKET_SIZE, 0, (struct sockaddr*)&src_addr, &addr_len);
+            if (len <= 0) break;
+
+            RxPacket pkt;
+            pkt.src_ip = src_addr.sin_addr.s_addr; // Network Byte Order
+            pkt.src_port = src_addr.sin_port;      // Network Byte Order
+            pkt.length = (uint16_t)len;
+            memcpy(pkt.data, buffer, len);
+
+            dispatch_packet(&pkt, world);
+        }
+    }
+
+    void send_packet(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
+    {
+        if (_sockfd < 0) return;
+
+        struct sockaddr_in dest_addr;
+        memset(&dest_addr, 0, sizeof(dest_addr));
+        dest_addr.sin_family = AF_INET;
+        dest_addr.sin_addr.s_addr = htonl(ip); // htonl because send_packet expects Host Order
+        dest_addr.sin_port = htons(port);      // htons because send_packet expects Host Order
+
+        sendto(_sockfd, data, length, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+    }
+
+#else
+    // --- MODE KERNEL DRIVER (SERVER) ---
+
     bool network_init()
     {
         _driverFd = open("/dev/" LPL_DEVICE_NAME, O_RDWR);
@@ -95,17 +177,11 @@ public:
         _shm = static_cast<LplSharedMemory *>(adrr);
         _rx = &_shm->rx;
         _tx = &_shm->tx;
-        _rx->idx.tail = _rx->idx.head;
 
         printf("[NET] Driver connecté. Ring Buffer mappé à %p (%zu bytes)\n", _shm, sizeof(LplSharedMemory));
         return true;
     }
 
-    /**
-     * @brief Libère le mapping mémoire du ring buffer.
-     *
-     * @param ring Pointeur obtenu via network_init().
-     */
     void network_cleanup()
     {
         if (_shm && _shm != MAP_FAILED)
@@ -118,18 +194,6 @@ public:
         }
     }
 
-    [[nodiscard]] uint64_t size()
-    {
-        return _clients.size();
-    }
-
-    /**
-     * @brief Consomme les paquets du ring buffer et les dispatch dans le WorldPartition.
-     *
-     * @note Prevent infinite loop if head is moving
-     *
-     * @param world Le WorldPartition cible.
-     */
     void network_consume_packets(WorldPartition &world)
     {
         if (!_rx)
@@ -147,6 +211,40 @@ public:
             rx_head = smp_load_acquire(&_rx->idx.head);
         }
         _rx->idx.tail = rx_tail;
+    }
+
+    void send_packet(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
+    {
+        if (!_tx)
+            return;
+
+        uint32_t tx_tail = _tx->idx.tail;
+        uint32_t tx_head = smp_load_acquire(&_tx->idx.head);
+        uint32_t tx_next_tail = (tx_tail + 1u) & (RING_SLOTS - 1u);
+
+        if (tx_next_tail != tx_head)
+        {
+            TxPacket *tx_pkt = &_tx->packets[tx_tail];
+            tx_pkt->dst_ip = htonl(ip);
+            tx_pkt->dst_port = htons(port);
+            uint16_t safe_len = (length > MAX_PACKET_SIZE) ? MAX_PACKET_SIZE : length;
+            tx_pkt->length = safe_len;
+            memcpy(tx_pkt->data, data, safe_len);
+
+            _tx->idx.tail = tx_next_tail;
+            smp_store_release(&_tx->idx.tail, tx_next_tail);
+            ioctl(_driverFd, LPL_IOC_KICK_TX, 0);
+        }
+        else
+        {
+            fprintf(stderr, "[NET] TX Ring Full\n");
+        }
+    }
+#endif
+
+    [[nodiscard]] uint64_t size()
+    {
+        return _clients.size();
     }
 
     // --- Server Side API ---
@@ -217,15 +315,8 @@ public:
     void send_connect(const char* ip_str, uint16_t port)
     {
         uint32_t ip;
-        inet_pton(AF_INET, ip_str, &ip);
-        // host byte order for send_packet? No, send_packet expects host order for convenience or network?
-        // Let's assume send_packet takes HOST byte order for IP/Port and converts it.
-        // inet_pton returns NETWORK byte order.
-        // My send_packet does `dst_ip = htonl(ip)`.
-        // So I should pass HOST byte order to send_packet.
-        // `inet_pton` -> Network Order (Big Endian).
-        // `ntohl` -> Host Order.
-
+        inet_pton(AF_INET, ip_str, &ip); // Network Order
+        // send_packet attend du Host Order, il fera le htonl.
         uint8_t type = MSG_CONNECT;
         send_packet(ntohl(ip), port, 1u, &type);
     }
@@ -394,39 +485,17 @@ private:
         }
     }
 
-    void send_packet(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
-    {
-        if (!_tx)
-            return;
-
-        uint32_t tx_tail = _tx->idx.tail;
-        uint32_t tx_head = smp_load_acquire(&_tx->idx.head);
-        uint32_t tx_next_tail = (tx_tail + 1u) & (RING_SLOTS - 1u);
-
-        if (tx_next_tail != tx_head)
-        {
-            TxPacket *tx_pkt = &_tx->packets[tx_tail];
-            tx_pkt->dst_ip = htonl(ip);
-            tx_pkt->dst_port = htons(port);
-            tx_pkt->length = length;
-            memcpy(tx_pkt->data, data, (length > MAX_PACKET_SIZE) ? MAX_PACKET_SIZE: length);
-
-            _tx->idx.tail = tx_next_tail;
-            smp_store_release(&_tx->idx.tail, tx_next_tail);
-            ioctl(_driverFd, LPL_IOC_KICK_TX, 0);
-        }
-        else
-        {
-            fprintf(stderr, "[NET] TX Ring Full\n");
-        }
-    }
-
 private:
+#ifdef LPL_USE_SOCKET
+    int _sockfd = -1;
+#else
     LplSharedMemory *_shm = nullptr;
     RxRingBuffer *_rx = nullptr;
     TxRingBuffer *_tx = nullptr;
-    uint32_t _nextEntityId = 100u; // Reserved 0-99
     int _driverFd = -1;
+#endif
+
+    uint32_t _nextEntityId = 100u; // Reserved 0-99
 
     std::vector<ClientEndpoint> _clients;
 

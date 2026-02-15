@@ -6,7 +6,17 @@ CC = gcc
 CXX = g++
 NVCC = nvcc
 NVCC_FLAGS = -O3 -std=c++20 -ccbin $(CC) -Xcompiler "-Wall -pthread"
-NVCC_AVAILABLE := $(shell command -v $(NVCC) 2>/dev/null)
+NVCC_PATH := $(shell command -v $(NVCC) 2>/dev/null)
+NVCC_AVAILABLE :=
+ifneq ($(NVCC_PATH),)
+    # Try compiling a dummy file to check if nvcc works with the current gcc
+    NVCC_TEST_SRC := $(shell echo 'int main(){return 0;}' > .nvcc_test.cu)
+    NVCC_TEST_OUT := $(shell $(NVCC) -ccbin $(CC) -x cu .nvcc_test.cu -o .nvcc_test.o >/dev/null 2>&1 && echo "yes")
+    NVCC_CLEANUP  := $(shell rm -f .nvcc_test.cu .nvcc_test.o)
+    ifeq ($(NVCC_TEST_OUT),yes)
+        NVCC_AVAILABLE := yes
+    endif
+endif
 
 # ============================================================
 #  Common header dependencies
@@ -58,7 +68,7 @@ benchmark: benchmark.cpp $(WORLD_HEADERS)
 
 # --- Visual 3D Client (connects to engine server via UDP) ---
 visual: visual.cpp lpl_protocol.h $(WORLD_HEADERS)
-	$(CXX) -O3 -std=c++20 -Wall -pthread -o visual visual.cpp -lglfw -lGLEW -lGL -lm
+	$(CXX) -O3 -std=c++20 -Wall -pthread -DLPL_USE_SOCKET -o visual visual.cpp -lglfw -lGLEW -lGL -lm
 
 client: visual
 
@@ -81,6 +91,6 @@ run:
 	./engine
 
 logs:
-	dmesg | tail -20
+	sudo dmesg | tail -20
 
 .PHONY: all driver engine client clean install uninstall run logs
