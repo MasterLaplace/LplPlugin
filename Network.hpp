@@ -118,6 +118,11 @@ public:
         }
     }
 
+    [[nodiscard]] uint64_t size()
+    {
+        return _clients.size();
+    }
+
     /**
      * @brief Consomme les paquets du ring buffer et les dispatch dans le WorldPartition.
      *
@@ -221,7 +226,8 @@ public:
         // `inet_pton` -> Network Order (Big Endian).
         // `ntohl` -> Host Order.
 
-        send_packet(ntohl(ip), port, 1u, (uint8_t*)&(uint8_t){MSG_CONNECT});
+        uint8_t type = MSG_CONNECT;
+        send_packet(ntohl(ip), port, 1u, &type);
     }
 
     void send_input(uint32_t entityId, const Vec3& dir)
@@ -390,7 +396,7 @@ private:
 
     void send_packet(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
     {
-        if (!_rx)
+        if (!_tx)
             return;
 
         uint32_t tx_tail = _tx->idx.tail;
@@ -429,5 +435,4 @@ private:
     uint16_t _serverPort = 0;
     uint32_t _localEntityId = 0;
     bool _connected = false;
-    int _driverFd = -1;
 };

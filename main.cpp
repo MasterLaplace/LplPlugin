@@ -163,9 +163,8 @@ int main()
         frameCount++;
         if (frameCount % 300 == 0)
         {
-            LocalGuard lock(g_clientsLock);
             printf("[SERVER] Frame %lu | Clients: %zu | Entities: %d | Chunks: %d\n",
-                   static_cast<unsigned long>(frameCount), g_clients.size(),
+                   static_cast<unsigned long>(frameCount), g_network.size(),
                    world.getEntityCount(), world.getChunkCount());
         }
 
