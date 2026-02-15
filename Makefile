@@ -48,7 +48,7 @@ ifeq ($(NVCC_AVAILABLE),)
 engine: main.o
 	$(CXX) -O3 -std=c++20 -Wall -pthread -o engine main.o -lpthread -lm
 
-main.o: main.cpp PhysicsGPU.cuh lpl_protocol.h $(WORLD_HEADERS)
+main.o: main.cpp PhysicsGPU.cuh $(WORLD_HEADERS)
 	$(CXX) -O3 -std=c++20 -Wall -pthread -c main.cpp -o main.o
 
 else
@@ -67,10 +67,39 @@ benchmark: benchmark.cpp $(WORLD_HEADERS)
 	$(CXX) -O3 -march=native -std=c++20 -Wall -pthread -o benchmark benchmark.cpp
 
 # --- Visual 3D Client (connects to engine server via UDP) ---
-visual: visual.cpp lpl_protocol.h $(WORLD_HEADERS)
+visual: visual.cpp $(WORLD_HEADERS)
 	$(CXX) -O3 -std=c++20 -Wall -pthread -DLPL_USE_SOCKET -o visual visual.cpp -lglfw -lGLEW -lGL -lm
 
 client: visual
+
+# --- Android (Native Activity) ---
+ANDROID_NDK_HOME ?= $(shell echo $$ANDROID_NDK_HOME)
+ANDROID_API = 24
+ANDROID_TOOLCHAIN = $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin
+ANDROID_CXX = $(ANDROID_TOOLCHAIN)/aarch64-linux-android$(ANDROID_API)-clang++
+
+android: visual_android.cpp $(WORLD_HEADERS)
+	@if [ -z "$(ANDROID_NDK_HOME)" ]; then \
+		echo "--------------------------------------------------------"; \
+		echo "ERREUR: NDK Android introuvable !"; \
+		echo "Veuillez definir la variable d'environnement ANDROID_NDK_HOME."; \
+		echo "Exemple: export ANDROID_NDK_HOME=/home/user/Android/Sdk/ndk/25.x.xxxx"; \
+		echo "--------------------------------------------------------"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(ANDROID_CXX)" ]; then \
+		echo "--------------------------------------------------------"; \
+		echo "ERREUR: Compilateur NDK introuvable : $(ANDROID_CXX)"; \
+		echo "Verifiez votre installation NDK (linux-x86_64)."; \
+		echo "--------------------------------------------------------"; \
+		exit 1; \
+	fi
+	$(ANDROID_CXX) -O3 -std=c++20 -shared -u ANativeActivity_onCreate \
+		-o liblpl_visual.so visual_android.cpp -DLPL_USE_SOCKET \
+		-landroid -llog -lEGL -lGLESv2 \
+		-Wl,-soname,liblpl_visual.so
+	@echo "Build Android DOIT etre integre dans un APK."
+	@echo "Genere: liblpl_visual.so (simplement la lib partagée)"
 
 # ============================================================
 #  Utils
