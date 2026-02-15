@@ -30,14 +30,14 @@ LplPlugin is a high-performance engine designed to minimize latency in networked
 ## Architecture
 
 ```
-[UDP Packet] → [Kernel Module (lpl_kmod)] → [Ring Buffer (mmap)]
-                                                   ↓
-                                           [Engine Dispatch]
-                                                   ↓
+[Network Packet] → [Kernel Module (lpl_kmod)] → [Shared Ring Buffer]
+                                                    ↓
+                                         [Network Class (Userspace)]
+                                                    ↓
                                          [SystemScheduler DAG]
-                                                   ↓
+                                                    ↓
                                    [WorldPartition (Morton Chunks)]
-                                                   ↓
+                                                    ↓
                                         [Physics (CUDA/CPU)]
 ```
 
@@ -45,7 +45,8 @@ LplPlugin is a high-performance engine designed to minimize latency in networked
 
 | File | Role |
 |------|------|
-| `lpl_kmod.c` | Linux kernel module — Netfilter hook, ring buffer via mmap |
+| `lpl_kmod.c` | Linux kernel module — Netfilter hook, zero-copy ring buffer via mmap |
+| `Network.hpp` | Userspace interface to the kernel module. Handles packet dispatch and client management. |
 | `SystemScheduler.hpp` | DAG-based ECS scheduler. Resolves R/W dependencies automatically. |
 | `WorldPartition.hpp` | Spatially partitioned world. Orchestrates physics steps (CPU/GPU). |
 | `ThreadPool.hpp` | High-performance thread pool with `enqueueDetached` for low-overhead tasks. |
@@ -62,7 +63,7 @@ LplPlugin is a high-performance engine designed to minimize latency in networked
 ### Quick Start
 ```bash
 make            # Builds driver and engine
-make install    # Loops kernel module (optional)
+make install    # Libs kernel module (required)
 make run        # Starts engine
 ```
 
@@ -74,18 +75,23 @@ make visual
 
 ## Technical Details
 
-### 1. System Scheduler
+### 1. Networking (Kernel Bypass-like)
+-   **Zero-Copy:** Packets are intercepted by `lpl_kmod` at the netfilter level and written directly to a shared memory ring buffer.
+-   **Lockless:** The userspace `Network` class poll consumes packets from the ring buffer without system calls during the game loop.
+-   **Protocol:** Custom binary protocol for `CONNECT`, `INPUT`, and `STATE` synchronization.
+
+### 2. System Scheduler
 The `SystemScheduler` builds a dependency graph (DAG) based on component access (`Read`/`Write`).
 - **Automatic Parallelism:** Systems in the same stage run concurrently via `ThreadPool`.
 - **Synchronization:** Stages are synchronized using `std::latch`.
 - **Performance:** Uses `enqueueDetached` to minimize `std::future` overhead.
 
-### 2. World Partitioning & Parallelism
+### 3. World Partitioning & Parallelism
 - **Storage:** `FlatAtomicsHashMap` stores chunks with 22-bit indices.
 - **Parallel Loop:** `forEachParallel` dynamically batches work across the `ThreadPool`.
 - **Optimization:** If only 1 batch is needed (small workload or single core), it executes inline on the calling thread to avoid context switching.
 
-### 3. Physics Pipeline
+### 4. Physics Pipeline
 - **GPU Path:** Zero-copy `cudaHostGetDevicePointer` → Kernel launch per chunk.
 - **CPU Path:** Parallel execution over chunks using the ThreadPool.
 
