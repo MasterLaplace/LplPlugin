@@ -1,6 +1,6 @@
 // --- LAPLACE TEST CLIENT (3D) --- //
 // TEMPORARY TEST CLIENT — will be replaced by production architecture
-// File: visual3d.cpp
+// File: visual.cpp
 // Description: Client OpenGL qui se connecte au serveur LplPlugin (UDP 7777),
 //              fait une simulation locale (prediction) et corrige avec MSG_STATE.
 // Auteur: MasterLaplace & Copilot

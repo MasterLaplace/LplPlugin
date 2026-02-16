@@ -1,7 +1,7 @@
 // --- LAPLACE DEDICATED TEST SERVER --- //
 // TEMPORARY TEST SERVER — will be replaced by production architecture
 // File: main.cpp
-// Description: Serveur autoritaire avec broadcast UDP vers les clients visual3d.
+// Description: Serveur autoritaire avec broadcast UDP vers les clients visual.
 //              Reçoit les inputs clients, applique la physique, broadcast l'état.
 // Auteur: MasterLaplace & Copilot
 
