@@ -172,6 +172,7 @@ private:
         while (_running)
         {
             int n = read(_fd, buffer, BCI_PACKET_SIZE);
+
             if (n != BCI_PACKET_SIZE)
                 continue;
 
@@ -181,20 +182,54 @@ private:
                 uint32_t head = _ring->idx.head;
                 uint32_t next_head = (head + 1u) & (BCI_RING_SLOTS - 1u);
 
-                if (next_head == tail)
-                    continue;
-
-                BciPacket *pkt = &_ring->packets[head];
-                memcpy(pkt->data, buffer, BCI_PACKET_SIZE);
-                smp_store_release(&_ring->idx.head, next_head);
+                if (next_head != tail)
+                {
+                    BciPacket *pkt = &_ring->packets[head];
+                    memcpy(pkt->data, buffer, BCI_PACKET_SIZE);
+                    smp_store_release(&_ring->idx.head, next_head);
+                }
                 continue;
             }
 
             uint8_t byte = 0u;
-            while ((read(_fd, &byte, 1) >= 1) && (byte != 0xA0 && _running));
+            while (_running && read(_fd, &byte, 1u) > 0 && byte == 0xA0);
 
-            n = read(_fd, buffer + 1u, BCI_PACKET_SIZE -1u);
             buffer[0] = 0xA0;
+
+            uint8_t needed = BCI_PACKET_SIZE - 1u;
+            uint8_t received = 0u;
+            while (received < needed && _running)
+            {
+                int r = read(_fd, buffer + 1u + received, needed - received);
+                if (r > 0)
+                    received += r;
+            }
+        }
+    }
+
+    void processFFT(NeuralState &state)
+    {
+        for (size_t i = 0u; i < FFT_SIZE; ++i)
+        {
+            size_t idx = (_sampleIndex + i) % FFT_SIZE;
+            _fftInput[i] = Complex(_timeDomainBuffer[idx], 0.0f);
+        }
+
+        FastFourierTransform::apply_window(_fftInput),
+        FastFourierTransform::compute(_fftInput);
+
+        float alphaSum = 0.0f;
+        float betaSum = 0.0f;
+
+        for (size_t i = 1u; i < FFT_SIZE / 2u; ++i)
+        {
+            float freq = i * FREQ_RES;
+            float magnitude = std::abs(_fftInput[i]);
+
+            if (freq >= 8.0f && freq <= 12.0f)
+                alphaSum += magnitude;
+            else if (freq >= 13.0f && freq <= 30.0f)
+                betaSum += magnitude;
         }
     }
 
