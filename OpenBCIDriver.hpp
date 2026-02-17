@@ -29,7 +29,7 @@ struct BciRingBuffer{
 
 struct NeuralState {
     float alphaPower = 0.0f;
-    float betaPoxer = 0.0f;
+    float betaPower = 0.0f;
     float concentration = 0.0f;
     bool blinkDetected = false;
 };
@@ -49,7 +49,7 @@ public:
         for (uint32_t i = 1u; i < N; ++i)
         {
             uint32_t bit = N >> 1u;
-            for (; j & bit; bit >>=1u)
+            for (; j & bit; bit >>= 1u)
                 j ^= bit;
             j ^= bit;
             if (i < j)
@@ -138,8 +138,6 @@ public:
         uint32_t head = smp_load_acquire(&_ring->idx.head);
         uint32_t tail = _ring->idx.tail;
 
-        bool needsProcessing = false;
-
         while (head != tail)
         {
             BciPacket *pkt = &_ring->packets[tail];
@@ -147,21 +145,18 @@ public:
             _timeDomainBuffer[_sampleIndex] = raw_uV;
             _sampleIndex = (_sampleIndex + 1) % FFT_SIZE;
 
-            if (std::abs(raw_uV) > 150.0f)
-                state.blinkDetected = true;
-            else state.blinkDetected = false;
-
+            state.blinkDetected = (std::abs(raw_uV) > 150.0f);
             _samplesSinceLastFFT++;
-            if (_samplesSinceLastFFT >= UPDATE_INTERVAL) {
-                needsProcessing = true;
-                _samplesSinceLastFFT = 0;
+
+            if (_samplesSinceLastFFT >= UPDATE_INTERVAL)
+            {
+                processFFT(state);
+                _samplesSinceLastFFT = 0u;
             }
+
             tail = (tail + 1u) & (BCI_RING_SLOTS - 1u);
         }
         smp_store_release(&_ring->idx.tail, tail);
-
-        if (needsProcessing)
-            processFFT(state);
     }
 
 private:
@@ -215,22 +210,32 @@ private:
             _fftInput[i] = Complex(_timeDomainBuffer[idx], 0.0f);
         }
 
-        FastFourierTransform::apply_window(_fftInput),
+        FastFourierTransform::apply_window(_fftInput);
         FastFourierTransform::compute(_fftInput);
 
         float alphaSum = 0.0f;
         float betaSum = 0.0f;
+        const float normFactor = 2.0f / FFT_SIZE;
 
         for (size_t i = 1u; i < FFT_SIZE / 2u; ++i)
         {
             float freq = i * FREQ_RES;
-            float magnitude = std::abs(_fftInput[i]);
+            float magnitude = std::abs(_fftInput[i]) * normFactor;
 
             if (freq >= 8.0f && freq <= 12.0f)
                 alphaSum += magnitude;
             else if (freq >= 13.0f && freq <= 30.0f)
                 betaSum += magnitude;
         }
+
+        float smoothFactor = 0.1f;
+        state.alphaPower = state.alphaPower * (1.0f - smoothFactor) + alphaSum * smoothFactor;
+        state.betaPower  = state.betaPower  * (1.0f - smoothFactor) + betaSum  * smoothFactor;
+
+        float totalPower = state.alphaPower + state.betaPower + 0.0001f;
+        float ratio = state.betaPower / totalPower;
+
+        state.concentration = state.concentration * 0.9f + ratio * 0.1f;
     }
 
     int setup_serial_port(const char *device_path)
@@ -284,8 +289,8 @@ private:
 
     float parse_channel(const uint8_t *data)
     {
-        uint32_t value = (data[0] << 16) | (data[1] << 8) | data[2];
-        if (value & 0x800000)
+        int32_t value = (data[0] << 16) | (data[1] << 8) | data[2];
+        if (value & 0x00800000)
             value |= 0xFF000000;
         return (float)value * BCI_SCALE_FACTOR;
     }

@@ -31,6 +31,12 @@
  */
 class Partition {
 public:
+    struct NeuralControl {
+        float alpha = 0.0f;
+        float beta = 0.0f;
+        float concentration = 0.0f;
+    };
+
     struct EntityRef {
         Vec3 &position;
         Quat &rotation;
@@ -39,6 +45,7 @@ public:
         Vec3 &force;
         Vec3 size;
         int32_t &health;
+        NeuralControl &neural;
     };
 
     struct EntitySnapshot {
@@ -50,6 +57,7 @@ public:
         Vec3 force;
         Vec3 size;
         int32_t health = 100u;
+        NeuralControl neural = {};
     };
 
 public:
@@ -68,6 +76,7 @@ public:
         _masses(std::move(other._masses)),
         _sizes(std::move(other._sizes)),
         _health(std::move(other._health)),
+        _neuralControls(std::move(other._neuralControls)),
         _sleeping(std::move(other._sleeping)),
         _sleepCounter(std::move(other._sleepCounter)),
         _positions{std::move(other._positions[0]), std::move(other._positions[1])},
@@ -91,6 +100,7 @@ public:
             _masses = std::move(other._masses);
             _sizes = std::move(other._sizes);
             _health = std::move(other._health);
+            _neuralControls = std::move(other._neuralControls);
             _sleeping = std::move(other._sleeping);
             _sleepCounter = std::move(other._sleepCounter);
             _sparseToLocal = std::move(other._sparseToLocal);
@@ -126,6 +136,7 @@ public:
         _masses.push_back(entity.mass);
         _sizes.push_back(entity.size);
         _health.push_back(entity.health);
+        _neuralControls.push_back(entity.neural);
 
         // Sleeping data
         _sleeping.push_back(false);
@@ -157,7 +168,8 @@ public:
         _masses[index],
         _forces[bufIdx][index],
         _sizes[index],
-        _health[index]
+        _health[index],
+        _neuralControls[index]
     }; }
 
     [[nodiscard]] size_t getEntityCount() const noexcept {
@@ -199,7 +211,7 @@ public:
         EntitySnapshot removed = {
             _ids[index], _positions[writeIdx][index], _rotations[index],
             _velocities[writeIdx][index], _masses[index], _forces[writeIdx][index],
-            _sizes[index], _health[index]
+            _sizes[index], _health[index], _neuralControls[index]
         };
 
         _sparseToLocal[entityId] = INVALID_INDEX;
@@ -223,6 +235,7 @@ public:
             _masses[index] = _masses[last];
             _sizes[index] = _sizes[last];
             _health[index] = _health[last];
+            _neuralControls[index] = _neuralControls[last];
             _sleeping[index] = _sleeping[last];
             _sleepCounter[index] = _sleepCounter[last];
             if (movedId < _sparseCapacity)
@@ -240,6 +253,7 @@ public:
         _masses.pop_back();
         _sizes.pop_back();
         _health.pop_back();
+        _neuralControls.pop_back();
         _sleeping.pop_back();
         _sleepCounter.pop_back();
 
@@ -278,6 +292,7 @@ public:
 
     [[nodiscard]] float   *getMassesData()  noexcept { return _masses.data(); }
     [[nodiscard]] int32_t *getHealthData()  noexcept { return _health.data(); }
+    [[nodiscard]] NeuralControl *getNeuralData() noexcept { return _neuralControls.data(); }
     [[nodiscard]] const BoundaryBox &getBound() const noexcept { return _bound; }
 
     // ─── Component Setters ────────────────────────────────────────
@@ -294,6 +309,7 @@ public:
     void setMass(uint32_t localIdx, float m)       noexcept { _masses[localIdx] = m; }
     void setSize(uint32_t localIdx, Vec3 s)         noexcept { _sizes[localIdx] = s; }
     void setHealth(uint32_t localIdx, int32_t hp)  noexcept { _health[localIdx] = hp; }
+    void setNeuralControl(uint32_t localIdx, NeuralControl nc) noexcept { _neuralControls[localIdx] = nc; }
 
     /**
      * @brief Réveille une entité endormie (ex: input réseau, collision externe).
@@ -321,6 +337,7 @@ public:
         _masses.reserve(capacity);
         _sizes.reserve(capacity);
         _health.reserve(capacity);
+        _neuralControls.reserve(capacity);
         _sleeping.reserve(capacity);
         _sleepCounter.reserve(capacity);
     }
@@ -584,7 +601,7 @@ private:
 
             out_migrating.push_back({
                 _ids[i], _positions[writeIdx][i], _rotations[i],
-                _velocities[writeIdx][i], _masses[i], _forces[writeIdx][i], _sizes[i], _health[i]
+                _velocities[writeIdx][i], _masses[i], _forces[writeIdx][i], _sizes[i], _health[i], _neuralControls[i]
             });
 
             uint32_t removedId = _ids[i];
@@ -606,6 +623,7 @@ private:
                 _masses[i] = _masses[last];
                 _sizes[i] = _sizes[last];
                 _health[i] = _health[last];
+                _neuralControls[i] = _neuralControls[last];
                 _sleeping[i] = _sleeping[last];
                 _sleepCounter[i] = _sleepCounter[last];
                 if (movedId < _sparseCapacity)
@@ -623,6 +641,7 @@ private:
             _masses.pop_back();
             _sizes.pop_back();
             _health.pop_back();
+            _neuralControls.pop_back();
             _sleeping.pop_back();
             _sleepCounter.pop_back();
         }
@@ -649,6 +668,7 @@ private:
     std::vector<float, PinnedAllocator<float>> _masses;
     std::vector<Vec3, PinnedAllocator<Vec3>> _sizes;
     std::vector<int32_t, PinnedAllocator<int32_t>> _health;
+    std::vector<NeuralControl, PinnedAllocator<NeuralControl>> _neuralControls;
 
     // ─── Sleeping data ────────────────────────────────────────────
     std::vector<bool> _sleeping;          ///< true si l'entité est endormie (skip physics+migration)

@@ -44,6 +44,7 @@ enum class ComponentId : uint8_t {
     Rotation,
     Size,
     Health,
+    NeuralControl,
     COUNT
 };
 
@@ -275,6 +276,7 @@ private:
         case ComponentId::Rotation: return "Rot";
         case ComponentId::Size:     return "Size";
         case ComponentId::Health:   return "HP";
+        case ComponentId::NeuralControl: return "Neural";
         default:                    return "?";
         }
     }
