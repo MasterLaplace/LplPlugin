@@ -76,8 +76,14 @@ public:
         while (head != tail)
         {
             BciPacket *pkt = &_ring->packets[tail];
-            uint8_t rawVal = pkt->data[2];
-            state.concentration = (float)rawVal / 255.0f;
+            float raw_uV = parse_channel(&pkt->data[2]);
+            float inputMag = std::abs(raw_uV);
+            float targetConcentration = inputMag / 100.0f;
+
+            if (targetConcentration > 1.0f)
+                targetConcentration = 1.0f;
+            state.concentration = state.concentration * 0.9f + targetConcentration * 0.1f;
+            state.blinkDetected = (inputMag > 150.0f);
             tail = (tail + 1u) & (BCI_RING_SLOTS - 1u);
         }
         smp_store_release(&_ring->idx.tail, tail);
@@ -94,16 +100,27 @@ private:
             if (n != BCI_PACKET_SIZE)
                 continue;
 
-            uint32_t tail = smp_load_acquire(&_ring->idx.tail);
-            uint32_t head = _ring->idx.head;
-            uint32_t next_head = (head + 1u) & (BCI_RING_SLOTS - 1u);
+            if (buffer[0] == 0xA0 && buffer[BCI_PACKET_SIZE - 1u] == 0xC0)
+            {
+                uint32_t tail = smp_load_acquire(&_ring->idx.tail);
+                uint32_t head = _ring->idx.head;
+                uint32_t next_head = (head + 1u) & (BCI_RING_SLOTS - 1u);
 
-            if (next_head == tail)
+                if (next_head == tail)
+                    continue;
+
+                BciPacket *pkt = &_ring->packets[head];
+                memcpy(pkt->data, buffer, BCI_PACKET_SIZE);
+                smp_store_release(&_ring->idx.head, next_head);
                 continue;
+            }
 
-            BciPacket *pkt = &_ring->packets[head];
-            memcpy(pkt->data, buffer, BCI_PACKET_SIZE);
-            smp_store_release(&_ring->idx.head, next_head);
+            uint8_t byte = 0u;
+
+            while ((read(_fd, &byte, 1) < 1) || (byte != 0xA0 && _running));
+
+            n = read(_fd, buffer + 1u, BCI_PACKET_SIZE -1u);
+            buffer[0] = 0xA0;
         }
     }
 
@@ -156,7 +173,16 @@ private:
         return fd;
     }
 
+    float parse_channel(const uint8_t *data)
+    {
+        uint32_t value = (data[0] << 16) | (data[1] << 8) | data[2];
+        if (value & 0x800000)
+            value |= 0xFF000000;
+        return (float)value * BCI_SCALE_FACTOR;
+    }
+
 private:
+    const float BCI_SCALE_FACTOR = 4.5f / 24.0f / 8388607.0f * 1000000.0f;
     BciRingBuffer *_ring;
     std::atomic<bool> _running;
     std::thread _worker;
