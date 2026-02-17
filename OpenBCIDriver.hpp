@@ -7,6 +7,10 @@
 #include <sys/ioctl.h>
 #include <atomic>
 #include <thread>
+#include <complex>
+#include <numbers>
+#include <vector>
+#include <cmath>
 #include "lpl_protocol.h"
 
 #pragma once
@@ -24,16 +28,77 @@ struct BciRingBuffer{
 };
 
 struct NeuralState {
+    float alphaPower = 0.0f;
+    float betaPoxer = 0.0f;
     float concentration = 0.0f;
     bool blinkDetected = false;
 };
 
+class FastFourierTransform {
+public:
+    using Complex = std::complex<float>;
+
+public:
+    static void compute(std::vector<Complex> &x)
+    {
+        const size_t N = x.size();
+        if (N <= 1u)
+            return;
+
+        uint32_t j = 0u;
+        for (uint32_t i = 1u; i < N; ++i)
+        {
+            uint32_t bit = N >> 1u;
+            for (; j & bit; bit >>=1u)
+                j ^= bit;
+            j ^= bit;
+            if (i < j)
+                std::swap(x[i], x[j]);
+        }
+
+        for (uint32_t len = 2u; len <= N; len <<= 1u)
+        {
+            float ang = -2.0f * std::numbers::pi_v<float> / len;
+            Complex wlen(std::cos(ang), std::sin(ang));
+            for (uint32_t i = 0u; i < N; i += len)
+            {
+                Complex w(1.0f, 0.0f);
+                for (uint32_t k = 0u; k < len / 2u; ++k)
+                {
+                    Complex u = x[i + k];
+                    Complex v = x[i + k + len / 2u] * w;
+                    x[i + k] = u + v;
+                    x[i + k + len / 2u] = u - v;
+                    w *= len;
+                }
+            }
+        }
+    }
+
+    static void apply_window(std::vector<Complex> &x)
+    {
+        const size_t N = x.size();
+        const size_t computedSize = N -1u;
+        for (size_t i = 0u; i < N; ++i)
+        {
+            float multiplier = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * i / computedSize));
+            x[i] *= multiplier;
+        }
+    }
+};
+
 class OpenBCIDriver {
 public:
-    OpenBCIDriver() : _ring(nullptr), _running(false), _fd(-1)
+    using Complex = std::complex<float>;
+
+public:
+    OpenBCIDriver() : _ring(nullptr), _running(false), _fd(-1), _sampleIndex(0), _samplesSinceLastFFT(0)
     {
         _ring = new BciRingBuffer();
         memset(_ring, 0, sizeof(BciRingBuffer));
+
+        _timeDomainBuffer.resize(FFT_SIZE, 0.0f);
+        _fftInput.resize(FFT_SIZE);
     }
 
     ~OpenBCIDriver()
@@ -73,20 +138,30 @@ public:
         uint32_t head = smp_load_acquire(&_ring->idx.head);
         uint32_t tail = _ring->idx.tail;
 
+        bool needsProcessing = false;
+
         while (head != tail)
         {
             BciPacket *pkt = &_ring->packets[tail];
             float raw_uV = parse_channel(&pkt->data[2]);
-            float inputMag = std::abs(raw_uV);
-            float targetConcentration = inputMag / 100.0f;
+            _timeDomainBuffer[_sampleIndex] = raw_uV;
+            _sampleIndex = (_sampleIndex + 1) % FFT_SIZE;
 
-            if (targetConcentration > 1.0f)
-                targetConcentration = 1.0f;
-            state.concentration = state.concentration * 0.9f + targetConcentration * 0.1f;
-            state.blinkDetected = (inputMag > 150.0f);
+            if (std::abs(raw_uV) > 150.0f)
+                state.blinkDetected = true;
+            else state.blinkDetected = false;
+
+            _samplesSinceLastFFT++;
+            if (_samplesSinceLastFFT >= UPDATE_INTERVAL) {
+                needsProcessing = true;
+                _samplesSinceLastFFT = 0;
+            }
             tail = (tail + 1u) & (BCI_RING_SLOTS - 1u);
         }
         smp_store_release(&_ring->idx.tail, tail);
+
+        if (needsProcessing)
+            processFFT(state);
     }
 
 private:
@@ -116,8 +191,7 @@ private:
             }
 
             uint8_t byte = 0u;
-
-            while ((read(_fd, &byte, 1) < 1) || (byte != 0xA0 && _running));
+            while ((read(_fd, &byte, 1) >= 1) && (byte != 0xA0 && _running));
 
             n = read(_fd, buffer + 1u, BCI_PACKET_SIZE -1u);
             buffer[0] = 0xA0;
@@ -182,7 +256,15 @@ private:
     }
 
 private:
-    const float BCI_SCALE_FACTOR = 4.5f / 24.0f / 8388607.0f * 1000000.0f;
+    static constexpr float BCI_SCALE_FACTOR = 4.5f / 24.0f / 8388607.0f * 1000000.0f;
+    static constexpr size_t UPDATE_INTERVAL = 32u;
+    static constexpr size_t FFT_SIZE = 256u;
+    static constexpr float SAMPLE_RATE = 250.0f;
+    static constexpr float FREQ_RES = SAMPLE_RATE / FFT_SIZE;
+    std::vector<float> _timeDomainBuffer;
+    std::vector<Complex> _fftInput;
+    size_t _sampleIndex;
+    size_t _samplesSinceLastFFT;
     BciRingBuffer *_ring;
     std::atomic<bool> _running;
     std::thread _worker;
