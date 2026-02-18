@@ -268,7 +268,7 @@ public:
         uint8_t *cursor = pkt + HEADER_SIZE;
 
         auto flush_packet = [&](bool force = false) {
-            if (count == 0 && !force) return;
+            if (count == 0u && !force) return;
 
             pkt[0] = MSG_STATE;
             *reinterpret_cast<uint16_t*>(pkt + 1) = count;
@@ -283,7 +283,7 @@ public:
         };
 
         world.forEachChunk([&](Partition &p) {
-            for (size_t i = 0; i < p.getEntityCount(); ++i)
+            for (size_t i = 0u; i < p.getEntityCount(); ++i)
             {
                 if (count >= MAX_ENTITIES_PER_PACKET)
                     flush_packet();
@@ -306,7 +306,7 @@ public:
             }
         });
 
-        if (count > 0)
+        if (count > 0u)
             flush_packet();
     }
 
@@ -321,23 +321,44 @@ public:
         send_packet(ntohl(ip), port, 1u, &type);
     }
 
-    void send_input(uint32_t entityId, const Vec3& dir)
+    void send_inputs(uint32_t entityId, const std::vector<uint8_t> &keyData, const std::vector<uint8_t> &axisData, const std::vector<uint8_t> &neuralData)
     {
-        // MSG_INPUT: [Type(1)][ID(4)][Dir(12)]
-        uint8_t pkt[17];
-        pkt[0] = MSG_INPUT;
-        *reinterpret_cast<uint32_t*>(pkt + 1) = entityId;
-        *reinterpret_cast<float*>(pkt + 5) = dir.x;
-        *reinterpret_cast<float*>(pkt + 9) = dir.y;
-        *reinterpret_cast<float*>(pkt + 13) = dir.z;
+        // MSG_INPUT_UNIFIED: [Type(1)][ID(4)][KeyCount(1)][Keys...?][AxisCount(1)][Axes...?][Neural?]
 
-        // Assuming we are connected to someone, but client needs to know where to send.
-        // For now, let's assume we store the server address or just broadcast?
-        // Client usually sends to a specific server.
-        // Let's add `_serverIp` and `_serverPort` to Network class?
-        // Or just pass it in.
-        if (_serverPort != 0u)
-            send_packet(_serverIp, _serverPort, 17, pkt);
+        uint8_t pkt[MAX_PACKET_SIZE];
+        pkt[0] = MSG_INPUTS;
+        *reinterpret_cast<uint32_t*>(pkt + 1u) = entityId;
+
+        uint8_t *cursor = pkt + 5u;
+        size_t totalLen = 5u;
+
+        uint8_t keyCount = static_cast<uint8_t>(keyData.size() / 2u);
+        *cursor = keyCount; cursor++; totalLen++;
+        if (keyData.size() > 0u)
+        {
+            memcpy(cursor, keyData.data(), keyData.size());
+            cursor += keyData.size();
+            totalLen += keyData.size();
+        }
+
+        uint8_t axisCount = static_cast<uint8_t>(axisData.size() / 5u);
+        *cursor = axisCount; cursor++; totalLen++;
+        if (axisData.size() > 0u)
+        {
+            memcpy(cursor, axisData.data(), axisData.size());
+            cursor += axisData.size();
+            totalLen += axisData.size();
+        }
+
+        if (neuralData.size() >= 13u)
+        {
+            memcpy(cursor, neuralData.data(), 13u);
+            cursor += 13u;
+            totalLen += 13u;
+        }
+
+        if (_serverPort != 0u && totalLen <= MAX_PACKET_SIZE && totalLen >= 7u)
+            send_packet(_serverIp, _serverPort, (uint16_t)totalLen, pkt);
     }
 
     void set_server_info(const char* ip_str, uint16_t port)
@@ -370,17 +391,6 @@ private:
             handle_connect(world, src_ip_h, src_port_h);
             break;
         }
-        case MSG_INPUT: {
-             if (pkt->length < 17) break;
-             uint32_t eid = *reinterpret_cast<uint32_t*>(cursor + 1);
-             Vec3 dir{
-                 *reinterpret_cast<float*>(cursor + 5),
-                 *reinterpret_cast<float*>(cursor + 9),
-                 *reinterpret_cast<float*>(cursor + 13)
-             };
-             handle_input(world, eid, dir);
-             break;
-        }
         case MSG_WELCOME: {
             if (pkt->length < 5) break;
             _localEntityId = *reinterpret_cast<uint32_t*>(cursor + 1);
@@ -392,6 +402,12 @@ private:
             if (pkt->length < 3) break;
             uint16_t count = *reinterpret_cast<uint16_t*>(cursor + 1);
             dispatch_state_update(world, count, cursor + 3, pkt->length - 3);
+            break;
+        }
+        case MSG_INPUTS: {
+            if (pkt->length < 7) break;
+            uint32_t eid = *reinterpret_cast<uint32_t*>(cursor + 1);
+            handle_inputs(world, eid, cursor + 5, pkt->length - 5);
             break;
         }
         default:
@@ -409,21 +425,19 @@ private:
 
         uint32_t newId = _nextEntityId++;
 
-        // Add player entity
-        Partition::EntitySnapshot ent{};
-        ent.id = newId;
-        ent.position = {0.f, 10.f, 0.f};
-        ent.rotation = {0.f, 0.f, 0.f, 1.f};
-        ent.velocity = {0.f, 0.f, 0.f};
-        ent.mass = 1.f;
-        ent.force = {0.f, 0.f, 0.f};
-        ent.size = {1.f, 2.f, 1.f};
-        ent.health = 100;
-        world.addEntity(ent);
+        Partition::EntitySnapshot player_entity{};
+        player_entity.id = newId;
+        player_entity.position = {0.f, 10.f, 0.f};
+        player_entity.rotation = {0.f, 0.f, 0.f, 1.f};
+        player_entity.velocity = {0.f, 0.f, 0.f};
+        player_entity.mass = 1.f;
+        player_entity.force = {0.f, 0.f, 0.f};
+        player_entity.size = {1.f, 2.f, 1.f};
+        player_entity.health = 100;
+        world.addEntity(player_entity);
 
         _clients.push_back({client_ip, client_port, newId});
 
-        // Send Welcome
         uint8_t resp[5u];
         resp[0u] = MSG_WELCOME;
         *reinterpret_cast<uint32_t*>(resp + 1u) = newId;
@@ -432,7 +446,7 @@ private:
         printf("[NET] Client connected: %u -> Entity %u\n", client_ip, newId);
     }
 
-    void handle_input(WorldPartition &world, uint32_t entityId, const Vec3 &dir)
+    void handle_input(WorldPartition &world, const uint32_t entityId, const Vec3 &dir)
     {
         uint32_t writeIdx = world.getWriteIdx();
         int localIdx = -1;
@@ -446,7 +460,106 @@ private:
         }
     }
 
-    void dispatch_state_update(WorldPartition &world, uint16_t count, uint8_t *data, uint32_t len)
+    void handle_input_key(WorldPartition &world, const uint32_t entityId, const uint16_t key, bool pressed)
+    {
+        uint32_t writeIdx = world.getWriteIdx();
+        int localIdx = -1;
+        Partition *chunk = world.findEntity(entityId, localIdx);
+
+        if (chunk && localIdx >= 0)
+        {
+            Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
+            constexpr float SPEED = 50.0f;
+
+            Vec3 delta{0,0,0};
+            // 87=W, 83=S, 65=A, 68=D (GLFW/ASCII roughly)
+            switch (key)
+            {
+                case 87u: delta.z += 1.0f; break;
+                case 83u: delta.z -= 1.0f; break;
+                case 65u: delta.x -= 1.0f; break;
+                case 68u: delta.x += 1.0f; break;
+            }
+
+            if (pressed)
+                currentVel = currentVel + delta * SPEED;
+            else
+                currentVel = currentVel - delta * SPEED;
+
+            chunk->setVelocity(static_cast<uint32_t>(localIdx), currentVel, writeIdx);
+            chunk->wakeEntity(static_cast<uint32_t>(localIdx));
+        }
+    }
+
+    void handle_input_axis(WorldPartition &world, const uint32_t entityId, const uint8_t axisId, const float value)
+    {
+        // For future use (e.g. joystick, mouse look, etc.)
+    }
+
+    void handle_input_neural(WorldPartition &world, const uint32_t entityId, float alpha, float beta, float conc, bool blink)
+    {
+        uint32_t writeIdx = world.getWriteIdx();
+        int localIdx = -1;
+        Partition *chunk = world.findEntity(entityId, localIdx);
+        if (chunk && localIdx >= 0)
+        {
+            Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
+            if (blink)
+                currentVel.y += 10.0f;
+            chunk->setVelocity(static_cast<uint32_t>(localIdx), currentVel, writeIdx);
+            chunk->wakeEntity(static_cast<uint32_t>(localIdx));
+        }
+    }
+
+    void handle_inputs(WorldPartition &world, const uint32_t entityId, uint8_t *data, const uint32_t len)
+    {
+        uint8_t *cursor = data;
+        uint32_t remaining = len;
+
+        if (remaining < 1u)
+            return;
+        uint8_t keyCount = *cursor; cursor++; remaining--;
+
+        for (uint8_t i = 0u; i < keyCount; ++i)
+        {
+            // Each key: [1b state + 15b key] = 2 bytes
+            if (remaining < 2u)
+                break;
+            uint16_t packed = *reinterpret_cast<uint16_t*>(cursor);
+            uint16_t key = packed & 0x7FFF;
+            bool state = (packed & 0x8000) != 0;
+            handle_input_key(world, entityId, key, state);
+            cursor += 2u; remaining -= 2u;
+        }
+
+        if (remaining < 1u)
+            return;
+        uint8_t axisCount = *cursor; cursor++; remaining--;
+
+        for (uint8_t i = 0u; i < axisCount; ++i)
+        {
+            // Each axis: [1B axisId][4B float value] = 5 bytes
+            if (remaining < 5u)
+                break;
+            uint8_t axisId = *cursor;
+            float value = *reinterpret_cast<float*>(cursor + 1);
+            handle_input_axis(world, entityId, axisId, value);
+            cursor += 5u; remaining -= 5u;
+        }
+
+        if (remaining >= 13u)
+        {
+            // [4B alpha][4B beta][4B conc][1B blink]
+            float alpha = *reinterpret_cast<float*>(cursor);
+            float beta = *reinterpret_cast<float*>(cursor + 4);
+            float conc = *reinterpret_cast<float*>(cursor + 8);
+            bool blink = *(cursor + 12) != 0;
+            handle_input_neural(world, entityId, alpha, beta, conc, blink);
+            cursor += 13u; remaining -= 13u;
+        }
+    }
+
+    void dispatch_state_update(WorldPartition &world, const uint16_t count, uint8_t *data, const uint32_t len)
     {
         uint8_t *cursor = data;
         uint32_t bytesRead = 0u;

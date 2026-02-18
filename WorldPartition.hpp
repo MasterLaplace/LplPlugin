@@ -82,7 +82,7 @@ public:
      * @brief Supprime une entité du monde par son ID public.
      * @return L'EntitySnapshot retiré (id=0 si non trouvé).
      */
-    Partition::EntitySnapshot removeEntity(uint32_t publicId)
+    Partition::EntitySnapshot removeEntity(const uint32_t publicId)
     {
         uint64_t chunkKey = _registry.getChunkKey(publicId);
         if (chunkKey == EntityRegistry::INVALID_CHUNK)
@@ -102,7 +102,7 @@ public:
      * @param[out] outLocalIndex Index local dans le chunk (-1 si non trouvé).
      * @return Partition contenant l'entité, ou nullptr.
      */
-    [[nodiscard]] Partition *findEntity(uint32_t publicId, int &outLocalIndex) const
+    [[nodiscard]] Partition *findEntity(const uint32_t publicId, int &outLocalIndex) const
     {
         uint64_t chunkKey = _registry.getChunkKey(publicId);
         if (chunkKey == EntityRegistry::INVALID_CHUNK)
@@ -127,7 +127,7 @@ public:
         return _registry.getChunkKey(entityId);
     }
 
-    [[nodiscard]] bool isEntityRegistered(uint32_t publicId) const noexcept
+    [[nodiscard]] bool isEntityRegistered(const uint32_t publicId) const noexcept
     {
         return _registry.isRegistered(publicId);
     }

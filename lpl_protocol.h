@@ -43,8 +43,11 @@ typedef enum {
  */
 #define MSG_CONNECT  0x10  /* Client->Server: [1B type]                                      */
 #define MSG_WELCOME  0x11  /* Server->Client: [1B type][4B entityId]                          */
-#define MSG_INPUT    0x12  /* Client->Server: [1B type][4B entityId][12B direction(Vec3)]     */
-#define MSG_STATE    0x13  /* Server->Client: [1B type][2B count][{4B id,12B pos,12B size,4B hp}xN] */
+#define MSG_STATE    0x12  /* Server->Client: [1B type][2B count][{4B id,12B pos,12B size,4B hp}xN] */
+#define MSG_INPUTS   0x13  /* Client->Server: [1B type][4B entityId]
+                                              [1B keyCount][{1B key, 1B state}xN]
+                                              [1B axisCount][{1B axis, 4B value}xN]
+                                              [NeuralData(13B)] (optional, if len remains) */
 
 typedef struct {
     uint32_t head;

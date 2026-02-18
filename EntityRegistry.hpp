@@ -42,10 +42,10 @@ public:
         _sparseToSlot.assign(MAX_ID, INVALID_SLOT);
 
         uint32_t val = MAX_ENTITIES;
-        for (uint32_t i = 0; i < MAX_ENTITIES; ++i)
+        for (uint32_t i = 0u; i < MAX_ENTITIES; ++i)
         {
             _freeSlots[i] = --val;
-            _generations[i] = 0;
+            _generations[i] = 0u;
             _chunkKeys[i] = INVALID_CHUNK;
             _slotToPublic[i] = INVALID_SLOT;
         }
@@ -60,15 +60,15 @@ public:
      * @param chunkKey Clé Morton du chunk contenant l'entité.
      * @return Smart handle (generation << INDEX_BITS | slot), ou UINT32_MAX en cas d'échec.
      */
-    uint32_t registerEntity(uint32_t publicId, uint64_t chunkKey) noexcept
+    uint32_t registerEntity(const uint32_t publicId, const uint64_t chunkKey) noexcept
     {
         if (publicId >= MAX_ID)
             return UINT32_MAX;
 
-        uint32_t fc = _freeCount.fetch_sub(1, std::memory_order_relaxed);
-        if (fc == 0 || fc - 1 >= MAX_ENTITIES)
+        uint32_t fc = _freeCount.fetch_sub(1u, std::memory_order_relaxed);
+        if (fc == 0u || fc - 1u >= MAX_ENTITIES)
         {
-            _freeCount.fetch_add(1, std::memory_order_relaxed);
+            _freeCount.fetch_add(1u, std::memory_order_relaxed);
             return UINT32_MAX;
         }
 
@@ -84,7 +84,7 @@ public:
      * @brief Désenregistre une entité par son ID public.
      * Incrémente la génération pour invalider les handles existants.
      */
-    void unregisterEntity(uint32_t publicId) noexcept
+    void unregisterEntity(const uint32_t publicId) noexcept
     {
         if (publicId >= MAX_ID) return;
 
@@ -96,7 +96,7 @@ public:
         _slotToPublic[slot] = INVALID_SLOT;
         _generations[slot]++;
 
-        uint32_t pos = _freeCount.fetch_add(1, std::memory_order_relaxed);
+        uint32_t pos = _freeCount.fetch_add(1u, std::memory_order_relaxed);
         if (pos < MAX_ENTITIES)
             _freeSlots[pos] = slot;
     }
@@ -107,7 +107,7 @@ public:
      * @brief Localise une entité par son ID public.
      * @return Clé Morton du chunk contenant l'entité, ou INVALID_CHUNK si non trouvée.
      */
-    [[nodiscard]] uint64_t getChunkKey(uint32_t publicId) const noexcept
+    [[nodiscard]] uint64_t getChunkKey(const uint32_t publicId) const noexcept
     {
         if (publicId >= MAX_ID) return INVALID_CHUNK;
         uint32_t slot = _sparseToSlot[publicId];
@@ -118,7 +118,7 @@ public:
     /**
      * @brief Met à jour la clé de chunk d'une entité (après migration inter-chunk).
      */
-    void updateChunkKey(uint32_t publicId, uint64_t newChunkKey) noexcept
+    void updateChunkKey(const uint32_t publicId, const uint64_t newChunkKey) noexcept
     {
         if (publicId >= MAX_ID) return;
         uint32_t slot = _sparseToSlot[publicId];
@@ -131,7 +131,7 @@ public:
     /**
      * @brief Vérifie la validité d'un smart handle (génération correcte).
      */
-    [[nodiscard]] bool isValid(uint32_t smartId) const noexcept
+    [[nodiscard]] bool isValid(const uint32_t smartId) const noexcept
     {
         uint32_t slot = smartId & INDEX_MASK;
         uint16_t gen = static_cast<uint16_t>(smartId >> INDEX_BITS);
@@ -142,7 +142,7 @@ public:
     /**
      * @brief Vérifie si un ID public est actuellement enregistré.
      */
-    [[nodiscard]] bool isRegistered(uint32_t publicId) const noexcept
+    [[nodiscard]] bool isRegistered(const uint32_t publicId) const noexcept
     {
         if (publicId >= MAX_ID) return false;
         return _sparseToSlot[publicId] != INVALID_SLOT;
@@ -150,12 +150,12 @@ public:
 
     // ─── Utilitaires ──────────────────────────────────────────────
 
-    [[nodiscard]] static uint32_t getSlot(uint32_t smartId) noexcept
+    [[nodiscard]] static uint32_t getSlot(const uint32_t smartId) noexcept
     {
         return smartId & INDEX_MASK;
     }
 
-    [[nodiscard]] static uint16_t getGeneration(uint32_t smartId) noexcept
+    [[nodiscard]] static uint16_t getGeneration(const uint32_t smartId) noexcept
     {
         return static_cast<uint16_t>(smartId >> INDEX_BITS);
     }

@@ -199,7 +199,7 @@ public:
      * @param writeIdx Index du write buffer (pour le snapshot retourné).
      * @return EntitySnapshot de l'entité retirée (id=0 si non trouvée).
      */
-    EntitySnapshot removeEntityById(uint32_t entityId, uint32_t writeIdx)
+    EntitySnapshot removeEntityById(const uint32_t entityId, const uint32_t writeIdx)
     {
         LocalGuard guard(_locker);
         if (entityId >= _sparseCapacity || _sparseToLocal[entityId] == INVALID_INDEX)
