@@ -1,3 +1,5 @@
+#pragma once
+
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -12,8 +14,6 @@
 #include <vector>
 #include <cmath>
 #include "lpl_protocol.h"
-
-#pragma once
 
 #define BCI_PACKET_SIZE 33
 #define BCI_RING_SLOTS 1024
@@ -92,7 +92,7 @@ public:
     using Complex = std::complex<float>;
 
 public:
-    OpenBCIDriver() : _ring(nullptr), _running(false), _fd(-1), _sampleIndex(0), _samplesSinceLastFFT(0)
+    OpenBCIDriver() : _sampleIndex(0), _samplesSinceLastFFT(0), _ring(nullptr), _running(false), _fd(-1)
     {
         _ring = new BciRingBuffer();
         memset(_ring, 0, sizeof(BciRingBuffer));
