@@ -176,7 +176,7 @@ public:
      * Les systèmes d'un même stage sont parallélisables.
      * Après tous les stages, appelle world.swapBuffers().
      */
-    void tick(WorldPartition &world, float dt)
+    void threaded_tick(WorldPartition &world, float dt)
     {
         if (_scheduleDirty)
             buildSchedule();
@@ -199,6 +199,18 @@ public:
             {
                 _systems[stage[0]].tick(world, dt);
             }
+        }
+    }
+
+    void ordered_tick(WorldPartition &world, float dt)
+    {
+        if (_scheduleDirty)
+            buildSchedule();
+
+        for (const auto &stage : _stages)
+        {
+            for (uint32_t sysIdx : stage)
+                _systems[sysIdx].tick(world, dt);
         }
     }
 

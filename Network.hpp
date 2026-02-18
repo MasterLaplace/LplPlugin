@@ -67,9 +67,9 @@ public:
     };
 
     struct ClientEndpoint {
+        uint32_t entityId;
         uint32_t ip;
         uint16_t port;
-        uint32_t entityId;
     };
 
 public:
@@ -436,7 +436,7 @@ private:
         player_entity.health = 100;
         world.addEntity(player_entity);
 
-        _clients.push_back({client_ip, client_port, newId});
+        _clients.push_back({newId, client_ip, client_port});
 
         uint8_t resp[5u];
         resp[0u] = MSG_WELCOME;
@@ -609,12 +609,11 @@ private:
 #endif
 
     uint32_t _nextEntityId = 100u; // Reserved 0-99
-
     std::vector<ClientEndpoint> _clients;
 
     // Client State
-    uint32_t _serverIp = 0;
-    uint16_t _serverPort = 0;
-    uint32_t _localEntityId = 0;
+    uint32_t _localEntityId = 0u;
+    uint32_t _serverIp = 0u;
+    uint16_t _serverPort = 0u;
     bool _connected = false;
 };

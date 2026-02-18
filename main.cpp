@@ -152,7 +152,7 @@ int main()
         uint64_t frame_start = get_time_ns();
 
         // Tick ECS : RingConsume → ClientIO → Physics
-        scheduler.tick(world, DT);
+        scheduler.threaded_tick(world, DT);
 
         // Swap buffers : rend les résultats de la physique visibles au read buffer
         world.swapBuffers();
