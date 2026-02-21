@@ -1,39 +1,39 @@
-# shared — Headers partagés
+# shared — Shared Headers
 
-Headers C/C++ communs à tous les plugins (protocole binaire, mathématiques).
+Common C/C++ headers for all plugins (binary protocol, mathematics).
 
-## Contenu
+## Contents
 
 ```
 shared/
-├── lpl_protocol.h   — Protocole binaire kernel↔userspace (C pur)
+├── lpl_protocol.h   — Binary protocol kernel↔userspace (pure C)
 └── Math.hpp         — Vec3, Quat, BoundaryBox (__host__ __device__)
 ```
 
 ## `lpl_protocol.h`
 
-Header C pur (`#pragma once` + types C99) utilisé à la fois dans le module noyau (`kernel/`) et les plugins userspace.
+Pure C header (`#pragma once` + C99 types) used in both the kernel module (`kernel/`) and userspace plugins.
 
-| Structure | Rôle |
+| Structure | Role |
 |-----------|------|
-| `RingHeader` | Head/tail atomiques du ring buffer partagé |
-| `RxPacket` | Paquet entrant reçu du réseau |
-| `TxPacket` | Paquet sortant à envoyer |
-| `LplSharedMemory` | Layout complet de la mémoire partagée (mmap) |
+| `RingHeader` | Atomic head/tail of the shared ring buffer |
+| `RxPacket` | Incoming packet received from network |
+| `TxPacket` | Outgoing packet to send |
+| `LplSharedMemory` | Complete layout of shared memory (mmap) |
 
-Macros utiles : `smp_load_acquire`, `smp_store_release` (barrières mémoire portables).
+Useful macros: `smp_load_acquire`, `smp_store_release` (portable memory barriers).
 
 ## `Math.hpp`
 
-Primitives mathématiques compatibles CPU et GPU CUDA (`__host__ __device__`).
+Mathematical primitives compatible with CPU and CUDA GPU (`__host__ __device__`).
 
-| Type | Opérations |
+| Type | Operations |
 |------|-----------|
 | `Vec3` | `+`, `-`, `*`, `dot`, `cross`, `normalize`, `length` |
-| `Quat` | Multiplication, normalisation, rotation de vecteur |
+| `Quat` | Multiplication, normalization, vector rotation |
 | `BoundaryBox` | AABB — `contains(Vec3)`, `intersects(BoundaryBox)` |
 
-## Règle d'inclusion
+## Include Rule
 
-Tous les plugins ajoutent `-I../../shared` (ou `-I../shared` pour `bci/`) à leurs flags de compilation.  
-Aucun include ne doit utiliser de chemin relatif vers `shared/` — cela garantit la portabilité des headers.
+All plugins add `-I../../shared` (or `-I../shared` for `bci/`) to their compilation flags.  
+No include should use relative paths to `shared/` — this ensures header portability.

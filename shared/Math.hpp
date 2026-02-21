@@ -20,6 +20,13 @@ struct Vec3 {
     [[nodiscard]] LPL_HD float dot(const Vec3 other) const noexcept { return x * other.x + y * other.y + z * other.z; }
     [[nodiscard]] LPL_HD Vec3 cross(const Vec3 other) const noexcept { return Vec3{y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x}; }
     [[nodiscard]] LPL_HD float magnitudeSquared() const noexcept { return x * x + y * y + z * z; }
+    [[nodiscard]] LPL_HD Vec3 normalize() const noexcept
+    {
+        float m = sqrtf(x * x + y * y + z * z);
+        if (m > 1e-6f)
+            return Vec3{x / m, y / m, z / m};
+        return Vec3{0, 0, 0};
+    }
 };
 
 struct Quat {

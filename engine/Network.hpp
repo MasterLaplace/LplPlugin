@@ -24,48 +24,18 @@
 #include "lpl_protocol.h"
 #include "WorldPartition.hpp"
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define LOG_TAG "Protocol"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define PRINTER(...) LOGI(__VA_ARGS__)
+#else
+#define PRINTER(...) printf(__VA_ARGS__)
+#endif
+
 class Network {
 public:
-
-    /// <summary>
-    /// Represents the event ID.
-    /// </summary>
-    enum class EventId : uint8_t
-    {
-        MOVE_LEFT = 0,
-        MOVE_RIGHT = 1,
-        MOVE_UP = 2,
-        MOVE_DOWN = 3,
-        MOVE_FRONT = 4,
-        MOVE_BACK = 5,
-        LOOK_LEFT = 6,
-        LOOK_RIGHT = 7,
-        LOOK_UP = 8,
-        LOOK_DOWN = 9,
-        SHOOT = 10,
-        MAX_EVENT
-    };
-
-    /// <summary>
-    /// Represents the state of an event.
-    /// </summary>
-    enum class EventState : uint8_t
-    {
-        PRESSED = 0,
-        RELEASED = 1,
-        MAX_STATE
-    };
-
-    struct ButtonEvent {
-        EventId entityId;
-        EventState direction;
-    };
-
-    struct JoyStickEvent {
-        EventId entityId;
-        float axis;
-    };
-
     struct ClientEndpoint {
         uint32_t entityId;
         uint32_t ip;
@@ -178,7 +148,7 @@ public:
         _rx = &_shm->rx;
         _tx = &_shm->tx;
 
-        printf("[NET] Driver connecté. Ring Buffer mappé à %p (%zu bytes)\n", _shm, sizeof(LplSharedMemory));
+        PRINTER("[NET] Driver connecté. Ring Buffer mappé à %p (%zu bytes)\n", _shm, sizeof(LplSharedMemory));
         return true;
     }
 
@@ -395,7 +365,7 @@ private:
             if (pkt->length < 5) break;
             _localEntityId = *reinterpret_cast<uint32_t*>(cursor + 1);
             _connected = true;
-            printf("[NET] Connected! Entity ID: %u\n", _localEntityId);
+            PRINTER("[NET] Connected! Entity ID: %u\n", _localEntityId);
             break;
         }
         case MSG_STATE: {

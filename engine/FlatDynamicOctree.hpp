@@ -107,9 +107,21 @@ private:
         EntityRef *src = _sortedRefs.data();
         EntityRef *dst = _tempRefs.data();
 
+    #ifdef __ANDROID__
+        // Heap allocation for histogram (256KB x 2 = 512KB on stack is risky on Android)
+        std::vector<uint32_t> counts(65536u, 0u);
+        std::vector<uint32_t> offsets(65536u, 0u);
+    #endif
+
         for (uint8_t pass = 0u; pass < 4u; ++pass)
         {
-            uint32_t counts[65536u] = {0u};
+        #ifdef __ANDROID__
+            std::fill(counts.begin(), counts.end(), 0u);
+            std::fill(offsets.begin(), offsets.end(), 0u);
+        #else
+            uint32_t counts[65536] = {0u};
+            uint32_t offsets[65536] = {0u};
+        #endif
             uint64_t shift = pass * 16u;
 
             for (uint32_t index = 0u; index < count; ++index)
@@ -118,7 +130,6 @@ private:
                 ++counts[bucket];
             }
 
-            uint32_t offsets[65536u];
             offsets[0u] = 0u;
             for (uint32_t index = 1u; index < 65536u; ++index)
                 offsets[index] = offsets[index - 1u] + counts[index -1u];

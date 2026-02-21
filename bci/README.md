@@ -1,81 +1,81 @@
-# bci — Plugin BCI OpenBCI Cyton
+# bci — OpenBCI Cyton BCI Plugin
 
-Interface temps-réel avec le casque **OpenBCI Cyton** (8 canaux, 250 Hz) et calcul de métriques neurales pour la boucle fermée BCI.
+Real-time interface with the **OpenBCI Cyton** headset (8 channels, 250 Hz) and neural metrics computation for closed-loop BCI control.
 
-## Contenu
+## Contents
 
 ```
 bci/
 ├── include/
-│   ├── OpenBCIDriver.hpp     — Driver USB-série, ring buffer, FFT multi-canal
-│   ├── SignalMetrics.hpp     — Métriques spectrales (Schumacher R(t), RMS, baseline)
-│   ├── RiemannianGeometry.hpp— Géométrie SPD, δ_R, distance de Mahalanobis
-│   └── NeuralMetrics.hpp     — Struct normalisée pour la boucle de contrôle
-├── calcul.c                  — Référence C de Schumacher/intégrale
+│   ├── OpenBCIDriver.hpp     — USB-serial driver, ring buffer, multi-channel FFT
+│   ├── SignalMetrics.hpp     — Spectral metrics (Schumacher R(t), RMS, baseline)
+│   ├── RiemannianGeometry.hpp— SPD geometry, δ_R, Mahalanobis distance
+│   └── NeuralMetrics.hpp     — Normalized struct for control loop
+├── calcul.c                  — C reference for Schumacher/integral
 └── tests/
-    ├── test_metrics.cpp      — Tests unitaires SignalMetrics
-    └── test_riemannian.cpp   — Tests unitaires RiemannianGeometry
+    ├── test_metrics.cpp      — Unit tests SignalMetrics
+    └── test_riemannian.cpp   — Unit tests RiemannianGeometry
 ```
 
-## Métriques implémentées
+## Implemented Metrics
 
-### Schumacher R(t) — Tension musculaire
+### Schumacher R(t) — Muscle Tension
 
 $$
 R(t) = \frac{1}{N_{ch}} \sum_{i=1}^{N_{ch}} \int_{40}^{70} \mathrm{PSD}_i(f,t)\, df
 $$
 
-Indicateur de contamination EMG/artefacts haute-fréquence du signal EEG.  
-Référence : Schumacher et al., *Closed-loop control of gait using BCI*, 2015.
+Indicator of EMG contamination/high-frequency artifacts in EEG signal.  
+Reference: Schumacher et al., *Closed-loop control of gait using BCI*, 2015.
 
-### Distance Riemannienne δ_R — Stabilité cognitive
+### Riemannian Distance δ_R — Cognitive Stability
 
 $$
 \delta_R(C_1, C_2) = \sqrt{\sum_i \ln^2(\lambda_i)}
 $$
 
-où $\lambda_i$ sont les valeurs propres de $C_1^{-1/2} C_2 C_1^{-1/2}$.  
-Invariante par congruence — robuste aux artéfacts de volume-conduit.  
-Références : Moakher 2005, Arsigny et al. 2006, Blankertz et al. 2011.
+where $\lambda_i$ are eigenvalues of $C_1^{-1/2} C_2 C_1^{-1/2}$.  
+Congruence-invariant — robust to volume-conduction artifacts.  
+References: Moakher 2005, Arsigny et al. 2006, Blankertz et al. 2011.
 
-### Distance de Mahalanobis D_M — Détection d'anomalie
+### Mahalanobis Distance D_M — Anomaly Detection
 
 $$
 D_M(x_t) = \sqrt{(x_t - \mu_c)^T \Sigma_c^{-1} (x_t - \mu_c)}
 $$
 
-Détecte les points anormaux dans l'espace des caractéristiques EEG par rapport à un état de référence calibré.
+Detects outlier points in EEG feature space relative to a calibrated reference state.
 
 ## Build & Tests
 
 ```bash
-make -C bci test   # Compile et exécute les 24 tests unitaires
+make -C bci test   # Compile and run 24 unit tests
 ```
 
-**Résultat attendu :**
+**Expected output:**
 ```
-[OK] Tous les tests sont passes.   (SignalMetrics — 12 tests)
-[OK] Tous les tests sont passes.   (RiemannianGeometry — 12 tests)
+[OK] All tests passed.   (SignalMetrics — 12 tests)
+[OK] All tests passed.   (RiemannianGeometry — 12 tests)
 ```
 
-## Format de paquet OpenBCI Cyton
+## OpenBCI Cyton Packet Format
 
-Le Cyton émet des paquets de 33 octets à 250 Hz :
+The Cyton emits 33-byte packets at 250 Hz:
 
-| Octets | Contenu                        |
+| Bytes | Content                        |
 |--------|-------------------------------|
-| `[0]`  | `0xA0` — marqueur de début    |
-| `[1]`  | Compteur d'échantillons        |
-| `[2..4]` | Canal 1 (24 bits, signé)   |
-| `[5..7]` | Canal 2                    |
+| `[0]`  | `0xA0` — start marker         |
+| `[1]`  | Sample counter                |
+| `[2..4]` | Channel 1 (24-bit, signed)  |
+| `[5..7]` | Channel 2                   |
 | …      | …                             |
-| `[23..25]` | Canal 8                |
-| `[26..31]` | Accéléromètre (AX,AY,AZ)|
-| `[32]` | `0xC0` — marqueur de fin      |
+| `[23..25]` | Channel 8               |
+| `[26..31]` | Accelerometer (AX,AY,AZ)|
+| `[32]` | `0xC0` — end marker           |
 
-`parse_channel(data)` récupère une valeur en microvolts via le facteur d'échelle `4.5 / 24 / 8388607 × 10⁶ µV/LSB`.
+`parse_channel(data)` retrieves a value in microvolts via scale factor `4.5 / 24 / 8388607 × 10⁶ µV/LSB`.
 
-## Usage (exemple)
+## Usage (example)
 
 ```cpp
 #include "OpenBCIDriver.hpp"
@@ -87,7 +87,7 @@ bci.init("/dev/ttyUSB0");
 NeuralState  ns;
 float        baseline_R = 0.0f;
 
-// Phase de calibration (2 secondes au repos)
+// Calibration phase (2 seconds at rest)
 // ...
 
 while (running) {
@@ -97,3 +97,4 @@ while (running) {
         pause_feedback();
 }
 ```
+

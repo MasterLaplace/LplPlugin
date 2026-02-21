@@ -1,60 +1,60 @@
-# engine — Moteur ECS temps-réel (header-only)
+# engine — Real-time ECS Engine (header-only)
 
-Moteur de simulation hautes performances basé sur un **ECS/SoA** avec partitionnement spatial Morton, ordonnancement DAG et physique hybride CPU/GPU (CUDA).
+High-performance simulation engine based on **ECS/SoA** with Morton spatial partitioning, DAG scheduling, and hybrid CPU/GPU physics (CUDA).
 
-## Contenu
+## Contents
 
 ```
 engine/
-├── WorldPartition.hpp     — Monde partitionné (Morton chunks, double buffer)
-├── Partition.hpp          — Stockage SoA par chunk (ECS)
-├── EntityRegistry.hpp     — Sparse set générationnel O(1)
-├── SystemScheduler.hpp    — Ordonnanceur DAG avec parallélisme automatique
-├── ThreadPool.hpp         — Thread pool custom (enqueueDetached, latch)
-├── FlatAtomicsHashMap.hpp — Hash map lock-free (22-bit slots)
-├── FlatDynamicOctree.hpp  — Octree dynamique pour requêtes spatiales
-├── Network.hpp            — Interface kernel module + dispatch de paquets
-├── PhysicsGPU.cu/.cuh     — Kernels CUDA (Euler semi-implicite)
-├── Morton.hpp             — Encodage/décodage Morton 3D
-├── SpinLock.hpp           — Spin lock léger
-└── PinnedAllocator.hpp    — Allocateur mémoire paginée (CUDA pinned)
+├── WorldPartition.hpp     — Partitioned world (Morton chunks, double buffer)
+├── Partition.hpp          — SoA storage per chunk (ECS)
+├── EntityRegistry.hpp     — Generational sparse set O(1)
+├── SystemScheduler.hpp    — DAG scheduler with automatic parallelism
+├── ThreadPool.hpp         — Custom thread pool (enqueueDetached, latch)
+├── FlatAtomicsHashMap.hpp — Lock-free hash map (22-bit slots)
+├── FlatDynamicOctree.hpp  — Dynamic octree for spatial queries
+├── Network.hpp            — Kernel module interface + packet dispatch
+├── PhysicsGPU.cu/.cuh     — CUDA kernels (semi-implicit Euler)
+├── Morton.hpp             — 3D Morton encoding/decoding
+├── SpinLock.hpp           — Lightweight spin lock
+└── PinnedAllocator.hpp    — Pinned memory allocator (CUDA pinned)
 ```
 
-## Architecture ECS
+## ECS Architecture
 
 ```
-[EntityRegistry] ──── entités ────► [Partition (SoA)]
-                                          │
+[EntityRegistry] ──── entities ────► [Partition (SoA)]
+                                             │
 [SystemScheduler] ──── DAG ──────► [WorldPartition]
-                                          │
-                              ┌───────────┴───────────┐
-                         [GPU Physics]           [CPU Physics]
-                         (CUDA kernels)          (ThreadPool)
+                                             │
+                                 ┌───────────┴───────────┐
+                            [GPU Physics]           [CPU Physics]
+                            (CUDA kernels)          (ThreadPool)
 ```
 
-## Pipeline de simulation (par frame)
+## Simulation Pipeline (per frame)
 
-1. **Réseau** — `Network::poll()` consomme le ring buffer, dispatche `STATE`/`INPUT`/`CONNECT`
-2. **Ordonnancement** — `SystemScheduler::run()` lance les systèmes en parallèle par stage
-3. **Partitionnement** — `WorldPartition::step()` itère sur les chunks actifs
-4. **Physique** — kernels CUDA (si disponible) ou `ThreadPool` en fallback
-5. **Double buffer** — swap atomique de la frame rendue
+1. **Network** — `Network::poll()` consumes ring buffer, dispatches `STATE`/`INPUT`/`CONNECT`
+2. **Scheduling** — `SystemScheduler::run()` launches systems in parallel by stage
+3. **Partitioning** — `WorldPartition::step()` iterates over active chunks
+4. **Physics** — CUDA kernels (if available) or `ThreadPool` fallback
+5. **Double buffer** — atomic frame swap
 
-## Points techniques
+## Technical Details
 
-| Composant | Détail |
+| Component | Detail |
 |-----------|--------|
-| `Morton.hpp` | Encodage Z-order 3D 64-bit — localité cache pour la traversée spatiale |
-| `FlatAtomicsHashMap` | `std::atomic<uint64_t>` par slot — insertions wait-free |
-| `PinnedAllocator` | `cudaHostAlloc` → accès GPU zero-copy via `cudaHostGetDevicePointer` |
-| `SystemScheduler` | Graphe de dépendances R/W → stages parallèles synchronisés par `std::latch` |
+| `Morton.hpp` | 3D Z-order 64-bit encoding — cache locality for spatial traversal |
+| `FlatAtomicsHashMap` | `std::atomic<uint64_t>` per slot — wait-free insertions |
+| `PinnedAllocator` | `cudaHostAlloc` → GPU access zero-copy via `cudaHostGetDevicePointer` |
+| `SystemScheduler` | R/W dependency graph → parallel stages synchronized by `std::latch` |
 
 ## Build
 
-Bibliothèque **header-only** — aucune compilation séparée hormis `PhysicsGPU.cu` (CUDA optionnel).
+**Header-only** library — no separate compilation except `PhysicsGPU.cu` (CUDA optional).
 
 ```bash
-make server     # Compile apps/server avec -I../../engine
+make server     # Compiles apps/server with -I../../engine
 ```
 
-CUDA est détecté automatiquement par le Makefile ; si `nvcc` est absent, la physique CPU est utilisée.
+CUDA is auto-detected by the Makefile; if `nvcc` is absent, CPU physics is used.

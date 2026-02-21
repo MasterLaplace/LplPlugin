@@ -1,12 +1,12 @@
-# kernel — Module noyau Linux (lpl_kmod)
+# kernel — Linux Kernel Module (lpl_kmod)
 
-Module noyau Linux implémentant un pipeline **zéro-copie** pour l'ingestion de paquets UDP avec partage mémoire vers l'espace utilisateur.
+Linux kernel module implementing a **zero-copy** pipeline for UDP packet ingestion with shared memory to userspace.
 
-## Contenu
+## Contents
 
 ```
 kernel/
-├── lpl_kmod.c   — Source du module (hook Netfilter + char device + mmap)
+├── lpl_kmod.c   — Module source (Netfilter hook + char device + mmap)
 └── Makefile
 ```
 
@@ -20,32 +20,33 @@ kernel/
                                            [Network.hpp — polling lockless]
 ```
 
-## Fonctionnement
+## Operation
 
-| Mécanisme | Détail |
-|-----------|--------|
-| **Hook Netfilter** | `NF_INET_PRE_ROUTING` — capture les paquets avant le routage noyau |
-| **Ring Buffer** | Structure `RxRingBuffer` / `TxRingBuffer` partagée via `mmap` |
-| **Char Device** | `/dev/lpl` exposé avec `open`, `mmap`, `ioctl` |
-| **Thread TX** | Thread noyau dédié à l'envoi des paquets de réponse |
-| **Zéro-copie** | Aucun `copy_to_user` — la mémoire est directement mappée |
+| Mechanism | Details |
+|-----------|---------|
+| **Netfilter Hook** | `NF_INET_PRE_ROUTING` — captures packets before kernel routing |
+| **Ring Buffer** | `RxRingBuffer` / `TxRingBuffer` structure shared via `mmap` |
+| **Char Device** | `/dev/lpl` exposed with `open`, `mmap`, `ioctl` |
+| **TX Thread** | Dedicated kernel thread for sending response packets |
+| **Zero-copy** | No `copy_to_user` — memory is directly mapped |
 
 ## Build
 
 ```bash
-# Prérequis : linux-headers-$(uname -r)
-make -C kernel   # ou `make driver` depuis la racine
+# Prerequisites: linux-headers-$(uname -r)
+make -C kernel   # or `make driver` from root
 ```
 
-Produit `lpl_kmod.ko` dans `/tmp/lpl_kernel_build/`.
+Produces `lpl_kmod.ko` in `/tmp/lpl_kernel_build/`.
 
 ```bash
 make install     # insmod + chown /dev/lpl
 make uninstall   # rmmod
 ```
 
-## Dépendance partagée
+## Shared Dependency
 
-Le module utilise `lpl_protocol.h` (depuis `shared/`) pour les définitions des structures `RingHeader`, `RxPacket`, `TxPacket`, et les constantes du protocole binaire.
+The module uses `lpl_protocol.h` (from `shared/`) for structure definitions `RingHeader`, `RxPacket`, `TxPacket`, and binary protocol constants.
 
-Le Makefile copie automatiquement `../shared/lpl_protocol.h` dans le répertoire de build temporaire avant la compilation noyau.
+The Makefile automatically copies `../shared/lpl_protocol.h` to the temporary build directory before kernel compilation.
+
