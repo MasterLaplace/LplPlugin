@@ -1,36 +1,49 @@
 #pragma once
 
-#include <termios.h>
+#include "SignalMetrics.hpp"
+#include "lpl_protocol.h"
+#include <array>
+#include <atomic>
+#include <cmath>
+#include <complex>
+#include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <numbers>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/ioctl.h>
-#include <atomic>
+#include <termios.h>
 #include <thread>
-#include <complex>
-#include <numbers>
+#include <unistd.h>
 #include <vector>
-#include <cmath>
-#include "lpl_protocol.h"
 
 #define BCI_PACKET_SIZE 33
-#define BCI_RING_SLOTS 1024
+#define BCI_RING_SLOTS  1024
+
+static constexpr size_t BCI_CHANNELS = 8u;
 
 struct BciPacket {
     uint8_t data[BCI_PACKET_SIZE];
 };
 
-struct BciRingBuffer{
+struct BciRingBuffer {
     RingHeader idx;
     BciPacket packets[BCI_RING_SLOTS];
 };
 
 struct NeuralState {
+    // Puissance par canal (post-FFT)
+    std::array<float, BCI_CHANNELS> channelAlpha = {};
+    std::array<float, BCI_CHANNELS> channelBeta = {};
+
+    // Métriques agrégées (moyenne inter-canaux)
     float alphaPower = 0.0f;
     float betaPower = 0.0f;
     float concentration = 0.0f;
+
+    // Métrique de Schumacher R(t) — tension musculaire 40-70 Hz
+    float schumacherR = 0.0f;
+
     bool blinkDetected = false;
 };
 
@@ -78,7 +91,7 @@ public:
     static void apply_window(std::vector<Complex> &x)
     {
         const size_t N = x.size();
-        const size_t computedSize = N -1u;
+        const size_t computedSize = N - 1u;
         for (size_t i = 0u; i < N; ++i)
         {
             float multiplier = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * i / computedSize));
@@ -97,8 +110,11 @@ public:
         _ring = new BciRingBuffer();
         memset(_ring, 0, sizeof(BciRingBuffer));
 
-        _timeDomainBuffer.resize(FFT_SIZE, 0.0f);
-        _fftInput.resize(FFT_SIZE);
+        for (size_t ch = 0u; ch < BCI_CHANNELS; ++ch)
+        {
+            _timeDomainBuffers[ch].resize(FFT_SIZE, 0.0f);
+            _fftInputs[ch].resize(FFT_SIZE);
+        }
     }
 
     ~OpenBCIDriver()
@@ -141,11 +157,17 @@ public:
         while (head != tail)
         {
             BciPacket *pkt = &_ring->packets[tail];
-            float raw_uV = parse_channel(&pkt->data[2]);
-            _timeDomainBuffer[_sampleIndex] = raw_uV;
-            _sampleIndex = (_sampleIndex + 1) % FFT_SIZE;
 
-            state.blinkDetected = (std::abs(raw_uV) > 150.0f);
+            // Parse les 8 canaux Cyton (3 octets par canal, offset data[2 + ch*3])
+            for (size_t ch = 0u; ch < BCI_CHANNELS; ++ch)
+            {
+                float raw_uV = parse_channel(&pkt->data[2u + ch * 3u]);
+                _timeDomainBuffers[ch][_sampleIndex] = raw_uV;
+                if (ch == 0u)
+                    state.blinkDetected = (std::abs(raw_uV) > 150.0f);
+            }
+
+            _sampleIndex = (_sampleIndex + 1u) % FFT_SIZE;
             _samplesSinceLastFFT++;
 
             if (_samplesSinceLastFFT >= UPDATE_INTERVAL)
@@ -204,38 +226,58 @@ private:
 
     void processFFT(NeuralState &state)
     {
-        for (size_t i = 0u; i < FFT_SIZE; ++i)
-        {
-            size_t idx = (_sampleIndex + i) % FFT_SIZE;
-            _fftInput[i] = Complex(_timeDomainBuffer[idx], 0.0f);
-        }
+        const float normFactor = 2.0f / FFT_SIZE;
 
-        FastFourierTransform::apply_window(_fftInput);
-        FastFourierTransform::compute(_fftInput);
+        // Bins Schumacher : 40 Hz et ~70 Hz dans le spectre demi-bande
+        static constexpr uint16_t BIN_40HZ = static_cast<uint16_t>(40.0f * FFT_SIZE / SAMPLE_RATE);
+        static constexpr uint16_t BIN_70HZ = static_cast<uint16_t>(70.0f * FFT_SIZE / SAMPLE_RATE);
+
+        std::vector<std::vector<float>> psdChannels(BCI_CHANNELS, std::vector<float>(FFT_SIZE / 2u, 0.0f));
 
         float alphaSum = 0.0f;
         float betaSum = 0.0f;
-        const float normFactor = 2.0f / FFT_SIZE;
 
-        for (size_t i = 1u; i < FFT_SIZE / 2u; ++i)
+        for (size_t ch = 0u; ch < BCI_CHANNELS; ++ch)
         {
-            float freq = i * FREQ_RES;
-            float magnitude = std::abs(_fftInput[i]) * normFactor;
+            for (size_t i = 0u; i < FFT_SIZE; ++i)
+            {
+                size_t idx = (_sampleIndex + i) % FFT_SIZE;
+                _fftInputs[ch][i] = Complex(_timeDomainBuffers[ch][idx], 0.0f);
+            }
 
-            if (freq >= 8.0f && freq <= 12.0f)
-                alphaSum += magnitude;
-            else if (freq >= 13.0f && freq <= 30.0f)
-                betaSum += magnitude;
+            FastFourierTransform::apply_window(_fftInputs[ch]);
+            FastFourierTransform::compute(_fftInputs[ch]);
+
+            float chAlpha = 0.0f;
+            float chBeta = 0.0f;
+
+            for (size_t i = 1u; i < FFT_SIZE / 2u; ++i)
+            {
+                float freq = i * FREQ_RES;
+                float magnitude = std::abs(_fftInputs[ch][i]) * normFactor;
+                psdChannels[ch][i] = magnitude;
+
+                if (freq >= 8.0f && freq <= 12.0f)
+                    chAlpha += magnitude;
+                else if (freq >= 13.0f && freq <= 30.0f)
+                    chBeta += magnitude;
+            }
+
+            state.channelAlpha[ch] = chAlpha;
+            state.channelBeta[ch] = chBeta;
+            alphaSum += chAlpha;
+            betaSum += chBeta;
         }
 
-        float smoothFactor = 0.1f;
-        state.alphaPower = state.alphaPower * (1.0f - smoothFactor) + alphaSum * smoothFactor;
-        state.betaPower  = state.betaPower  * (1.0f - smoothFactor) + betaSum  * smoothFactor;
+        // R(t) de Schumacher : puissance EMG/HF moyenne inter-canaux
+        state.schumacherR = SignalMetrics::schumacher(psdChannels, BIN_40HZ, BIN_70HZ);
 
-        float totalPower = state.alphaPower + state.betaPower + 0.0001f;
-        float ratio = state.betaPower / totalPower;
+        const float smoothFactor = 0.1f;
+        state.alphaPower = state.alphaPower * (1.0f - smoothFactor) + (alphaSum / BCI_CHANNELS) * smoothFactor;
+        state.betaPower = state.betaPower * (1.0f - smoothFactor) + (betaSum / BCI_CHANNELS) * smoothFactor;
 
-        state.concentration = state.concentration * 0.9f + ratio * 0.1f;
+        const float totalPower = state.alphaPower + state.betaPower + 0.0001f;
+        state.concentration = state.concentration * 0.9f + (state.betaPower / totalPower) * 0.1f;
     }
 
     int setup_serial_port(const char *device_path)
@@ -292,7 +334,7 @@ private:
         int32_t value = (data[0] << 16) | (data[1] << 8) | data[2];
         if (value & 0x00800000)
             value |= 0xFF000000;
-        return (float)value * BCI_SCALE_FACTOR;
+        return (float) value * BCI_SCALE_FACTOR;
     }
 
 private:
@@ -301,8 +343,8 @@ private:
     static constexpr size_t FFT_SIZE = 256u;
     static constexpr float SAMPLE_RATE = 250.0f;
     static constexpr float FREQ_RES = SAMPLE_RATE / FFT_SIZE;
-    std::vector<float> _timeDomainBuffer;
-    std::vector<Complex> _fftInput;
+    std::array<std::vector<float>, BCI_CHANNELS> _timeDomainBuffers;
+    std::array<std::vector<Complex>, BCI_CHANNELS> _fftInputs;
     size_t _sampleIndex;
     size_t _samplesSinceLastFFT;
     BciRingBuffer *_ring;

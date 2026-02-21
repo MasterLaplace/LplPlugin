@@ -57,5 +57,19 @@ dkms.conf
 # personal files
 .vs*/
 .Test/
-engine
+.agent_tools/
+.ndk_link/
+res/
 visual
+*.apk
+*.java
+*.zip
+*.idsig
+*.keystore
+
+# Build outputs (binaires sans extension)
+apps/server/server
+apps/benchmark/benchmark
+apps/client/visual
+bci/tests/test_metrics
+bci/tests/test_riemannian

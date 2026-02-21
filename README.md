@@ -1,57 +1,92 @@
 # LplPlugin
 
-Low-latency real-time simulation engine using zero-copy architecture from NIC to GPU, with spatial partitioning for MMO-scale worlds.
+Plate-forme BCI adaptative en boucle fermée — du signal EEG brut à la simulation temps-réel, avec un pipeline noyau zéro-copie et des métriques de neuroscience computationnelle.
 
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [Architecture](#architecture)
-3. [Core Components](#core-components)
-4. [Build & Run](#build--run)
-5. [Technical Details](#technical-details)
-6. [Performance](#performance)
-7. [Roadmap](#roadmap)
-8. [License](#license)
+3. [Plugins](#plugins)
+4. [BCI Scientific Contributions](#bci-scientific-contributions)
+5. [Build & Run](#build--run)
+6. [Technical Details](#technical-details)
+7. [Performance](#performance)
+8. [Roadmap](#roadmap)
+9. [License](#license)
 
 ## Overview
 
-LplPlugin is a high-performance engine designed to minimize latency in networked real-time simulations. It combines a Linux kernel module for zero-copy UDP packet ingestion with a WorldPartition system that spatially organizes entities into Morton-encoded chunks.
+LplPlugin est une **plate-forme BCI adaptative** combinée à un moteur de simulation hautes performances. Elle implémente une boucle fermée complète : acquisition EEG multi-canal (OpenBCI Cyton, 8ch/250 Hz) → métriques spectrales et géométriques → adaptation du retour visuel en temps réel.
 
-**Key features:**
-- **Zero-copy packet path:** NIC → Kernel → Userspace → GPU
-- **WorldPartition:** Morton-encoded spatial hashing with lock-free storage (`FlatAtomicsHashMap`).
-- **Parallel ECS Scheduler:** DAG-based `SystemScheduler` with automatic dependency resolution and parallel stage execution.
-- **Optimized ThreadPool:** Custom thread pool with `std::future` support and local-thread optimization for single-batch workloads.
-- **Hybrid Physics:**
-  - **GPU:** CUDA kernels (Euler semi-implicit) for massive scale.
-  - **CPU:** Parallelized fallback via `ThreadPool` for compatibility.
-- **EntityRegistry:** Generational sparse set O(1) lookup.
+**Domaine d'application :** réentraînement moteur assisté par BCI, interfaces neuro-adaptatives, retour hàptique conditionné par l'état neural.
+
+**Contributions scientifiques clés :**
+- **Schumacher R(t)** — indicateur de tension musculaire 40-70 Hz inter-canaux
+- **Distance de Riemann δ_R** — détection de changement d'état cognitif sur les matrices de covariance SPD
+- **Distance de Mahalanobis D_M** — détection d'anomalie dans l'espace des caractéristiques EEG
+
+**Infrastructure système :**
+- **Zéro-copie NIC → GPU** via module noyau Netfilter + `mmap` + CUDA
+- **WorldPartition ECS** avec hachage spatial Morton et hash map lock-free
+- **SystemScheduler DAG** — parallélisme automatique par résolution de dépendances R/W
 
 ## Architecture
 
 ```
+[OpenBCI Cyton]
+  8 canaux / 250 Hz
+       |
+[OpenBCIDriver] ── FFT multi-canal ──► [SignalMetrics : R(t) Schumacher]
+       |                               [RiemannianGeometry : δ_R, D_M    ]
+       ▼                                          |
+[NeuralMetrics]                                   ▼
+    muscle_tension / stability / concentration    |
+       |                                          |
+       ▼                                          ▼
 [Network Packet] → [Kernel Module (lpl_kmod)] → [Shared Ring Buffer]
-                                                    ↓
-                                         [Network Class (Userspace)]
-                                                    ↓
+                                                      ↓
+                                         [Network (Userspace)]
+                                                      ↓
                                          [SystemScheduler DAG]
-                                                    ↓
+                                                      ↓
                                    [WorldPartition (Morton Chunks)]
-                                                    ↓
-                                        [Physics (CUDA/CPU)]
+                                                      ↓
+                                        [Physics (CUDA / CPU)]
 ```
 
-### Core Components
+## Plugins
 
-| File | Role |
-|------|------|
-| `lpl_kmod.c` | Linux kernel module — Netfilter hook, zero-copy ring buffer via mmap |
-| `Network.hpp` | Userspace interface to the kernel module. Handles packet dispatch and client management. |
-| `SystemScheduler.hpp` | DAG-based ECS scheduler. Resolves R/W dependencies automatically. |
-| `WorldPartition.hpp` | Spatially partitioned world. Orchestrates physics steps (CPU/GPU). |
-| `ThreadPool.hpp` | High-performance thread pool with `enqueueDetached` for low-overhead tasks. |
-| `FlatAtomicsHashMap.hpp` | Lock-free hash map with `forEachParallel` optimization. |
-| `Partition.hpp` | Per-chunk SoA ECS storage. |
+| Plugin | Rôle | Voir |
+|--------|------|------|
+| [`bci/`](bci/README.md) | Driver OpenBCI, FFT, Schumacher, Riemann, Mahalanobis | [README](bci/README.md) |
+| [`engine/`](engine/README.md) | ECS SoA, WorldPartition, SystemScheduler, CUDA physics | [README](engine/README.md) |
+| [`kernel/`](kernel/README.md) | Module noyau Netfilter + ring buffer zéro-copie | [README](kernel/README.md) |
+| [`shared/`](shared/README.md) | Protocole binaire + mathématiques CPU/GPU | [README](shared/README.md) |
+
+## BCI Scientific Contributions
+
+### Schumacher R(t)
+
+$$R(t) = \frac{1}{N_{ch}} \sum_{i=1}^{N_{ch}} \int_{40}^{70} \mathrm{PSD}_i(f,t)\, df$$
+
+Mesure la puissance dans la bande 40-70 Hz sur tous les canaux. Utilisé comme proxy de la **tension musculaire** et de la fatigue. Un R(t) élevé déclenche une pause ou une réduction du feedback.
+
+### Distance Riemannienne δ_R
+
+$$\delta_R(C_1, C_2) = \sqrt{\sum_i \ln^2(\lambda_i)}$$
+
+Métrique géodésique sur la variété des matrices symétriques définies positives. **Invariante par congruence** — mème distance avant et après pré-multiplication par une matrice non singulière, ce qui la rend robuste aux artfacts de volume-conduit.
+
+### Distance de Mahalanobis D_M
+
+$$D_M(x_t) = \sqrt{(x_t - \mu_c)^T \Sigma_c^{-1} (x_t - \mu_c)}$$
+
+Détection d'anomalie dans l'espace des caractéristiques. Se réduit à la distance euclidienne quand Σ_c = I.
+
+**Références :**
+- Schumacher et al., *Closed-loop BCI for fatigue monitoring*, 2015
+- Blankertz et al., *Single-trial EEG using Riemannian covariance matrices*, 2011
+- Moakher, *A Riemannian framework for the geometric mean of SPD matrices*, 2005
 
 ## Build & Run
 
@@ -108,9 +143,14 @@ The `SystemScheduler` builds a dependency graph (DAG) based on component access 
 
 ## Roadmap
 
-- [ ] Client-side prediction & reconciliation
-- [ ] GPUDirect RDMA support (NIC → GPU bypass)
-- [ ] 100k+ entities stress testing
+- [x] Driver OpenBCI Cyton multi-canal (8 ch)
+- [x] Schumacher R(t) avec tests unitaires
+- [x] Distance de Riemann (Jacobi eigenvalue, sans dépendance extérieure)
+- [x] Distance de Mahalanobis
+- [ ] Phase de calibration automatique (baseline 30s)
+- [ ] Visual feedback conditionné par NeuralMetrics
+- [ ] GPUDirect RDMA (NIC → GPU bypass)
+- [ ] Stress test 100k+ entités
 
 ## License
 

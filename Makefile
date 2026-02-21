@@ -1,15 +1,17 @@
-obj-m += lpl_kmod.o
+# =============================================================
+#  LAPLACE PLUGIN — Root Orchestrator
+#  Structure: shared/ kernel/ engine/ bci/ apps/
+# =============================================================
 
-KDIR := /lib/modules/$(shell uname -r)/build
-
-CC = gcc
-CXX = g++
+CC   = gcc
+CXX  = g++
 NVCC = nvcc
 NVCC_FLAGS = -O3 -std=c++20 -ccbin $(CC) -Xcompiler "-Wall -pthread"
+
+# --- Detect NVCC ---
 NVCC_PATH := $(shell command -v $(NVCC) 2>/dev/null)
 NVCC_AVAILABLE :=
 ifneq ($(NVCC_PATH),)
-    # Try compiling a dummy file to check if nvcc works with the current gcc
     NVCC_TEST_SRC := $(shell echo 'int main(){return 0;}' > .nvcc_test.cu)
     NVCC_TEST_OUT := $(shell $(NVCC) -ccbin $(CC) -x cu .nvcc_test.cu -o .nvcc_test.o >/dev/null 2>&1 && echo "yes")
     NVCC_CLEANUP  := $(shell rm -f .nvcc_test.cu .nvcc_test.o)
@@ -18,108 +20,50 @@ ifneq ($(NVCC_PATH),)
     endif
 endif
 
-# ============================================================
-#  Common header dependencies
-# ============================================================
+export CC CXX NVCC NVCC_FLAGS NVCC_AVAILABLE
 
-WORLD_HEADERS = WorldPartition.hpp Partition.hpp FlatAtomicsHashMap.hpp \
-                EntityRegistry.hpp Math.hpp Morton.hpp SpinLock.hpp \
-                PinnedAllocator.hpp FlatDynamicOctree.hpp \
-				SystemScheduler.hpp ThreadPool.hpp Network.hpp \
-				lpl_protocol.h
-
-# ============================================================
+# =============================================================
 #  Targets
-# ============================================================
+# =============================================================
 
-all: driver engine
+.PHONY: all driver server benchmark visual client test clean install uninstall run logs
 
-# --- Kernel Module ---
+all: driver server
+
 driver:
-	@mkdir -p /tmp/lpl_kernel_build
-	@cp lpl_kmod.c lpl_protocol.h /tmp/lpl_kernel_build/
-	@echo 'obj-m += lpl_kmod.o' > /tmp/lpl_kernel_build/Makefile
-	@$(MAKE) -C $(KDIR) M=/tmp/lpl_kernel_build modules
-	@cp /tmp/lpl_kernel_build/lpl_kmod.ko .
-	@rm -rf /tmp/lpl_kernel_build
+	$(MAKE) -C kernel
 
-# --- Engine (NIC → GPU pipeline with ECS SystemScheduler) ---
-ifeq ($(NVCC_AVAILABLE),)
-engine: main.o
-	$(CXX) -O3 -std=c++20 -Wall -pthread -o engine main.o -lpthread -lm
+server:
+	$(MAKE) -C apps/server
 
-main.o: main.cpp PhysicsGPU.cuh $(WORLD_HEADERS)
-	$(CXX) -O3 -std=c++20 -Wall -pthread -c main.cpp -o main.o
+benchmark:
+	$(MAKE) -C apps/benchmark
 
-else
-engine: main.o PhysicsGPU.o
-	$(NVCC) $(NVCC_FLAGS) -o engine main.o PhysicsGPU.o -lpthread -lm
+visual client:
+	$(MAKE) -C apps/client visual
 
-main.o: main.cpp PhysicsGPU.cuh $(WORLD_HEADERS)
-	$(NVCC) $(NVCC_FLAGS) -x cu -c main.cpp -o main.o
+android:
+	$(MAKE) -C apps/client android
 
-PhysicsGPU.o: PhysicsGPU.cu PhysicsGPU.cuh Math.hpp
-	$(NVCC) $(NVCC_FLAGS) -c PhysicsGPU.cu -o PhysicsGPU.o
-endif
-
-# --- Benchmark (CPU performance testing) ---
-benchmark: benchmark.cpp $(WORLD_HEADERS)
-	$(CXX) -O3 -march=native -std=c++20 -Wall -pthread -o benchmark benchmark.cpp
-
-# --- Visual 3D Client (connects to engine server via UDP) ---
-visual: visual.cpp $(WORLD_HEADERS)
-	$(CXX) -O3 -std=c++20 -Wall -pthread -DLPL_USE_SOCKET -o visual visual.cpp -lglfw -lGLEW -lGL -lm
-
-client: visual
-
-# --- Android (Native Activity) ---
-ANDROID_NDK_HOME ?= $(shell echo $$ANDROID_NDK_HOME)
-ANDROID_API = 24
-ANDROID_TOOLCHAIN = $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin
-ANDROID_CXX = $(ANDROID_TOOLCHAIN)/aarch64-linux-android$(ANDROID_API)-clang++
-
-android: visual_android.cpp $(WORLD_HEADERS)
-	@if [ -z "$(ANDROID_NDK_HOME)" ]; then \
-		echo "--------------------------------------------------------"; \
-		echo "ERREUR: NDK Android introuvable !"; \
-		echo "Veuillez definir la variable d'environnement ANDROID_NDK_HOME."; \
-		echo "Exemple: export ANDROID_NDK_HOME=/home/user/Android/Sdk/ndk/25.x.xxxx"; \
-		echo "--------------------------------------------------------"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(ANDROID_CXX)" ]; then \
-		echo "--------------------------------------------------------"; \
-		echo "ERREUR: Compilateur NDK introuvable : $(ANDROID_CXX)"; \
-		echo "Verifiez votre installation NDK (linux-x86_64)."; \
-		echo "--------------------------------------------------------"; \
-		exit 1; \
-	fi
-	$(ANDROID_CXX) -O3 -std=c++20 -shared -u ANativeActivity_onCreate \
-		-o liblpl_visual.so visual_android.cpp -DLPL_USE_SOCKET \
-		-landroid -llog -lEGL -lGLESv2 \
-		-Wl,-soname,liblpl_visual.so
-	@echo "Build Android DOIT etre integre dans un APK."
-	@echo "Genere: liblpl_visual.so (simplement la lib partagée)"
-
-# ============================================================
-#  Utils
-# ============================================================
+test:
+	$(MAKE) -C bci test
 
 clean:
-	rm -f /tmp/lpl_kernel_build 2>/dev/null; true
-	rm -f *.o engine benchmark visual visual *.ko
+	$(MAKE) -C kernel clean
+	$(MAKE) -C apps/server clean
+	$(MAKE) -C apps/benchmark clean
+	$(MAKE) -C apps/client clean
+	$(MAKE) -C bci clean
 
 install:
-	sudo insmod lpl_kmod.ko
+	sudo insmod kernel/lpl_kmod.ko
 	sudo chmod 666 /dev/lpl_driver
 
 uninstall:
 	sudo rmmod lpl_kmod
 
 run:
-	./engine
+	./apps/server/server
 
 logs:
 	sudo dmesg | tail -20
-
-.PHONY: all driver engine client clean install uninstall run logs

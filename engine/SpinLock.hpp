@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <immintrin.h>
+#endif
 
 class SpinLock {
 public:
@@ -9,7 +11,11 @@ public:
     {
         while (flag.test_and_set(std::memory_order_acquire))
         {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
             _mm_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+            __asm__ __volatile__("yield");
+#endif
         }
     }
 
