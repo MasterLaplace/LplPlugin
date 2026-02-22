@@ -82,7 +82,7 @@ public:
                     Complex v = x[i + k + len / 2u] * w;
                     x[i + k] = u + v;
                     x[i + k + len / 2u] = u - v;
-                    w *= len;
+                    w *= wlen;
                 }
             }
         }
