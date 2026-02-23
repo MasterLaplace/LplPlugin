@@ -40,6 +40,14 @@ public:
         uint32_t entityId;
         uint32_t ip;
         uint16_t port;
+        bool keyW = false;
+        bool keyA = false;
+        bool keyS = false;
+        bool keyD = false;
+        float neuralAlpha = 0.0f;
+        float neuralBeta = 0.0f;
+        float neuralConcentration = 0.5f;
+        bool neuralBlinkPrev = false;
     };
 
 public:
@@ -438,25 +446,35 @@ private:
 
         if (chunk && localIdx >= 0)
         {
-            Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
             constexpr float SPEED = 50.0f;
 
-            Vec3 delta{0,0,0};
-            // 87=W, 83=S, 65=A, 68=D (GLFW/ASCII roughly)
-            switch (key)
+            // Idempotent key state: repeated packets no longer accumulate velocity.
+            for (auto &client : _clients)
             {
-                case 87u: delta.z += 1.0f; break;
-                case 83u: delta.z -= 1.0f; break;
-                case 65u: delta.x -= 1.0f; break;
-                case 68u: delta.x += 1.0f; break;
+                if (client.entityId != entityId)
+                    continue;
+
+                // 87=W, 83=S, 65=A, 68=D (GLFW/ASCII roughly)
+                switch (key)
+                {
+                    case 87u: client.keyW = pressed; break;
+                    case 83u: client.keyS = pressed; break;
+                    case 65u: client.keyA = pressed; break;
+                    case 68u: client.keyD = pressed; break;
+                    default: break;
+                }
+
+                Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
+                Vec3 newVel = currentVel;
+                const float concentration = std::clamp(client.neuralConcentration, 0.0f, 1.0f);
+                const float neuralSpeedScale = 0.70f + concentration * 0.60f; // [0.70x .. 1.30x]
+                newVel.x = ((client.keyD ? 1.0f : 0.0f) - (client.keyA ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
+                newVel.z = ((client.keyW ? 1.0f : 0.0f) - (client.keyS ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
+
+                chunk->setVelocity(static_cast<uint32_t>(localIdx), newVel, writeIdx);
+                break;
             }
 
-            if (pressed)
-                currentVel = currentVel + delta * SPEED;
-            else
-                currentVel = currentVel - delta * SPEED;
-
-            chunk->setVelocity(static_cast<uint32_t>(localIdx), currentVel, writeIdx);
             chunk->wakeEntity(static_cast<uint32_t>(localIdx));
         }
     }
@@ -471,13 +489,36 @@ private:
         uint32_t writeIdx = world.getWriteIdx();
         int localIdx = -1;
         Partition *chunk = world.findEntity(entityId, localIdx);
-        if (chunk && localIdx >= 0)
+        if (!chunk || localIdx < 0)
+            return;
+
+        constexpr float SPEED = 50.0f;
+
+        for (auto &client : _clients)
         {
+            if (client.entityId != entityId)
+                continue;
+
+            client.neuralAlpha = alpha;
+            client.neuralBeta = beta;
+            client.neuralConcentration = std::clamp(conc, 0.0f, 1.0f);
+
             Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
-            if (blink)
-                currentVel.y += 10.0f;
-            chunk->setVelocity(static_cast<uint32_t>(localIdx), currentVel, writeIdx);
+            Vec3 newVel = currentVel;
+
+            // Authoritative deterministic neural modulation (continuous)
+            const float neuralSpeedScale = 0.70f + client.neuralConcentration * 0.60f; // [0.70x .. 1.30x]
+            newVel.x = ((client.keyD ? 1.0f : 0.0f) - (client.keyA ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
+            newVel.z = ((client.keyW ? 1.0f : 0.0f) - (client.keyS ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
+
+            // Blink jump only on rising edge (idempotent)
+            if (blink && !client.neuralBlinkPrev)
+                newVel.y += 10.0f;
+            client.neuralBlinkPrev = blink;
+
+            chunk->setVelocity(static_cast<uint32_t>(localIdx), newVel, writeIdx);
             chunk->wakeEntity(static_cast<uint32_t>(localIdx));
+            break;
         }
     }
 

@@ -16,18 +16,19 @@
 #include <vector>
 
 #include <GL/glew.h>
-#include <glm/gtc/type_ptr.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "BciSourceFactory.hpp"
+#include "Calibration.hpp"
 #include "Network.hpp"
-#include "OpenBCIDriver.hpp"
 #include "SystemScheduler.hpp"
 #include "WorldPartition.hpp"
 #include "lpl_protocol.h"
@@ -49,7 +50,8 @@ struct ClientState {
     WorldPartition world;
     Camera camera;
     Network network;
-    OpenBCIDriver bci;
+    std::unique_ptr<BciSource> bci; ///< Source BCI abstraite (serial/synthetic/lsl/csv)
+    Calibration calibration{30.0f}; ///< Machine à états de calibration
     SystemScheduler scheduler;
     uint32_t myEntityId = 0;
     bool connected = false;
@@ -424,12 +426,15 @@ static void setupSystems(SystemScheduler &sched)
                                          {ComponentId::Health, AccessMode::Write}}
     });
 
-    // 2. BCI System
+    // 2. BCI System (source abstraite + calibration)
     sched.registerSystem({"BCISystem",
                           -10,
                           [](WorldPartition &w, float dt) {
+                              if (!state.bci)
+                                  return;
                               std::lock_guard<std::mutex> lock(state.neuralMutex);
-                              state.bci.update(state.neuralState);
+                              state.bci->update(state.neuralState);
+                              state.calibration.tick(state.neuralState);
                           },
                           {}});
 
@@ -467,20 +472,29 @@ static void setupSystems(SystemScheduler &sched)
                               constexpr float SPEED = 50.0f;
 
                               Vec3 inputDir = getInputDirection();
-                              Vec3 targetVel = inputDir * SPEED;
+                              Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
+                              Vec3 targetVel = currentVel;
 
-                              // Apply BCI blink for jump
+                              float concentration = 0.5f;
+                              bool blink = false;
                               {
                                   std::lock_guard<std::mutex> lock(state.neuralMutex);
-                                  if (state.neuralState.blinkDetected)
-                                      targetVel.y += 10.0f;
+                                  concentration = std::clamp(state.neuralState.concentration, 0.0f, 1.0f);
+                                  blink = state.neuralState.blinkDetected;
                               }
 
-                              if (glm::length(glm::vec3(inputDir.x, inputDir.y, inputDir.z)) > 0.01f)
-                              {
-                                  chunk->setVelocity(static_cast<uint32_t>(localIdx), targetVel, writeIdx);
-                                  chunk->wakeEntity(static_cast<uint32_t>(localIdx));
-                              }
+                              const float neuralSpeedScale = 0.70f + concentration * 0.60f; // [0.70x .. 1.30x]
+                              targetVel.x = inputDir.x * SPEED * neuralSpeedScale;
+                              targetVel.z = inputDir.z * SPEED * neuralSpeedScale;
+
+                              // Blink jump on rising edge only, same rule as server.
+                              static bool previousBlink = false;
+                              if (blink && !previousBlink)
+                                  targetVel.y += 10.0f;
+                              previousBlink = blink;
+
+                              chunk->setVelocity(static_cast<uint32_t>(localIdx), targetVel, writeIdx);
+                              chunk->wakeEntity(static_cast<uint32_t>(localIdx));
                           },
                           {{ComponentId::Velocity, AccessMode::Write}}});
 
@@ -502,34 +516,22 @@ static void setupSystems(SystemScheduler &sched)
                               if (!state.connected || state.myEntityId == 0)
                                   return;
 
-                              static uint32_t frameCounter = 0;
-                              frameCounter++;
-
                               std::vector<uint8_t> kData, aData, nData;
 
-                              // Send key states every frame (bitpacked)
-                              // We track which keys changed to minimize bandwidth
-                              static bool lastKeys[512] = {};
-
-                              for (int k = 0; k < 512; k++)
+                              // Send authoritative WASD key states every frame (idempotent server side)
+                              constexpr int trackedKeys[] = {GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D};
+                              for (int key : trackedKeys)
                               {
-                                  bool currentKey = keys[k].load();
-                                  if (currentKey != lastKeys[k])
-                                  {
-                                      lastKeys[k] = currentKey;
+                                  bool currentKey = keys[key].load();
+                                  uint16_t packed = (static_cast<uint16_t>(key) & 0x7FFF);
+                                  if (currentKey)
+                                      packed |= 0x8000;
 
-                                      // Bitpack: Key(15) | Pressed(1)
-                                      uint16_t packed = (static_cast<uint16_t>(k) & 0x7FFF);
-                                      if (currentKey)
-                                          packed |= 0x8000;
-
-                                      kData.push_back(static_cast<uint8_t>(packed & 0xFF));
-                                      kData.push_back(static_cast<uint8_t>((packed >> 8) & 0xFF));
-                                  }
+                                  kData.push_back(static_cast<uint8_t>(packed & 0xFF));
+                                  kData.push_back(static_cast<uint8_t>((packed >> 8) & 0xFF));
                               }
 
-                              // Send neural data every 10 frames
-                              if (frameCounter % 10 == 0)
+                              // Send neural data every frame to minimize authoritative lag.
                               {
                                   std::lock_guard<std::mutex> lock(state.neuralMutex);
 
@@ -568,7 +570,8 @@ static GLFWwindow *initWindow()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 
-    GLFWwindow *window = glfwCreateWindow(1440, 900, "LplPlugin Client — WASD: move | Arrows: camera | ESC: quit", nullptr, nullptr);
+    GLFWwindow *window =
+        glfwCreateWindow(1440, 900, "LplPlugin Client — WASD: move | Arrows: camera | ESC: quit", nullptr, nullptr);
     if (!window)
     {
         std::cerr << "[ERROR] Window creation failed\n";
@@ -619,10 +622,25 @@ int main(int argc, char *argv[])
     const char *serverIp = "127.0.0.1";
     uint16_t serverPort = 7777;
 
-    if (argc >= 2)
-        serverIp = argv[1];
-    if (argc >= 3)
-        serverPort = static_cast<uint16_t>(atoi(argv[2]));
+    // Parse BCI arguments (--bci-mode, --csv-file, --calib-duration, etc.)
+    BciConfig bciCfg = bci_parse_args(argc, argv);
+
+    // Parse legacy positional args (IP, port)
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg(argv[i]);
+        if (arg.rfind("--", 0) != 0) // Skip --bci-* flags
+        {
+            if (serverIp == std::string("127.0.0.1") && arg.find('.') != std::string::npos)
+                serverIp = argv[i];
+            else
+            {
+                int p = atoi(argv[i]);
+                if (p > 0 && p < 65536)
+                    serverPort = static_cast<uint16_t>(p);
+            }
+        }
+    }
 
     std::cout << "[MAIN] Starting LplPlugin Client...\n";
 
@@ -647,12 +665,20 @@ int main(int argc, char *argv[])
     }
     std::cout << "[MAIN] Network initialized\n";
 
-    // 3. Init BCI (optional)
-    std::cout << "[MAIN] Initializing BCI...\n";
-    if (state.bci.init("/dev/ttyUSB0"))
-        std::cout << "[CLIENT] OpenBCI driver started on /dev/ttyUSB0\n";
+    // 3. Init BCI (abstracted source with fallback)
+    std::cout << "[MAIN] Initializing BCI (mode: " << bci_mode_name(bciCfg.mode) << ")...\n";
+    state.bci = BciSourceFactory::createAndInit(bciCfg);
+    if (state.bci)
+    {
+        std::cout << "[CLIENT] BCI source active: " << state.bci->name() << "\n";
+        // Auto-start calibration
+        state.calibration = Calibration(bciCfg.calibDuration);
+        state.calibration.start();
+    }
     else
-        std::cout << "[CLIENT] OpenBCI init failed (continuing with keyboard only)\n";
+    {
+        std::cout << "[CLIENT] BCI init failed (continuing with keyboard only)\n";
+    }
 
     // 4. Setup ECS Systems
     std::cout << "[MAIN] Setting up ECS systems...\n";
@@ -699,7 +725,8 @@ int main(int argc, char *argv[])
     // 6. Cleanup
     std::cout << "[MAIN] Shutting down...\n";
     running = false;
-    state.bci.stop();
+    if (state.bci)
+        state.bci->stop();
     state.network.network_cleanup();
     glfwTerminate();
 
