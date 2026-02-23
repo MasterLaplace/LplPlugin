@@ -21,17 +21,20 @@ public:
         for (uint32_t i = 0u; i < numThreads; ++i)
         {
             _workers.emplace_back([this] {
-                std::function<void()> task;
+                while (true)
                 {
-                    std::unique_lock<std::mutex> lock(_mutex);
-                    _condition.wait(lock, [this] {return !_active || !_tasks.empty(); });
-                    if (!_active && _tasks.empty())
-                        return;
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(_mutex);
+                        _condition.wait(lock, [this] { return !_active || !_tasks.empty(); });
+                        if (!_active && _tasks.empty())
+                            return;
 
-                    task = std::move(_tasks.front());
-                    _tasks.pop();
+                        task = std::move(_tasks.front());
+                        _tasks.pop();
+                    }
+                    task();
                 }
-                task();
             });
         }
     }

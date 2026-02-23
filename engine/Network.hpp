@@ -1,5 +1,8 @@
 // File: Network.hpp
-// Description: Routage des paquets réseau + gestion du driver kernel OU socket standard
+// Description: Transport réseau pur — envoi/réception de paquets + sérialisation/désérialisation.
+//              Dispatch vers des queues typées (PacketQueue) pour consommation par les systèmes ECS.
+//              Ne contient plus de logique métier (inputs, physique, session).
+//              Fallback socket côté serveur pour WSL.
 // Auteur: MasterLaplace
 
 #pragma once
@@ -22,7 +25,7 @@
 #endif
 
 #include "lpl_protocol.h"
-#include "WorldPartition.hpp"
+#include "PacketQueue.hpp"
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -34,275 +37,109 @@
 #define PRINTER(...) printf(__VA_ARGS__)
 #endif
 
+/**
+ * @brief Transport réseau — envoi/réception/sérialisation de paquets UDP.
+ *
+ * Trois modes :
+ *   - LPL_USE_SOCKET : socket UDP standard (client)
+ *   - Sinon (serveur) : essaie le driver kernel en premier, fallback sur socket UDP si indisponible (WSL, dev)
+ *
+ * network_consume_packets() désérialise les paquets et les pousse dans
+ * des PacketQueue typées. Les systèmes ECS consomment ensuite via drain().
+ *
+ * Ne contient plus de logique de session, d'inputs ou de physique.
+ */
 class Network {
 public:
-    struct ClientEndpoint {
-        uint32_t entityId;
-        uint32_t ip;
-        uint16_t port;
-        bool keyW = false;
-        bool keyA = false;
-        bool keyS = false;
-        bool keyD = false;
-        float neuralAlpha = 0.0f;
-        float neuralBeta = 0.0f;
-        float neuralConcentration = 0.5f;
-        bool neuralBlinkPrev = false;
-    };
-
-public:
+    bool network_init()
+    {
 #ifdef LPL_USE_SOCKET
-    // --- MODE SOCKET STANDARD (CLIENT TEST) ---
-
-    bool network_init()
-    {
-        _sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-        if (_sockfd < 0) {
-            perror("[ERROR] network_init: Socket creation failed");
-            return false;
-        }
-
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_ANY);
-        addr.sin_port = 0; // Ephemeral port
-
-        if (bind(_sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-            perror("[ERROR] network_init: Bind failed");
-            close(_sockfd);
-            return false;
-        }
-
-        // Get assigned port
-        socklen_t len = sizeof(addr);
-        if (getsockname(_sockfd, (struct sockaddr*)&addr, &len) == 0) {
-            printf("[NET] Socket UDP init sur le port %d (Mode CLIENT)\n", ntohs(addr.sin_port));
-        }
-
-        // Non-blocking mode
-        int flags = fcntl(_sockfd, F_GETFL, 0);
-        fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
-
-        return true;
-    }
-
-    void network_cleanup()
-    {
-        if (_sockfd >= 0) {
-            close(_sockfd);
-            _sockfd = -1;
-        }
-    }
-
-    void network_consume_packets(WorldPartition &world)
-    {
-        if (_sockfd < 0) return;
-
-        uint8_t buffer[MAX_PACKET_SIZE];
-        struct sockaddr_in src_addr;
-        socklen_t addr_len = sizeof(src_addr);
-
-        while (true)
-        {
-            ssize_t len = recvfrom(_sockfd, buffer, MAX_PACKET_SIZE, 0, (struct sockaddr*)&src_addr, &addr_len);
-            if (len <= 0) break;
-
-            RxPacket pkt;
-            pkt.src_ip = src_addr.sin_addr.s_addr; // Network Byte Order
-            pkt.src_port = src_addr.sin_port;      // Network Byte Order
-            pkt.length = (uint16_t)len;
-            memcpy(pkt.data, buffer, len);
-
-            dispatch_packet(&pkt, world);
-        }
-    }
-
-    void send_packet(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
-    {
-        if (_sockfd < 0) return;
-
-        struct sockaddr_in dest_addr;
-        memset(&dest_addr, 0, sizeof(dest_addr));
-        dest_addr.sin_family = AF_INET;
-        dest_addr.sin_addr.s_addr = htonl(ip); // htonl because send_packet expects Host Order
-        dest_addr.sin_port = htons(port);      // htons because send_packet expects Host Order
-
-        sendto(_sockfd, data, length, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
-    }
-
+        return init_socket_mode();
 #else
-    // --- MODE KERNEL DRIVER (SERVER) ---
-
-    bool network_init()
-    {
-        _driverFd = open("/dev/" LPL_DEVICE_NAME, O_RDWR);
-        if (_driverFd < 0)
+        // Server: try kernel driver first, fallback to socket mode
+        if (init_kernel_mode())
         {
-            perror("[ERROR] network_init: Impossible d'ouvrir /dev/" LPL_DEVICE_NAME);
-            return false;
+            _useKernelDriver = true;
+            return true;
         }
 
-        void *adrr = mmap(nullptr, sizeof(LplSharedMemory), PROT_READ | PROT_WRITE, MAP_SHARED, _driverFd, 0);
-        if (adrr == MAP_FAILED)
+        printf("[NET] Kernel driver unavailable, falling back to socket mode (WSL/dev)\n");
+        if (init_socket_mode())
         {
-            perror("[ERROR] network_init: Erreur de mappage mémoire");
-            close(_driverFd);
-            _driverFd = -1;
-            return false;
+            _useKernelDriver = false;
+            return true;
         }
 
-        _shm = static_cast<LplSharedMemory *>(adrr);
-        _rx = &_shm->rx;
-        _tx = &_shm->tx;
-
-        PRINTER("[NET] Driver connecté. Ring Buffer mappé à %p (%zu bytes)\n", _shm, sizeof(LplSharedMemory));
-        return true;
+        return false;
+#endif
     }
 
     void network_cleanup()
     {
-        if (_shm && _shm != MAP_FAILED)
-            munmap(_shm, sizeof(LplSharedMemory));
-
-        if (_driverFd >= 0)
-        {
-            close(_driverFd);
-            _driverFd = -1;
-        }
+#ifdef LPL_USE_SOCKET
+        cleanup_socket_mode();
+#else
+        // Cleanup whichever mode was active
+        if (_useKernelDriver)
+            cleanup_kernel_mode();
+        else
+            cleanup_socket_mode();
+#endif
     }
 
-    void network_consume_packets(WorldPartition &world)
+    void network_consume_packets(PacketQueue &queue)
     {
-        if (!_rx)
-            return;
-
-        uint32_t rx_head = smp_load_acquire(&_rx->idx.head);
-        uint32_t rx_tail = _rx->idx.tail;
-
-        int loop_safety = RING_SLOTS * 2;
-        while (rx_head != rx_tail && loop_safety-- > 0)
-        {
-            dispatch_packet(&_rx->packets[rx_tail], world);
-            rx_tail = (rx_tail + 1u) & (RING_SLOTS - 1u);
-            smp_store_release(&_rx->idx.tail, rx_tail);
-            rx_head = smp_load_acquire(&_rx->idx.head);
-        }
-        _rx->idx.tail = rx_tail;
+#ifdef LPL_USE_SOCKET
+        consume_packets_socket(queue);
+#else
+        if (_useKernelDriver)
+            consume_packets_kernel(queue);
+        else
+            consume_packets_socket(queue);
+#endif
     }
 
     void send_packet(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
     {
-        if (!_tx)
-            return;
-
-        uint32_t tx_tail = _tx->idx.tail;
-        uint32_t tx_head = smp_load_acquire(&_tx->idx.head);
-        uint32_t tx_next_tail = (tx_tail + 1u) & (RING_SLOTS - 1u);
-
-        if (tx_next_tail != tx_head)
-        {
-            TxPacket *tx_pkt = &_tx->packets[tx_tail];
-            tx_pkt->dst_ip = htonl(ip);
-            tx_pkt->dst_port = htons(port);
-            uint16_t safe_len = (length > MAX_PACKET_SIZE) ? MAX_PACKET_SIZE : length;
-            tx_pkt->length = safe_len;
-            memcpy(tx_pkt->data, data, safe_len);
-
-            _tx->idx.tail = tx_next_tail;
-            smp_store_release(&_tx->idx.tail, tx_next_tail);
-            ioctl(_driverFd, LPL_IOC_KICK_TX, 0);
-        }
+#ifdef LPL_USE_SOCKET
+        send_packet_socket(ip, port, length, data);
+#else
+        if (_useKernelDriver)
+            send_packet_kernel(ip, port, length, data);
         else
-        {
-            fprintf(stderr, "[NET] TX Ring Full\n");
-        }
-    }
+            send_packet_socket(ip, port, length, data);
 #endif
-
-    [[nodiscard]] uint64_t size()
-    {
-        return _clients.size();
     }
 
-    // --- Server Side API ---
+    // ─── Packet Construction Helpers ─────────────────────────
 
-    void broadcast_state(WorldPartition &world)
-    {
-        if (_clients.empty()) return;
-
-        uint32_t readIdx = world.getReadIdx();
-        constexpr size_t MAX_UDP = MAX_PACKET_SIZE; // Limited by ring buffer packet size
-        // Wrapper for packet data
-        uint8_t pkt[MAX_UDP];
-
-        // Protocol: [MSG_STATE (1)][Count (2)][EntityData...]
-        // EntityData: [ID (4)][Pos (12)][Size (12)][HP (4)] = 32 bytes
-        constexpr size_t HEADER_SIZE = 3u;
-        constexpr size_t ENTITY_SIZE = 32u;
-        constexpr size_t MAX_ENTITIES_PER_PACKET = (MAX_UDP - HEADER_SIZE) / ENTITY_SIZE;
-
-        uint16_t count = 0u;
-        uint8_t *cursor = pkt + HEADER_SIZE;
-
-        auto flush_packet = [&](bool force = false) {
-            if (count == 0u && !force) return;
-
-            pkt[0] = MSG_STATE;
-            *reinterpret_cast<uint16_t*>(pkt + 1) = count;
-            uint16_t len = static_cast<uint16_t>(cursor - pkt);
-
-            for (const auto& client : _clients) {
-                send_packet(client.ip, client.port, len, pkt);
-            }
-
-            count = 0u;
-            cursor = pkt + HEADER_SIZE;
-        };
-
-        world.forEachChunk([&](Partition &p) {
-            for (size_t i = 0u; i < p.getEntityCount(); ++i)
-            {
-                if (count >= MAX_ENTITIES_PER_PACKET)
-                    flush_packet();
-
-                auto ent = p.getEntity(i, readIdx);
-                uint32_t entId = p.getEntityId(i);
-
-                *reinterpret_cast<uint32_t*>(cursor) = entId; cursor += 4;
-                *reinterpret_cast<float*>(cursor) = ent.position.x; cursor += 4;
-                *reinterpret_cast<float*>(cursor) = ent.position.y; cursor += 4;
-                *reinterpret_cast<float*>(cursor) = ent.position.z; cursor += 4;
-
-                *reinterpret_cast<float*>(cursor) = ent.size.x; cursor += 4;
-                *reinterpret_cast<float*>(cursor) = ent.size.y; cursor += 4;
-                *reinterpret_cast<float*>(cursor) = ent.size.z; cursor += 4;
-
-                *reinterpret_cast<int32_t*>(cursor) = ent.health; cursor += 4;
-
-                count++;
-            }
-        });
-
-        if (count > 0u)
-            flush_packet();
-    }
-
-    // --- Client Side API ---
-
+    /**
+     * @brief Envoie un MSG_CONNECT au serveur.
+     */
     void send_connect(const char* ip_str, uint16_t port)
     {
         uint32_t ip;
         inet_pton(AF_INET, ip_str, &ip); // Network Order
-        // send_packet attend du Host Order, il fera le htonl.
         uint8_t type = MSG_CONNECT;
         send_packet(ntohl(ip), port, 1u, &type);
     }
 
+    /**
+     * @brief Envoie un MSG_WELCOME à un client.
+     */
+    void send_welcome(uint32_t clientIp, uint16_t clientPort, uint32_t entityId)
+    {
+        uint8_t resp[5u];
+        resp[0u] = MSG_WELCOME;
+        *reinterpret_cast<uint32_t*>(resp + 1u) = entityId;
+        send_packet(clientIp, clientPort, 5u, resp);
+    }
+
+    /**
+     * @brief Sérialise et envoie les inputs au serveur.
+     */
     void send_inputs(uint32_t entityId, const std::vector<uint8_t> &keyData, const std::vector<uint8_t> &axisData, const std::vector<uint8_t> &neuralData)
     {
-        // MSG_INPUT_UNIFIED: [Type(1)][ID(4)][KeyCount(1)][Keys...?][AxisCount(1)][Axes...?][Neural?]
-
         uint8_t pkt[MAX_PACKET_SIZE];
         pkt[0] = MSG_INPUTS;
         *reinterpret_cast<uint32_t*>(pkt + 1u) = entityId;
@@ -339,6 +176,9 @@ public:
             send_packet(_serverIp, _serverPort, (uint16_t)totalLen, pkt);
     }
 
+    /**
+     * @brief Configure l'adresse du serveur (côté client).
+     */
     void set_server_info(const char* ip_str, uint16_t port)
     {
         uint32_t ip_n;
@@ -347,284 +187,328 @@ public:
         _serverPort = port;
     }
 
-    uint32_t get_local_entity_id() const { return _localEntityId; }
-    bool is_connected() const { return _connected; }
-
 private:
-    void dispatch_packet(RxPacket *pkt, WorldPartition &world)
+    // ─── Socket Mode Implementation ──────────────────────────
+
+    bool init_socket_mode()
+    {
+        _sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (_sockfd < 0) {
+            perror("[ERROR] init_socket_mode: Socket creation failed");
+            return false;
+        }
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+#ifdef LPL_USE_SOCKET
+        addr.sin_port = 0; // Ephemeral port (client)
+#else
+        addr.sin_port = htons(LPL_PORT); // Fixed port 7777 (server)
+#endif
+
+        if (bind(_sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+            perror("[ERROR] init_socket_mode: Bind failed");
+            close(_sockfd);
+            _sockfd = -1;
+            return false;
+        }
+
+        // Get assigned port
+        socklen_t len = sizeof(addr);
+        if (getsockname(_sockfd, (struct sockaddr*)&addr, &len) == 0) {
+#ifdef LPL_USE_SOCKET
+            printf("[NET] Socket UDP init sur le port %d (Mode CLIENT)\n", ntohs(addr.sin_port));
+#else
+            printf("[NET] Socket UDP init sur le port %d (Mode SERVER fallback)\n", ntohs(addr.sin_port));
+#endif
+        }
+
+        // Non-blocking mode
+        int flags = fcntl(_sockfd, F_GETFL, 0);
+        fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
+
+        return true;
+    }
+
+    void cleanup_socket_mode()
+    {
+        if (_sockfd >= 0) {
+            close(_sockfd);
+            _sockfd = -1;
+        }
+    }
+
+    void consume_packets_socket(PacketQueue &queue)
+    {
+        if (_sockfd < 0) return;
+
+        uint8_t buffer[MAX_PACKET_SIZE];
+        struct sockaddr_in src_addr;
+        socklen_t addr_len = sizeof(src_addr);
+
+        while (true)
+        {
+            ssize_t len = recvfrom(_sockfd, buffer, MAX_PACKET_SIZE, 0, (struct sockaddr*)&src_addr, &addr_len);
+            if (len <= 0) break;
+
+            RxPacket pkt;
+            pkt.src_ip = src_addr.sin_addr.s_addr; // Network Byte Order
+            pkt.src_port = src_addr.sin_port;      // Network Byte Order
+            pkt.length = (uint16_t)len;
+            memcpy(pkt.data, buffer, len);
+
+            dispatch_packet(&pkt, queue);
+        }
+    }
+
+    void send_packet_socket(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
+    {
+        if (_sockfd < 0) return;
+
+        struct sockaddr_in dest_addr;
+        memset(&dest_addr, 0, sizeof(dest_addr));
+        dest_addr.sin_family = AF_INET;
+        dest_addr.sin_addr.s_addr = htonl(ip); // htonl because send_packet expects Host Order
+        dest_addr.sin_port = htons(port);      // htons because send_packet expects Host Order
+
+        sendto(_sockfd, data, length, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+    }
+
+#ifndef LPL_USE_SOCKET
+    // ─── Kernel Driver Mode Implementation ───────────────────
+
+    bool init_kernel_mode()
+    {
+        _driverFd = open("/dev/" LPL_DEVICE_NAME, O_RDWR);
+        if (_driverFd < 0)
+        {
+            return false;
+        }
+
+        void *adrr = mmap(nullptr, sizeof(LplSharedMemory), PROT_READ | PROT_WRITE, MAP_SHARED, _driverFd, 0);
+        if (adrr == MAP_FAILED)
+        {
+            close(_driverFd);
+            _driverFd = -1;
+            return false;
+        }
+
+        _shm = static_cast<LplSharedMemory *>(adrr);
+        _rx = &_shm->rx;
+        _tx = &_shm->tx;
+
+        PRINTER("[NET] Driver connecté. Ring Buffer mappé à %p (%zu bytes)\n", _shm, sizeof(LplSharedMemory));
+        return true;
+    }
+
+    void cleanup_kernel_mode()
+    {
+        if (_shm && _shm != MAP_FAILED)
+            munmap(_shm, sizeof(LplSharedMemory));
+
+        if (_driverFd >= 0)
+        {
+            close(_driverFd);
+            _driverFd = -1;
+        }
+    }
+
+    void consume_packets_kernel(PacketQueue &queue)
+    {
+        if (!_rx)
+            return;
+
+        uint32_t rx_head = smp_load_acquire(&_rx->idx.head);
+        uint32_t rx_tail = _rx->idx.tail;
+
+        int loop_safety = RING_SLOTS * 2;
+        while (rx_head != rx_tail && loop_safety-- > 0)
+        {
+            dispatch_packet(&_rx->packets[rx_tail], queue);
+            rx_tail = (rx_tail + 1u) & (RING_SLOTS - 1u);
+            smp_store_release(&_rx->idx.tail, rx_tail);
+            rx_head = smp_load_acquire(&_rx->idx.head);
+        }
+        _rx->idx.tail = rx_tail;
+    }
+
+    void send_packet_kernel(uint32_t ip, uint16_t port, uint16_t length, uint8_t *data)
+    {
+        if (!_tx)
+            return;
+
+        uint32_t tx_tail = _tx->idx.tail;
+        uint32_t tx_head = smp_load_acquire(&_tx->idx.head);
+        uint32_t tx_next_tail = (tx_tail + 1u) & (RING_SLOTS - 1u);
+
+        if (tx_next_tail != tx_head)
+        {
+            TxPacket *tx_pkt = &_tx->packets[tx_tail];
+            tx_pkt->dst_ip = htonl(ip);
+            tx_pkt->dst_port = htons(port);
+            uint16_t safe_len = (length > MAX_PACKET_SIZE) ? MAX_PACKET_SIZE : length;
+            tx_pkt->length = safe_len;
+            memcpy(tx_pkt->data, data, safe_len);
+
+            _tx->idx.tail = tx_next_tail;
+            smp_store_release(&_tx->idx.tail, tx_next_tail);
+            ioctl(_driverFd, LPL_IOC_KICK_TX, 0);
+        }
+        else
+        {
+            fprintf(stderr, "[NET] TX Ring Full\n");
+        }
+    }
+#endif
+
+    /**
+     * @brief Désérialise un paquet brut et le pousse dans la queue appropriée.
+     *
+     * Pur routage — aucune logique métier.
+     */
+    void dispatch_packet(RxPacket *pkt, PacketQueue &queue)
     {
         uint8_t *cursor = pkt->data;
         if (pkt->length < 1u)
             return;
         uint8_t msg_type = *cursor;
 
-        // Convert network endian to host for IP/Port (stored in RxPacket in network order? No compy_bits just copies bytes)
-        // Wait, lpl_kmod puts `ip->saddr` (Network Byte Order) into `pkt->src_ip`.
         uint32_t src_ip_h = ntohl(pkt->src_ip);
         uint16_t src_port_h = ntohs(pkt->src_port);
 
         switch (msg_type)
         {
         case MSG_CONNECT: {
-            handle_connect(world, src_ip_h, src_port_h);
+            queue.connects.push({src_ip_h, src_port_h});
             break;
         }
         case MSG_WELCOME: {
             if (pkt->length < 5) break;
-            _localEntityId = *reinterpret_cast<uint32_t*>(cursor + 1);
-            _connected = true;
-            PRINTER("[NET] Connected! Entity ID: %u\n", _localEntityId);
+            uint32_t entityId = *reinterpret_cast<uint32_t*>(cursor + 1);
+            queue.welcomes.push({entityId});
+            PRINTER("[NET] Received MSG_WELCOME: Entity ID %u\n", entityId);
             break;
         }
         case MSG_STATE: {
             if (pkt->length < 3) break;
             uint16_t count = *reinterpret_cast<uint16_t*>(cursor + 1);
-            dispatch_state_update(world, count, cursor + 3, pkt->length - 3);
+            deserialize_state(queue, count, cursor + 3, pkt->length - 3);
             break;
         }
         case MSG_INPUTS: {
             if (pkt->length < 7) break;
             uint32_t eid = *reinterpret_cast<uint32_t*>(cursor + 1);
-            handle_inputs(world, eid, cursor + 5, pkt->length - 5);
+            deserialize_inputs(queue, eid, cursor + 5, pkt->length - 5);
             break;
         }
         default:
-            // Could be component based packet?
-            // dispatch_packet_world(world, pkt->data);
             break;
         }
     }
 
-    void handle_connect(WorldPartition &world, uint32_t client_ip, uint16_t client_port)
+    /**
+     * @brief Désérialise un MSG_STATE et pousse les entités dans la queue.
+     */
+    static void deserialize_state(PacketQueue &queue, const uint16_t count, uint8_t *data, const uint32_t len)
     {
-        for (auto &c : _clients)
-            if (c.ip == client_ip && c.port == client_port)
-                return;
+        StateUpdateEvent event;
+        event.entities.reserve(count);
 
-        uint32_t newId = _nextEntityId++;
+        uint8_t *cursor = data;
+        uint32_t bytesRead = 0u;
 
-        Partition::EntitySnapshot player_entity{};
-        player_entity.id = newId;
-        player_entity.position = {0.f, 10.f, 0.f};
-        player_entity.rotation = {0.f, 0.f, 0.f, 1.f};
-        player_entity.velocity = {0.f, 0.f, 0.f};
-        player_entity.mass = 1.f;
-        player_entity.force = {0.f, 0.f, 0.f};
-        player_entity.size = {1.f, 2.f, 1.f};
-        player_entity.health = 100;
-        world.addEntity(player_entity);
-
-        _clients.push_back({newId, client_ip, client_port});
-
-        uint8_t resp[5u];
-        resp[0u] = MSG_WELCOME;
-        *reinterpret_cast<uint32_t*>(resp + 1u) = newId;
-        send_packet(client_ip, client_port, 5u, resp);
-
-        printf("[NET] Client connected: %u -> Entity %u\n", client_ip, newId);
-    }
-
-    void handle_input(WorldPartition &world, const uint32_t entityId, const Vec3 &dir)
-    {
-        uint32_t writeIdx = world.getWriteIdx();
-        int localIdx = -1;
-        Partition *chunk = world.findEntity(entityId, localIdx);
-        if (chunk && localIdx >= 0)
+        for (uint16_t i = 0u; i < count; ++i)
         {
-            constexpr float PLAYER_SPEED = 50.0f;
-            Vec3 vel = dir * PLAYER_SPEED;
-            chunk->setVelocity(static_cast<uint32_t>(localIdx), vel, writeIdx);
-            chunk->wakeEntity(static_cast<uint32_t>(localIdx));
+            if (bytesRead + 32u > len) break;
+
+            StateEntityData ent;
+            ent.id = *reinterpret_cast<uint32_t*>(cursor); cursor += 4;
+            ent.pos = {
+                *reinterpret_cast<float*>(cursor),
+                *reinterpret_cast<float*>(cursor + 4),
+                *reinterpret_cast<float*>(cursor + 8)
+            }; cursor += 12;
+            ent.size = {
+                *reinterpret_cast<float*>(cursor),
+                *reinterpret_cast<float*>(cursor + 4),
+                *reinterpret_cast<float*>(cursor + 8)
+            }; cursor += 12;
+            ent.hp = *reinterpret_cast<int32_t*>(cursor); cursor += 4;
+            bytesRead += 32u;
+
+            event.entities.push_back(ent);
         }
+
+        if (!event.entities.empty())
+            queue.states.push(std::move(event));
     }
 
-    void handle_input_key(WorldPartition &world, const uint32_t entityId, const uint16_t key, bool pressed)
+    /**
+     * @brief Désérialise un MSG_INPUTS et pousse l'événement dans la queue.
+     */
+    static void deserialize_inputs(PacketQueue &queue, uint32_t entityId, uint8_t *data, uint32_t len)
     {
-        uint32_t writeIdx = world.getWriteIdx();
-        int localIdx = -1;
-        Partition *chunk = world.findEntity(entityId, localIdx);
+        InputEvent event;
+        event.entityId = entityId;
 
-        if (chunk && localIdx >= 0)
-        {
-            constexpr float SPEED = 50.0f;
-
-            // Idempotent key state: repeated packets no longer accumulate velocity.
-            for (auto &client : _clients)
-            {
-                if (client.entityId != entityId)
-                    continue;
-
-                // 87=W, 83=S, 65=A, 68=D (GLFW/ASCII roughly)
-                switch (key)
-                {
-                    case 87u: client.keyW = pressed; break;
-                    case 83u: client.keyS = pressed; break;
-                    case 65u: client.keyA = pressed; break;
-                    case 68u: client.keyD = pressed; break;
-                    default: break;
-                }
-
-                Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
-                Vec3 newVel = currentVel;
-                const float concentration = std::clamp(client.neuralConcentration, 0.0f, 1.0f);
-                const float neuralSpeedScale = 0.70f + concentration * 0.60f; // [0.70x .. 1.30x]
-                newVel.x = ((client.keyD ? 1.0f : 0.0f) - (client.keyA ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
-                newVel.z = ((client.keyW ? 1.0f : 0.0f) - (client.keyS ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
-
-                chunk->setVelocity(static_cast<uint32_t>(localIdx), newVel, writeIdx);
-                break;
-            }
-
-            chunk->wakeEntity(static_cast<uint32_t>(localIdx));
-        }
-    }
-
-    void handle_input_axis(WorldPartition &world, const uint32_t entityId, const uint8_t axisId, const float value)
-    {
-        // For future use (e.g. joystick, mouse look, etc.)
-    }
-
-    void handle_input_neural(WorldPartition &world, const uint32_t entityId, float alpha, float beta, float conc, bool blink)
-    {
-        uint32_t writeIdx = world.getWriteIdx();
-        int localIdx = -1;
-        Partition *chunk = world.findEntity(entityId, localIdx);
-        if (!chunk || localIdx < 0)
-            return;
-
-        constexpr float SPEED = 50.0f;
-
-        for (auto &client : _clients)
-        {
-            if (client.entityId != entityId)
-                continue;
-
-            client.neuralAlpha = alpha;
-            client.neuralBeta = beta;
-            client.neuralConcentration = std::clamp(conc, 0.0f, 1.0f);
-
-            Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
-            Vec3 newVel = currentVel;
-
-            // Authoritative deterministic neural modulation (continuous)
-            const float neuralSpeedScale = 0.70f + client.neuralConcentration * 0.60f; // [0.70x .. 1.30x]
-            newVel.x = ((client.keyD ? 1.0f : 0.0f) - (client.keyA ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
-            newVel.z = ((client.keyW ? 1.0f : 0.0f) - (client.keyS ? 1.0f : 0.0f)) * SPEED * neuralSpeedScale;
-
-            // Blink jump only on rising edge (idempotent)
-            if (blink && !client.neuralBlinkPrev)
-                newVel.y += 10.0f;
-            client.neuralBlinkPrev = blink;
-
-            chunk->setVelocity(static_cast<uint32_t>(localIdx), newVel, writeIdx);
-            chunk->wakeEntity(static_cast<uint32_t>(localIdx));
-            break;
-        }
-    }
-
-    void handle_inputs(WorldPartition &world, const uint32_t entityId, uint8_t *data, const uint32_t len)
-    {
         uint8_t *cursor = data;
         uint32_t remaining = len;
 
-        if (remaining < 1u)
-            return;
+        // Keys
+        if (remaining < 1u) { queue.inputs.push(std::move(event)); return; }
         uint8_t keyCount = *cursor; cursor++; remaining--;
 
         for (uint8_t i = 0u; i < keyCount; ++i)
         {
-            // Each key: [1b state + 15b key] = 2 bytes
-            if (remaining < 2u)
-                break;
+            if (remaining < 2u) break;
             uint16_t packed = *reinterpret_cast<uint16_t*>(cursor);
             uint16_t key = packed & 0x7FFF;
             bool state = (packed & 0x8000) != 0;
-            handle_input_key(world, entityId, key, state);
+            event.keys.push_back({key, state});
             cursor += 2u; remaining -= 2u;
         }
 
-        if (remaining < 1u)
-            return;
+        // Axes
+        if (remaining < 1u) { queue.inputs.push(std::move(event)); return; }
         uint8_t axisCount = *cursor; cursor++; remaining--;
 
         for (uint8_t i = 0u; i < axisCount; ++i)
         {
-            // Each axis: [1B axisId][4B float value] = 5 bytes
-            if (remaining < 5u)
-                break;
+            if (remaining < 5u) break;
             uint8_t axisId = *cursor;
             float value = *reinterpret_cast<float*>(cursor + 1);
-            handle_input_axis(world, entityId, axisId, value);
+            event.axes.push_back({axisId, value});
             cursor += 5u; remaining -= 5u;
         }
 
+        // Neural data
         if (remaining >= 13u)
         {
-            // [4B alpha][4B beta][4B conc][1B blink]
-            float alpha = *reinterpret_cast<float*>(cursor);
-            float beta = *reinterpret_cast<float*>(cursor + 4);
-            float conc = *reinterpret_cast<float*>(cursor + 8);
-            bool blink = *(cursor + 12) != 0;
-            handle_input_neural(world, entityId, alpha, beta, conc, blink);
-            cursor += 13u; remaining -= 13u;
+            event.neural.alpha = *reinterpret_cast<float*>(cursor);
+            event.neural.beta = *reinterpret_cast<float*>(cursor + 4);
+            event.neural.concentration = *reinterpret_cast<float*>(cursor + 8);
+            event.neural.blink = *(cursor + 12) != 0;
+            event.hasNeural = true;
         }
-    }
 
-    void dispatch_state_update(WorldPartition &world, const uint16_t count, uint8_t *data, const uint32_t len)
-    {
-        uint8_t *cursor = data;
-        uint32_t bytesRead = 0u;
-        uint32_t writeIdx = world.getWriteIdx();
-
-        for (uint16_t i = 0u; i < count; ++i) {
-            if (bytesRead + 32u > len) break;
-
-            uint32_t id = *reinterpret_cast<uint32_t*>(cursor); cursor += 4;
-            Vec3 pos{ *reinterpret_cast<float*>(cursor), *reinterpret_cast<float*>(cursor+4), *reinterpret_cast<float*>(cursor+8)}; cursor += 12;
-            Vec3 size{ *reinterpret_cast<float*>(cursor), *reinterpret_cast<float*>(cursor+4), *reinterpret_cast<float*>(cursor+8)}; cursor += 12;
-            int32_t hp = *reinterpret_cast<int32_t*>(cursor); cursor += 4;
-            bytesRead += 32u;
-
-            int localIdx = -1;
-            Partition *chunk = world.findEntity(id, localIdx);
-
-            /// Simple client-side reconciliation / update
-            if (chunk && localIdx >= 0)
-            {
-                chunk->setPosition(static_cast<uint32_t>(localIdx), pos, writeIdx);
-                chunk->setSize(static_cast<uint32_t>(localIdx), size);
-                chunk->setHealth(static_cast<uint32_t>(localIdx), hp);
-            }
-            else
-            {
-                Partition::EntitySnapshot snap{};
-                snap.id = id;
-                snap.position = pos;
-                snap.size = size;
-                snap.health = hp;
-                snap.mass = 1.0f; // default
-                snap.rotation = {0,0,0,1};
-                world.addEntity(snap);
-            }
-        }
+        queue.inputs.push(std::move(event));
     }
 
 private:
 #ifdef LPL_USE_SOCKET
     int _sockfd = -1;
 #else
+    int _sockfd = -1;                          // Socket fallback (WSL/dev)
+    bool _useKernelDriver = false;             // Flag to track which mode is active
     LplSharedMemory *_shm = nullptr;
     RxRingBuffer *_rx = nullptr;
     TxRingBuffer *_tx = nullptr;
     int _driverFd = -1;
 #endif
 
-    uint32_t _nextEntityId = 100u; // Reserved 0-99
-    std::vector<ClientEndpoint> _clients;
-
-    // Client State
-    uint32_t _localEntityId = 0u;
+    // Client-side server address
     uint32_t _serverIp = 0u;
     uint16_t _serverPort = 0u;
-    bool _connected = false;
 };

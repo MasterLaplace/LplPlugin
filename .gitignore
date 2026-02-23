@@ -57,8 +57,8 @@ dkms.conf
 # personal files
 .vs*/
 .Test/
-.agent_tools/
 .ndk_link/
+.trash
 res/
 visual
 *.apk

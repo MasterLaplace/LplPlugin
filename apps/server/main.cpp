@@ -1,42 +1,18 @@
-// --- LAPLACE DEDICATED TEST SERVER --- //
-// TEMPORARY TEST SERVER — will be replaced by production architecture
+// --- LAPLACE DEDICATED SERVER --- //
 // File: main.cpp
-// Description: Serveur autoritaire avec broadcast UDP vers les clients visual.
-//              Reçoit les inputs clients, applique la physique, broadcast l'état.
-// Auteur: MasterLaplace & Copilot
+// Description: Serveur autoritaire utilisant le Core engine.
+//              Enregistre les systèmes serveur, spawn les NPCs, core.run().
+// Auteur: MasterLaplace
 
 #include <cstdio>
 #include <cstdlib>
-#include <cmath>
 #include <cstring>
 #include <random>
-#include <vector>
-#include <pthread.h>
-#include <signal.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <time.h>
-#include <unistd.h>
 
-#include "PhysicsGPU.cuh"
-#include "Network.hpp"
-#include "WorldPartition.hpp"
-#include "SystemScheduler.hpp"
-#include "SpinLock.hpp"
+#include "Core.hpp"
+#include "Systems.hpp"
 
-// ─── Global State ─────────────────────────────────────────────
-
-// ─── Global State ─────────────────────────────────────────────
-
-static Network g_network;
-static volatile bool running = true;
-
-// ─── Signal Handler (Ctrl+C) ─────────────────────────────────
-
-static void sigint_handler(int) { running = false; }
-
-// ─── Timing ───────────────────────────────────────────────────
+// ─── Timing Helper ────────────────────────────────────────────
 
 static inline uint64_t get_time_ns()
 {
@@ -49,23 +25,12 @@ static inline uint64_t get_time_ns()
 
 int main()
 {
-    signal(SIGINT, sigint_handler);
-    printf("=== LplPlugin Test Server (TEMPORARY) ===\n\n");
+    printf("=== LplPlugin Server ===\n\n");
 
-    // 1. GPU init
-    gpu_init();
+    // 1. Create Core (inits GPU + Network)
+    Core core;
 
-    // 2. Kernel ring buffer
-    if (!g_network.network_init())
-    {
-        printf("[FATAL] Echec initialisation Network (driver manquant ?)\n");
-        // Fallback or exit? Assuming forced exit as per plan to rely on driver
-        gpu_cleanup();
-        return 1;
-    }
-
-    // 4. Créer le monde avec des NPCs
-    WorldPartition world;
+    // 2. Spawn NPCs
     {
         std::mt19937 rng(42);
         std::uniform_real_distribution<float> posDist(-500.f, 500.f);
@@ -82,33 +47,24 @@ int main()
             npc.mass = 1.f;
             npc.size = {sizeDist(rng), sizeDist(rng) * 1.2f, sizeDist(rng)};
             npc.health = 100;
-            world.addEntity(npc);
+            core.world().addEntity(npc);
         }
         printf("[WORLD] 50 NPC entities spawned\n");
     }
 
-    // 5. SystemScheduler ECS
-    SystemScheduler scheduler;
+    // 3. Register server systems
 
-    // Système : Network IO (Packet Consume + Logic)
-    scheduler.registerSystem({
-        "NetworkIO", -20,
-        [&](WorldPartition &w, float /*dt*/) {
-             g_network.network_consume_packets(w);
-        },
-        {
-            {ComponentId::Position, AccessMode::Write},
-            {ComponentId::Velocity, AccessMode::Write},
-            {ComponentId::Health,   AccessMode::Write},
-            {ComponentId::Mass,     AccessMode::Write},
-            {ComponentId::Size,     AccessMode::Write},
-        }
-    });
+    // PreSwap: Network Receive → Session → InputProcessing → Movement → Physics
+    core.registerSystem(Systems::NetworkReceiveSystem(core.network(), core.packetQueue()));
+    core.registerSystem(Systems::SessionSystem(core.sessionManager(), core.packetQueue(),
+                                               core.network(), core.inputManager()));
+    core.registerSystem(Systems::InputProcessingSystem(core.packetQueue(), core.inputManager()));
+    core.registerSystem(Systems::MovementSystem(core.inputManager()));
 
-    // Système : Physique
-    scheduler.registerSystem({
+    // Physics system with monitoring
+    core.registerSystem({
         "Physics", 0,
-        [&](WorldPartition &w, float dt) {
+        [](WorldPartition &w, float dt) {
             static uint64_t totalTime = 0;
             static uint64_t count = 0;
 
@@ -132,55 +88,39 @@ int main()
             {ComponentId::Velocity, AccessMode::Write},
             {ComponentId::Forces,   AccessMode::Write},
             {ComponentId::Mass,     AccessMode::Read},
-        }
+        },
+        SchedulePhase::PreSwap
     });
 
-    scheduler.buildSchedule();
-    scheduler.printSchedule();
+    // PostSwap: Broadcast state to all clients
+    core.registerSystem(Systems::BroadcastSystem(core.sessionManager(), core.network()));
 
-    // 6. (Recv Thread removed, handled by ring buffer in main thread via NetworkIO system)
+    // PostSwap: Server monitoring
+    core.registerSystem({
+        "ServerMonitor", 10,
+        [&core](WorldPartition &w, float /*dt*/) {
+            static uint64_t frameCount = 0;
+            frameCount++;
+            if (frameCount % 300 == 0)
+            {
+                printf("[SERVER] Frame %lu | Clients: %zu | Entities: %d | Chunks: %d\n",
+                       static_cast<unsigned long>(frameCount),
+                       core.sessionManager().getClientCount(),
+                       w.getEntityCount(), w.getChunkCount());
+            }
+        },
+        {},
+        SchedulePhase::PostSwap
+    });
 
-    // 7. Boucle principale (infinie — Ctrl+C pour arrêter)
-    printf("\n[SERVER] Serveur démarré via Kernel Driver. Ctrl+C pour arrêter.\n\n");
+    // 4. Build schedule and print it
+    core.buildSchedule();
+    core.printSchedule();
 
-    constexpr uint64_t FRAME_TIME_NS = 16666666; // ~60Hz
-    constexpr float DT = 1.f / 60.f;
-    uint64_t frameCount = 0;
+    // 5. Run
+    printf("\n[SERVER] Serveur démarré. Ctrl+C pour arrêter.\n\n");
+    core.run(true); // threaded mode
 
-    while (running)
-    {
-        uint64_t frame_start = get_time_ns();
-
-        // Tick ECS : RingConsume → ClientIO → Physics
-        scheduler.threaded_tick(world, DT);
-
-        // Swap buffers : rend les résultats de la physique visibles au read buffer
-        world.swapBuffers();
-
-        // Broadcast l'état du monde à tous les clients (depuis le read buffer)
-        g_network.broadcast_state(world);
-
-        frameCount++;
-        if (frameCount % 300 == 0)
-        {
-            printf("[SERVER] Frame %lu | Clients: %zu | Entities: %d | Chunks: %d\n",
-                   static_cast<unsigned long>(frameCount), g_network.size(),
-                   world.getEntityCount(), world.getChunkCount());
-        }
-
-        // Maintenir 60Hz
-        uint64_t elapsed = get_time_ns() - frame_start;
-        if (elapsed < FRAME_TIME_NS)
-        {
-            struct timespec ts{0, static_cast<long>(FRAME_TIME_NS - elapsed)};
-            nanosleep(&ts, nullptr);
-        }
-    }
-
-    // 8. Shutdown
-    printf("\n[SERVER] Arrêt en cours...\n");
-    g_network.network_cleanup();
-    gpu_cleanup();
     printf("[SERVER] Terminé.\n");
     return 0;
 }

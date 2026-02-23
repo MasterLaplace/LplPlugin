@@ -1,9 +1,11 @@
 /**
  * @file SystemScheduler.hpp
- * @brief ECS System Scheduler avec dépendances composants et DAG automatique.
+ * @brief ECS System Scheduler avec dépendances composants, DAG automatique et phases PreSwap/PostSwap.
  *
- * Chaque System déclare les composants qu'il lit/écrit via ComponentAccess.
- * Le scheduler construit un DAG d'exécution :
+ * Chaque System déclare les composants qu'il lit/écrit via ComponentAccess,
+ * ainsi que sa phase d'exécution (PreSwap ou PostSwap).
+ *
+ * Le scheduler construit un DAG d'exécution par phase :
  *   - Deux systèmes qui écrivent le même composant → séquentialisés
  *   - Un Write et un Read sur le même composant → séquentialisés
  *   - Deux Reads sur le même composant → parallélisables
@@ -11,8 +13,10 @@
  * Les systèmes sans conflit sont regroupés dans le même "stage" et pourraient
  * à terme tourner en parallèle (CUDA streams, threads).
  *
- * L'exécution se fait en stages ordonnés. Après tous les stages,
- * le scheduler appelle world.swapBuffers() automatiquement.
+ * Flux d'exécution :
+ *   1. tick_pre_swap(world, dt)  — systèmes PreSwap (inputs, physique, etc.)
+ *   2. world.swapBuffers()       — (appelé par l'utilisateur/Core)
+ *   3. tick_post_swap(world, dt) — systèmes PostSwap (broadcast, rendu, etc.)
  *
  * @author MasterLaplace
  */
@@ -64,6 +68,19 @@ struct ComponentAccess {
     AccessMode  mode;
 };
 
+// ─── Schedule Phase ──────────────────────────────────────────
+
+/**
+ * @brief Phase d'exécution d'un système dans le scheduler.
+ *
+ * PreSwap  — exécuté avant world.swapBuffers() (écrit dans le write buffer).
+ * PostSwap — exécuté après  world.swapBuffers() (lit depuis le read buffer, ex: broadcast, rendu).
+ */
+enum class SchedulePhase : uint8_t {
+    PreSwap = 0,
+    PostSwap
+};
+
 // ─── System Descriptor ───────────────────────────────────────
 
 /**
@@ -73,28 +90,35 @@ struct ComponentAccess {
  * @param priority Priorité d'exécution (plus petit = plus tôt) au sein d'un même stage.
  * @param tick     Foncteur appelé chaque frame avec (world, dt).
  * @param access   Liste des composants lus/écrits par ce système.
+ * @param phase    Phase d'exécution : PreSwap (défaut) ou PostSwap.
  */
 struct SystemDescriptor {
     std::string name;
     int32_t priority = 0;
     std::function<void(WorldPartition &, float)> tick;
     std::vector<ComponentAccess> access;
+    SchedulePhase phase = SchedulePhase::PreSwap;
 };
 
 // ─── System Scheduler ────────────────────────────────────────
 
 /**
- * @brief Scheduler ECS avec analyse de dépendances DAG.
+ * @brief Scheduler ECS avec analyse de dépendances DAG et phases PreSwap/PostSwap.
  *
  * Usage :
  * @code
  *   SystemScheduler scheduler;
- *   scheduler.registerSystem({"Physics", 0, physicsFn, {{ComponentId::Position, AccessMode::Write}, ...}});
- *   scheduler.registerSystem({"Network", -10, netFn, {{ComponentId::Velocity, AccessMode::Write}, ...}});
+ *   scheduler.registerSystem({"Physics", 0, physicsFn,
+ *       {{ComponentId::Position, AccessMode::Write}, ...}, SchedulePhase::PreSwap});
+ *   scheduler.registerSystem({"Broadcast", 0, broadcastFn,
+ *       {{ComponentId::Position, AccessMode::Read}, ...}, SchedulePhase::PostSwap});
  *   scheduler.buildSchedule();
  *
- *   while (running)
- *       scheduler.tick(world, dt);
+ *   while (running) {
+ *       scheduler.ordered_tick_pre_swap(world, dt);
+ *       world.swapBuffers();
+ *       scheduler.ordered_tick_post_swap(world, dt);
+ *   }
  * @endcode
  */
 class SystemScheduler {
@@ -110,12 +134,13 @@ public:
     }
 
     /**
-     * @brief Construit le DAG d'exécution.
+     * @brief Construit le DAG d'exécution pour chaque phase.
      *
-     * Algorithme :
-     * 1. Trier les systèmes par priorité.
-     * 2. Pour chaque système, vérifier les conflits avec ceux déjà placés dans le stage courant.
-     * 3. Si conflit → nouveau stage. Sinon → même stage.
+     * Algorithme (par phase) :
+     * 1. Filtrer les systèmes de la phase.
+     * 2. Trier par priorité croissante.
+     * 3. Pour chaque système, vérifier les conflits avec ceux déjà placés dans le stage courant.
+     * 4. Si conflit → nouveau stage. Sinon → même stage.
      *
      * Un conflit existe si deux systèmes accèdent au même composant
      * et qu'au moins un des accès est Write.
@@ -125,24 +150,174 @@ public:
         if (_systems.empty())
             return;
 
-        // Tri par priorité croissante
-        std::sort(_systems.begin(), _systems.end(),
-            [](const SystemDescriptor &a, const SystemDescriptor &b) {
-                return a.priority < b.priority;
+        // Tri global par priorité croissante (stable pour les indices)
+        // On trie les indices, pas les systèmes eux-mêmes, pour garder les références stables
+        std::vector<uint32_t> sortedIndices(_systems.size());
+        for (size_t i = 0; i < _systems.size(); ++i)
+            sortedIndices[i] = static_cast<uint32_t>(i);
+
+        std::sort(sortedIndices.begin(), sortedIndices.end(),
+            [this](uint32_t a, uint32_t b) {
+                return _systems[a].priority < _systems[b].priority;
             });
 
-        // Construction des stages par analyse de conflits
-        _stages.clear();
-        _stages.push_back({0}); // Premier système dans le premier stage
+        // Construire les stages pour chaque phase séparément
+        _preSwapStages.clear();
+        _postSwapStages.clear();
 
-        for (size_t i = 1; i < _systems.size(); ++i)
-        {
-            bool conflictWithCurrentStage = false;
+        buildStagesForPhase(sortedIndices, SchedulePhase::PreSwap, _preSwapStages);
+        buildStagesForPhase(sortedIndices, SchedulePhase::PostSwap, _postSwapStages);
 
-            // Vérifier les conflits avec tous les systèmes du stage courant
-            for (uint32_t sysIdx : _stages.back())
+        _scheduleDirty = false;
+
+#ifdef LPL_MONITORING
+        printSchedule();
+#endif
+    }
+
+    // ─── Ordered (sequential) execution ──────────────────────
+
+    /**
+     * @brief Exécute les systèmes PreSwap en respectant le DAG (séquentiel).
+     */
+    void ordered_tick_pre_swap(WorldPartition &world, float dt)
+    {
+        if (_scheduleDirty)
+            buildSchedule();
+
+        executeStagesOrdered(_preSwapStages, world, dt);
+    }
+
+    /**
+     * @brief Exécute les systèmes PostSwap en respectant le DAG (séquentiel).
+     */
+    void ordered_tick_post_swap(WorldPartition &world, float dt)
+    {
+        if (_scheduleDirty)
+            buildSchedule();
+
+        executeStagesOrdered(_postSwapStages, world, dt);
+    }
+
+    /**
+     * @brief Exécute tous les systèmes PreSwap puis PostSwap (séquentiel).
+     * @deprecated Préférer ordered_tick_pre_swap + swapBuffers + ordered_tick_post_swap.
+     */
+    void ordered_tick(WorldPartition &world, float dt)
+    {
+        ordered_tick_pre_swap(world, dt);
+        // Note: le swapBuffers doit être appelé entre les deux par l'utilisateur
+        ordered_tick_post_swap(world, dt);
+    }
+
+    // ─── Threaded (parallel) execution ───────────────────────
+
+    /**
+     * @brief Exécute les systèmes PreSwap en respectant le DAG (parallèle intra-stage).
+     */
+    void threaded_tick_pre_swap(WorldPartition &world, float dt)
+    {
+        if (_scheduleDirty)
+            buildSchedule();
+
+        executeStagesThreaded(_preSwapStages, world, dt);
+    }
+
+    /**
+     * @brief Exécute les systèmes PostSwap en respectant le DAG (parallèle intra-stage).
+     */
+    void threaded_tick_post_swap(WorldPartition &world, float dt)
+    {
+        if (_scheduleDirty)
+            buildSchedule();
+
+        executeStagesThreaded(_postSwapStages, world, dt);
+    }
+
+    /**
+     * @brief Exécute tous les systèmes PreSwap puis PostSwap (parallèle).
+     * @deprecated Préférer threaded_tick_pre_swap + swapBuffers + threaded_tick_post_swap.
+     */
+    void threaded_tick(WorldPartition &world, float dt)
+    {
+        threaded_tick_pre_swap(world, dt);
+        threaded_tick_post_swap(world, dt);
+    }
+
+    // ─── Queries ─────────────────────────────────────────────
+
+    /** @brief Nombre de stages PreSwap. */
+    [[nodiscard]] size_t getPreSwapStageCount() const noexcept { return _preSwapStages.size(); }
+
+    /** @brief Nombre de stages PostSwap. */
+    [[nodiscard]] size_t getPostSwapStageCount() const noexcept { return _postSwapStages.size(); }
+
+    /** @brief Nombre total de stages (les deux phases combinées). */
+    [[nodiscard]] size_t getStageCount() const noexcept { return _preSwapStages.size() + _postSwapStages.size(); }
+
+    /** @brief Nombre total de systèmes enregistrés. */
+    [[nodiscard]] size_t getSystemCount() const noexcept { return _systems.size(); }
+
+    /**
+     * @brief Log le schedule courant (debug).
+     */
+    void printSchedule() const
+    {
+        printf("[SCHEDULER] %zu systems (%zu PreSwap stages, %zu PostSwap stages):\n",
+               _systems.size(), _preSwapStages.size(), _postSwapStages.size());
+
+        auto printPhase = [this](const char *phaseName, const std::vector<std::vector<uint32_t>> &stages) {
+            if (stages.empty()) return;
+            printf("  ── %s ──\n", phaseName);
+            for (size_t s = 0; s < stages.size(); ++s)
             {
-                if (hasConflict(_systems[i], _systems[sysIdx]))
+                printf("    Stage %zu:", s);
+                for (uint32_t idx : stages[s])
+                {
+                    printf(" [%s p=%d (", _systems[idx].name.c_str(), _systems[idx].priority);
+                    for (size_t a = 0; a < _systems[idx].access.size(); ++a)
+                    {
+                        const auto &acc = _systems[idx].access[a];
+                        printf("%s%s:%s",
+                            a > 0 ? " " : "",
+                            componentName(acc.component),
+                            acc.mode == AccessMode::Read ? "R" : "W");
+                    }
+                    printf(")]");
+                }
+                printf("\n");
+            }
+        };
+
+        printPhase("PreSwap", _preSwapStages);
+        printPhase("PostSwap", _postSwapStages);
+    }
+
+private:
+    /**
+     * @brief Construit les stages pour une phase donnée.
+     */
+    void buildStagesForPhase(const std::vector<uint32_t> &sortedIndices,
+                             SchedulePhase phase,
+                             std::vector<std::vector<uint32_t>> &outStages)
+    {
+        outStages.clear();
+
+        for (uint32_t idx : sortedIndices)
+        {
+            if (_systems[idx].phase != phase)
+                continue;
+
+            if (outStages.empty())
+            {
+                outStages.push_back({idx});
+                continue;
+            }
+
+            bool conflictWithCurrentStage = false;
+            for (uint32_t sysIdx : outStages.back())
+            {
+                if (hasConflict(_systems[idx], _systems[sysIdx]))
                 {
                     conflictWithCurrentStage = true;
                     break;
@@ -150,38 +325,32 @@ public:
             }
 
             if (conflictWithCurrentStage)
-                _stages.push_back({static_cast<uint32_t>(i)}); // Nouveau stage
+                outStages.push_back({idx}); // Nouveau stage
             else
-                _stages.back().push_back(static_cast<uint32_t>(i)); // Même stage
+                outStages.back().push_back(idx); // Même stage
         }
-
-        _scheduleDirty = false;
-
-#ifdef LPL_MONITORING
-        printf("[SCHEDULER] Built %zu stages for %zu systems:\n", _stages.size(), _systems.size());
-        for (size_t s = 0; s < _stages.size(); ++s)
-        {
-            printf("  Stage %zu: ", s);
-            for (uint32_t idx : _stages[s])
-                printf("[%s (p=%d)] ", _systems[idx].name.c_str(), _systems[idx].priority);
-            printf("\n");
-        }
-#endif
     }
 
     /**
-     * @brief Exécute tous les systèmes en respectant le DAG.
-     *
-     * Chaque stage est exécuté séquentiellement.
-     * Les systèmes d'un même stage sont parallélisables.
-     * Après tous les stages, appelle world.swapBuffers().
+     * @brief Exécute des stages séquentiellement.
      */
-    void threaded_tick(WorldPartition &world, float dt)
+    void executeStagesOrdered(const std::vector<std::vector<uint32_t>> &stages,
+                              WorldPartition &world, float dt)
     {
-        if (_scheduleDirty)
-            buildSchedule();
+        for (const auto &stage : stages)
+        {
+            for (uint32_t sysIdx : stage)
+                _systems[sysIdx].tick(world, dt);
+        }
+    }
 
-        for (const auto &stage : _stages)
+    /**
+     * @brief Exécute des stages avec parallélisme intra-stage.
+     */
+    void executeStagesThreaded(const std::vector<std::vector<uint32_t>> &stages,
+                               WorldPartition &world, float dt)
+    {
+        for (const auto &stage : stages)
         {
             if (stage.size() > 1u)
             {
@@ -202,55 +371,6 @@ public:
         }
     }
 
-    void ordered_tick(WorldPartition &world, float dt)
-    {
-        if (_scheduleDirty)
-            buildSchedule();
-
-        for (const auto &stage : _stages)
-        {
-            for (uint32_t sysIdx : stage)
-                _systems[sysIdx].tick(world, dt);
-        }
-    }
-
-    /**
-     * @brief Nombre de stages dans le schedule courant.
-     */
-    [[nodiscard]] size_t getStageCount() const noexcept { return _stages.size(); }
-
-    /**
-     * @brief Nombre total de systèmes enregistrés.
-     */
-    [[nodiscard]] size_t getSystemCount() const noexcept { return _systems.size(); }
-
-    /**
-     * @brief Log le schedule courant (debug).
-     */
-    void printSchedule() const
-    {
-        printf("[SCHEDULER] %zu systems, %zu stages:\n", _systems.size(), _stages.size());
-        for (size_t s = 0; s < _stages.size(); ++s)
-        {
-            printf("  Stage %zu:", s);
-            for (uint32_t idx : _stages[s])
-            {
-                printf(" [%s p=%d (", _systems[idx].name.c_str(), _systems[idx].priority);
-                for (size_t a = 0; a < _systems[idx].access.size(); ++a)
-                {
-                    const auto &acc = _systems[idx].access[a];
-                    printf("%s%s:%s",
-                        a > 0 ? " " : "",
-                        componentName(acc.component),
-                        acc.mode == AccessMode::Read ? "R" : "W");
-                }
-                printf(")]");
-            }
-            printf("\n");
-        }
-    }
-
-private:
     /**
      * @brief Détecte un conflit entre deux systèmes.
      *
@@ -295,7 +415,8 @@ private:
 
 private:
     std::vector<SystemDescriptor> _systems;
-    std::vector<std::vector<uint32_t>> _stages; ///< Chaque stage = liste d'indices dans _systems
+    std::vector<std::vector<uint32_t>> _preSwapStages;  ///< Stages exécutés avant swapBuffers
+    std::vector<std::vector<uint32_t>> _postSwapStages; ///< Stages exécutés après swapBuffers
     ThreadPool _pool;
     bool _scheduleDirty = false;
 };

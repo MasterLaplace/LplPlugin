@@ -1,9 +1,9 @@
-// --- LAPLACE TEST CLIENT (3D) --- //
-// TEMPORARY TEST CLIENT — will be replaced by production architecture
+// --- LAPLACE CLIENT (3D) --- //
 // File: visual.cpp
-// Description: Client OpenGL qui se connecte au serveur LplPlugin (UDP 7777),
-//              fait une simulation locale (prediction) et corrige avec MSG_STATE.
-// Auteur: MasterLaplace & Copilot
+// Description: Client OpenGL utilisant le Core engine.
+//              Enregistre les systèmes client (BCI, prediction, camera, render, etc.)
+//              via le SystemScheduler avec phases PreSwap/PostSwap.
+// Auteur: MasterLaplace
 
 #include <algorithm>
 #include <atomic>
@@ -21,17 +21,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include "BciSourceFactory.hpp"
 #include "Calibration.hpp"
-#include "Network.hpp"
-#include "SystemScheduler.hpp"
-#include "WorldPartition.hpp"
-#include "lpl_protocol.h"
+#include "Core.hpp"
+#include "Systems.hpp"
 
 // ─── Camera ───────────────────────────────────────────────────
 
@@ -47,12 +40,10 @@ struct Camera {
 // ─── Client State ─────────────────────────────────────────────
 
 struct ClientState {
-    WorldPartition world;
+    Core *core = nullptr;
     Camera camera;
-    Network network;
     std::unique_ptr<BciSource> bci; ///< Source BCI abstraite (serial/synthetic/lsl/csv)
     Calibration calibration{30.0f}; ///< Machine à états de calibration
-    SystemScheduler scheduler;
     uint32_t myEntityId = 0;
     bool connected = false;
     GLFWwindow *window = nullptr;
@@ -200,8 +191,8 @@ static void drawChunkGrid()
 
 static void drawEntities()
 {
-    uint32_t readIdx = state.world.getReadIdx();
-    state.world.forEachChunk([&](Partition &p) {
+    uint32_t readIdx = state.core->world().getReadIdx();
+    state.core->world().forEachChunk([&](Partition &p) {
         for (size_t i = 0; i < p.getEntityCount(); ++i)
         {
             auto ent = p.getEntity(i, readIdx);
@@ -223,7 +214,7 @@ static void drawEntities()
 static size_t countEntities()
 {
     size_t total = 0;
-    state.world.forEachChunk([&](Partition &p) { total += p.getEntityCount(); });
+    state.core->world().forEachChunk([&](Partition &p) { total += p.getEntityCount(); });
     return total;
 }
 
@@ -234,7 +225,6 @@ static void drawHUD(GLFWwindow *window)
     int width, height;
     glfwGetWindowSize(window, &width, &height);
 
-    // Switch to 2D orthographic projection for HUD
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -244,7 +234,6 @@ static void drawHUD(GLFWwindow *window)
     glLoadIdentity();
     glDisable(GL_DEPTH_TEST);
 
-    // Connection status indicator (top-left corner)
     if (state.connected)
         glColor3f(0.f, 1.f, 0.f);
     else
@@ -257,7 +246,6 @@ static void drawHUD(GLFWwindow *window)
     glVertex2f(10.f, static_cast<float>(height) - 30.f);
     glEnd();
 
-    // Entity count indicator (small bar)
     float barWidth = std::min(200.f, static_cast<float>(countEntities()) * 2.f);
     glColor3f(0.3f, 0.6f, 1.f);
     glBegin(GL_QUADS);
@@ -274,41 +262,16 @@ static void drawHUD(GLFWwindow *window)
     glPopMatrix();
 }
 
-// ─── Input Helpers ───────────────────────────────────────────
-
-static Vec3 getInputDirection()
-{
-    glm::vec3 dir(0.f);
-    if (keys[GLFW_KEY_W])
-        dir += state.camera.front;
-    if (keys[GLFW_KEY_S])
-        dir -= state.camera.front;
-    if (keys[GLFW_KEY_A])
-        dir -= glm::normalize(glm::cross(state.camera.front, state.camera.up));
-    if (keys[GLFW_KEY_D])
-        dir += glm::normalize(glm::cross(state.camera.front, state.camera.up));
-
-    // Flatten to XZ plane
-    dir.y = 0.f;
-
-    if (glm::length(dir) > 0.1f)
-        dir = glm::normalize(dir);
-    else
-        dir = glm::vec3(0.f);
-
-    return Vec3{dir.x, dir.y, dir.z};
-}
-
 // ─── Camera System ────────────────────────────────────────────
 
 static bool getEntityPosition(uint32_t id, Vec3 &outPos)
 {
     int localIdx = -1;
-    Partition *chunk = state.world.findEntity(id, localIdx);
+    Partition *chunk = state.core->world().findEntity(id, localIdx);
     if (!chunk || localIdx < 0)
         return false;
 
-    uint32_t readIdx = state.world.getReadIdx();
+    uint32_t readIdx = state.core->world().getReadIdx();
     auto ent = chunk->getEntity(static_cast<size_t>(localIdx), readIdx);
     outPos = ent.position;
     return true;
@@ -318,7 +281,6 @@ static void updateCameraSystem(float dt)
 {
     constexpr float ROT_SPEED = 60.f;
 
-    // Camera rotation with arrow keys
     if (keys[GLFW_KEY_LEFT])
     {
         state.camera.yaw -= ROT_SPEED * dt;
@@ -344,7 +306,6 @@ static void updateCameraSystem(float dt)
         updateCameraDirection();
     }
 
-    // Follow player entity if connected
     if (state.connected && state.myEntityId != 0)
     {
         Vec3 pos;
@@ -352,11 +313,10 @@ static void updateCameraSystem(float dt)
         {
             glm::vec3 target(pos.x, pos.y, pos.z);
             state.camera.position = target - state.camera.front * 60.f + glm::vec3(0.f, 30.f, 0.f);
-            return; // Camera locked on player, don't do free movement
+            return;
         }
     }
 
-    // Free camera movement with WASD (when not following player)
     glm::vec3 movement(0.f);
     if (keys[GLFW_KEY_W])
         movement += state.camera.front;
@@ -400,160 +360,166 @@ static void renderSystem(GLFWwindow *window)
     glfwPollEvents();
 
     if (glfwWindowShouldClose(window))
+    {
         running = false;
+        state.core->stop();
+    }
 }
 
 // ─── Systems Setup ────────────────────────────────────────────
 
-static void setupSystems(SystemScheduler &sched)
+static void setupSystems(Core &core)
 {
-    // 1. Network System (Receive)
-    sched.registerSystem({
-        "NetworkSystem",
-        -20,
-        [](WorldPartition &w, float dt) {
-            state.network.network_consume_packets(w);
+    // ── PreSwap Systems ──────────────────────────────────────
 
-            if (!state.connected && state.network.is_connected())
+    // 1. Network Receive
+    core.registerSystem(Systems::NetworkReceiveSystem(core.network(), core.packetQueue()));
+
+    // 2. Welcome (handle MSG_WELCOME)
+    core.registerSystem(Systems::WelcomeSystem(core.packetQueue(), state.myEntityId, state.connected));
+
+    // 3. State Reconciliation (handle MSG_STATE)
+    core.registerSystem(Systems::StateReconciliationSystem(core.packetQueue()));
+
+    // 4. BCI System (source abstraite + calibration)
+    core.registerSystem({
+        "BCISystem", -10,
+        [&core](WorldPartition &/*w*/, float /*dt*/) {
+            if (!state.bci)
+                return;
+            std::lock_guard<std::mutex> lock(state.neuralMutex);
+            state.bci->update(state.neuralState);
+            state.calibration.tick(state.neuralState);
+
+            // Update InputManager with neural data
+            if (state.connected && state.myEntityId != 0)
             {
-                state.connected = true;
-                state.myEntityId = state.network.get_local_entity_id();
-                std::cout << "[CLIENT] Connected! Entity ID: " << state.myEntityId << "\n";
+                core.inputManager().setNeural(state.myEntityId,
+                    state.neuralState.alphaPower,
+                    state.neuralState.betaPower,
+                    state.neuralState.concentration,
+                    state.neuralState.blinkDetected);
             }
-                                         },
-        {{ComponentId::Position, AccessMode::Write},
-                                         {ComponentId::Velocity, AccessMode::Write},
-                                         {ComponentId::Health, AccessMode::Write}}
+        },
+        {},
+        SchedulePhase::PreSwap
     });
 
-    // 2. BCI System (source abstraite + calibration)
-    sched.registerSystem({"BCISystem",
-                          -10,
-                          [](WorldPartition &w, float dt) {
-                              if (!state.bci)
-                                  return;
-                              std::lock_guard<std::mutex> lock(state.neuralMutex);
-                              state.bci->update(state.neuralState);
-                              state.calibration.tick(state.neuralState);
-                          },
-                          {}});
+    // 5. Local Input System (GLFW keys → InputManager)
+    core.registerSystem({
+        "LocalInput", -8,
+        [&core](WorldPartition &/*w*/, float /*dt*/) {
+            if (!state.connected || state.myEntityId == 0)
+                return;
 
-    // 3. Spawn System
-    sched.registerSystem({"SpawnSystem",
-                          -5,
-                          [](WorldPartition &w, float dt) {
-                              if (state.connected && state.myEntityId != 0 &&
-                                  !state.world.isEntityRegistered(state.myEntityId))
-                              {
-                                  Partition::EntitySnapshot ent{};
-                                  ent.id = state.myEntityId;
-                                  ent.position = {0.f, 10.f, 0.f};
-                                  ent.velocity = {0.f, 0.f, 0.f};
-                                  ent.size = {1.f, 2.f, 1.f};
-                                  ent.health = 100;
-                                  state.world.addEntity(ent);
-                              }
-                          },
-                          {{ComponentId::Position, AccessMode::Write}}});
+            auto &im = core.inputManager();
+            im.getOrCreate(state.myEntityId);
 
-    // 4. Local Prediction System
-    sched.registerSystem({"PredictionSystem",
-                          0,
-                          [](WorldPartition &w, float dt) {
-                              if (!state.connected || state.myEntityId == 0)
-                                  return;
-
-                              int localIdx = -1;
-                              Partition *chunk = w.findEntity(state.myEntityId, localIdx);
-                              if (!chunk || localIdx < 0)
-                                  return;
-
-                              uint32_t writeIdx = w.getWriteIdx();
-                              constexpr float SPEED = 50.0f;
-
-                              Vec3 inputDir = getInputDirection();
-                              Vec3 currentVel = chunk->getEntity(static_cast<uint32_t>(localIdx), writeIdx).velocity;
-                              Vec3 targetVel = currentVel;
-
-                              float concentration = 0.5f;
-                              bool blink = false;
-                              {
-                                  std::lock_guard<std::mutex> lock(state.neuralMutex);
-                                  concentration = std::clamp(state.neuralState.concentration, 0.0f, 1.0f);
-                                  blink = state.neuralState.blinkDetected;
-                              }
-
-                              const float neuralSpeedScale = 0.70f + concentration * 0.60f; // [0.70x .. 1.30x]
-                              targetVel.x = inputDir.x * SPEED * neuralSpeedScale;
-                              targetVel.z = inputDir.z * SPEED * neuralSpeedScale;
-
-                              // Blink jump on rising edge only, same rule as server.
-                              static bool previousBlink = false;
-                              if (blink && !previousBlink)
-                                  targetVel.y += 10.0f;
-                              previousBlink = blink;
-
-                              chunk->setVelocity(static_cast<uint32_t>(localIdx), targetVel, writeIdx);
-                              chunk->wakeEntity(static_cast<uint32_t>(localIdx));
-                          },
-                          {{ComponentId::Velocity, AccessMode::Write}}});
-
-    // 5. Physics System
-    sched.registerSystem({
-        "PhysicsSystem",
-        5,
-        [](WorldPartition &w, float dt) { w.step(dt); },
-        {{ComponentId::Position, AccessMode::Write}, {ComponentId::Velocity, AccessMode::Write}}
+            // Sync WASD keys from GLFW atomics to InputManager
+            constexpr int trackedKeys[] = {GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D};
+            for (int key : trackedKeys)
+                im.setKeyState(state.myEntityId, static_cast<uint16_t>(key), keys[key].load());
+        },
+        {},
+        SchedulePhase::PreSwap
     });
 
-    // 6. Camera System
-    sched.registerSystem({"CameraSystem", 10, [](WorldPartition &w, float dt) { updateCameraSystem(dt); }, {}});
+    // 6. Spawn System (create local entity if needed)
+    core.registerSystem({
+        "Spawn", -6,
+        [](WorldPartition &w, float /*dt*/) {
+            if (state.connected && state.myEntityId != 0 &&
+                !w.isEntityRegistered(state.myEntityId))
+            {
+                Partition::EntitySnapshot ent{};
+                ent.id = state.myEntityId;
+                ent.position = {0.f, 10.f, 0.f};
+                ent.velocity = {0.f, 0.f, 0.f};
+                ent.size = {1.f, 2.f, 1.f};
+                ent.health = 100;
+                w.addEntity(ent);
+            }
+        },
+        {{ComponentId::Position, AccessMode::Write}},
+        SchedulePhase::PreSwap
+    });
 
-    // 7. Input System (Send to Server)
-    sched.registerSystem({"InputSystem",
-                          15,
-                          [](WorldPartition &w, float dt) {
-                              if (!state.connected || state.myEntityId == 0)
-                                  return;
+    // 7. Movement (client-side prediction via InputManager)
+    core.registerSystem(Systems::MovementSystem(core.inputManager()));
 
-                              std::vector<uint8_t> kData, aData, nData;
+    // 8. Physics
+    core.registerSystem(Systems::PhysicsSystem());
 
-                              // Send authoritative WASD key states every frame (idempotent server side)
-                              constexpr int trackedKeys[] = {GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D};
-                              for (int key : trackedKeys)
-                              {
-                                  bool currentKey = keys[key].load();
-                                  uint16_t packed = (static_cast<uint16_t>(key) & 0x7FFF);
-                                  if (currentKey)
-                                      packed |= 0x8000;
+    // 9. Input Send System (serialize inputs → send to server)
+    core.registerSystem({
+        "InputSend", 15,
+        [&core](WorldPartition &/*w*/, float /*dt*/) {
+            if (!state.connected || state.myEntityId == 0)
+                return;
 
-                                  kData.push_back(static_cast<uint8_t>(packed & 0xFF));
-                                  kData.push_back(static_cast<uint8_t>((packed >> 8) & 0xFF));
-                              }
+            std::vector<uint8_t> kData, aData, nData;
 
-                              // Send neural data every frame to minimize authoritative lag.
-                              {
-                                  std::lock_guard<std::mutex> lock(state.neuralMutex);
+            // WASD key states
+            constexpr int trackedKeys[] = {GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D};
+            for (int key : trackedKeys)
+            {
+                bool currentKey = keys[key].load();
+                uint16_t packed = (static_cast<uint16_t>(key) & 0x7FFF);
+                if (currentKey)
+                    packed |= 0x8000;
 
-                                  nData.resize(13);
-                                  memcpy(nData.data(), &state.neuralState.alphaPower, 4);
-                                  memcpy(nData.data() + 4, &state.neuralState.betaPower, 4);
-                                  memcpy(nData.data() + 8, &state.neuralState.concentration, 4);
-                                  nData[12] = state.neuralState.blinkDetected ? 1 : 0;
-                              }
+                kData.push_back(static_cast<uint8_t>(packed & 0xFF));
+                kData.push_back(static_cast<uint8_t>((packed >> 8) & 0xFF));
+            }
 
-                              // Only send if we have data
-                              if (!kData.empty() || !aData.empty() || !nData.empty())
-                              {
-                                  state.network.send_inputs(state.myEntityId, kData, aData, nData);
-                              }
-                          },
-                          {}});
+            // Neural data
+            {
+                std::lock_guard<std::mutex> lock(state.neuralMutex);
+                nData.resize(13);
+                memcpy(nData.data(), &state.neuralState.alphaPower, 4);
+                memcpy(nData.data() + 4, &state.neuralState.betaPower, 4);
+                memcpy(nData.data() + 8, &state.neuralState.concentration, 4);
+                nData[12] = state.neuralState.blinkDetected ? 1 : 0;
+            }
 
-    sched.buildSchedule();
+            if (!kData.empty() || !aData.empty() || !nData.empty())
+                core.network().send_inputs(state.myEntityId, kData, aData, nData);
+        },
+        {},
+        SchedulePhase::PreSwap
+    });
+
+    // ── PostSwap Systems ─────────────────────────────────────
+
+    // 10. Camera System (PostSwap — reads from read buffer)
+    core.registerSystem({
+        "Camera", 0,
+        [](WorldPartition &/*w*/, float dt) { updateCameraSystem(dt); },
+        {},
+        SchedulePhase::PostSwap
+    });
+
+    // 11. Render System (PostSwap — reads from read buffer)
+    core.registerSystem({
+        "Render", 10,
+        [](WorldPartition &/*w*/, float /*dt*/) {
+            if (state.window)
+                renderSystem(state.window);
+            else
+                glfwPollEvents();
+        },
+        {
+            {ComponentId::Position, AccessMode::Read},
+            {ComponentId::Size,     AccessMode::Read},
+            {ComponentId::Health,   AccessMode::Read},
+        },
+        SchedulePhase::PostSwap
+    });
+
+    core.buildSchedule();
 
 #ifdef LPL_MONITORING
-    sched.printSchedule();
+    core.printSchedule();
 #endif
 }
 
@@ -598,23 +564,6 @@ static GLFWwindow *initWindow()
     return window;
 }
 
-// ─── Init Network ─────────────────────────────────────────────
-
-static bool initNetwork(const char *serverIp, uint16_t serverPort)
-{
-    if (!state.network.network_init())
-    {
-        std::cerr << "[ERROR] Network init failed\n";
-        return false;
-    }
-
-    state.network.set_server_info(serverIp, serverPort);
-    state.network.send_connect(serverIp, serverPort);
-
-    std::cout << "[CLIENT] MSG_CONNECT sent to " << serverIp << ":" << serverPort << "\n";
-    return true;
-}
-
 // ─── MAIN ─────────────────────────────────────────────────────
 
 int main(int argc, char *argv[])
@@ -629,7 +578,7 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; ++i)
     {
         std::string arg(argv[i]);
-        if (arg.rfind("--", 0) != 0) // Skip --bci-* flags
+        if (arg.rfind("--", 0) != 0)
         {
             if (serverIp == std::string("127.0.0.1") && arg.find('.') != std::string::npos)
                 serverIp = argv[i];
@@ -655,23 +604,22 @@ int main(int argc, char *argv[])
     state.window = window;
     std::cout << "[MAIN] Window created successfully\n";
 
-    // 2. Init network
+    // 2. Init Core (GPU + Network)
+    std::cout << "[MAIN] Initializing Core...\n";
+    Core core;
+    state.core = &core;
+
+    // 3. Init client network
     std::cout << "[MAIN] Initializing network...\n";
-    if (!initNetwork(serverIp, serverPort))
-    {
-        std::cerr << "[FATAL] Network init failed\n";
-        glfwTerminate();
-        return 1;
-    }
+    core.initClientNetwork(serverIp, serverPort);
     std::cout << "[MAIN] Network initialized\n";
 
-    // 3. Init BCI (abstracted source with fallback)
+    // 4. Init BCI (abstracted source with fallback)
     std::cout << "[MAIN] Initializing BCI (mode: " << bci_mode_name(bciCfg.mode) << ")...\n";
     state.bci = BciSourceFactory::createAndInit(bciCfg);
     if (state.bci)
     {
         std::cout << "[CLIENT] BCI source active: " << state.bci->name() << "\n";
-        // Auto-start calibration
         state.calibration = Calibration(bciCfg.calibDuration);
         state.calibration.start();
     }
@@ -680,9 +628,9 @@ int main(int argc, char *argv[])
         std::cout << "[CLIENT] BCI init failed (continuing with keyboard only)\n";
     }
 
-    // 4. Setup ECS Systems
+    // 5. Setup ECS Systems
     std::cout << "[MAIN] Setting up ECS systems...\n";
-    setupSystems(state.scheduler);
+    setupSystems(core);
     std::cout << "[MAIN] ECS systems ready\n";
 
     std::cout << "[CLIENT] Waiting for MSG_WELCOME...\n"
@@ -690,44 +638,28 @@ int main(int argc, char *argv[])
               << "  Arrows  : rotate camera\n"
               << "  ESC     : quit\n\n";
 
-    // 5. Main loop
+    // 6. Main loop using Core.runVariableDt
     std::cout << "[MAIN] Entering main loop...\n";
     double lastFrameTime = nowSeconds();
 
-    while (running)
-    {
-        double currentTime = nowSeconds();
-        float dt = static_cast<float>(currentTime - lastFrameTime);
-        lastFrameTime = currentTime;
-
-        // Limit delta to avoid huge jumps
-        if (dt > 0.1f)
-            dt = 0.1f;
-
-        // Run all ECS systems
-        state.scheduler.ordered_tick(state.world, dt);
-
-        // Swap buffers after all systems ran
-        state.world.swapBuffers();
-
-        // Render (must be on main thread for OpenGL)
-        if (state.window)
-        {
-            renderSystem(state.window);
+    core.runVariableDt(
+        [&lastFrameTime]() -> float {
+            double currentTime = nowSeconds();
+            float dt = static_cast<float>(currentTime - lastFrameTime);
+            lastFrameTime = currentTime;
+            return dt;
+        },
+        [](float /*dt*/) {
+            // Post-loop: check if we need to stop
+            if (!running)
+                state.core->stop();
         }
-        else
-        {
-            // If no window, still need to poll events to check for window close request
-            glfwPollEvents();
-        }
-    }
+    );
 
-    // 6. Cleanup
+    // 7. Cleanup
     std::cout << "[MAIN] Shutting down...\n";
-    running = false;
     if (state.bci)
         state.bci->stop();
-    state.network.network_cleanup();
     glfwTerminate();
 
     std::cout << "[CLIENT] Shutdown complete\n";
