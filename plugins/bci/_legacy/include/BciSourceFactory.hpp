@@ -14,6 +14,7 @@
 #pragma once
 
 #include "BciSource.hpp"
+#include "BrainFlowSource.hpp"
 #include "CsvReplaySource.hpp"
 #include "LslSource.hpp"
 #include "SerialSource.hpp"
@@ -31,6 +32,8 @@ struct BciConfig {
     std::string lslStream = "OpenBCI_EEG";   ///< Nom du stream LSL
     uint64_t seed = 0;                       ///< Graine PRNG pour Synthetic (0 = aléatoire)
     float calibDuration = 30.0f;             ///< Durée de calibration (secondes)
+    int brainflowBoard = -1;                 ///< BrainFlow board ID (-1 = SYNTHETIC_BOARD)
+    std::string brainflowSerial;             ///< BrainFlow serial port/number
 };
 
 /// Parse les arguments CLI relatifs au BCI.
@@ -70,6 +73,10 @@ inline BciConfig bci_parse_args(int argc, char *argv[])
             cfg.seed = std::stoull(v5);
         else if (auto v6 = extractValue("--calib-duration="); !v6.empty())
             cfg.calibDuration = std::stof(v6);
+        else if (auto v7 = extractValue("--brainflow-board="); !v7.empty())
+            cfg.brainflowBoard = std::stoi(v7);
+        else if (auto v8 = extractValue("--brainflow-serial="); !v8.empty())
+            cfg.brainflowSerial = v8;
     }
 
     return cfg;
@@ -103,6 +110,10 @@ namespace BciSourceFactory {
         {
             source = std::make_unique<CsvReplaySource>(cfg.csvFile);
         }
+        break;
+
+    case BciMode::BrainFlow:
+        source = std::make_unique<BrainFlowSource>(cfg.brainflowBoard, cfg.brainflowSerial);
         break;
     }
 

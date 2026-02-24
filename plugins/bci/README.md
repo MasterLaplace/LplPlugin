@@ -1,100 +1,121 @@
-# bci — OpenBCI Cyton BCI Plugin
+# LPL BCI Plugin V2
 
-Real-time interface with the **OpenBCI Cyton** headset (8 channels, 250 Hz) and neural metrics computation for closed-loop BCI control.
+Brain-Computer Interface plugin for the LplPlugin engine.  
+C++23 · Eigen3 · Boost · liblsl · Catch2  
 
-## Contents
+## Architecture
 
 ```
-bci/
-├── include/
-│   ├── OpenBCIDriver.hpp     — USB-serial driver, ring buffer, multi-channel FFT
-│   ├── SignalMetrics.hpp     — Spectral metrics (Schumacher R(t), RMS, baseline)
-│   ├── RiemannianGeometry.hpp— SPD geometry, δ_R, Mahalanobis distance
-│   └── NeuralMetrics.hpp     — Normalized struct for control loop
-├── calcul.c                  — C reference for Schumacher/integral
-└── tests/
-    ├── test_metrics.cpp      — Unit tests SignalMetrics
-    └── test_riemannian.cpp   — Unit tests RiemannianGeometry
+plugins/bci/
+├── include/lpl/bci/
+│   ├── core/           # Types, Constants, Error, Concepts
+│   ├── dsp/            # IStage, Pipeline, Windowing, FFT, BandExtractor, RingBuffer
+│   ├── source/         # ISource, OpenBCI, Synthetic, LSL, BrainFlow, CSV, Factory
+│   │   ├── serial/     # Cross-platform SerialPort (POSIX + Win32)
+│   │   └── sim/        # SyntheticGenerator
+│   ├── math/           # Statistics, Covariance, Riemannian geometry (SPD manifold)
+│   ├── metric/         # SignalMetric (Schumacher), NeuralMetric, StabilityMetric
+│   ├── calibration/    # State machine (Idle → Calibrating → Ready)
+│   ├── stream/         # LslOutlet (LSL broadcast)
+│   └── openvibe/       # MuscleRelaxationBox, StabilityMonitorBox
+├── src/lpl/bci/        # Implementation files (.cpp)
+├── tests/              # Catch2 unit tests
+├── _legacy/            # V1 archived code (read-only reference)
+└── xmake.lua           # Build configuration
 ```
 
-## Implemented Metrics
+## Design Principles
 
-### Schumacher R(t) — Muscle Tension
+| Principle | Implementation |
+|-----------|---------------|
+| **SRP** | Sources only acquire data; DSP stages only transform; Metrics only compute |
+| **OCP** | `ISource` and `IStage` interfaces allow extension without modification |
+| **LSP** | All `ISource` implementations are interchangeable via `SourceFactory` |
+| **ISP** | Small focused interfaces (`ISource`, `IStage`) |
+| **DIP** | Pipeline depends on `IStage` abstraction, not concrete implementations |
 
-$$
-R(t) = \frac{1}{N_{ch}} \sum_{i=1}^{N_{ch}} \int_{40}^{70} \mathrm{PSD}_i(f,t)\, df
-$$
+## Error Handling
 
-Indicator of EMG contamination/high-frequency artifacts in EEG signal.  
-Reference: Schumacher et al., *Closed-loop control of gait using BCI*, 2015.
-
-### Riemannian Distance δ_R — Cognitive Stability
-
-$$
-\delta_R(C_1, C_2) = \sqrt{\sum_i \ln^2(\lambda_i)}
-$$
-
-where $\lambda_i$ are eigenvalues of $C_1^{-1/2} C_2 C_1^{-1/2}$.  
-Congruence-invariant — robust to volume-conduction artifacts.  
-References: Moakher 2005, Arsigny et al. 2006, Blankertz et al. 2011.
-
-### Mahalanobis Distance D_M — Anomaly Detection
-
-$$
-D_M(x_t) = \sqrt{(x_t - \mu_c)^T \Sigma_c^{-1} (x_t - \mu_c)}
-$$
-
-Detects outlier points in EEG feature space relative to a calibrated reference state.
-
-## Build & Tests
-
-```bash
-make -C bci test   # Compile and run 24 unit tests
-```
-
-**Expected output:**
-```
-[OK] All tests passed.   (SignalMetrics — 12 tests)
-[OK] All tests passed.   (RiemannianGeometry — 12 tests)
-```
-
-## OpenBCI Cyton Packet Format
-
-The Cyton emits 33-byte packets at 250 Hz:
-
-| Bytes | Content                        |
-|--------|-------------------------------|
-| `[0]`  | `0xA0` — start marker         |
-| `[1]`  | Sample counter                |
-| `[2..4]` | Channel 1 (24-bit, signed)  |
-| `[5..7]` | Channel 2                   |
-| …      | …                             |
-| `[23..25]` | Channel 8               |
-| `[26..31]` | Accelerometer (AX,AY,AZ)|
-| `[32]` | `0xC0` — end marker           |
-
-`parse_channel(data)` retrieves a value in microvolts via scale factor `4.5 / 24 / 8388607 × 10⁶ µV/LSB`.
-
-## Usage (example)
+All fallible operations return `Expected<T>` (`std::expected<T, Error>`).  
+Errors carry an `ErrorCode`, a human-readable message, and `source_location`.
 
 ```cpp
-#include "OpenBCIDriver.hpp"
-#include "NeuralMetrics.hpp"
-
-OpenBCIDriver bci;
-bci.init("/dev/ttyUSB0");
-
-NeuralState  ns;
-float        baseline_R = 0.0f;
-
-// Calibration phase (2 seconds at rest)
-// ...
-
-while (running) {
-    bci.update(ns);
-    auto metrics = NeuralMetrics::from_state(ns, baseline_R);
-    if (metrics.muscle_alert)
-        pause_feedback();
-}
+auto result = source->read(buffer);
+if (!result)
+    log("{}", result.error().format());
 ```
 
+## Key Improvements over V1
+
+- **Single FFT implementation** — V1 had `processFFT()` duplicated 5 times
+- **No conditional compilation** — all dependencies are mandatory (except optional BrainFlow)
+- **Proper namespace** — `lpl::bci` with sub-namespaces
+- **Centralized constants** — `Constants.hpp` replaces 5 copies of `BCI_CHANNELS`
+- **RAII everywhere** — `std::jthread`, `std::unique_ptr`, PIMPL for serial ports
+- **Fixed bugs** — V1's `StabilityMonitor::_distanceHistory` was never populated
+- **Riemannian geometry** — Eigen-only, no manual Jacobi fallback
+
+## Dependencies
+
+| Library | Purpose | Required |
+|---------|---------|----------|
+| Eigen3 | Linear algebra, SPD geometry | Yes |
+| Boost | `lockfree::spsc_queue` for RingBuffer | Yes |
+| liblsl | Lab Streaming Layer I/O | Yes |
+| BrainFlow | Multi-board acquisition SDK | Optional |
+| Catch2 | Unit testing | Dev only |
+
+## Build
+
+```bash
+xmake config --mode=debug
+xmake build lpl-bci
+xmake build lpl-bci-tests
+xmake run lpl-bci-tests
+```
+
+Enable BrainFlow support:
+```bash
+xmake config --with_brainflow=y
+```
+
+## Module Overview
+
+### `core/` — Vocabulary Types
+`Sample`, `SignalBlock`, `FrequencyBand`, `BandPower`, `NeuralState`, `Baseline`, `AcquisitionMode`
+
+### `dsp/` — Digital Signal Processing
+Fluent `PipelineBuilder` composes stages: `HannWindow → FftProcessor → BandExtractor`
+
+### `source/` — Data Acquisition
+`ISource` implementations: `OpenBciSource` (serial), `SyntheticSource`, `LslSource`, `BrainFlowSource`, `CsvReplaySource`
+
+### `math/` — Mathematical Foundations
+- `Statistics`: PSD integration, Hz→bin, sliding RMS, baseline
+- `Covariance`: Batch + Welford online estimation, Ledoit-Wolf regularization
+- `Riemannian`: `matrixSqrt`, `matrixLog`, geodesic distance, Fréchet mean on SPD(n)
+
+### `metric/` — BCI Metrics
+- `SignalMetric`: Schumacher β/(α+θ) ratio
+- `NeuralMetric`: Baseline-normalized state in [0,1]
+- `StabilityMetric`: Temporal consistency via Riemannian distances
+
+### `calibration/` — Baseline Acquisition
+Three-state machine with Observer pattern for state-change notifications.
+
+### `stream/` — Network Output
+`LslOutlet` broadcasts `NeuralState` or raw samples over LSL.
+
+### `openvibe/` — OpenViBE Integration
+`MuscleRelaxationBox` (gamma artifact detection) and `StabilityMonitorBox` (EMA-smoothed Riemannian stability).
+
+## References
+
+- Schumacher et al. (2015) — Muscular relaxation in MI-BCI
+- Sollfrank et al. (2016) — Multimodal enriched feedback for SMR-BCI
+- Barachant et al. (2012) — Multiclass BCI by Riemannian geometry
+- Congedo et al. (2017) — Riemannian geometry for EEG-based BCI
+
+## License
+
+See [LICENSE](../../LICENSE) for details.

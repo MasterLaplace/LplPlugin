@@ -114,7 +114,7 @@ BenchResult benchHashMapInsert(size_t iters)
     for (size_t i = 0; i < cap; ++i)
     {
         uint64_t key = Morton::encode2D(i % 256, i / 256);
-        map.insert(key);
+        map.insert(key, static_cast<uint64_t>(i));
     }
     return {"FlatAtomicsHashMap::insert", t.elapsedNs(), cap};
 }
@@ -129,7 +129,7 @@ BenchResult benchHashMapGet(size_t iters)
     for (size_t i = 0; i < cap; ++i)
     {
         uint64_t key = Morton::encode2D(i % 256, i / 256);
-        map.insert(key);
+        map.insert(key, static_cast<uint64_t>(i));
         keys.push_back(key);
     }
 
@@ -351,14 +351,14 @@ int main(int argc, char **argv)
     for (int n : entityCounts)
     {
         auto r = benchPhysicsScale(n);
-        const char *rating = r.fps >= 60.0 ? "✅ REAL-TIME" : (r.fps >= 30.0 ? "⚠️  PLAYABLE" : "❌ TOO SLOW");
+        const char *rating = r.fps >= 60.0 ? "[OK] REAL-TIME" : (r.fps >= 30.0 ? "[OK] PLAYABLE" : "[KO] TOO SLOW");
         std::cout << "  │ " << std::right << std::setw(10) << r.entityCount << "   │ " << std::setw(9)
                   << std::fixed << std::setprecision(2) << r.avgFrameMs << " ms │ " << std::setw(10)
                   << std::setprecision(1) << r.fps << " Hz │ " << std::left << std::setw(19) << rating
                   << "│\n";
     }
 
-    std::cout << "  └──────────────┴──────────────┴──────────────┴────────────────────┘\n\n";
+    std::cout << "  └──────────────┴──────────────┴────────────────┴───────────────────┘\n\n";
 
     std::cout << "══════════════════════════════════════════════════════════════════════════\n"
               << "  Benchmark complete. Results are deterministic (fixed RNG seeds).\n"

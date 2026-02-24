@@ -12,10 +12,11 @@
 
 /// Mode d'acquisition BCI — sélectionnable au runtime via CLI.
 enum class BciMode {
-    Serial,    ///< Matériel réel (OpenBCI Cyton via /dev/ttyUSBx)
-    Synthetic, ///< Générateur synthétique multi-bandes (aucun matériel)
-    Lsl,       ///< Flux LSL entrant (Lab Streaming Layer)
-    CsvReplay  ///< Replay d'un enregistrement CSV
+    Serial,     ///< Matériel réel (OpenBCI Cyton via /dev/ttyUSBx)
+    Synthetic,  ///< Générateur synthétique multi-bandes (aucun matériel)
+    Lsl,        ///< Flux LSL entrant (Lab Streaming Layer)
+    CsvReplay,  ///< Replay d'un enregistrement CSV
+    BrainFlow   ///< BrainFlow SDK — multi-board acquisition (OpenBCI, Muse, etc.)
 };
 
 /// Convertit un nom CLI ("serial", "synthetic", "lsl", "csv") en BciMode.
@@ -27,6 +28,8 @@ enum class BciMode {
         return BciMode::Lsl;
     if (s == "csv" || s == "replay")
         return BciMode::CsvReplay;
+    if (s == "brainflow" || s == "bf")
+        return BciMode::BrainFlow;
     return BciMode::Serial;
 }
 
@@ -39,6 +42,7 @@ enum class BciMode {
     case BciMode::Synthetic: return "Synthetic";
     case BciMode::Lsl: return "LSL Inlet";
     case BciMode::CsvReplay: return "CSV Replay";
+    case BciMode::BrainFlow: return "BrainFlow";
     }
     return "Unknown";
 }
