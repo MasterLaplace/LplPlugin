@@ -1,6 +1,6 @@
 /**
  * @file TestCalibration.cpp
- * @brief Unit tests for lpl::bci::calibration::Calibration state machine.
+ * @brief Unit tests for bci::calibration::Calibration state machine.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -8,7 +8,7 @@
 
 #include "lpl/bci/calibration/Calibration.hpp"
 
-using namespace lpl::bci::calibration;
+using namespace bci::calibration;
 
 TEST_CASE("Calibration starts in Idle state", "[calibration]")
 {

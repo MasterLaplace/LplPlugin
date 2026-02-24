@@ -1,6 +1,6 @@
 /**
  * @file TestPipeline.cpp
- * @brief Unit tests for lpl::bci::dsp::Pipeline and DSP stages.
+ * @brief Unit tests for bci::dsp::Pipeline and DSP stages.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -11,8 +11,8 @@
 #include "lpl/bci/dsp/Pipeline.hpp"
 #include "lpl/bci/dsp/Windowing.hpp"
 
-using namespace lpl::bci;
-using namespace lpl::bci::dsp;
+using namespace bci;
+using namespace bci::dsp;
 
 static SignalBlock makeConstantBlock(std::size_t samples, std::size_t channels, float value)
 {

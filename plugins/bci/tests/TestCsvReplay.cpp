@@ -1,6 +1,6 @@
 /**
  * @file TestCsvReplay.cpp
- * @brief Unit tests for lpl::bci::source::CsvReplaySource.
+ * @brief Unit tests for bci::source::CsvReplaySource.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -10,7 +10,7 @@
 #include <filesystem>
 #include <fstream>
 
-using namespace lpl::bci::source;
+using namespace bci::source;
 
 namespace {
 
@@ -49,7 +49,7 @@ TEST_CASE("CsvReplaySource reads CSV data", "[source][csv]")
     auto info = source.info();
     REQUIRE(info.channelCount == 3);
 
-    std::vector<lpl::bci::Sample> buffer(3);
+    std::vector<bci::Sample> buffer(3);
     auto readResult = source.read(buffer);
 
     REQUIRE(readResult.has_value());
@@ -73,7 +73,7 @@ TEST_CASE("CsvReplaySource loops on exhaustion", "[source][csv]")
     auto res = source.start();
     REQUIRE(res.has_value());
 
-    std::vector<lpl::bci::Sample> buffer(4);
+    std::vector<bci::Sample> buffer(4);
     auto result1 = source.read(buffer);
     REQUIRE(result1.has_value());
     REQUIRE(*result1 == 2);

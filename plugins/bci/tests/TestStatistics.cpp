@@ -1,6 +1,6 @@
 /**
  * @file TestStatistics.cpp
- * @brief Unit tests for lpl::bci::math::Statistics.
+ * @brief Unit tests for bci::math::Statistics.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -9,7 +9,7 @@
 
 #include "lpl/bci/math/Statistics.hpp"
 
-using namespace lpl::bci::math;
+using namespace bci::math;
 using Catch::Matchers::WithinAbs;
 
 TEST_CASE("Statistics::integratePsd sums bins inclusively", "[math][statistics]")

@@ -4,10 +4,7 @@
 
 set_xmakever("2.8.0")
 
-local xrepo_dir = path.absolute(path.join(os.projectdir(), "..", "..", "xmake-local-repo"))
-if os.isdir(xrepo_dir) then
-    add_repositories("local-xrepo", xrepo_dir)
-end
+add_repositories("package_repo https://github.com/MasterLaplace/xmake-repo.git")
 
 -- ─── Dependencies ────────────────────────────────────────────────────────────
 
@@ -34,20 +31,20 @@ target("lpl-bci")
 
     add_includedirs("include", {public = true})
 
-    add_files("src/lpl/bci/core/*.cpp")
-    add_files("src/lpl/bci/dsp/*.cpp")
-    add_files("src/lpl/bci/math/*.cpp")
-    add_files("src/lpl/bci/metric/*.cpp")
-    add_files("src/lpl/bci/calibration/*.cpp")
-    add_files("src/lpl/bci/stream/*.cpp")
-    add_files("src/lpl/bci/openvibe/*.cpp")
-    add_files("src/lpl/bci/source/*.cpp")
-    add_files("src/lpl/bci/source/sim/*.cpp")
+    add_files("src/core/*.cpp")
+    add_files("src/dsp/*.cpp")
+    add_files("src/math/*.cpp")
+    add_files("src/metric/*.cpp")
+    add_files("src/calibration/*.cpp")
+    add_files("src/stream/*.cpp")
+    add_files("src/openvibe/*.cpp")
+    add_files("src/source/*.cpp")
+    add_files("src/source/sim/*.cpp")
 
     if is_plat("linux", "macosx") then
-        add_files("src/lpl/bci/source/serial/SerialPortPosix.cpp")
+        add_files("src/source/serial/SerialPortPosix.cpp")
     elseif is_plat("windows") then
-        add_files("src/lpl/bci/source/serial/SerialPortWin32.cpp")
+        add_files("src/source/serial/SerialPortWin32.cpp")
     end
 
     add_packages("eigen", "boost", "liblsl", {public = true})

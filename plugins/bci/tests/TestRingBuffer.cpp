@@ -1,13 +1,13 @@
 /**
  * @file TestRingBuffer.cpp
- * @brief Unit tests for lpl::bci::dsp::RingBuffer.
+ * @brief Unit tests for bci::dsp::RingBuffer.
  */
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "lpl/bci/dsp/RingBuffer.hpp"
 
-using namespace lpl::bci::dsp;
+using namespace bci::dsp;
 
 TEST_CASE("RingBuffer basic push and pop", "[dsp][ringbuffer]")
 {

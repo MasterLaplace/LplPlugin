@@ -1,14 +1,14 @@
 /**
  * @file TestSourceFactory.cpp
- * @brief Unit tests for lpl::bci::source::SourceFactory.
+ * @brief Unit tests for bci::source::SourceFactory.
  */
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "lpl/bci/source/SourceFactory.hpp"
 
-using namespace lpl::bci;
-using namespace lpl::bci::source;
+using namespace bci;
+using namespace bci::source;
 
 TEST_CASE("SourceFactory creates SyntheticSource", "[source][factory]")
 {

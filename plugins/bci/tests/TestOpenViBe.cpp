@@ -1,6 +1,6 @@
 /**
  * @file TestOpenViBe.cpp
- * @brief Unit tests for lpl::bci::openvibe processors.
+ * @brief Unit tests for bci::openvibe processors.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -9,7 +9,7 @@
 #include "lpl/bci/openvibe/MuscleRelaxationBox.hpp"
 #include "lpl/bci/openvibe/StabilityMonitorBox.hpp"
 
-using namespace lpl::bci::openvibe;
+using namespace bci::openvibe;
 using Catch::Matchers::WithinAbs;
 
 TEST_CASE("MuscleRelaxationBox computes gamma ratio", "[openvibe][muscle]")

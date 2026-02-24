@@ -1,6 +1,6 @@
 /**
  * @file TestRiemannian.cpp
- * @brief Unit tests for lpl::bci::math Riemannian geometry operations.
+ * @brief Unit tests for bci::math Riemannian geometry operations.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -8,7 +8,7 @@
 
 #include "lpl/bci/math/Riemannian.hpp"
 
-using namespace lpl::bci::math;
+using namespace bci::math;
 using Catch::Matchers::WithinAbs;
 
 TEST_CASE("matrixSqrt of identity is identity", "[math][riemannian]")

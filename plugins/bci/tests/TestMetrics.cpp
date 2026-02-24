@@ -1,6 +1,6 @@
 /**
  * @file TestMetrics.cpp
- * @brief Unit tests for lpl::bci::metric (Signal, Neural, Stability).
+ * @brief Unit tests for bci::metric (Signal, Neural, Stability).
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -10,7 +10,7 @@
 #include "lpl/bci/metric/SignalMetric.hpp"
 #include "lpl/bci/metric/StabilityMetric.hpp"
 
-using namespace lpl::bci::metric;
+using namespace bci::metric;
 using Catch::Matchers::WithinAbs;
 
 TEST_CASE("SignalMetric computes Schumacher ratio", "[metric][signal]")

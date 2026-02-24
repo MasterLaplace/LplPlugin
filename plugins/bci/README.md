@@ -49,7 +49,7 @@ if (!result)
 
 - **Single FFT implementation** — V1 had `processFFT()` duplicated 5 times
 - **No conditional compilation** — all dependencies are mandatory (except optional BrainFlow)
-- **Proper namespace** — `lpl::bci` with sub-namespaces
+- **Proper namespace** — `bci` with sub-namespaces
 - **Centralized constants** — `Constants.hpp` replaces 5 copies of `BCI_CHANNELS`
 - **RAII everywhere** — `std::jthread`, `std::unique_ptr`, PIMPL for serial ports
 - **Fixed bugs** — V1's `StabilityMonitor::_distanceHistory` was never populated

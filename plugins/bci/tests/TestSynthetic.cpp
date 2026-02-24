@@ -1,6 +1,6 @@
 /**
  * @file TestSynthetic.cpp
- * @brief Unit tests for lpl::bci::source::SyntheticGenerator and SyntheticSource.
+ * @brief Unit tests for bci::source::SyntheticGenerator and SyntheticSource.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -9,7 +9,7 @@
 #include "lpl/bci/source/SyntheticSource.hpp"
 #include "lpl/bci/source/sim/SyntheticGenerator.hpp"
 
-using namespace lpl::bci::source;
+using namespace bci::source;
 
 TEST_CASE("SyntheticGenerator produces correct sample count", "[source][synthetic]")
 {
@@ -76,7 +76,7 @@ TEST_CASE("SyntheticSource implements ISource interface", "[source][synthetic]")
     auto startResult = source.start();
     REQUIRE(startResult.has_value());
 
-    std::vector<lpl::bci::Sample> buffer(32);
+    std::vector<bci::Sample> buffer(32);
     auto readResult = source.read(buffer);
     REQUIRE(readResult.has_value());
     // In block mode (realtime = false), read() currently yields kFftUpdateInterval (32) samples if buffer allows

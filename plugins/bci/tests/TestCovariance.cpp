@@ -1,6 +1,6 @@
 /**
  * @file TestCovariance.cpp
- * @brief Unit tests for lpl::bci::math covariance estimators.
+ * @brief Unit tests for bci::math covariance estimators.
  */
 
 #include <catch2/catch_test_macros.hpp>
@@ -8,7 +8,7 @@
 
 #include "lpl/bci/math/Covariance.hpp"
 
-using namespace lpl::bci::math;
+using namespace bci::math;
 using Catch::Matchers::WithinAbs;
 
 TEST_CASE("batchCovariance produces correct result", "[math][covariance]")
