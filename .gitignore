@@ -60,6 +60,8 @@ dkms.conf
 .ndk_link/
 .trash
 res/
+build/
+.xmake/
 visual
 *.apk
 *.java
