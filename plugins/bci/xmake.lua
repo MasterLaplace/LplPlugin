@@ -4,23 +4,18 @@
 
 set_xmakever("2.8.0")
 
+local xrepo_dir = path.absolute(path.join(os.projectdir(), "..", "..", "xmake-local-repo"))
+if os.isdir(xrepo_dir) then
+    add_repositories("local-xrepo", xrepo_dir)
+end
+
 -- ─── Dependencies ────────────────────────────────────────────────────────────
 
 add_requires("eigen")
 add_requires("boost")
 add_requires("catch2", {optional = true})
-
--- liblsl / brainflow: prefer system packages, fall back to xmake repo
-package("liblsl")
-    set_homepage("https://github.com/sccn/liblsl")
-    set_description("Lab Streaming Layer library")
-    on_fetch(function (package, opt)
-        if opt.system then
-            return package:find_package("system::lsl", {includes = "lsl_cpp.h", links = "lsl"})
-        end
-    end)
-package_end()
-add_requires("liblsl", {system = true, optional = true})
+add_requires("liblsl")
+add_requires("brainflow", {optional = true})
 
 -- ─── Options ─────────────────────────────────────────────────────────────────
 
@@ -55,11 +50,11 @@ target("lpl-bci")
         add_files("src/lpl/bci/source/serial/SerialPortWin32.cpp")
     end
 
-    add_packages("eigen", "boost", "liblsl")
+    add_packages("eigen", "boost", "liblsl", {public = true})
 
     if has_config("with_brainflow") then
-        add_packages("brainflow")
-        add_defines("LPL_HAS_BRAINFLOW")
+        add_packages("brainflow", {public = true})
+        add_defines("LPL_HAS_BRAINFLOW", {public = true})
     end
 
     add_cxxflags("-fno-rtti", {tools = {"gcc", "clang"}})
@@ -73,8 +68,12 @@ target("lpl-bci-tests")
     set_warnings("all", "error")
     set_default(false)
 
-    add_deps("lpl-bci")
-    add_packages("catch2")
+    add_deps("lpl-bci", {public = true})
+    add_packages("catch2", "eigen", "boost", "liblsl")
+
+    if has_config("with_brainflow") then
+        add_packages("brainflow")
+    end
 
     add_files("tests/*.cpp")
 

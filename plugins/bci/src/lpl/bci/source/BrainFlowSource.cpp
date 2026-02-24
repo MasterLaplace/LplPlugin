@@ -5,6 +5,7 @@
  */
 
 #include "lpl/bci/source/BrainFlowSource.hpp"
+#include "lpl/bci/core/Constants.hpp"
 
 #include <algorithm>
 

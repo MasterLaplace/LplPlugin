@@ -84,7 +84,7 @@ Expected<SignalBlock> FftProcessor::process(const SignalBlock &input)
         .channelCount = input.channelCount,
         .timestamp = input.timestamp
     };
-    output.data.resize(_halfSize, std::vector<float>(input.channelCount, 0.0f));
+    output.data.resize(_halfSize + 1, std::vector<float>(input.channelCount, 0.0f));
 
     std::vector<Complex> buffer(_fftSize);
 
@@ -96,7 +96,7 @@ Expected<SignalBlock> FftProcessor::process(const SignalBlock &input)
         bitReversalPermutation(buffer);
         butterflyPass(buffer);
 
-        for (std::size_t i = 0; i < _halfSize; ++i) {
+        for (std::size_t i = 0; i <= _halfSize; ++i) {
             output.data[i][ch] = std::abs(buffer[i]) * _normFactor;
         }
     }

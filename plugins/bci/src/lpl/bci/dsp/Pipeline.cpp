@@ -30,8 +30,7 @@ PipelineBuilder Pipeline::builder()
 Expected<SignalBlock> Pipeline::process(const SignalBlock &input)
 {
     if (_stages.empty()) {
-        return std::unexpected(
-            Error::make(ErrorCode::kPipelineEmpty, "Pipeline contains no stages"));
+        return input;
     }
 
     Expected<SignalBlock> current = _stages.front()->process(input);

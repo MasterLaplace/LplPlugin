@@ -48,7 +48,9 @@ Expected<std::size_t> CsvReplaySource::read(std::span<Sample> buffer)
     }
 
     std::size_t samplesToProcess;
-    if (_config.realtime) {
+    if (_config.burstMode) {
+        samplesToProcess = buffer.size();
+    } else if (_config.realtime) {
         auto now = std::chrono::steady_clock::now();
         const float elapsed =
             std::chrono::duration<float>(now - _lastRead).count();
@@ -71,8 +73,8 @@ Expected<std::size_t> CsvReplaySource::read(std::span<Sample> buffer)
                 _cursor = 0;
             } else {
                 _running = false;
-                break;
             }
+            break; // Yield existing samples back to caller, resume next time
         }
 
         buffer[count].channels = _data[_cursor];
