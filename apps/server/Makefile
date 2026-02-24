@@ -6,7 +6,7 @@ NVCC_AVAILABLE ?=
 
 SHARED   := ../../shared
 ENGINE   := ../../engine
-BCI      := ../../bci/include
+BCI      := ../../plugins/bci/include
 
 INCLUDES := -I$(SHARED) -I$(ENGINE) -I$(BCI)
 CXXFLAGS := -O3 -std=c++20 -Wall -pthread $(INCLUDES)

@@ -1,6 +1,6 @@
 # =============================================================
 #  LAPLACE PLUGIN — Root Orchestrator
-#  Structure: shared/ kernel/ engine/ bci/ apps/
+#  Structure: shared/ kernel/ engine/ plugins/ apps/
 # =============================================================
 
 CC   = gcc
@@ -46,14 +46,14 @@ android:
 	$(MAKE) -C apps/client android
 
 test:
-	$(MAKE) -C bci test
+	$(MAKE) -C plugins/bci test
 
 clean:
 	$(MAKE) -C kernel clean
 	$(MAKE) -C apps/server clean
 	$(MAKE) -C apps/benchmark clean
 	$(MAKE) -C apps/client clean
-	$(MAKE) -C bci clean
+	$(MAKE) -C plugins/bci clean
 
 install:
 	sudo insmod kernel/lpl_kmod.ko

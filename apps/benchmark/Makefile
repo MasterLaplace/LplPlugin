@@ -13,7 +13,12 @@ SHARED_HEADERS := $(SHARED)/lpl_protocol.h $(SHARED)/Math.hpp
 benchmark: benchmark.cpp $(ENGINE_HEADERS) $(SHARED_HEADERS)
 	$(CXX) $(CXXFLAGS) -o benchmark benchmark.cpp
 
-clean:
-	rm -f benchmark *.o
+benchmark_research: benchmark_research.cpp $(ENGINE_HEADERS) $(SHARED_HEADERS)
+	$(CXX) $(CXXFLAGS) -o benchmark_research benchmark_research.cpp
 
-.PHONY: benchmark clean
+all: benchmark benchmark_research
+
+clean:
+	rm -f benchmark benchmark_research *.o
+
+.PHONY: benchmark benchmark_research all clean

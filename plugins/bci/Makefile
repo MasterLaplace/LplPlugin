@@ -1,6 +1,6 @@
 CXX ?= g++
 
-SHARED   := ../shared
+SHARED   := ../../shared
 INCLUDES := -I$(SHARED) -Iinclude
 CXXFLAGS := -O3 -std=c++20 -Wall $(INCLUDES)
 
