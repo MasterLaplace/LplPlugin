@@ -46,14 +46,14 @@ android:
 	$(MAKE) -C apps/client android
 
 test:
-	$(MAKE) -C plugins/bci test
+	cd plugins/bci && xmake config --with_brainflow=n && xmake run lpl-bci-tests
 
 clean:
 	$(MAKE) -C kernel clean
 	$(MAKE) -C apps/server clean
 	$(MAKE) -C apps/benchmark clean
 	$(MAKE) -C apps/client clean
-	$(MAKE) -C plugins/bci clean
+	cd plugins/bci && xmake clean
 
 install:
 	sudo insmod kernel/lpl_kmod.ko

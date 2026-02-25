@@ -21,8 +21,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "BciSourceFactory.hpp"
-#include "Calibration.hpp"
+#include "source/SourceFactory.hpp"
+#include "calibration/Calibration.hpp"
+#include "dsp/Pipeline.hpp"
+#include "dsp/Windowing.hpp"
+#include "dsp/FftProcessor.hpp"
+#include "dsp/BandExtractor.hpp"
+#include "metric/NeuralMetric.hpp"
+#include "core/Types.hpp"
 #include "Core.hpp"
 #include "Systems.hpp"
 
@@ -42,15 +48,17 @@ struct Camera {
 struct ClientState {
     Core *core = nullptr;
     Camera camera;
-    std::unique_ptr<BciSource> bci; ///< Source BCI abstraite (serial/synthetic/lsl/csv)
-    Calibration calibration{30.0f}; ///< Machine à états de calibration
+    std::unique_ptr<bci::source::ISource> bci;
+    bci::dsp::Pipeline pipeline;
+    bci::metric::NeuralMetric metric;
+    bci::calibration::Calibration calibration{bci::calibration::CalibrationConfig{8, 30}}; // Default config, updated later
     uint32_t myEntityId = 0;
     bool connected = false;
     GLFWwindow *window = nullptr;
 
     // Neural state (thread-safe)
     std::mutex neuralMutex;
-    NeuralState neuralState;
+    bci::NeuralState neuralState{8}; // Assuming 8 channels initially
 };
 
 static ClientState state;
@@ -388,8 +396,58 @@ static void setupSystems(Core &core)
             if (!state.bci)
                 return;
             std::lock_guard<std::mutex> lock(state.neuralMutex);
-            state.bci->update(state.neuralState);
-            state.calibration.tick(state.neuralState);
+
+            // Allocate space for up to 256 samples
+            std::vector<bci::Sample> samples(256);
+            auto readResult = state.bci->read(samples);
+            if (!readResult || *readResult == 0) return; // No new samples
+
+            // Build SignalBlock from acquired samples
+            bci::SignalBlock block;
+            block.channelCount = state.bci->info().channelCount;
+            // Accumulating in memory for the pipeline to process
+            // In a real scenario, should buffer 256 samples properly
+            // Here, for simplicity we create a block out of what was read
+            for(size_t i = 0; i < *readResult; ++i) {
+                block.data.push_back(samples[i].channels);
+            }
+            block.sampleRate = state.bci->info().sampleRate;
+
+            // Must have enough samples for FFT if possible,
+            // the pipeline will process it.
+            // The FftProcessor takes 256. If block is smaller, FFT will zero-pad or similar.
+            // Let's pass it to the pipeline.
+            auto result = state.pipeline.process(block);
+            if (!result) return;
+
+            // After DSP pipeline, result is a block of band powers
+            // Usually [sampleIdx][channelIdx*numBands + band_index] or similar.
+            // But since BandExtractor emits [channelIdx][bandIdx] we assume we extract alpha/beta
+
+            // Assuming we extract the latest values from the block
+            // In the v2 architecture, BandPower is produced. We will extract Alpha and Beta
+            // To simplify, we get mock or last powers:
+            size_t nChannels = block.channelCount;
+            std::vector<float> alphaPowers(nChannels, 0.0f);
+            std::vector<float> betaPowers(nChannels, 0.0f);
+
+            // Very simplified: assuming the block has the powers
+            if (!result->empty()) {
+                for (size_t c = 0; c < nChannels; ++c) {
+                    if (result->data.back().size() > c * 2 + 1) {
+                        alphaPowers[c] = result->data.back()[c * 2 + 0];
+                        betaPowers[c] = result->data.back()[c * 2 + 1];
+                    }
+                }
+            }
+
+            if (state.calibration.state() == bci::calibration::CalibrationState::kCalibrating) {
+                auto err = state.calibration.addTrial(alphaPowers, betaPowers);
+                if (err) std::cerr << "Calibration error: " << err.error().message() << "\n";
+            } else if (state.calibration.state() == bci::calibration::CalibrationState::kReady) {
+                // Update baselines first if needed, or state.metric is already updated
+                state.neuralState = state.metric.compute(alphaPowers, betaPowers);
+            }
 
             // Update InputManager with neural data
             if (state.connected && state.myEntityId != 0)
@@ -564,6 +622,45 @@ static GLFWwindow *initWindow()
     return window;
 }
 
+struct BciConfig {
+    bci::source::SourceConfig source;
+    bci::calibration::CalibrationConfig calib;
+};
+
+static BciConfig bci_parse_args(int argc, char *argv[])
+{
+    BciConfig config;
+    // defaults
+    config.source.mode = bci::AcquisitionMode::kSynthetic;
+    config.calib.requiredTrials = 30;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg(argv[i]);
+        auto extractValue = [&](const std::string &prefix) -> std::string {
+            if (arg.rfind(prefix, 0) == 0) return arg.substr(prefix.size());
+            return {};
+        };
+
+        if (auto v = extractValue("--bci-mode="); !v.empty()) {
+            if (v == "serial") config.source.mode = bci::AcquisitionMode::kSerial;
+            else if (v == "lsl") config.source.mode = bci::AcquisitionMode::kLsl;
+            else if (v == "csv") config.source.mode = bci::AcquisitionMode::kCsvReplay;
+        } else if (auto v2 = extractValue("--csv-file="); !v2.empty()) {
+            config.source.csvFilePath = v2;
+        } else if (auto v3 = extractValue("--lsl-stream="); !v3.empty()) {
+            config.source.lslStreamName = v3;
+        } else if (auto v4 = extractValue("--serial-port="); !v4.empty()) {
+            config.source.serialPort = v4;
+        } else if (auto v5 = extractValue("--bci-seed="); !v5.empty()) {
+            config.source.syntheticSeed = std::stoull(v5);
+        } else if (auto v6 = extractValue("--calib-duration="); !v6.empty()) {
+            config.calib.requiredTrials = std::stoull(v6);
+        }
+    }
+    return config;
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────
 
 int main(int argc, char *argv[])
@@ -615,13 +712,36 @@ int main(int argc, char *argv[])
     std::cout << "[MAIN] Network initialized\n";
 
     // 4. Init BCI (abstracted source with fallback)
-    std::cout << "[MAIN] Initializing BCI (mode: " << bci_mode_name(bciCfg.mode) << ")...\n";
-    state.bci = BciSourceFactory::createAndInit(bciCfg);
-    if (state.bci)
+    std::cout << "[MAIN] Initializing BCI (mode: " << bci::acquisitionModeName(bciCfg.source.mode) << ")...\n";
+    auto sourceRes = bci::source::SourceFactory::create(bciCfg.source);
+    if (sourceRes)
     {
-        std::cout << "[CLIENT] BCI source active: " << state.bci->name() << "\n";
-        state.calibration = Calibration(bciCfg.calibDuration);
-        state.calibration.start();
+        state.bci = std::move(sourceRes.value());
+        if (state.bci->start()) {
+            std::cout << "[CLIENT] BCI source active: " << state.bci->info().name << "\n";
+            bciCfg.calib.channelCount = state.bci->info().channelCount;
+
+            state.calibration = bci::calibration::Calibration(bciCfg.calib);
+
+            // Build DSP Pipeline
+            std::vector<bci::FrequencyBand> bands = { bci::band::kAlpha, bci::band::kBeta };
+            state.pipeline = bci::dsp::Pipeline::builder()
+                .add<bci::dsp::HannWindow>()
+                .add<bci::dsp::FftProcessor>(256)
+                .add<bci::dsp::BandExtractor>(bands, state.bci->info().sampleRate, 256)
+                .build();
+
+            state.calibration.onStateChange([&](bci::calibration::CalibrationState oldState, bci::calibration::CalibrationState newState){
+                if (newState == bci::calibration::CalibrationState::kReady) {
+                    auto baselines = state.calibration.baselines();
+                    if (baselines) state.metric.setBaselines(*baselines);
+                }
+            });
+            state.calibration.start();
+        } else {
+            std::cout << "[CLIENT] BCI source start failed.\n";
+            state.bci.reset();
+        }
     }
     else
     {
