@@ -3,7 +3,7 @@
  * @brief Implementation of neural state normalization.
  */
 
-#include "lpl/bci/metric/NeuralMetric.hpp"
+#include "metric/NeuralMetric.hpp"
 
 #include <algorithm>
 #include <cmath>

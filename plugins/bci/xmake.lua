@@ -2,7 +2,7 @@
 -- Build configuration for the LplPlugin BCI module (V2)
 -- Requirements: C++23, Eigen3, Boost, liblsl, BrainFlow, Catch2
 
-set_xmakever("2.8.0")
+set_xmakever("3.0.7")
 
 add_repositories("package_repo https://github.com/MasterLaplace/xmake-repo.git")
 

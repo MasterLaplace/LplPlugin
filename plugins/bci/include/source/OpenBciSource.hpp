@@ -15,8 +15,8 @@
 
 #include "ISource.hpp"
 #include "serial/SerialPort.hpp"
-#include "lpl/bci/core/Constants.hpp"
-#include "lpl/bci/dsp/RingBuffer.hpp"
+#include "core/Constants.hpp"
+#include "dsp/RingBuffer.hpp"
 
 #include <stop_token>
 #include <thread>

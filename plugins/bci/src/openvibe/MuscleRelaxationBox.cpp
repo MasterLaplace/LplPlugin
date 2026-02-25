@@ -3,8 +3,8 @@
  * @brief Implementation of the muscle relaxation processor.
  */
 
-#include "lpl/bci/openvibe/MuscleRelaxationBox.hpp"
-#include "lpl/bci/math/Statistics.hpp"
+#include "openvibe/MuscleRelaxationBox.hpp"
+#include "math/Statistics.hpp"
 
 namespace bci::openvibe {
 

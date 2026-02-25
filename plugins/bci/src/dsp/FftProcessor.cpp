@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/dsp/FftProcessor.hpp"
+#include "dsp/FftProcessor.hpp"
 
 #include <bit>
 #include <cmath>

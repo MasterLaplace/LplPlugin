@@ -7,7 +7,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <cmath>
 
-#include "lpl/bci/math/Statistics.hpp"
+#include "math/Statistics.hpp"
 
 using namespace bci::math;
 using Catch::Matchers::WithinAbs;

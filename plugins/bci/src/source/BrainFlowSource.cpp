@@ -4,8 +4,8 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/BrainFlowSource.hpp"
-#include "lpl/bci/core/Constants.hpp"
+#include "source/BrainFlowSource.hpp"
+#include "core/Constants.hpp"
 
 #include <algorithm>
 

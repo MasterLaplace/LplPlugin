@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/dsp/Pipeline.hpp"
+#include "dsp/Pipeline.hpp"
 
 namespace bci::dsp {
 

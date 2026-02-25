@@ -7,7 +7,7 @@ C++23 · Eigen3 · Boost · liblsl · Catch2
 
 ```
 plugins/bci/
-├── include/lpl/bci/
+├── include/
 │   ├── core/           # Types, Constants, Error, Concepts
 │   ├── dsp/            # IStage, Pipeline, Windowing, FFT, BandExtractor, RingBuffer
 │   ├── source/         # ISource, OpenBCI, Synthetic, LSL, BrainFlow, CSV, Factory
@@ -18,7 +18,7 @@ plugins/bci/
 │   ├── calibration/    # State machine (Idle → Calibrating → Ready)
 │   ├── stream/         # LslOutlet (LSL broadcast)
 │   └── openvibe/       # MuscleRelaxationBox, StabilityMonitorBox
-├── src/lpl/bci/        # Implementation files (.cpp)
+├── src/        # Implementation files (.cpp)
 ├── tests/              # Catch2 unit tests
 ├── _legacy/            # V1 archived code (read-only reference)
 └── xmake.lua           # Build configuration

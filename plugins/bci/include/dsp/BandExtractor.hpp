@@ -13,7 +13,7 @@
 #pragma once
 
 #include "IStage.hpp"
-#include "lpl/bci/core/Constants.hpp"
+#include "core/Constants.hpp"
 
 #include <vector>
 

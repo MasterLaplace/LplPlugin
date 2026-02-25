@@ -16,7 +16,7 @@
 #pragma once
 
 #include "ISource.hpp"
-#include "lpl/bci/core/Constants.hpp"
+#include "core/Constants.hpp"
 
 #include <chrono>
 #include <string>

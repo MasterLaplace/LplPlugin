@@ -23,8 +23,8 @@
 
 #pragma once
 
-#include "lpl/bci/core/Types.hpp"
-#include "lpl/bci/metric/SignalMetric.hpp"
+#include "core/Types.hpp"
+#include "metric/SignalMetric.hpp"
 
 #include <cstddef>
 #include <span>

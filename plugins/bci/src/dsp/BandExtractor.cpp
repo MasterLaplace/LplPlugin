@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/dsp/BandExtractor.hpp"
+#include "dsp/BandExtractor.hpp"
 
 #include <algorithm>
 #include <cmath>

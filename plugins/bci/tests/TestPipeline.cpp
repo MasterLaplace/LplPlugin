@@ -6,10 +6,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "lpl/bci/dsp/BandExtractor.hpp"
-#include "lpl/bci/dsp/FftProcessor.hpp"
-#include "lpl/bci/dsp/Pipeline.hpp"
-#include "lpl/bci/dsp/Windowing.hpp"
+#include "dsp/BandExtractor.hpp"
+#include "dsp/FftProcessor.hpp"
+#include "dsp/Pipeline.hpp"
+#include "dsp/Windowing.hpp"
 
 using namespace bci;
 using namespace bci::dsp;

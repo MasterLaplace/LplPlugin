@@ -3,7 +3,7 @@
  * @brief Implementation of basic statistical utilities.
  */
 
-#include "lpl/bci/math/Statistics.hpp"
+#include "math/Statistics.hpp"
 
 #include <cmath>
 #include <numeric>

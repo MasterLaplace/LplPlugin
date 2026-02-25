@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "lpl/bci/dsp/RingBuffer.hpp"
+#include "dsp/RingBuffer.hpp"
 
 using namespace bci::dsp;
 

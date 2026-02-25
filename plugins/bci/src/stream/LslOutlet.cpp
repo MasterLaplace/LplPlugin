@@ -3,7 +3,7 @@
  * @brief Implementation of the LSL outlet wrapper.
  */
 
-#include "lpl/bci/stream/LslOutlet.hpp"
+#include "stream/LslOutlet.hpp"
 
 #include <lsl_cpp.h>
 #include <vector>

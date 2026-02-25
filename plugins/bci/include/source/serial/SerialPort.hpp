@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "lpl/bci/core/Error.hpp"
+#include "core/Error.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +32,7 @@ struct SerialConfig {
     bool parity = false;
     std::uint8_t vmin = 33;
     std::uint8_t vtime = 1;
+    bool nonBlocking = false;
 };
 
 /**

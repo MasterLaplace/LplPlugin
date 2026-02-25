@@ -7,8 +7,8 @@
  * report default values.
  */
 
-#include "lpl/bci/metric/StabilityMetric.hpp"
-#include "lpl/bci/math/Riemannian.hpp"
+#include "metric/StabilityMetric.hpp"
+#include "math/Riemannian.hpp"
 
 #include <cmath>
 #include <numeric>

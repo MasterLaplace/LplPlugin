@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "lpl/bci/core/Error.hpp"
+#include "core/Error.hpp"
 
 #include <Eigen/Dense>
 #include <cstddef>

@@ -6,7 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "lpl/bci/math/Covariance.hpp"
+#include "math/Covariance.hpp"
 
 using namespace bci::math;
 using Catch::Matchers::WithinAbs;

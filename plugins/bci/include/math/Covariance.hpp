@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "lpl/bci/core/Types.hpp"
+#include "core/Types.hpp"
 
 #include <Eigen/Dense>
 #include <cstddef>

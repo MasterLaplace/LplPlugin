@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include "lpl/bci/core/Error.hpp"
-#include "lpl/bci/metric/StabilityMetric.hpp"
+#include "core/Error.hpp"
+#include "metric/StabilityMetric.hpp"
 
 #include <Eigen/Dense>
 #include <cstddef>

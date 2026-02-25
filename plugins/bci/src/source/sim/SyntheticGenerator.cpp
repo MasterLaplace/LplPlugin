@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/sim/SyntheticGenerator.hpp"
+#include "source/sim/SyntheticGenerator.hpp"
 
 #include <chrono>
 #include <cmath>

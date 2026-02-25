@@ -4,12 +4,12 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/SourceFactory.hpp"
-#include "lpl/bci/source/BrainFlowSource.hpp"
-#include "lpl/bci/source/CsvReplaySource.hpp"
-#include "lpl/bci/source/LslSource.hpp"
-#include "lpl/bci/source/OpenBciSource.hpp"
-#include "lpl/bci/source/SyntheticSource.hpp"
+#include "source/SourceFactory.hpp"
+#include "source/BrainFlowSource.hpp"
+#include "source/CsvReplaySource.hpp"
+#include "source/LslSource.hpp"
+#include "source/OpenBciSource.hpp"
+#include "source/SyntheticSource.hpp"
 
 namespace bci::source {
 

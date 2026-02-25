@@ -8,7 +8,7 @@
  * V1 OpenBCIDriver serial setup.
  */
 
-#include "lpl/bci/source/serial/SerialPort.hpp"
+#include "source/serial/SerialPort.hpp"
 
 #include <cerrno>
 #include <cstring>
@@ -59,7 +59,11 @@ ExpectedVoid SerialPort::open(const SerialConfig &config)
             Error::make(ErrorCode::kAlreadyRunning, "Serial port already open"));
     }
 
-    _impl->fd = ::open(config.portPath.c_str(), O_RDWR | O_NOCTTY);
+    int flags = O_RDWR | O_NOCTTY;
+    if (config.nonBlocking)
+        flags |= O_NONBLOCK;
+
+    _impl->fd = ::open(config.portPath.c_str(), flags);
     if (_impl->fd < 0) {
         return std::unexpected(
             Error::make(ErrorCode::kSerialPortNotFound,
@@ -132,6 +136,9 @@ Expected<std::size_t> SerialPort::read(std::span<std::uint8_t> buffer)
 
     auto bytesRead = ::read(_impl->fd, buffer.data(), buffer.size());
     if (bytesRead < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return std::size_t{0};
+
         return std::unexpected(
             Error::make(ErrorCode::kSerialReadFailed,
                 std::string("read: ") + std::strerror(errno)));

@@ -3,7 +3,7 @@
  * @brief Implementation of batch and online covariance estimators.
  */
 
-#include "lpl/bci/math/Covariance.hpp"
+#include "math/Covariance.hpp"
 
 namespace bci::math {
 

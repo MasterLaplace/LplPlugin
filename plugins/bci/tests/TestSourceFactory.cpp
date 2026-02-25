@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "lpl/bci/source/SourceFactory.hpp"
+#include "source/SourceFactory.hpp"
 
 using namespace bci;
 using namespace bci::source;

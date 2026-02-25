@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/LslSource.hpp"
+#include "source/LslSource.hpp"
 
 namespace bci::source {
 

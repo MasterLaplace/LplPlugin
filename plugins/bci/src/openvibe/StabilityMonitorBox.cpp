@@ -3,7 +3,7 @@
  * @brief Implementation of the EMA-smoothed stability monitor.
  */
 
-#include "lpl/bci/openvibe/StabilityMonitorBox.hpp"
+#include "openvibe/StabilityMonitorBox.hpp"
 
 #include <algorithm>
 

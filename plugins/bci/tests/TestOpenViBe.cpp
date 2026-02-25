@@ -6,8 +6,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "lpl/bci/openvibe/MuscleRelaxationBox.hpp"
-#include "lpl/bci/openvibe/StabilityMonitorBox.hpp"
+#include "openvibe/MuscleRelaxationBox.hpp"
+#include "openvibe/StabilityMonitorBox.hpp"
 
 using namespace bci::openvibe;
 using Catch::Matchers::WithinAbs;

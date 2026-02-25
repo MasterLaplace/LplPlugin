@@ -13,8 +13,8 @@
 
 #pragma once
 
-#include "lpl/bci/core/Error.hpp"
-#include "lpl/bci/core/Types.hpp"
+#include "core/Error.hpp"
+#include "core/Types.hpp"
 
 #include <span>
 

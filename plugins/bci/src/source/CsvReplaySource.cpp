@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/CsvReplaySource.hpp"
+#include "source/CsvReplaySource.hpp"
 
 #include <algorithm>
 #include <fstream>

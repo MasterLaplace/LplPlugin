@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "lpl/bci/core/Types.hpp"
+#include "core/Types.hpp"
 
 #include <cstddef>
 #include <cstdint>

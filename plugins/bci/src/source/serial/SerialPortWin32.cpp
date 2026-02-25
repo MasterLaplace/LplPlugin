@@ -7,7 +7,7 @@
  * Provides the same interface as the POSIX implementation.
  */
 
-#include "lpl/bci/source/serial/SerialPort.hpp"
+#include "source/serial/SerialPort.hpp"
 
 #ifdef _WIN32
 
@@ -90,9 +90,15 @@ ExpectedVoid SerialPort::open(const SerialConfig &config)
     }
 
     COMMTIMEOUTS timeouts{};
-    timeouts.ReadIntervalTimeout = 10;
-    timeouts.ReadTotalTimeoutMultiplier = 1;
-    timeouts.ReadTotalTimeoutConstant = 100;
+    if (config.nonBlocking) {
+        timeouts.ReadIntervalTimeout = MAXDWORD;
+        timeouts.ReadTotalTimeoutMultiplier = 0;
+        timeouts.ReadTotalTimeoutConstant = 0;
+    } else {
+        timeouts.ReadIntervalTimeout = 10;
+        timeouts.ReadTotalTimeoutMultiplier = 1;
+        timeouts.ReadTotalTimeoutConstant = 100;
+    }
     SetCommTimeouts(_impl->handle, &timeouts);
 
     return {};

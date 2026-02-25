@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/OpenBciSource.hpp"
+#include "source/OpenBciSource.hpp"
 
 #include <array>
 #include <cstring>
@@ -74,11 +74,12 @@ void OpenBciSource::stop() noexcept
     }
 
     _worker.request_stop();
+    _serial.close();
+
     if (_worker.joinable()) {
         _worker.join();
     }
 
-    _serial.close();
     _started = false;
 }
 
@@ -98,6 +99,9 @@ void OpenBciSource::workerLoop(std::stop_token stopToken)
     while (!stopToken.stop_requested()) {
         auto result = _serial.read(buffer);
         if (!result || result.value() != kCytonPacketSize) {
+            if (stopToken.stop_requested())
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
 

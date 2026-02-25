@@ -3,8 +3,8 @@
  * @brief Implementation of the calibration state machine.
  */
 
-#include "lpl/bci/calibration/Calibration.hpp"
-#include "lpl/bci/math/Statistics.hpp"
+#include "calibration/Calibration.hpp"
+#include "math/Statistics.hpp"
 
 #include <format>
 

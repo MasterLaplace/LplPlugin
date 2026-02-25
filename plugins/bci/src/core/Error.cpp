@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/core/Error.hpp"
+#include "core/Error.hpp"
 
 #include <sstream>
 

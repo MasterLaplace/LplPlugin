@@ -13,8 +13,8 @@
 
 #pragma once
 
-#include "lpl/bci/core/Constants.hpp"
-#include "lpl/bci/core/Types.hpp"
+#include "core/Constants.hpp"
+#include "core/Types.hpp"
 
 #include <array>
 #include <cstdint>

@@ -6,9 +6,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "lpl/bci/metric/NeuralMetric.hpp"
-#include "lpl/bci/metric/SignalMetric.hpp"
-#include "lpl/bci/metric/StabilityMetric.hpp"
+#include "metric/NeuralMetric.hpp"
+#include "metric/SignalMetric.hpp"
+#include "metric/StabilityMetric.hpp"
 
 using namespace bci::metric;
 using Catch::Matchers::WithinAbs;

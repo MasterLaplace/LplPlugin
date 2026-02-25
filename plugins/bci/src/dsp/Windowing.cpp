@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/dsp/Windowing.hpp"
+#include "dsp/Windowing.hpp"
 
 #include <cmath>
 #include <numbers>

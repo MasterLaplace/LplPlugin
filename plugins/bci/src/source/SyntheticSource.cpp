@@ -4,7 +4,7 @@
  * @author MasterLaplace
  */
 
-#include "lpl/bci/source/SyntheticSource.hpp"
+#include "source/SyntheticSource.hpp"
 
 #include <algorithm>
 
