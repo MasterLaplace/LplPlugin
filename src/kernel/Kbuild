@@ -1,0 +1,14 @@
+# /////////////////////////////////////////////////////////////////////////////
+# Kbuild — out-of-tree Linux kernel module build for lpl_kmod
+# /////////////////////////////////////////////////////////////////////////////
+
+obj-m += lpl_kmod.o
+
+# Uncomment to build manually:
+# KDIR := /lib/modules/$(shell uname -r)/build
+#
+# all:
+# 	$(MAKE) -C $(KDIR) M=$(PWD) modules
+#
+# clean:
+# 	$(MAKE) -C $(KDIR) M=$(PWD) clean
