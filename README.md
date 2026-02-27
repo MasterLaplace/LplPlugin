@@ -20,6 +20,11 @@ This codebase has been thoroughly refactored from its legacy roots into a **flat
 - **Vulkan Renderer** — Integrated Vulkan pipeline (ported from [VkWrapper](https://github.com/EngineSquared/VkWrapper.git)) with ImGui support.
 - **BCI Integration** — Brain-Computer Interface module (OpenBCI Cyton, 8ch/250Hz) with real-time DSP: Schumacher $R(t)$, Riemannian $\delta_R$, Mahalanobis $D_M$.
 
+> [!NOTE]
+> This is an experimental project currently under development, not a distributable software product.
+> I am currently testing an architecture that combines various personal projects I have undertaken. It is still in the testing phase and is not yet fully functional.
+> However, the `_legacy` folder contains a functional version of the original proof of concept for this repository.
+
 ---
 
 ## Directory Structure
