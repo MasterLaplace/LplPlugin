@@ -27,6 +27,9 @@
 #include <lpl/net/netcode/AuthoritativeStrategy.hpp>
 #include <lpl/net/netcode/RollbackStrategy.hpp>
 
+#include <lpl/render/VulkanRenderer.hpp>
+#include <GLFW/glfw3.h>
+
 namespace lpl::engine {
 
 struct Engine::Impl
@@ -44,6 +47,9 @@ struct Engine::Impl
     std::unique_ptr<ecs::WorldPartition> world;
     std::unique_ptr<net::netcode::INetcodeStrategy> netcode;
     std::shared_ptr<net::transport::ITransport> transport;
+
+    std::unique_ptr<render::IRenderer> renderer;
+    GLFWwindow* window{nullptr};
 
     bool initialised{false};
 
@@ -107,6 +113,31 @@ core::Expected<void> Engine::init()
         _impl->netcode = std::make_unique<net::netcode::RollbackStrategy>(8);
     }
 
+    if (_impl->config.enableGpu())
+    {
+        core::Log::info("Engine: Booting GPU Renderer");
+
+        if (!glfwInit())
+        {
+            core::Log::error("Failed to initialize GLFW");
+            return core::makeError(core::ErrorCode::kGpuInitFailed, "Failed to initialize GLFW");
+        }
+
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        _impl->window = glfwCreateWindow(800, 600, "LplPlugin Client", nullptr, nullptr);
+
+        _impl->renderer = std::make_unique<render::vk::VulkanRenderer>();
+        if (auto res = _impl->renderer->init(800, 600); !res)
+        {
+            core::Log::error("Failed to initialize VulkanRenderer");
+            return res;
+        }
+        
+        // Let the Vulkan Renderer bind to the GLFW Window
+        auto& vkRenderer = static_cast<render::vk::VulkanRenderer&>(*_impl->renderer);
+        vkRenderer.initVulkanContext(_impl->window);
+    }
+
     _impl->initialised = true;
     core::Log::info("Engine::init — done");
     return {};
@@ -115,6 +146,12 @@ core::Expected<void> Engine::init()
 void Engine::run()
 {
     LPL_ASSERT(_impl->initialised);
+
+    if (auto res = _impl->scheduler.buildGraph(); !res)
+    {
+        core::Log::fatal("Failed to build ECS system graph: {}", res.error().message());
+        std::abort();
+    }
 
     LoopCallbacks callbacks;
 
@@ -135,12 +172,26 @@ void Engine::run()
         _impl->scheduler.tick(static_cast<core::f32>(dt));
     };
 
-    callbacks.render = [](core::f64 /*alpha*/)
+    callbacks.render = [this](core::f64 /*alpha*/)
     {
+        if (_impl->renderer)
+        {
+            _impl->renderer->beginFrame();
+            _impl->renderer->endFrame(); 
+        }
+
+        if (_impl->window && glfwWindowShouldClose(_impl->window))
+        {
+            requestShutdown();
+        }
     };
 
-    callbacks.postFrame = []()
+    callbacks.postFrame = [this]()
     {
+        if (_impl->window)
+        {
+            glfwPollEvents();
+        }
     };
 
     _impl->loop.run(callbacks);
@@ -165,6 +216,19 @@ void Engine::shutdown()
         _impl->transport->close();
     }
     
+    if (_impl->renderer)
+    {
+        _impl->renderer->shutdown();
+        _impl->renderer.reset();
+    }
+
+    if (_impl->window)
+    {
+        glfwDestroyWindow(_impl->window);
+        _impl->window = nullptr;
+    }
+    glfwTerminate();
+
     _impl->inputManager.shutdown();
     _impl->initialised = false;
 }

@@ -1,36 +1,117 @@
-# FullDive Engine (LPL Plugin)
+# FullDive Engine — LplPlugin
 
-Welcome to the **FullDive Engine**, the highly optimized, C++23 foundation for neuro-immersive simulations.
+> **A modular, experimental ultra-optimized C++23 engine for neuro-immersive simulations.**
+
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Build: xmake](https://img.shields.io/badge/build-xmake-brightgreen)](https://xmake.io)
+[![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)]()
+
+---
 
 ## Architecture Highlights
-This codebase has been thoroughly refactored from its legacy roots into a modular, horizontally scalable architecture powered by:
-- **Lockless Zero-Copy IPC**: Utilizing Linux kernel modules (`/dev/lpl0`) with `vmalloc_user` mapped memory and `smp_*` lockless ring buffers. Bypasses standard VFS syscall constraints for microsecond-latency network broadcasting. 
-- **Data-Oriented ECS**: A highly optimized Entity Component System (`lpl::ecs`) using flat archetypes, atomic concurrent registries, and strictly cache-aligned component layouts.
-- **DDA Task Scheduler**: System dependency graph scheduling execution over an integrated Thread Pool leveraging work-stealing and concurrent atomic queues.
-- **Deterministic Fixed-Point Math**: Replaced floating-point drift with `Fixed32` types combined with custom CORDIC trigonometry functions for guaranteed deterministic cross-platform physics validation.
-- **Flat Dynamic Octree**: Fast, recursive 3D spatial partitioning utilizing Morton (Z-order) encoded bit-interleaving and high-performance LSD Radix Sorting variants.
+
+This codebase has been thoroughly refactored from its legacy roots into a **flat, modular architecture** of 16 independent libraries orchestrated by xmake:
+
+- **Lockless Zero-Copy IPC** — Linux kernel module (`/dev/lpl0`) with `vmalloc_user` mapped memory and `smp_*` lockless ring buffers for microsecond-latency network I/O.
+- **Data-Oriented ECS** — Flat archetypes, atomic concurrent registries, cache-aligned SoA component layouts with double-buffered hot data.
+- **DDA Task Scheduler** — System dependency graph (DAG) split into PreSwap/PostSwap phases, executed over an integrated ThreadPool with work-stealing.
+- **Deterministic Fixed-Point Math** — `Fixed32` types with custom CORDIC trigonometry for cross-platform deterministic physics.
+- **Flat Dynamic Octree** — Morton (Z-order) encoded spatial partitioning with LSD Radix Sort and adaptive brute-force/octree broadphase.
+- **Vulkan Renderer** — Integrated Vulkan pipeline (ported from [VkWrapper](https://github.com/EngineSquared/VkWrapper.git)) with ImGui support.
+- **BCI Integration** — Brain-Computer Interface module (OpenBCI Cyton, 8ch/250Hz) with real-time DSP: Schumacher $R(t)$, Riemannian $\delta_R$, Mahalanobis $D_M$.
+
+---
 
 ## Directory Structure
-- `apps/` — Entry points (Server headless, Client visual, and Benchmarking suites).
-- `bci/` — Brain-Computer Interface adapters for non-invasive (EEG) hardware, integrating OpenBCI via LSL with DSP processing lines.
-- `kernel/` — Linux kernel module source (`lpl_kmod.c`) injecting directly into the Netfilter stack (`NF_INET_PRE_ROUTING`) for instant UDP ingestion.
-- `ecs/`, `physics/`, `net/`, `math/`, `core/` — Individual modules comprising the core runtime.
-- `_legacy/` — The previous generation's prototype codebase preserved for reference.
+
+```
+LplPlugin/
+├── core/           — Platform abstraction, types, assertions, logging
+├── math/           — Vec3, Quat, Fixed32, CORDIC, BoundaryBox
+├── memory/         — PinnedAllocator (CUDA zero-copy), pool allocators
+├── container/      — FlatAtomicsHashMap, Morton encoding, sparse sets
+├── concurrency/    — ThreadPool, SpinLock, atomic utilities
+├── ecs/            — Entity registry, Partition (SoA double-buffered chunks)
+├── physics/        — WorldPartition, collision (AABB, octree broadphase)
+├── net/            — UDP transport (kernel driver / socket fallback), protocol
+├── gpu/            — CUDA physics kernels, GPU lifecycle
+├── input/          — InputManager (keys, axes, neural state per entity)
+├── render/         — Vulkan pipeline, ImGui integration
+├── audio/          — Spatial audio (stub)
+├── haptic/         — Haptic/vestibular feedback (stub)
+├── bci/            — OpenBCI driver, FFT, SignalMetrics, RiemannianGeometry, NeuralMetrics
+├── serial/         — Serial port abstraction
+├── engine/         — Top-level facade aggregating all modules, game loop
+├── kernel/         — Linux kernel module (lpl_kmod.c) — Netfilter + ring buffers
+├── apps/           — Executables (lpl-server, lpl-client, lpl-benchmark)
+└── _legacy/        — Previous-generation prototype preserved for reference
+```
+
+Each module is a **static library** (`lpl-<name>`) with its own `xmake.lua`, `include/lpl/<name>/`, and `src/`.
+
+---
 
 ## Building the Engine
 
-The project relies entirely on **xmake**. 
+The project uses **[xmake](https://xmake.io)** exclusively.
+
+### Prerequisites
+
+- **Linux** with kernel headers (for the kernel module)
+- **xmake** ≥ 2.9.0
+- **GCC 13+** or **Clang 17+** (C++23 support)
+- **Vulkan SDK** (headers + loader)
+- NVIDIA CUDA Toolkit *(optional — automatic CPU fallback)*
+
+### Build Commands
 
 ```bash
-# Clean configuration and cache
-$ xmake f -c
+# Configure (clean cache)
+xmake f -c
 
-# Build all targets (lpl-server, lpl-client, lpl-benchmark)
-$ xmake build -j$(nproc)
+# Build all targets
+xmake build -j$(nproc)
+
+# Build specific targets
+xmake build lpl-server
+xmake build lpl-client
+xmake build lpl-benchmark
+
+# Run
+xmake run lpl-server
+xmake run lpl-client
+xmake run lpl-benchmark
 ```
 
-## Running the Verification Suite
-To gauge component-level latency and general runtime throughput:
+### Build Modes
+
 ```bash
-$ xmake run lpl-benchmark
+xmake f -m debug      # Debug symbols, no optimization, LPL_DEBUG
+xmake f -m release    # Full optimization, stripped, NDEBUG
+xmake f -m profile    # Debug symbols + full optimization, LPL_PROFILE
 ```
+
+---
+
+## Known Issues / TODO
+
+> These are identified regressions compared to the legacy codebase that need to be addressed.
+
+| # | Issue | Description |
+|---|-------|-------------|
+| 1 | **GPU enables Vulkan for server** | Enabling GPU compute forces the Vulkan renderer dependency even for the headless server, which doesn't need it. Need to decouple GPU compute from the render module. |
+| 2 | **No automatic socket fallback** | The legacy code automatically fell back to socket mode when the kernel module wasn't installed. The new architecture doesn't do this automatically. Additionally, the default dev mode for the client should be socket mode (allows running server + client on the same machine). |
+| 3 | **xmake doesn't manage kernel module** | The legacy `Makefile` had `make install` / `make uninstall` targets for `insmod` / `rmmod` of `lpl_kmod.ko`. xmake currently has no equivalent. |
+| 4 | **No CUDA physics ported** | The legacy codebase had CUDA kernels for GPU-accelerated physics (`PhysicsGPU.cu`). This has not been ported to the new architecture — only the CPU physics path exists. |
+
+---
+
+## Documentation
+
+📖 Full documentation available in the **[Wiki](LplPlugin.wiki/Home.md)** — architecture deep-dives, module reference, ADRs, benchmarks, and scientific contributions.
+
+---
+
+## License
+
+This project is licensed under the **GPL-3.0** — see [LICENSE](LICENSE) for details.

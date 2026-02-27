@@ -35,8 +35,7 @@ namespace lpl::ecs {
  * Each cell is identified by its Morton code. Entities are assigned to a
  * cell based on their position (snapped to cell-grid coordinates).
  */
-class WorldPartition final : public core::NonCopyable<WorldPartition>
-{
+class WorldPartition final : public core::NonCopyable<WorldPartition> {
 public:
     /**
      * @brief Constructs a world partition with the given cell size.
@@ -99,6 +98,7 @@ public:
     /** @brief Returns the number of active cells. */
     [[nodiscard]] core::u32 cellCount() const noexcept;
 
+public:
     /** @brief GPU dispatch threshold (entity count). */
     static constexpr core::u32 kGpuThreshold = 4096;
 

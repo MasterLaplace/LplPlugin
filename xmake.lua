@@ -36,10 +36,14 @@ end
 
 add_cxxflags("-fno-rtti", {force = true})
 add_cxxflags("-fno-exceptions", {force = true})
+add_defines("VULKAN_HPP_NO_EXCEPTIONS")
 
 -- /////////////////////////////////////////////////////////////////////////////
 -- Sub-modules (ordered by dependency depth, leaves first)
 -- /////////////////////////////////////////////////////////////////////////////
+
+add_requires("vulkan-headers", "vulkan-loader", "vulkan-hpp")
+add_requires("imgui", {system = false, configs = {glfw = true, vulkan = true}})
 
 includes(
     "core",
