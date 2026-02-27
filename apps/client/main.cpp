@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief LplPlugin dedicated server entry-point.
+ * @brief LplPlugin client entry-point (desktop / VR).
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -15,15 +15,15 @@
 
 int main(int /*argc*/, char* /*argv*/[])
 {
-    lpl::core::Log::info("=== LplPlugin Server ===");
+    lpl::core::Log::info("=== LplPlugin Client ===");
 
     auto config = lpl::engine::Config::Builder{}
         .tickRate(144)
         .maxEntities(10000)
-        .serverMode(true)
-        .headless(true)
-        .arenaSize(128 * 1024 * 1024)
-        .enableGpu(false)
+        .serverMode(false)
+        .headless(false)
+        .arenaSize(64 * 1024 * 1024)
+        .enableGpu(true)
         .enableBci(false)
         .build();
 
@@ -32,13 +32,13 @@ int main(int /*argc*/, char* /*argv*/[])
     auto result = engine.init();
     if (!result)
     {
-        lpl::core::Log::error("Server init failed");
+        lpl::core::Log::error("Client init failed");
         return 1;
     }
 
     engine.run();
     engine.shutdown();
 
-    lpl::core::Log::info("Server exited cleanly");
+    lpl::core::Log::info("Client exited cleanly");
     return 0;
 }

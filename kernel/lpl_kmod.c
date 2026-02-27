@@ -1,267 +1,418 @@
-// --- LAPLACE PLUGIN SYSTEM --- //
-// File: lpl_kmod.c
-// Description: Module kernel RX/TX UDP via Shared Memory RingBuffer
-// Auteur: MasterLaplace
+/**
+ * @file lpl_kmod.c
+ * @brief Laplace Kernel Module — High-Performance Zero-Copy RingBuffer RX/TX.
+ *
+ * Character device /dev/lpl0 with:
+ *   - Netfilter PRE_ROUTING hook to capture UDP packets before the stack
+ *   - vmalloc_user + mmap for zero-copy shared memory (RX/TX ring buffers)
+ *   - Lockless SPSC ring buffers via smp_load_acquire/smp_store_release
+ *   - TX kthread with wait_event_interruptible + ioctl kick
+ *   - Stats reporting via ioctl
+ *
+ * Build: out-of-tree via Kbuild.
+ *
+ * @author MasterLaplace
+ * @version 0.2.0
+ * @date 2026-02-27
+ * @copyright MIT License
+ */
 
+#include <linux/module.h>
+#include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/module.h>         // MODULE_LICENSE, MODULE_AUTHOR, MODULE_DESCRIPTION, module_init, module_exit
-#include <linux/kernel.h>         // KERN_INFO, printk, pr_info, pr_err
-#include <linux/netfilter.h>      // struct nf_hook_ops, NF_INET_PRE_ROUTING, NF_IP_PRI_FIRST
-#include <linux/netfilter_ipv4.h> // NF_INET_PRE_ROUTING, nf_register_net_hook, nf_unregister_net_hook, struct nf_hook_state
-#include <linux/skbuff.h>         // struct sk_buff, skb_copy_bits
-#include <linux/ip.h>             // struct iphdr, ip_hdr
-#include <linux/udp.h>            // struct udphdr, ntohs
-#include <linux/fs.h>             // struct file_operations, register_chrdev, unregister_chrdev
-#include <linux/device.h>         //  class_create, device_create
-#include <linux/err.h>            //  IS_ERR, PTR_ERR
-#include <linux/socket.h>
-#include <linux/in.h>
-
-#include <linux/slab.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
 #include <linux/uaccess.h>
+#include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/kthread.h>
-#include <linux/delay.h>
-#include <linux/sched.h>
-#include <net/sock.h>
+#include <linux/wait.h>
+#include <linux/net.h>
+#include <linux/in.h>
+#include <linux/inet.h>
+#include <linux/socket.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <linux/skbuff.h>
 
 #include "lpl_protocol.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("MasterLaplace");
 MODULE_DESCRIPTION("Laplace Kernel Module: High-Perf Zero-Copy RingBuffer RX/TX");
+MODULE_VERSION("0.2");
 
-static LplSharedMemory *shm = NULL;
-static int driver_id = 0;
-static struct class *lpl_class = NULL;
-static struct device *instance = NULL;
+/* ─── Module state ──────────────────────────────────────────────────────── */
 
-static struct task_struct *tx_task = NULL;
-static wait_queue_head_t tx_wq;
-static struct socket *udp_sock = NULL;
+static dev_t               lpl_devno;
+static struct cdev         lpl_cdev;
+static struct class       *lpl_class;
+static struct device      *lpl_device;
 
-static int send_udp_packet(TxPacket *pkt)
+static LplSharedMemory    *shm;            /* vmalloc_user shared memory    */
+static struct lpl_stats    stats;
+
+static struct task_struct *tx_task;         /* TX kthread                    */
+static wait_queue_head_t   tx_wq;          /* wait queue for TX kick        */
+
+static struct socket      *udp_sock;       /* kernel-space UDP socket       */
+
+static struct nf_hook_ops  lpl_nf_ops;     /* Netfilter hook registration   */
+
+/* ─── UDP send from kernel space ────────────────────────────────────────── */
+
+static int send_udp_packet(LplTxPacket *pkt)
 {
-    struct msghdr msg;
-    struct kvec iov;
-    struct sockaddr_in to;
-    int len = pkt->length;
+    struct msghdr msg = {};
+    struct kvec   iov;
+    struct sockaddr_in dst;
 
-    if (!udp_sock)
-        return -EIO;
+    if (!udp_sock || pkt->length == 0 || pkt->length > LPL_MAX_PACKET_SIZE)
+        return -EINVAL;
 
-    memset(&to, 0, sizeof(to));
-    to.sin_family = AF_INET;
-    to.sin_addr.s_addr = pkt->dst_ip;
-    to.sin_port = pkt->dst_port;
-
-    memset(&msg, 0, sizeof(msg));
-    msg.msg_name = &to;
-    msg.msg_namelen = sizeof(to);
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family      = AF_INET;
+    dst.sin_port        = htons(pkt->dst_port);
+    dst.sin_addr.s_addr = htonl(pkt->dst_ip);
 
     iov.iov_base = pkt->data;
-    iov.iov_len = len;
+    iov.iov_len  = pkt->length;
 
-    return kernel_sendmsg(udp_sock, &msg, &iov, 1, len);
+    msg.msg_name    = &dst;
+    msg.msg_namelen = sizeof(dst);
+
+    return kernel_sendmsg(udp_sock, &msg, &iov, 1, pkt->length);
 }
 
+/* ─── TX kthread ────────────────────────────────────────────────────────── */
+
+/**
+ * TX thread drains the TX ring and sends packets via kernel UDP socket.
+ * Sleeps via wait_event_interruptible until kicked by ioctl or signaled.
+ */
 static int tx_thread_fn(void *data)
 {
-    TxRingBuffer *ring = &shm->tx;
-    uint32_t head, tail;
+    (void)data;
 
     while (!kthread_should_stop())
     {
-        tail = smp_load_acquire(&ring->idx.tail);
-        head = ring->idx.head;
+        uint32_t head, tail;
+        uint32_t loop_safety = LPL_RING_SLOTS * 2;
 
-        wait_event_interruptible(tx_wq, (head != smp_load_acquire(&ring->idx.tail)) || kthread_should_stop());
+        wait_event_interruptible(tx_wq,
+            kthread_should_stop() ||
+            (smp_load_acquire(&shm->tx.idx.head) !=
+             smp_load_acquire(&shm->tx.idx.tail)));
 
         if (kthread_should_stop())
             break;
 
-        tail = smp_load_acquire(&ring->idx.tail);
+        head = smp_load_acquire(&shm->tx.idx.head);
+        tail = smp_load_acquire(&shm->tx.idx.tail);
 
-        while (head != tail)
+        while (tail != head && loop_safety-- > 0)
         {
-            TxPacket *pkt = &ring->packets[head];
-            send_udp_packet(pkt);
-            head = (head + 1u) & (RING_SLOTS - 1u);
-            smp_store_release(&ring->idx.head, head);
+            LplTxPacket *pkt = &shm->tx.packets[tail & LPL_RING_MASK];
+            int ret = send_udp_packet(pkt);
+
+            if (ret >= 0)
+            {
+                stats.tx_packets++;
+                stats.tx_bytes += pkt->length;
+            }
+            else
+            {
+                stats.drops++;
+            }
+
+            tail++;
+            smp_store_release(&shm->tx.idx.tail, tail);
+            cond_resched();
         }
-        cond_resched();
     }
+
     return 0;
 }
 
-static uint32_t hook_ingest_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
-{
-    struct iphdr *ip = ip_hdr(skb);
+/* ─── Netfilter hook: capture UDP packets for LPL_PORT ──────────────────── */
 
-    if (ip->protocol != IPPROTO_UDP)
+/**
+ * Hooks NF_INET_PRE_ROUTING to intercept UDP packets destined for LPL_PORT.
+ * Copies the payload directly into the RX ring via skb_copy_bits (zero-copy
+ * from skb). Returns NF_DROP to bypass the normal network stack.
+ */
+static unsigned int hook_ingest_packet(void *priv,
+                                       struct sk_buff *skb,
+                                       const struct nf_hook_state *state)
+{
+    struct iphdr  *iph;
+    struct udphdr *udph;
+    uint32_t       head, tail, next;
+    LplRxPacket   *slot;
+    uint16_t       payload_len;
+
+    (void)priv;
+    (void)state;
+
+    if (!shm)
         return NF_ACCEPT;
 
-    uint32_t ip_len = ip->ihl * 4u;
-    struct udphdr *udp = (struct udphdr *)((uint8_t *)ip + ip_len);
-    if (!shm || ntohs(udp->dest) != LPL_PORT)
+    iph = ip_hdr(skb);
+    if (!iph || iph->protocol != IPPROTO_UDP)
         return NF_ACCEPT;
 
-    RxRingBuffer *ring = &shm->rx;
-    uint32_t payload_len = ntohs(udp->len) - sizeof(struct udphdr);
+    udph = udp_hdr(skb);
+    if (!udph || ntohs(udph->dest) != LPL_PORT)
+        return NF_ACCEPT;
 
-    if (payload_len > MAX_PACKET_SIZE)
+    payload_len = ntohs(udph->len) - sizeof(struct udphdr);
+    if (payload_len == 0 || payload_len > LPL_MAX_PACKET_SIZE)
+        return NF_ACCEPT;
+
+    /* Lockless SPSC: producer = Netfilter (this hook), consumer = userspace */
+    head = smp_load_acquire(&shm->rx.idx.head);
+    tail = smp_load_acquire(&shm->rx.idx.tail);
+    next = head + 1;
+
+    /* Ring full check */
+    if ((next - tail) > LPL_RING_SLOTS)
+    {
+        stats.drops++;
         return NF_DROP;
+    }
 
-    uint32_t tail = smp_load_acquire(&ring->idx.tail);
-    uint32_t head = ring->idx.head;
-    uint32_t next_head = (head + 1u) & (RING_SLOTS - 1u);
+    slot = &shm->rx.packets[head & LPL_RING_MASK];
+    slot->src_ip   = ntohl(iph->saddr);
+    slot->src_port = ntohs(udph->source);
+    slot->length   = payload_len;
 
-    if (next_head == tail)
+    /* Copy payload from SKB directly into ring slot */
+    if (skb_copy_bits(skb, sizeof(struct iphdr) + sizeof(struct udphdr),
+                      slot->data, payload_len) < 0)
+    {
+        stats.drops++;
         return NF_DROP;
+    }
 
-    RxPacket *pkt = &ring->packets[head];
-    pkt->src_ip = ip->saddr;
-    pkt->src_port = udp->source;
-    pkt->length = payload_len;
+    smp_store_release(&shm->rx.idx.head, next);
+    stats.rx_packets++;
+    stats.rx_bytes += payload_len;
 
-    if (skb_copy_bits(skb, ip_len + sizeof(struct udphdr), pkt->data, payload_len) < 0)
-        return NF_DROP;
-
-    smp_store_release(&ring->idx.head, next_head);
-    return NF_DROP;
+    return NF_DROP; /* bypass normal stack for LPL packets */
 }
 
-static int lpl_open(struct inode *inode, struct file *file)
+/* ─── File operations ───────────────────────────────────────────────────── */
+
+static int lpl_open(struct inode *inode, struct file *filp)
 {
+    (void)inode;
+    (void)filp;
     return 0;
 }
 
-static int lpl_release(struct inode *inode, struct file *file)
+static int lpl_release(struct inode *inode, struct file *filp)
 {
+    (void)inode;
+    (void)filp;
     return 0;
 }
 
-static int lpl_mmap(struct file *file, struct vm_area_struct *vma)
+/**
+ * @brief mmap handler — maps LplSharedMemory into userspace.
+ *
+ * Uses vmalloc_user + remap_vmalloc_range for zero-copy IPC.
+ * Userspace accesses ring buffers directly without any syscalls.
+ */
+static int lpl_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-    unsigned long length = vma->vm_end - vma->vm_start;
-    unsigned long process_size = PAGE_ALIGN(sizeof(LplSharedMemory));
+    unsigned long size;
+    (void)filp;
 
-    if (length > process_size)
+    size = vma->vm_end - vma->vm_start;
+
+    if (size > sizeof(LplSharedMemory))
         return -EINVAL;
 
-    return remap_vmalloc_range(vma, shm, 0);
+    if (!PAGE_ALIGNED(vma->vm_start))
+        return -EINVAL;
+
+    if (remap_vmalloc_range(vma, shm, 0) < 0)
+        return -EAGAIN;
+
+    return 0;
 }
 
-static long lpl_ioctl(struct file *file, uint32_t cmd, unsigned long arg)
+static long lpl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-    if (cmd != LPL_IOC_KICK_TX)
-        return -EINVAL;
-    wake_up_interruptible(&tx_wq);
-    return 0;
+    (void)filp;
+
+    switch (cmd)
+    {
+    case LPL_IOCTL_RESET:
+        if (shm)
+        {
+            shm->rx.idx.head = 0;
+            shm->rx.idx.tail = 0;
+            shm->tx.idx.head = 0;
+            shm->tx.idx.tail = 0;
+        }
+        memset(&stats, 0, sizeof(stats));
+        return 0;
+
+    case LPL_IOCTL_GET_STATS:
+        if (copy_to_user((void __user *)arg, &stats, sizeof(stats)))
+            return -EFAULT;
+        return 0;
+
+    case LPL_IOCTL_KICK_TX:
+        wake_up_interruptible(&tx_wq);
+        return 0;
+
+    default:
+        return -ENOTTY;
+    }
 }
 
 static const struct file_operations lpl_fops = {
-    .owner = THIS_MODULE,
-    .open = lpl_open,
-    .release = lpl_release,
-    .mmap = lpl_mmap,
-    .unlocked_ioctl = lpl_ioctl
+    .owner          = THIS_MODULE,
+    .open           = lpl_open,
+    .release        = lpl_release,
+    .mmap           = lpl_mmap,
+    .unlocked_ioctl = lpl_ioctl,
 };
 
-static const struct nf_hook_ops lpl_nf_ops = {
-    .hook = hook_ingest_packet,
-    .pf = NFPROTO_IPV4,
-    .hooknum = NF_INET_PRE_ROUTING,
-    .priority = NF_IP_PRI_FIRST
-};
+/* ─── Init / Exit ───────────────────────────────────────────────────────── */
 
 static int __init lpl_init(void)
 {
-    pr_info("[LPL] ========== Module Init ==========\n");
-    int result = 0;
+    int ret;
+    struct sockaddr_in bind_addr;
 
-    shm = (LplSharedMemory *)vmalloc_user(sizeof(LplSharedMemory));
+    /* 1. Allocate shared memory (vmalloc_user for mmap) */
+    shm = vmalloc_user(sizeof(LplSharedMemory));
     if (!shm)
         return -ENOMEM;
 
     memset(shm, 0, sizeof(LplSharedMemory));
 
+    /* 2. Create character device */
+    ret = alloc_chrdev_region(&lpl_devno, 0, 1, LPL_DEVICE_NAME);
+    if (ret < 0)
+        goto fail_shm;
+
+    cdev_init(&lpl_cdev, &lpl_fops);
+    lpl_cdev.owner = THIS_MODULE;
+
+    ret = cdev_add(&lpl_cdev, lpl_devno, 1);
+    if (ret < 0)
+        goto fail_region;
+
+    lpl_class = class_create(LPL_DEVICE_NAME);
+    if (IS_ERR(lpl_class))
+    {
+        ret = PTR_ERR(lpl_class);
+        goto fail_cdev;
+    }
+
+    lpl_device = device_create(lpl_class, NULL, lpl_devno, NULL, LPL_DEVICE_NAME);
+    if (IS_ERR(lpl_device))
+    {
+        ret = PTR_ERR(lpl_device);
+        goto fail_class;
+    }
+
+    /* 3. Create kernel UDP socket for TX */
+    ret = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, IPPROTO_UDP, &udp_sock);
+    if (ret < 0)
+    {
+        pr_warn("lpl: failed to create UDP socket (%d), TX disabled\n", ret);
+        udp_sock = NULL;
+        /* Non-fatal: TX won't work but RX (Netfilter) still functions */
+    }
+    else
+    {
+        memset(&bind_addr, 0, sizeof(bind_addr));
+        bind_addr.sin_family      = AF_INET;
+        bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        bind_addr.sin_port        = 0; /* ephemeral port */
+
+        ret = kernel_bind(udp_sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr));
+        if (ret < 0)
+            pr_warn("lpl: UDP bind failed (%d)\n", ret);
+    }
+
+    /* 4. Start TX kthread */
     init_waitqueue_head(&tx_wq);
 
-    if ((result = sock_create_kern(&init_net, PF_INET, SOCK_DGRAM, IPPROTO_UDP, &udp_sock)) < 0)
+    if (udp_sock)
     {
-        pr_err("[LPL] Fail to create UDP kernel socket\n");
-        goto error_memory;
+        tx_task = kthread_run(tx_thread_fn, NULL, "lpl_tx");
+        if (IS_ERR(tx_task))
+        {
+            pr_warn("lpl: failed to start TX thread (%ld)\n", PTR_ERR(tx_task));
+            tx_task = NULL;
+        }
     }
 
-    if ((driver_id = register_chrdev(0, LPL_DEVICE_NAME, &lpl_fops)) < 0)
+    /* 5. Register Netfilter hook (PRE_ROUTING, capture LPL UDP packets) */
+    memset(&lpl_nf_ops, 0, sizeof(lpl_nf_ops));
+    lpl_nf_ops.hook     = hook_ingest_packet;
+    lpl_nf_ops.pf       = NFPROTO_IPV4;
+    lpl_nf_ops.hooknum  = NF_INET_PRE_ROUTING;
+    lpl_nf_ops.priority = NF_IP_PRI_FIRST;
+
+    ret = nf_register_net_hook(&init_net, &lpl_nf_ops);
+    if (ret < 0)
     {
-        pr_err("[LPL] Failed to register char device\n");
-        result = driver_id;
-        goto error_socket;
+        pr_warn("lpl: Netfilter hook registration failed (%d), RX via hook disabled\n", ret);
+        /* Non-fatal: still usable via read/write fallback */
     }
 
-    if (IS_ERR(lpl_class = class_create(LPL_CLASS_NAME)))
-    {
-        pr_err("[LPL] Failed to create class\n");
-        result = PTR_ERR(lpl_class);
-        goto error_chrdev;
-    }
-
-    if (IS_ERR(instance = device_create(lpl_class, instance, MKDEV(driver_id, 0), NULL, LPL_DEVICE_NAME)))
-    {
-        pr_err("[LPL] Failed to create device instance\n");
-        result = PTR_ERR(instance);
-        goto error_class;
-    }
-
-    if ((result = nf_register_net_hook(&init_net, &lpl_nf_ops)) < 0)
-    {
-        pr_err("[LPL] Failed to register Netfilter hook\n");
-        goto error_device;
-    }
-
-    if (IS_ERR(tx_task = kthread_run(tx_thread_fn, NULL, "lpl_tx_worker")))
-    {
-        pr_err("[LPL] Failed to run kernel thread\n");
-        result = PTR_ERR(tx_task);
-        goto error_nf;
-    }
-
-    pr_info("[LPL] Netfilter hook registered (NF_INET_PRE_ROUTING, port %d)\n", LPL_PORT);
-    pr_info("[LPL] ===== Module Loaded Successfully =====\n");
+    pr_info("lpl: /dev/%s registered (major %d), shm=%zu bytes\n",
+            LPL_DEVICE_NAME, MAJOR(lpl_devno), sizeof(LplSharedMemory));
     return 0;
 
-error_nf: nf_unregister_net_hook(&init_net, &lpl_nf_ops);
-error_device: device_destroy(lpl_class, MKDEV(driver_id, 0));
-error_class: class_destroy(lpl_class);
-error_chrdev: unregister_chrdev(driver_id, LPL_DEVICE_NAME);
-error_socket: sock_release(udp_sock);
-error_memory: vfree(shm);
-    return result;
+fail_class:
+    class_destroy(lpl_class);
+fail_cdev:
+    cdev_del(&lpl_cdev);
+fail_region:
+    unregister_chrdev_region(lpl_devno, 1);
+fail_shm:
+    vfree(shm);
+    shm = NULL;
+    return ret;
 }
 
 static void __exit lpl_exit(void)
 {
-    pr_info("[LPL] ========== Module Exit ==========\n");
+    /* Reverse order teardown */
+    nf_unregister_net_hook(&init_net, &lpl_nf_ops);
 
     if (tx_task)
+    {
         kthread_stop(tx_task);
-
-    nf_unregister_net_hook(&init_net, &lpl_nf_ops);
-    device_destroy(lpl_class, MKDEV(driver_id, 0));
-    class_destroy(lpl_class);
-    unregister_chrdev(driver_id, LPL_DEVICE_NAME);
+        tx_task = NULL;
+    }
 
     if (udp_sock)
-        sock_release(udp_sock);
-
-    if (shm)
     {
-        vfree(shm);
-        shm = NULL;
+        sock_release(udp_sock);
+        udp_sock = NULL;
     }
-    pr_info("[LPL] ===== Module Unloaded =====\n");
+
+    device_destroy(lpl_class, lpl_devno);
+    class_destroy(lpl_class);
+    cdev_del(&lpl_cdev);
+    unregister_chrdev_region(lpl_devno, 1);
+
+    vfree(shm);
+    shm = NULL;
+
+    pr_info("lpl: /dev/%s unregistered\n", LPL_DEVICE_NAME);
 }
 
 module_init(lpl_init);
