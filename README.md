@@ -77,6 +77,15 @@ xmake build lpl-server
 xmake build lpl-client
 xmake build lpl-benchmark
 
+# Build with options
+xmake f --renderer=n    # Disable Vulkan (useful for server)
+xmake f --cuda=y        # Enable CUDA physics
+
+# Kernel Module Management
+xmake kmod-build        # Build the kernel module
+xmake kmod-install      # Load into kernel (insmod)
+xmake kmod-uninstall    # Unload from kernel (rmmod)
+
 # Run
 xmake run lpl-server
 xmake run lpl-client
@@ -90,19 +99,6 @@ xmake f -m debug      # Debug symbols, no optimization, LPL_DEBUG
 xmake f -m release    # Full optimization, stripped, NDEBUG
 xmake f -m profile    # Debug symbols + full optimization, LPL_PROFILE
 ```
-
----
-
-## Known Issues / TODO
-
-> These are identified regressions compared to the legacy codebase that need to be addressed.
-
-| # | Issue | Description |
-|---|-------|-------------|
-| 1 | **GPU enables Vulkan for server** | Enabling GPU compute forces the Vulkan renderer dependency even for the headless server, which doesn't need it. Need to decouple GPU compute from the render module. |
-| 2 | **No automatic socket fallback** | The legacy code automatically fell back to socket mode when the kernel module wasn't installed. The new architecture doesn't do this automatically. Additionally, the default dev mode for the client should be socket mode (allows running server + client on the same machine). |
-| 3 | **xmake doesn't manage kernel module** | The legacy `Makefile` had `make install` / `make uninstall` targets for `insmod` / `rmmod` of `lpl_kmod.ko`. xmake currently has no equivalent. |
-| 4 | **No CUDA physics ported** | The legacy codebase had CUDA kernels for GPU-accelerated physics (`PhysicsGPU.cu`). This has not been ported to the new architecture — only the CPU physics path exists. |
 
 ---
 

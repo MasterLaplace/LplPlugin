@@ -15,12 +15,16 @@ target("lpl-engine")
         "lpl-net",
         "lpl-gpu",
         "lpl-input",
-        "lpl-render",
         "lpl-audio",
         "lpl-haptic",
         "lpl-bci",
         "lpl-serial"
     )
+
+    if has_config("renderer") then
+        add_deps("lpl-render")
+    end
+
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
     add_headerfiles("include/(lpl/engine/**.hpp)")

@@ -3,8 +3,8 @@
  * @brief Engine façade implementation.
  *
  * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
+ * @version 0.2.0
+ * @date 2026-02-27
  * @copyright MIT License
  */
 
@@ -23,12 +23,15 @@
 #include <lpl/net/session/SessionManager.hpp>
 #include <lpl/net/ServerMesh.hpp>
 #include <lpl/net/transport/KernelTransport.hpp>
+#include <lpl/net/transport/SocketTransport.hpp>
 #include <lpl/ecs/WorldPartition.hpp>
 #include <lpl/net/netcode/AuthoritativeStrategy.hpp>
 #include <lpl/net/netcode/RollbackStrategy.hpp>
 
-#include <lpl/render/VulkanRenderer.hpp>
-#include <GLFW/glfw3.h>
+#ifdef LPL_HAS_RENDERER
+    #include <lpl/render/VulkanRenderer.hpp>
+    #include <GLFW/glfw3.h>
+#endif
 
 namespace lpl::engine {
 
@@ -48,8 +51,10 @@ struct Engine::Impl
     std::unique_ptr<net::netcode::INetcodeStrategy> netcode;
     std::shared_ptr<net::transport::ITransport> transport;
 
+#ifdef LPL_HAS_RENDERER
     std::unique_ptr<render::IRenderer> renderer;
     GLFWwindow* window{nullptr};
+#endif
 
     bool initialised{false};
 
@@ -93,26 +98,49 @@ core::Expected<void> Engine::init()
     if (_impl->config.serverMode())
     {
         core::Log::info("Engine: Booting Server");
-        _impl->transport = std::make_shared<net::transport::KernelTransport>("/dev/lpl0");
-        if (!_impl->transport->open())
+
+        // Try kernel transport first, fallback to socket if unavailable
+        auto kernelTransport = std::make_shared<net::transport::KernelTransport>("/dev/lpl0");
+        if (auto res = kernelTransport->open(); res)
         {
-            core::Log::warn("Failed to open /dev/lpl0, server networking disabled");
+            core::Log::info("Engine: Using KernelTransport (/dev/lpl0)");
+            _impl->transport = std::move(kernelTransport);
         }
+        else
+        {
+            core::Log::warn("Engine: Kernel module unavailable (%s), falling back to SocketTransport",
+                            res.error().message().c_str());
+            auto socketTransport = std::make_shared<net::transport::SocketTransport>(7777);
+            if (auto res2 = socketTransport->open(); !res2)
+            {
+                core::Log::error("Engine: Failed to open SocketTransport fallback");
+                return res2;
+            }
+            _impl->transport = std::move(socketTransport);
+        }
+
         _impl->sessionManager = std::make_unique<net::session::SessionManager>();
         _impl->netcode = std::make_unique<net::netcode::AuthoritativeStrategy>();
     }
     else
     {
         core::Log::info("Engine: Booting Client");
-        _impl->transport = std::make_shared<net::transport::KernelTransport>("/dev/lpl0");
-        if (!_impl->transport->open())
+
+        // Client uses socket transport by default (same-machine dev friendly)
+        auto socketTransport = std::make_shared<net::transport::SocketTransport>(0);
+        if (auto res = socketTransport->open(); !res)
         {
-            core::Log::warn("Failed to open kernel transport for client");
+            core::Log::error("Engine: Failed to open client SocketTransport");
+            return res;
         }
+        core::Log::info("Engine: Using SocketTransport (client default)");
+        _impl->transport = std::move(socketTransport);
+
         _impl->sessionManager = std::make_unique<net::session::SessionManager>();
         _impl->netcode = std::make_unique<net::netcode::RollbackStrategy>(8);
     }
 
+#ifdef LPL_HAS_RENDERER
     if (_impl->config.enableGpu())
     {
         core::Log::info("Engine: Booting GPU Renderer");
@@ -132,11 +160,17 @@ core::Expected<void> Engine::init()
             core::Log::error("Failed to initialize VulkanRenderer");
             return res;
         }
-        
+
         // Let the Vulkan Renderer bind to the GLFW Window
         auto& vkRenderer = static_cast<render::vk::VulkanRenderer&>(*_impl->renderer);
         vkRenderer.initVulkanContext(_impl->window);
     }
+#else
+    if (_impl->config.enableGpu())
+    {
+        core::Log::warn("Engine: GPU rendering requested but LPL_HAS_RENDERER is not enabled (headless build)");
+    }
+#endif
 
     _impl->initialised = true;
     core::Log::info("Engine::init — done");
@@ -167,31 +201,35 @@ void Engine::run()
         {
             _impl->netcode->tick(static_cast<core::f32>(dt));
         }
-        
+
         // Physics and general simulation
         _impl->scheduler.tick(static_cast<core::f32>(dt));
     };
 
     callbacks.render = [this](core::f64 /*alpha*/)
     {
+#ifdef LPL_HAS_RENDERER
         if (_impl->renderer)
         {
             _impl->renderer->beginFrame();
-            _impl->renderer->endFrame(); 
+            _impl->renderer->endFrame();
         }
 
         if (_impl->window && glfwWindowShouldClose(_impl->window))
         {
             requestShutdown();
         }
+#endif
     };
 
     callbacks.postFrame = [this]()
     {
+#ifdef LPL_HAS_RENDERER
         if (_impl->window)
         {
             glfwPollEvents();
         }
+#endif
     };
 
     _impl->loop.run(callbacks);
@@ -210,12 +248,13 @@ void Engine::shutdown()
     }
 
     core::Log::info("Engine::shutdown");
-    
+
     if (_impl->transport)
     {
         _impl->transport->close();
     }
-    
+
+#ifdef LPL_HAS_RENDERER
     if (_impl->renderer)
     {
         _impl->renderer->shutdown();
@@ -228,6 +267,7 @@ void Engine::shutdown()
         _impl->window = nullptr;
     }
     glfwTerminate();
+#endif
 
     _impl->inputManager.shutdown();
     _impl->initialised = false;

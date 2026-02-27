@@ -51,17 +51,26 @@ core::Expected<void> KernelTransport::open()
     _impl->fd = ::open(_impl->devicePath, O_RDWR);
     if (_impl->fd < 0)
     {
+        int err = errno;
+        std::string msg = std::string("KernelTransport: open('")
+                          + _impl->devicePath + "') failed: "
+                          + std::strerror(err);
+        core::Log::error(msg);
         return core::makeError(core::ErrorCode::IoError,
                                "Failed to open kernel device");
     }
 
-    void* mapped = ::mmap(nullptr, sizeof(LplSharedMemory),
+    size_t page = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    size_t len = ((sizeof(LplSharedMemory) + page - 1) / page) * page;
+    void* mapped = ::mmap(nullptr, len,
                           PROT_READ | PROT_WRITE, MAP_SHARED, _impl->fd, 0);
 
     if (mapped == MAP_FAILED)
     {
+        int err = errno;
         ::close(_impl->fd);
         _impl->fd = -1;
+        core::Log::error("KernelTransport: mmap failed: %s", std::strerror(err));
         return core::makeError(core::ErrorCode::IoError,
                                "Failed to mmap kernel device");
     }
@@ -111,7 +120,7 @@ core::Expected<core::u32> KernelTransport::send(
     }
 
     LplTxPacket* slot = &_impl->shm->tx.packets[head & LPL_RING_MASK];
-    
+
     // Address handling would go here, mapping ITransport socket address to dst_ip/port
     slot->dst_ip   = 0;
     slot->dst_port = 0;

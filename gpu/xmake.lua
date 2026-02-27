@@ -15,4 +15,6 @@ target("lpl-gpu")
     -- CUDA sources are only compiled when the CUDA toolchain is available.
     if has_config("cuda") then
         add_files("src/*.cu")
+        add_defines("LPL_HAS_CUDA", {public = true})
     end
+target_end()

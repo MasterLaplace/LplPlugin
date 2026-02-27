@@ -233,7 +233,7 @@ static int lpl_mmap(struct file *filp, struct vm_area_struct *vma)
 
     size = vma->vm_end - vma->vm_start;
 
-    if (size > sizeof(LplSharedMemory))
+    if (size > PAGE_ALIGN(sizeof(LplSharedMemory)))
         return -EINVAL;
 
     if (!PAGE_ALIGNED(vma->vm_start))
