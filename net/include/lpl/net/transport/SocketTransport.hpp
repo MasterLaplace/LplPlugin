@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_NET_TRANSPORT_SOCKETTRANSPORT_HPP
-    #define LPL_NET_TRANSPORT_SOCKETTRANSPORT_HPP
+#    define LPL_NET_TRANSPORT_SOCKETTRANSPORT_HPP
 
-#include <lpl/net/transport/ITransport.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/net/transport/ITransport.hpp>
 
-#include <memory>
+#    include <memory>
 
 namespace lpl::net::transport {
 
@@ -27,9 +27,7 @@ namespace lpl::net::transport {
  * Binds to a local port on @ref open and uses @c sendto / @c recvfrom
  * for packet exchange.
  */
-class SocketTransport final : public ITransport,
-                              public core::NonCopyable<SocketTransport>
-{
+class SocketTransport final : public ITransport, public core::NonCopyable<SocketTransport> {
 public:
     /**
      * @brief Constructs a socket transport bound to the given port.
@@ -41,15 +39,22 @@ public:
     [[nodiscard]] core::Expected<void> open() override;
     void close() override;
 
-    [[nodiscard]] core::Expected<core::u32> send(
-        std::span<const core::byte> data,
-        const void* address) override;
+    [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const void *address) override;
 
-    [[nodiscard]] core::Expected<core::u32> receive(
-        std::span<core::byte> buffer,
-        void* fromAddress) override;
+    [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, void *fromAddress) override;
 
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
+
+    /**
+     * @brief Sets a default destination address used when @c send() is called
+     *        with a @c nullptr address.
+     *
+     * Called once after the initial handshake so that InputSendSystem,
+     * BroadcastSystem, etc. do not need to carry a copy of the server address.
+     *
+     * @param addr Pointer to a @c sockaddr_in describing the target.
+     */
+    void setDefaultDest(const void *addr) noexcept;
 
 private:
     struct Impl;

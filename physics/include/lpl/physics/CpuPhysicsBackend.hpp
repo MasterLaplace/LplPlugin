@@ -11,15 +11,18 @@
 #pragma once
 
 #ifndef LPL_PHYSICS_CPUPHYSICSBACKEND_HPP
-    #define LPL_PHYSICS_CPUPHYSICSBACKEND_HPP
+#    define LPL_PHYSICS_CPUPHYSICSBACKEND_HPP
 
-#include <lpl/physics/IPhysicsBackend.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/ecs/Entity.hpp>
+#    include <lpl/math/Vec3.hpp>
+#    include <lpl/physics/IPhysicsBackend.hpp>
 
-#include <memory>
+#    include <memory>
 
-namespace lpl::ecs { class Registry; }
+namespace lpl::ecs {
+class Registry;
+}
 
 namespace lpl::physics {
 
@@ -31,39 +34,32 @@ namespace lpl::physics {
  * Constants: gravity -9.81, damping 0.995, restitution 0.5,
  *            sleep threshold² 0.01, sleep frames 30, solver iterations 4.
  */
-class CpuPhysicsBackend final : public IPhysicsBackend,
-                                 public core::NonCopyable<CpuPhysicsBackend>
-{
+class CpuPhysicsBackend final : public IPhysicsBackend, public core::NonCopyable<CpuPhysicsBackend> {
 public:
     /**
      * @brief Constructs with a reference to the ECS registry.
      * @param registry Registry containing Position, Velocity, Mass, AABB, etc.
      */
-    explicit CpuPhysicsBackend(ecs::Registry& registry);
+    explicit CpuPhysicsBackend(ecs::Registry &registry);
     ~CpuPhysicsBackend() override;
 
     [[nodiscard]] core::Expected<void> init() override;
     [[nodiscard]] core::Expected<void> step(core::f32 dt) override;
     void shutdown() override;
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     /** @brief Semi-implicit Euler integration + gravity + damping + ground. */
-    void integrateChunk(math::Vec3<float>* positions,
-                        math::Vec3<float>* velocities,
-                        const float* masses,
-                        core::u32 count,
-                        core::f32 dt) const noexcept;
+    void integrateChunk(const ecs::EntityId *entities, math::Vec3<float> *positions, math::Vec3<float> *velocities,
+                        const float *masses, core::u32 count, core::f32 dt) const noexcept;
 
     /** @brief AABB collision detection + impulse resolution (4 iterations). */
-    void resolveCollisionsChunk(math::Vec3<float>* positions,
-                                math::Vec3<float>* velocities,
-                                const float* masses,
-                                const math::Vec3<float>* sizes,
+    void resolveCollisionsChunk(const ecs::EntityId *entities, math::Vec3<float> *positions,
+                                math::Vec3<float> *velocities, const float *masses, const math::Vec3<float> *sizes,
                                 core::u32 count) const noexcept;
 
     /** @brief Sleeping detection: sleep after 30 frames below threshold. */
-    void updateSleepingChunk(math::Vec3<float>* velocities,
+    void updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<float> *velocities,
                              core::u32 count) const noexcept;
 
     struct Impl;

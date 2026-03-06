@@ -9,7 +9,6 @@
  */
 
 #include <lpl/serial/ReplayPlayer.hpp>
-#include <stdexcept>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -28,6 +27,8 @@ ReplayPlayer::~ReplayPlayer() = default;
 
 core::Expected<void> ReplayPlayer::loadFromDisk(std::string_view /*path*/)
 {
+    /// @todo Deserialize replay frames and snapshots from disk.
+    ///       Binary format: [frameCount][frames...][snapshotCount][snapshots...].
     LPL_ASSERT(false && "unimplemented");
     return {};
 }
@@ -57,6 +58,7 @@ core::Expected<ReplayFrame> ReplayPlayer::advanceTick()
 
 core::Expected<void> ReplayPlayer::seekToTick(core::u64 /*tick*/)
 {
+    /// @todo Binary search snapshots for closest tick, then replay forwards.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }

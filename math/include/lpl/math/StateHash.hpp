@@ -14,13 +14,13 @@
 #pragma once
 
 #ifndef LPL_MATH_STATE_HASH_HPP
-    #define LPL_MATH_STATE_HASH_HPP
+#    define LPL_MATH_STATE_HASH_HPP
 
-    #include <lpl/core/Types.hpp>
-    #include <lpl/core/Concepts.hpp>
+#    include <lpl/core/Concepts.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <cstring>
-    #include <span>
+#    include <cstring>
+#    include <span>
 
 namespace lpl::math {
 
@@ -30,7 +30,7 @@ namespace lpl::math {
 class StateHash final {
 public:
     static constexpr core::u64 kOffsetBasis = 14695981039346656037ULL;
-    static constexpr core::u64 kPrime       = 1099511628211ULL;
+    static constexpr core::u64 kPrime = 1099511628211ULL;
 
     constexpr StateHash() = default;
 
@@ -47,8 +47,7 @@ public:
      * @param value Value to hash.
      * @return Reference to this hasher (for chaining).
      */
-    template <core::Blittable T>
-    StateHash &combine(const T &value)
+    template <core::Blittable T> StateHash &combine(const T &value)
     {
         const auto *ptr = reinterpret_cast<const core::byte *>(&value);
         return hashBytes({ptr, sizeof(T)});

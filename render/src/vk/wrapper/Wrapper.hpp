@@ -22,12 +22,12 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_WRAPPER_HPP_
-    #define LPL_RENDER_VK_WRAPPER_HPP_
+#define LPL_RENDER_VK_WRAPPER_HPP_
 
-#include "instance/Instance.hpp"
-#include "wrapper/Model.hpp"
 #include "buffers/Texture.hpp"
+#include "instance/Instance.hpp"
 #include "shaderModule/ShaderModule.hpp"
+#include "wrapper/Model.hpp"
 
 namespace lpl::render::vk {
 
@@ -100,7 +100,7 @@ public:
         NeedResize
     };
 
-  public:
+public:
     /**
      * @brief Create the Wrapper using the Vulkan API.
      *

@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_CONCURRENCY_ATOMICHELPERS_HPP
-    #define LPL_CONCURRENCY_ATOMICHELPERS_HPP
+#    define LPL_CONCURRENCY_ATOMICHELPERS_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Concepts.hpp>
+#    include <lpl/core/Concepts.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <atomic>
+#    include <atomic>
 
 namespace lpl::concurrency {
 
@@ -28,8 +28,8 @@ namespace lpl::concurrency {
  * @return Current value of @p atom.
  */
 template <typename T>
-    requires core::Blittable<T>
-[[nodiscard]] inline T atomicLoad(const std::atomic<T>& atom,
+requires core::Blittable<T>
+[[nodiscard]] inline T atomicLoad(const std::atomic<T> &atom,
                                   std::memory_order order = std::memory_order_acquire) noexcept
 {
     return atom.load(order);
@@ -43,10 +43,8 @@ template <typename T>
  * @param order Memory ordering (default: release).
  */
 template <typename T>
-    requires core::Blittable<T>
-inline void atomicStore(std::atomic<T>& atom,
-                        T value,
-                        std::memory_order order = std::memory_order_release) noexcept
+requires core::Blittable<T>
+inline void atomicStore(std::atomic<T> &atom, T value, std::memory_order order = std::memory_order_release) noexcept
 {
     atom.store(value, order);
 }
@@ -62,13 +60,10 @@ inline void atomicStore(std::atomic<T>& atom,
  * @return @c true if CAS succeeded.
  */
 template <typename T>
-    requires core::Blittable<T>
-[[nodiscard]] inline bool atomicCas(
-    std::atomic<T>& atom,
-    T& expected,
-    T desired,
-    std::memory_order successOrder = std::memory_order_acq_rel,
-    std::memory_order failureOrder = std::memory_order_acquire) noexcept
+requires core::Blittable<T>
+[[nodiscard]] inline bool atomicCas(std::atomic<T> &atom, T &expected, T desired,
+                                    std::memory_order successOrder = std::memory_order_acq_rel,
+                                    std::memory_order failureOrder = std::memory_order_acquire) noexcept
 {
     return atom.compare_exchange_weak(expected, desired, successOrder, failureOrder);
 }
@@ -82,11 +77,9 @@ template <typename T>
  * @return Previous value of @p atom.
  */
 template <typename T>
-    requires std::integral<T>
-[[nodiscard]] inline T atomicFetchAdd(
-    std::atomic<T>& atom,
-    T delta,
-    std::memory_order order = std::memory_order_acq_rel) noexcept
+requires std::integral<T>
+[[nodiscard]] inline T atomicFetchAdd(std::atomic<T> &atom, T delta,
+                                      std::memory_order order = std::memory_order_acq_rel) noexcept
 {
     return atom.fetch_add(delta, order);
 }
@@ -100,11 +93,9 @@ template <typename T>
  * @return Previous value of @p atom.
  */
 template <typename T>
-    requires std::integral<T>
-[[nodiscard]] inline T atomicFetchSub(
-    std::atomic<T>& atom,
-    T delta,
-    std::memory_order order = std::memory_order_acq_rel) noexcept
+requires std::integral<T>
+[[nodiscard]] inline T atomicFetchSub(std::atomic<T> &atom, T delta,
+                                      std::memory_order order = std::memory_order_acq_rel) noexcept
 {
     return atom.fetch_sub(delta, order);
 }

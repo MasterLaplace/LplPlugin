@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_CONCURRENCY_SPINLOCK_HPP
-    #define LPL_CONCURRENCY_SPINLOCK_HPP
+#    define LPL_CONCURRENCY_SPINLOCK_HPP
 
-#include <lpl/core/Platform.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Platform.hpp>
 
-#include <atomic>
+#    include <atomic>
 
 namespace lpl::concurrency {
 
@@ -29,8 +29,7 @@ namespace lpl::concurrency {
  *
  * Models the @c Lockable concept (core/Concepts.hpp).
  */
-class SpinLock final : public core::NonCopyable<SpinLock>
-{
+class SpinLock final : public core::NonCopyable<SpinLock> {
 public:
     /** @brief Default-constructs in unlocked state. */
     SpinLock() noexcept = default;
@@ -56,16 +55,10 @@ public:
      * @brief Attempts a single acquire without spinning.
      * @return @c true if the lock was successfully acquired.
      */
-    [[nodiscard]] bool tryLock() noexcept
-    {
-        return !_flag.test_and_set(std::memory_order_acquire);
-    }
+    [[nodiscard]] bool tryLock() noexcept { return !_flag.test_and_set(std::memory_order_acquire); }
 
     /** @brief Releases the lock. */
-    void unlock() noexcept
-    {
-        _flag.clear(std::memory_order_release);
-    }
+    void unlock() noexcept { _flag.clear(std::memory_order_release); }
 
 private:
     std::atomic_flag _flag = ATOMIC_FLAG_INIT;
@@ -76,27 +69,19 @@ private:
  * @brief RAII guard for SpinLock — acquires on construction, releases on
  *        destruction.
  */
-class SpinLockGuard final : public core::NonCopyable<SpinLockGuard>
-{
+class SpinLockGuard final : public core::NonCopyable<SpinLockGuard> {
 public:
     /**
      * @brief Acquires the given spin-lock.
      * @param lock Reference to the SpinLock to guard.
      */
-    explicit SpinLockGuard(SpinLock& lock) noexcept
-        : _lock{lock}
-    {
-        _lock.lock();
-    }
+    explicit SpinLockGuard(SpinLock &lock) noexcept : _lock{lock} { _lock.lock(); }
 
     /** @brief Releases the spin-lock. */
-    ~SpinLockGuard() noexcept
-    {
-        _lock.unlock();
-    }
+    ~SpinLockGuard() noexcept { _lock.unlock(); }
 
 private:
-    SpinLock& _lock;
+    SpinLock &_lock;
 };
 
 } // namespace lpl::concurrency

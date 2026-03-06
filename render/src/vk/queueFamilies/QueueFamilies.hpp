@@ -21,11 +21,11 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_QUEUEFAMILIES_HPP_
-    #define LPL_RENDER_VK_QUEUEFAMILIES_HPP_
+#define LPL_RENDER_VK_QUEUEFAMILIES_HPP_
 
 #include "debugMessenger/DebugMessenger.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 #include <optional>
 
@@ -48,7 +48,7 @@ const std::vector<const char *> DEVICE_EXTENSIONS = {VK_KHR_SWAPCHAIN_EXTENSION_
  * @endcode
  */
 class QueueFamilies {
-  public:
+public:
     /**
      * @struct QueueFamilyIndices
      * @brief Holds indices for Vulkan queue families.
@@ -80,7 +80,7 @@ class QueueFamilies {
         [[nodiscard]] bool IsComplete() const { return graphicsFamily.has_value() && presentFamily.has_value(); }
     };
 
-  public:
+public:
     /**
      * @brief Finds the queue families for a given Vulkan physical device.
      *
@@ -106,7 +106,7 @@ class QueueFamilies {
      */
     [[nodiscard]] const QueueFamilyIndices &GetIndices() const { return _indices; }
 
-  private:
+private:
     QueueFamilyIndices _indices;
 };
 

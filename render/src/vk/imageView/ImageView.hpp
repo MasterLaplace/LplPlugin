@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_IMAGEVIEW_HPP_
-    #define LPL_RENDER_VK_IMAGEVIEW_HPP_
+#define LPL_RENDER_VK_IMAGEVIEW_HPP_
 
 #include "swapChain/SwapChain.hpp"
 
@@ -38,7 +38,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class ImageView {
-  public:
+public:
     /** @brief Creates image views for the provided swap chain images.
      *
      * This function initializes image views for each image in the swap chain.
@@ -80,7 +80,8 @@ class ImageView {
      * @return VkImageView  The image view.
      */
     [[nodiscard]] static VkImageView CreateImageView(const VkDevice &device, VkImage image, VkFormat format,
-                                                     VkImageAspectFlags aspectFlags, uint32_t mipLevels = 1, uint32_t layer = 0);
+                                                     VkImageAspectFlags aspectFlags, uint32_t mipLevels = 1,
+                                                     uint32_t layer = 0);
 
     /**
      * @brief Get the Image Views object.
@@ -89,7 +90,7 @@ class ImageView {
      */
     [[nodiscard]] const std::vector<VkImageView> &GetImageViews() const { return _swapChainImageViews; }
 
-  private:
+private:
     std::vector<VkImageView> _swapChainImageViews;
 };
 

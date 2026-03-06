@@ -22,29 +22,29 @@
 #pragma once
 
 #ifndef LPL_MATH_FIXED_POINT_HPP
-    #define LPL_MATH_FIXED_POINT_HPP
+#    define LPL_MATH_FIXED_POINT_HPP
 
-    #include <lpl/core/Platform.hpp>
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Platform.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <compare>
-    #include <limits>
-    #include <type_traits>
+#    include <compare>
+#    include <limits>
+#    include <type_traits>
 
 namespace lpl::math {
 
 template <typename IntType, core::u32 FracBits>
-    requires std::is_signed_v<IntType>
+requires std::is_signed_v<IntType>
 class FixedPoint final {
 public:
     using raw_type = IntType;
 
     static constexpr core::u32 kFracBits = FracBits;
-    static constexpr IntType   kOne      = static_cast<IntType>(1) << FracBits;
+    static constexpr IntType kOne = static_cast<IntType>(1) << FracBits;
 
     constexpr FixedPoint() = default;
 
-    /// @brief Construct from a raw integer value (direct bit pattern).
+    /** @brief Construct from a raw integer value (direct bit pattern). */
     explicit constexpr FixedPoint(IntType rawValue) : _raw{rawValue} {}
 
     static constexpr FixedPoint fromRaw(IntType raw);
@@ -52,24 +52,24 @@ public:
     static constexpr FixedPoint fromFloat(float f);
     static constexpr FixedPoint fromDouble(double d);
 
-    [[nodiscard]] constexpr IntType raw()      const;
-    [[nodiscard]] constexpr IntType toInt()    const;
-    [[nodiscard]] constexpr float   toFloat()  const;
-    [[nodiscard]] constexpr double  toDouble() const;
+    [[nodiscard]] constexpr IntType raw() const;
+    [[nodiscard]] constexpr IntType toInt() const;
+    [[nodiscard]] constexpr float toFloat() const;
+    [[nodiscard]] constexpr double toDouble() const;
 
-    constexpr FixedPoint  operator+ (FixedPoint rhs) const;
-    constexpr FixedPoint  operator- (FixedPoint rhs) const;
-    constexpr FixedPoint  operator* (FixedPoint rhs) const;
-    constexpr FixedPoint  operator/ (FixedPoint rhs) const;
-    constexpr FixedPoint  operator- ()               const;
+    constexpr FixedPoint operator+(FixedPoint rhs) const;
+    constexpr FixedPoint operator-(FixedPoint rhs) const;
+    constexpr FixedPoint operator*(FixedPoint rhs) const;
+    constexpr FixedPoint operator/(FixedPoint rhs) const;
+    constexpr FixedPoint operator-() const;
 
     constexpr FixedPoint &operator+=(FixedPoint rhs);
     constexpr FixedPoint &operator-=(FixedPoint rhs);
     constexpr FixedPoint &operator*=(FixedPoint rhs);
     constexpr FixedPoint &operator/=(FixedPoint rhs);
 
-    constexpr auto operator<=>(const FixedPoint& rhs) const = default;
-    constexpr bool operator== (const FixedPoint& rhs) const = default;
+    constexpr auto operator<=>(const FixedPoint &rhs) const = default;
+    constexpr bool operator==(const FixedPoint &rhs) const = default;
 
     static constexpr FixedPoint zero();
     static constexpr FixedPoint one();
@@ -86,11 +86,7 @@ public:
 private:
     IntType _raw = 0;
 
-    using wide_type = std::conditional_t<
-        sizeof(IntType) <= 4,
-        core::i64,
-        __int128
-    >;
+    using wide_type = std::conditional_t<sizeof(IntType) <= 4, core::i64, __int128>;
 };
 
 using Fixed32 = FixedPoint<core::i32, 16>;
@@ -98,6 +94,6 @@ using Fixed64 = FixedPoint<core::i64, 32>;
 
 } // namespace lpl::math
 
-    #include "FixedPoint.inl"
+#    include "FixedPoint.inl"
 
 #endif // LPL_MATH_FIXED_POINT_HPP

@@ -36,11 +36,11 @@ namespace lpl::bci::openvibe {
  * @brief Configuration for the muscle relaxation processor.
  */
 struct MuscleRelaxationConfig {
-    float lowerFreqHz    = 40.0f;
-    float upperFreqHz    = 70.0f;
+    float lowerFreqHz = 40.0f;
+    float upperFreqHz = 70.0f;
     float alertThreshold = 0.5f;
-    float sampleRate     = 250.0f;
-    std::size_t fftSize  = 256;
+    float sampleRate = 250.0f;
+    std::size_t fftSize = 256;
 };
 
 /**
@@ -48,7 +48,7 @@ struct MuscleRelaxationConfig {
  */
 struct MuscleRelaxationResult {
     float gammaRatio = 0.0f;
-    bool isAlert     = false;
+    bool isAlert = false;
 };
 
 /**
@@ -64,7 +64,7 @@ public:
      *
      * @param config Frequency band and threshold parameters
      */
-    explicit MuscleRelaxationBox(const MuscleRelaxationConfig& config = {});
+    explicit MuscleRelaxationBox(const MuscleRelaxationConfig &config = {});
 
     /**
      * @brief Computes R(t) from per-channel PSD data.
@@ -74,13 +74,12 @@ public:
      * @param psd Per-channel PSD arrays [channelCount][bins]
      * @return Muscle relaxation result with ratio and alert flag
      */
-    [[nodiscard]] MuscleRelaxationResult compute(
-        std::span<const std::vector<float>> psd) const noexcept;
+    [[nodiscard]] MuscleRelaxationResult compute(std::span<const std::vector<float>> psd) const noexcept;
 
     /**
      * @brief Returns the current configuration.
      */
-    [[nodiscard]] const MuscleRelaxationConfig& config() const noexcept;
+    [[nodiscard]] const MuscleRelaxationConfig &config() const noexcept;
 
 private:
     MuscleRelaxationConfig _config;

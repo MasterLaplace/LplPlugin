@@ -11,10 +11,10 @@
 #pragma once
 
 #ifndef LPL_PHYSICS_IPHYSICSBACKEND_HPP
-    #define LPL_PHYSICS_IPHYSICSBACKEND_HPP
+#    define LPL_PHYSICS_IPHYSICSBACKEND_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
 namespace lpl::physics {
 
@@ -26,8 +26,7 @@ namespace lpl::physics {
  *   - @c CpuPhysicsBackend  — single-threaded CPU reference.
  *   - GPU backends via the @c gpu module (CUDA / Vulkan Compute).
  */
-class IPhysicsBackend
-{
+class IPhysicsBackend {
 public:
     virtual ~IPhysicsBackend() = default;
 
@@ -44,7 +43,7 @@ public:
     virtual void shutdown() = 0;
 
     /** @brief Returns a human-readable name for this backend. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::physics

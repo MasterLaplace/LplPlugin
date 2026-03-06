@@ -23,8 +23,9 @@ namespace lpl::net::transport {
 
 struct SocketTransport::Impl
 {
-    core::u16 port;
-    int       fd{-1};
+    core::u16    port;
+    int          fd{-1};
+    sockaddr_in  defaultDest{};   ///< Used when send() is called with nullptr address.
 
     explicit Impl(core::u16 p) : port{p} {}
 };
@@ -83,7 +84,13 @@ core::Expected<core::u32> SocketTransport::send(
         return core::makeError(core::ErrorCode::InvalidState, "Socket not open");
     }
 
-    const auto* addr = static_cast<const sockaddr_in*>(address);
+    // Fall back to the pre-set default destination when no address is provided
+    // (e.g. InputSendSystem calling sendInputs(..., nullptr, ...)).
+    const sockaddr_in* addr = static_cast<const sockaddr_in*>(address);
+    if (!addr || addr->sin_port == 0)
+    {
+        addr = &_impl->defaultDest;
+    }
     const auto sent = ::sendto(_impl->fd,
                                data.data(),
                                data.size(),
@@ -133,6 +140,14 @@ core::Expected<core::u32> SocketTransport::receive(
 const char* SocketTransport::name() const noexcept
 {
     return "SocketTransport";
+}
+
+void SocketTransport::setDefaultDest(const void* addr) noexcept
+{
+    if (addr)
+    {
+        _impl->defaultDest = *static_cast<const sockaddr_in*>(addr);
+    }
 }
 
 } // namespace lpl::net::transport

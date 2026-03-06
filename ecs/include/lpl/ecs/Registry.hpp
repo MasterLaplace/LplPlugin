@@ -11,17 +11,17 @@
 #pragma once
 
 #ifndef LPL_ECS_REGISTRY_HPP
-    #define LPL_ECS_REGISTRY_HPP
+#    define LPL_ECS_REGISTRY_HPP
 
-#include <lpl/ecs/Entity.hpp>
-#include <lpl/ecs/Archetype.hpp>
-#include <lpl/ecs/Partition.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Archetype.hpp>
+#    include <lpl/ecs/Entity.hpp>
+#    include <lpl/ecs/Partition.hpp>
 
-#include <memory>
-#include <vector>
+#    include <memory>
+#    include <vector>
 
 namespace lpl::ecs {
 
@@ -33,8 +33,7 @@ namespace lpl::ecs {
  * slot is recycled and the generation is bumped, invalidating stale
  * EntityIds.
  */
-class Registry final : public core::NonCopyable<Registry>
-{
+class Registry final : public core::NonCopyable<Registry> {
 public:
     /** @brief Default-constructs an empty registry. */
     Registry();
@@ -49,7 +48,7 @@ public:
      * @param archetype Archetype determining which components the entity has.
      * @return Entity identifier on success, or error on pool exhaustion.
      */
-    [[nodiscard]] core::Expected<EntityId> createEntity(const Archetype& archetype);
+    [[nodiscard]] core::Expected<EntityId> createEntity(const Archetype &archetype);
 
     /**
      * @brief Destroys an entity, recycling its slot.
@@ -79,7 +78,7 @@ public:
     // --------------------------------------------------------------------- //
 
     /** @brief Returns or creates the partition for the given archetype. */
-    [[nodiscard]] Partition& getOrCreatePartition(const Archetype& archetype);
+    [[nodiscard]] Partition &getOrCreatePartition(const Archetype &archetype);
 
     /** @brief Returns a read-only view of all partitions. */
     [[nodiscard]] std::span<const std::unique_ptr<Partition>> partitions() const noexcept;

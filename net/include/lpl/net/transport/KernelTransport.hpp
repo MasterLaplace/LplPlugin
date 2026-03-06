@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_NET_TRANSPORT_KERNELTRANSPORT_HPP
-    #define LPL_NET_TRANSPORT_KERNELTRANSPORT_HPP
+#    define LPL_NET_TRANSPORT_KERNELTRANSPORT_HPP
 
-#include <lpl/net/transport/ITransport.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/net/transport/ITransport.hpp>
 
-#include <memory>
+#    include <memory>
 
 namespace lpl::net::transport {
 
@@ -27,29 +27,23 @@ namespace lpl::net::transport {
  *
  * Falls back to @c SocketTransport if the device node is unavailable.
  */
-class KernelTransport final : public ITransport,
-                              public core::NonCopyable<KernelTransport>
-{
+class KernelTransport final : public ITransport, public core::NonCopyable<KernelTransport> {
 public:
     /**
      * @brief Constructs targeting the given device path.
      * @param devicePath Path to char device (default: /dev/lpl0).
      */
-    explicit KernelTransport(const char* devicePath = "/dev/lpl0");
+    explicit KernelTransport(const char *devicePath = "/dev/lpl0");
     ~KernelTransport() override;
 
     [[nodiscard]] core::Expected<void> open() override;
     void close() override;
 
-    [[nodiscard]] core::Expected<core::u32> send(
-        std::span<const core::byte> data,
-        const void* address) override;
+    [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const void *address) override;
 
-    [[nodiscard]] core::Expected<core::u32> receive(
-        std::span<core::byte> buffer,
-        void* fromAddress) override;
+    [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, void *fromAddress) override;
 
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     struct Impl;

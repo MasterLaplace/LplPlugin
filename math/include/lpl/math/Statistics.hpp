@@ -10,11 +10,11 @@
 #pragma once
 
 #ifndef LPL_MATH_STATISTICS_HPP
-    #define LPL_MATH_STATISTICS_HPP
+#    define LPL_MATH_STATISTICS_HPP
 
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <span>
+#    include <span>
 
 namespace lpl::math {
 
@@ -33,11 +33,7 @@ public:
      * @param binHigh Upper frequency bin (exclusive).
      * @return Integrated power.
      */
-    [[nodiscard]] static double integratePsd(
-        std::span<const double> psd,
-        core::u32 binLow,
-        core::u32 binHigh
-    );
+    [[nodiscard]] static double integratePsd(std::span<const double> psd, core::u32 binLow, core::u32 binHigh);
 
     /**
      * @brief Convert a frequency in Hz to an FFT bin index.
@@ -46,11 +42,7 @@ public:
      * @param fftSize    Number of FFT points.
      * @return Bin index.
      */
-    [[nodiscard]] static core::u32 hzToBin(
-        double freqHz,
-        double sampleRate,
-        core::u32 fftSize
-    );
+    [[nodiscard]] static core::u32 hzToBin(double freqHz, double sampleRate, core::u32 fftSize);
 
     /**
      * @brief Compute a sliding-window RMS over a signal.
@@ -58,11 +50,7 @@ public:
      * @param windowSize Number of samples per window.
      * @param[out] rms   Output RMS values.
      */
-    static void slidingWindowRms(
-        std::span<const double> signal,
-        core::u32 windowSize,
-        std::span<double> rms
-    );
+    static void slidingWindowRms(std::span<const double> signal, core::u32 windowSize, std::span<double> rms);
 
     /**
      * @brief Compute baseline mean and standard deviation.
@@ -70,11 +58,7 @@ public:
      * @param[out] mean Output mean.
      * @param[out] stddev Output standard deviation.
      */
-    static void computeBaseline(
-        std::span<const double> samples,
-        double &mean,
-        double &stddev
-    );
+    static void computeBaseline(std::span<const double> samples, double &mean, double &stddev);
 };
 
 } // namespace lpl::math

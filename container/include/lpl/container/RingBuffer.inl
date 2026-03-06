@@ -5,12 +5,12 @@
  */
 
 #ifndef LPL_CONTAINER_RING_BUFFER_INL
-    #define LPL_CONTAINER_RING_BUFFER_INL
+#define LPL_CONTAINER_RING_BUFFER_INL
 
 namespace lpl::container {
 
 template <typename T, core::usize C>
-    requires (std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
 bool RingBuffer<T, C>::push(const T &item)
 {
     auto tail = _tail.load(std::memory_order_relaxed);
@@ -25,7 +25,7 @@ bool RingBuffer<T, C>::push(const T &item)
 }
 
 template <typename T, core::usize C>
-    requires (std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
 bool RingBuffer<T, C>::pop(T &item)
 {
     auto head = _head.load(std::memory_order_relaxed);
@@ -39,7 +39,7 @@ bool RingBuffer<T, C>::pop(T &item)
 }
 
 template <typename T, core::usize C>
-    requires (std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
 core::usize RingBuffer<T, C>::drain(std::span<T> out)
 {
     core::usize count = 0;
@@ -50,7 +50,7 @@ core::usize RingBuffer<T, C>::drain(std::span<T> out)
 }
 
 template <typename T, core::usize C>
-    requires (std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
 bool RingBuffer<T, C>::isFull() const
 {
     auto next = (_tail.load(std::memory_order_relaxed) + 1) & kMask;
@@ -58,14 +58,14 @@ bool RingBuffer<T, C>::isFull() const
 }
 
 template <typename T, core::usize C>
-    requires (std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
 bool RingBuffer<T, C>::isEmpty() const
 {
     return _head.load(std::memory_order_acquire) == _tail.load(std::memory_order_acquire);
 }
 
 template <typename T, core::usize C>
-    requires (std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(C) && std::is_trivially_copyable_v<T>)
 core::usize RingBuffer<T, C>::size() const
 {
     auto h = _head.load(std::memory_order_acquire);

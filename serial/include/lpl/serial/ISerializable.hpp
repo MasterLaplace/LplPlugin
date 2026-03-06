@@ -10,18 +10,19 @@
 #pragma once
 
 #ifndef LPL_SERIAL_ISERIALIZABLE_HPP
-    #define LPL_SERIAL_ISERIALIZABLE_HPP
+#    define LPL_SERIAL_ISERIALIZABLE_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
-namespace lpl::net::protocol { class Bitstream; }
+namespace lpl::net::protocol {
+class Bitstream;
+}
 
 namespace lpl::serial {
 
 /** @brief Interface for types that support binary serialization. */
-class ISerializable
-{
+class ISerializable {
 public:
     virtual ~ISerializable() = default;
 
@@ -30,16 +31,14 @@ public:
      * @param stream Output bitstream.
      * @return Success or error.
      */
-    [[nodiscard]] virtual core::Expected<void> serialize(
-        net::protocol::Bitstream& stream) const = 0;
+    [[nodiscard]] virtual core::Expected<void> serialize(net::protocol::Bitstream &stream) const = 0;
 
     /**
      * @brief Deserialize this object from the bitstream.
      * @param stream Input bitstream.
      * @return Success or error.
      */
-    [[nodiscard]] virtual core::Expected<void> deserialize(
-        net::protocol::Bitstream& stream) = 0;
+    [[nodiscard]] virtual core::Expected<void> deserialize(net::protocol::Bitstream &stream) = 0;
 
     /** @brief Size in bytes when serialized (0 = variable). */
     [[nodiscard]] virtual core::usize serializedSize() const noexcept { return 0; }

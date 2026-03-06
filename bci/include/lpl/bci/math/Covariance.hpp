@@ -29,7 +29,7 @@ namespace lpl::bci::math {
  * @param data  Sample matrix [samples x channels]
  * @return Covariance matrix [channels x channels], or zero matrix if < 2 samples
  */
-[[nodiscard]] Eigen::MatrixXf batchCovariance(const Eigen::MatrixXf& data) noexcept;
+[[nodiscard]] Eigen::MatrixXf batchCovariance(const Eigen::MatrixXf &data) noexcept;
 
 /**
  * @brief Computes a regularized covariance matrix.
@@ -42,9 +42,7 @@ namespace lpl::bci::math {
  * @param alpha Shrinkage parameter in [0, 1]
  * @return Regularized covariance matrix
  */
-[[nodiscard]] Eigen::MatrixXf regularizeCovariance(
-    const Eigen::MatrixXf& cov,
-    float alpha = 0.01f) noexcept;
+[[nodiscard]] Eigen::MatrixXf regularizeCovariance(const Eigen::MatrixXf &cov, float alpha = 0.01f) noexcept;
 
 /**
  * @brief Online (Welford) covariance estimator.
@@ -78,7 +76,7 @@ public:
     /**
      * @brief Returns the current sample mean per channel.
      */
-    [[nodiscard]] const Eigen::VectorXf& mean() const noexcept;
+    [[nodiscard]] const Eigen::VectorXf &mean() const noexcept;
 
     /**
      * @brief Number of samples fed so far.

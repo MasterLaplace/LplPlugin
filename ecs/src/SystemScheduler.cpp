@@ -12,6 +12,7 @@
 #include <lpl/core/Assert.hpp>
 
 #include <algorithm>
+#include <functional>
 #include <latch>
 #include <queue>
 #include <unordered_map>
@@ -29,6 +30,9 @@ struct SystemScheduler::Impl
     std::vector<std::unique_ptr<ISystem>>           systems;
     std::vector<std::vector<core::u32>>             waves;
     bool                                            graphBuilt{false};
+
+    // Phase boundary callbacks: indexed by SchedulePhase (fired after that phase)
+    std::function<void()> phaseCallbacks[static_cast<core::u8>(SchedulePhase::Count)] = {};
 
     explicit Impl(concurrency::ThreadPool& p) : pool{p} {}
 };
@@ -158,8 +162,28 @@ void SystemScheduler::tick(core::f32 dt)
 {
     LPL_ASSERT(_impl->graphBuilt);
 
+    // Track which phase was last executed to detect phase transitions
+    auto lastPhase = SchedulePhase::Count;
+
     for (const auto& wave : _impl->waves)
     {
+        // Determine the phase of the first system in this wave.
+        // All systems in a wave share the same phase (guaranteed by the DAG
+        // which creates edges across phases), or they are in the same phase
+        // with no data conflicts.
+        const auto wavePhase = _impl->systems[wave[0]]->descriptor().phase;
+
+        // Fire phase callback on transition
+        if (lastPhase != SchedulePhase::Count && wavePhase != lastPhase)
+        {
+            const auto idx = static_cast<core::u8>(lastPhase);
+            if (_impl->phaseCallbacks[idx])
+            {
+                _impl->phaseCallbacks[idx]();
+            }
+        }
+        lastPhase = wavePhase;
+
         if (wave.size() == 1)
         {
             _impl->systems[wave[0]]->execute(dt);
@@ -178,6 +202,23 @@ void SystemScheduler::tick(core::f32 dt)
 
         barrier.wait();
     }
+
+    // Fire callback for the last phase if any
+    if (lastPhase != SchedulePhase::Count)
+    {
+        const auto idx = static_cast<core::u8>(lastPhase);
+        if (_impl->phaseCallbacks[idx])
+        {
+            _impl->phaseCallbacks[idx]();
+        }
+    }
+}
+
+void SystemScheduler::setPhaseCallback(SchedulePhase afterPhase,
+                                       std::function<void()> callback)
+{
+    const auto idx = static_cast<core::u8>(afterPhase);
+    _impl->phaseCallbacks[idx] = std::move(callback);
 }
 
 core::u32 SystemScheduler::systemCount() const noexcept

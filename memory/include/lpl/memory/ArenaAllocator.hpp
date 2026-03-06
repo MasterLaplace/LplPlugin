@@ -16,11 +16,11 @@
 #pragma once
 
 #ifndef LPL_MEMORY_ARENA_ALLOCATOR_HPP
-    #define LPL_MEMORY_ARENA_ALLOCATOR_HPP
+#    define LPL_MEMORY_ARENA_ALLOCATOR_HPP
 
-    #include "IAllocator.hpp"
+#    include "IAllocator.hpp"
 
-    #include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
 
 namespace lpl::memory {
 
@@ -41,13 +41,13 @@ public:
     void reset() override;
     [[nodiscard]] bool ownsPtr(const void *ptr) const override;
 
-    [[nodiscard]] core::usize used()     const { return _offset; }
+    [[nodiscard]] core::usize used() const { return _offset; }
     [[nodiscard]] core::usize capacity() const { return _capacity; }
 
 private:
-    char       *_memory   = nullptr;
+    char *_memory = nullptr;
     core::usize _capacity = 0;
-    core::usize _offset   = 0;
+    core::usize _offset = 0;
 };
 
 } // namespace lpl::memory

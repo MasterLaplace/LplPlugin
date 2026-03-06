@@ -15,9 +15,9 @@
 #pragma once
 
 #ifndef LPL_MEMORY_INTRUSIVE_LIST_HPP
-    #define LPL_MEMORY_INTRUSIVE_LIST_HPP
+#    define LPL_MEMORY_INTRUSIVE_LIST_HPP
 
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
 
 namespace lpl::memory {
 
@@ -33,7 +33,7 @@ struct IntrusiveNode {
  * @tparam T Type that publicly inherits IntrusiveNode.
  */
 template <typename T>
-    requires std::derived_from<T, IntrusiveNode>
+requires std::derived_from<T, IntrusiveNode>
 class IntrusiveList final {
 public:
     /**
@@ -55,8 +55,10 @@ public:
     bool remove(T *element)
     {
         IntrusiveNode **pp = &_head;
-        while (*pp) {
-            if (*pp == element) {
+        while (*pp)
+        {
+            if (*pp == element)
+            {
                 *pp = element->next;
                 element->next = nullptr;
                 --_size;
@@ -72,18 +74,18 @@ public:
      * @tparam Fn Callable taking T&.
      * @param fn  Visitor.
      */
-    template <typename Fn>
-    void forEach(Fn &&fn)
+    template <typename Fn> void forEach(Fn &&fn)
     {
         auto *node = _head;
-        while (node) {
+        while (node)
+        {
             fn(*static_cast<T *>(node));
             node = node->next;
         }
     }
 
-    [[nodiscard]] bool        empty() const { return _head == nullptr; }
-    [[nodiscard]] core::usize size()  const { return _size; }
+    [[nodiscard]] bool empty() const { return _head == nullptr; }
+    [[nodiscard]] core::usize size() const { return _size; }
 
     void clear()
     {
@@ -93,7 +95,7 @@ public:
 
 private:
     IntrusiveNode *_head = nullptr;
-    core::usize    _size = 0;
+    core::usize _size = 0;
 };
 
 } // namespace lpl::memory

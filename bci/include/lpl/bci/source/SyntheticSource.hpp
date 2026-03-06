@@ -40,11 +40,8 @@ public:
      * @param realtime If true, respects the 250 Hz timing; if false, generates
      *                 a fixed batch per read() call (burst mode for tests)
      */
-    explicit SyntheticSource(
-        std::uint64_t seed = 0,
-        bool realtime = true,
-        std::size_t channelCount = kDefaultChannelCount,
-        float sampleRate = kDefaultSampleRate);
+    explicit SyntheticSource(std::uint64_t seed = 0, bool realtime = true,
+                             std::size_t channelCount = kDefaultChannelCount, float sampleRate = kDefaultSampleRate);
 
     [[nodiscard]] ExpectedVoid start() override;
     [[nodiscard]] Expected<std::size_t> read(std::span<Sample> buffer) override;

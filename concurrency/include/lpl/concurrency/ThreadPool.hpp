@@ -11,21 +11,21 @@
 #pragma once
 
 #ifndef LPL_CONCURRENCY_THREADPOOL_HPP
-    #define LPL_CONCURRENCY_THREADPOOL_HPP
+#    define LPL_CONCURRENCY_THREADPOOL_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <atomic>
-#include <condition_variable>
-#include <deque>
-#include <functional>
-#include <future>
-#include <mutex>
-#include <thread>
-#include <type_traits>
-#include <vector>
+#    include <atomic>
+#    include <condition_variable>
+#    include <deque>
+#    include <functional>
+#    include <future>
+#    include <mutex>
+#    include <thread>
+#    include <type_traits>
+#    include <vector>
 
 namespace lpl::concurrency {
 
@@ -40,8 +40,7 @@ namespace lpl::concurrency {
  * Call @ref shutdown to drain all queued tasks; the destructor calls
  * @c shutdown implicitly.
  */
-class ThreadPool final : public core::NonCopyable<ThreadPool>
-{
+class ThreadPool final : public core::NonCopyable<ThreadPool> {
 public:
     /**
      * @brief Creates the pool with @p threadCount worker threads.
@@ -66,16 +65,14 @@ public:
      * @return @c std::future holding the return value.
      */
     template <typename F, typename... Args>
-    [[nodiscard]] auto enqueue(F&& func, Args&&... args)
-        -> std::future<std::invoke_result_t<F, Args...>>;
+    [[nodiscard]] auto enqueue(F &&func, Args &&...args) -> std::future<std::invoke_result_t<F, Args...>>;
 
     /**
      * @brief Enqueues a fire-and-forget callable.
      * @tparam F Callable type.
      * @param func Callable to execute.
      */
-    template <typename F>
-    void enqueueDetached(F&& func);
+    template <typename F> void enqueueDetached(F &&func);
 
     // --------------------------------------------------------------------- //
     //  Lifecycle                                                             //
@@ -94,11 +91,11 @@ private:
     /** @brief Worker loop — waits on the CV and processes tasks. */
     void workerLoop();
 
-    std::vector<std::thread>            _workers;
-    std::deque<std::function<void()>>   _tasks;
-    std::mutex                          _mutex;
-    std::condition_variable             _cv;
-    std::atomic<bool>                   _stopping{false};
+    std::vector<std::thread> _workers;
+    std::deque<std::function<void()>> _tasks;
+    std::mutex _mutex;
+    std::condition_variable _cv;
+    std::atomic<bool> _stopping{false};
 };
 
 // /////////////////////////////////////////////////////////////////////////////
@@ -106,14 +103,12 @@ private:
 // /////////////////////////////////////////////////////////////////////////////
 
 template <typename F, typename... Args>
-auto ThreadPool::enqueue(F&& func, Args&&... args)
-    -> std::future<std::invoke_result_t<F, Args...>>
+auto ThreadPool::enqueue(F &&func, Args &&...args) -> std::future<std::invoke_result_t<F, Args...>>
 {
     using ReturnType = std::invoke_result_t<F, Args...>;
 
     auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-        std::bind(std::forward<F>(func), std::forward<Args>(args)...)
-    );
+        std::bind(std::forward<F>(func), std::forward<Args>(args)...));
 
     std::future<ReturnType> future = task->get_future();
 
@@ -126,8 +121,7 @@ auto ThreadPool::enqueue(F&& func, Args&&... args)
     return future;
 }
 
-template <typename F>
-void ThreadPool::enqueueDetached(F&& func)
+template <typename F> void ThreadPool::enqueueDetached(F &&func)
 {
     {
         std::lock_guard<std::mutex> lock{_mutex};

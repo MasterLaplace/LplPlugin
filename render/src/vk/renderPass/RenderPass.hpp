@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_RENDERPASS_HPP_
-    #define LPL_RENDER_VK_RENDERPASS_HPP_
+#define LPL_RENDER_VK_RENDERPASS_HPP_
 
 #include "buffers/Buffer.hpp"
 
@@ -37,7 +37,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class RenderPass {
-  public:
+public:
     /**
      * @brief Creates a render pass.
      *
@@ -70,7 +70,7 @@ class RenderPass {
      */
     [[nodiscard]] const VkRenderPass &Get() const { return _renderPass; }
 
-  private:
+private:
     VkRenderPass _renderPass;
 };
 

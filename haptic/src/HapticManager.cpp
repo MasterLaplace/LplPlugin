@@ -9,7 +9,6 @@
  */
 
 #include <lpl/haptic/HapticManager.hpp>
-#include <stdexcept>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -59,6 +58,7 @@ void HapticManager::playAtPosition(
     const math::Vec3<math::Fixed32>& /*worldPosition*/,
     core::f32 /*intensity*/)
 {
+    /// @todo Map world position to nearest haptic actuator and modulate intensity.
     LPL_ASSERT(false && "unimplemented");
 }
 

@@ -130,8 +130,8 @@ void SessionManager::broadcastState(transport::ITransport& transport,
                 continue;
             }
 
-            // Use the session's stored address (player ID as address proxy)
-            auto result = transport.send(fragment, nullptr);
+            // Use the session's stored endpoint address
+            auto result = transport.send(fragment, session->address());
             if (!result.has_value())
             {
                 core::Log::warn("SessionManager: broadcast fragment failed");

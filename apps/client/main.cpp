@@ -25,6 +25,8 @@ int main(int /*argc*/, char* /*argv*/[])
         .arenaSize(64 * 1024 * 1024)
         .enableGpu(true)
         .enableBci(false)
+        .serverAddress("127.0.0.1")
+        .serverPort(4242)
         .build();
 
     lpl::engine::Engine engine{config};

@@ -48,7 +48,7 @@ public:
      * @return Reference to this builder (for chaining)
      */
     template <typename T, typename... Args>
-        requires std::derived_from<T, IStage>
+    requires std::derived_from<T, IStage>
     PipelineBuilder &add(Args &&...args)
     {
         _stages.push_back(std::make_unique<T>(std::forward<Args>(args)...));

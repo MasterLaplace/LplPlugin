@@ -11,10 +11,10 @@
 #pragma once
 
 #ifndef LPL_INPUT_IINPUTSOURCE_HPP
-    #define LPL_INPUT_IINPUTSOURCE_HPP
+#    define LPL_INPUT_IINPUTSOURCE_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
 namespace lpl::input {
 
@@ -25,8 +25,7 @@ namespace lpl::input {
  * Concrete implementations provide keyboard, gamepad, VR controller, or
  * BCI neural input.
  */
-class IInputSource
-{
+class IInputSource {
 public:
     virtual ~IInputSource() = default;
 
@@ -40,7 +39,7 @@ public:
     virtual void shutdown() = 0;
 
     /** @brief Returns a human-readable name. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::input

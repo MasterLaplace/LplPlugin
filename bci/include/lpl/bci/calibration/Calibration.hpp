@@ -42,7 +42,7 @@ using StateChangeCallback = std::function<void(CalibrationState oldState, Calibr
  * @brief Configuration for the calibration process.
  */
 struct CalibrationConfig {
-    std::size_t channelCount   = 8;
+    std::size_t channelCount = 8;
     std::size_t requiredTrials = 30;
 };
 
@@ -62,7 +62,7 @@ public:
      *
      * @param config Channel count and required trial count
      */
-    explicit Calibration(const CalibrationConfig& config = {});
+    explicit Calibration(const CalibrationConfig &config = {});
 
     /**
      * @brief Registers an observer for state-change notifications.
@@ -87,9 +87,7 @@ public:
      * @param betaPowers  Per-channel beta power (size == channelCount)
      * @return Error if not currently calibrating or size mismatch
      */
-    [[nodiscard]] ExpectedVoid addTrial(
-        std::span<const float> alphaPowers,
-        std::span<const float> betaPowers);
+    [[nodiscard]] ExpectedVoid addTrial(std::span<const float> alphaPowers, std::span<const float> betaPowers);
 
     /**
      * @brief Returns the computed per-channel baselines.

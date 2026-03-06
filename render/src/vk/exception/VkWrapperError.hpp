@@ -20,11 +20,11 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_VKWRAPPERERROR_HPP_
-    #define LPL_RENDER_VK_VKWRAPPERERROR_HPP_
+#define LPL_RENDER_VK_VKWRAPPERERROR_HPP_
 
+#include <cstdlib>
 #include <cstring>
 #include <lpl/core/Log.hpp>
-#include <cstdlib>
 #include <stdexcept>
 #include <string>
 
@@ -48,12 +48,12 @@ namespace lpl::render::vk {
  * @endcode
  */
 class VkWrapperError : public std::exception {
-  public:
+public:
     explicit VkWrapperError(const std::string &message) : msg("VkWrapper error: " + message){};
 
     const char *what() const throw() override { return this->msg.c_str(); };
 
-  private:
+private:
     std::string msg;
 };
 

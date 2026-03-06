@@ -11,13 +11,13 @@
 #pragma once
 
 #ifndef LPL_NET_PROTOCOL_DELTACOMPRESSION_HPP
-    #define LPL_NET_PROTOCOL_DELTACOMPRESSION_HPP
+#    define LPL_NET_PROTOCOL_DELTACOMPRESSION_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <span>
-#include <vector>
+#    include <span>
+#    include <vector>
 
 namespace lpl::net::protocol {
 
@@ -30,8 +30,7 @@ namespace lpl::net::protocol {
  * containing only the differing bytes (zero-run-length encoded for
  * bandwidth minimisation).
  */
-class DeltaCompression
-{
+class DeltaCompression {
 public:
     /**
      * @brief Encodes the delta between @p baseline and @p current.
@@ -39,9 +38,8 @@ public:
      * @param current  Current snapshot bytes.
      * @return Compressed delta buffer.
      */
-    [[nodiscard]] static core::Expected<std::vector<core::byte>> encode(
-        std::span<const core::byte> baseline,
-        std::span<const core::byte> current);
+    [[nodiscard]] static core::Expected<std::vector<core::byte>> encode(std::span<const core::byte> baseline,
+                                                                        std::span<const core::byte> current);
 
     /**
      * @brief Applies a delta on top of @p baseline to reconstruct the
@@ -50,9 +48,8 @@ public:
      * @param delta    Delta produced by @ref encode.
      * @return Reconstructed current state.
      */
-    [[nodiscard]] static core::Expected<std::vector<core::byte>> decode(
-        std::span<const core::byte> baseline,
-        std::span<const core::byte> delta);
+    [[nodiscard]] static core::Expected<std::vector<core::byte>> decode(std::span<const core::byte> baseline,
+                                                                        std::span<const core::byte> delta);
 };
 
 } // namespace lpl::net::protocol

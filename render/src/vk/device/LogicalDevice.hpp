@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_LOGICALDEVICE_HPP_
-    #define LPL_RENDER_VK_LOGICALDEVICE_HPP_
+#define LPL_RENDER_VK_LOGICALDEVICE_HPP_
 
 #include "queueFamilies/QueueFamilies.hpp"
 
@@ -39,7 +39,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class LogicalDevice {
-  public:
+public:
     /**
      * @brief Creates a logical device from the selected physical device.
      *
@@ -88,7 +88,7 @@ class LogicalDevice {
      */
     [[nodiscard]] const VkQueue &GetGraphicsQueue() { return _graphicsQueue; }
 
-  private:
+private:
     VkDevice _device = VK_NULL_HANDLE;
     QueueFamilies _queueFamilies;
     VkQueue _graphicsQueue;

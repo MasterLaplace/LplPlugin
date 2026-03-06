@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_FRAMEBUFFER_HPP_
-    #define LPL_RENDER_VK_FRAMEBUFFER_HPP_
+#define LPL_RENDER_VK_FRAMEBUFFER_HPP_
 
 #include "debugMessenger/DebugMessenger.hpp"
 
@@ -37,7 +37,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class Framebuffer {
-  public:
+public:
     struct CreateInfo {
         VkExtent2D swapChainExtent;
         VkRenderPass renderPass;
@@ -46,7 +46,7 @@ class Framebuffer {
         VkImageView colorImageView;
     };
 
-  public:
+public:
     /**
      * @brief Creates a framebuffer.
      *
@@ -75,7 +75,7 @@ class Framebuffer {
      */
     [[nodiscard]] const std::vector<VkFramebuffer> &GetSwapChainFramebuffers() const { return _swapChainFramebuffers; }
 
-  private:
+private:
     std::vector<VkFramebuffer> _swapChainFramebuffers;
 };
 

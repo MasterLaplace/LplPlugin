@@ -20,22 +20,20 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_BUFFER_HPP_
-    #define LPL_RENDER_VK_BUFFER_HPP_
+#define LPL_RENDER_VK_BUFFER_HPP_
 
-#include "imageView/ImageView.hpp"
 #include "buffers/Texture.hpp"
 #include "buffers/UniformObject.hpp"
+#include "imageView/ImageView.hpp"
 
+#include "wrapper/Model.hpp"
 #include <chrono>
-#include <unordered_map>
-#include <memory>
 #include <lpl/core/Types.hpp>
 #include <lpl/render/Mesh.hpp>
-#include "wrapper/Model.hpp"
+#include <memory>
+#include <unordered_map>
 
 namespace lpl::render::vk {
-
-
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -122,7 +120,7 @@ public:
 
     /**
      * @brief Create the Color Image object for MSAA.
-     * 
+     *
      * @param device The Vulkan device.
      * @param physicalDevice The Vulkan physical device.
      * @param swapChainExtent The swap chain extent.
@@ -134,8 +132,8 @@ public:
 
     /**
      * @brief Destroy the Color Image object in the Vulkan API.
-     * 
-     * @param device The Vulkan device. 
+     *
+     * @param device The Vulkan device.
      */
     void DestroyColorResources(const VkDevice &device);
 
@@ -291,7 +289,7 @@ private:
      * @param numSamples The number of samples for Multisampled Images.
      */
     void CreateImage(const VkDevice &device, const VkPhysicalDevice &physicalDevice, VkFormat format,
-                     VkImageTiling tiling, VkImageUsageFlags usage, Texture &texture, 
+                     VkImageTiling tiling, VkImageUsageFlags usage, Texture &texture,
                      VkSampleCountFlagBits numSamples = VK_SAMPLE_COUNT_1_BIT) const;
 
     /**
@@ -333,8 +331,8 @@ private:
      * @param newLayout  The new layout of the image.
      */
     void TransitionImageLayout(const VkDevice &device, const VkCommandPool &commandPool, const VkQueue &graphicsQueue,
-                               const VkImage &image, VkFormat format, VkImageLayout oldLayout,
-                               VkImageLayout newLayout, uint32_t mipLevels) const;
+                               const VkImage &image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
+                               uint32_t mipLevels) const;
 
     /**
      * @brief Copy a buffer to an image in the Vulkan API.

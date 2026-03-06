@@ -11,13 +11,13 @@
 #pragma once
 
 #ifndef LPL_PHYSICS_ISPATIALINDEX_HPP
-    #define LPL_PHYSICS_ISPATIALINDEX_HPP
+#    define LPL_PHYSICS_ISPATIALINDEX_HPP
 
-#include <lpl/math/AABB.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/math/AABB.hpp>
+#    include <lpl/math/FixedPoint.hpp>
 
-#include <functional>
+#    include <functional>
 
 namespace lpl::physics {
 
@@ -27,8 +27,7 @@ namespace lpl::physics {
  *
  * Concrete implementations: @c Octree, @c SpatialGrid.
  */
-class ISpatialIndex
-{
+class ISpatialIndex {
 public:
     virtual ~ISpatialIndex() = default;
 
@@ -37,12 +36,10 @@ public:
      * @param objectId User-defined identifier.
      * @param aabb     Axis-aligned bounding box.
      */
-    virtual void insert(core::u32 objectId,
-                        const math::AABB<math::Fixed32>& aabb) = 0;
+    virtual void insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) = 0;
 
     /** @brief Updates the AABB of an already-inserted object. */
-    virtual void update(core::u32 objectId,
-                        const math::AABB<math::Fixed32>& aabb) = 0;
+    virtual void update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) = 0;
 
     /** @brief Removes an object from the index. */
     virtual void remove(core::u32 objectId) = 0;
@@ -52,8 +49,8 @@ public:
      * @param region   Query AABB.
      * @param callback Called for every overlapping object ID.
      */
-    virtual void query(const math::AABB<math::Fixed32>& region,
-                       const std::function<void(core::u32)>& callback) const = 0;
+    virtual void query(const math::AABB<math::Fixed32> &region,
+                       const std::function<void(core::u32)> &callback) const = 0;
 
     /** @brief Rebuilds the internal structure (e.g. re-sort Morton keys). */
     virtual void rebuild() = 0;

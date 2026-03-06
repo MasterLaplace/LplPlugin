@@ -9,7 +9,6 @@
  */
 
 #include <lpl/serial/ReplayRecorder.hpp>
-#include <stdexcept>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -51,6 +50,8 @@ const ReplayFrame& ReplayRecorder::frame(core::usize index) const
 
 core::Expected<void> ReplayRecorder::saveToDisk(std::string_view /*path*/) const
 {
+    /// @todo Serialize all recorded frames and snapshots to binary file.
+    ///       Format: [frameCount][frames...][snapshotCount][snapshots...].
     LPL_ASSERT(false && "unimplemented");
     return {};
 }

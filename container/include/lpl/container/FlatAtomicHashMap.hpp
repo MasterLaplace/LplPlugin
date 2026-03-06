@@ -17,32 +17,37 @@
 #pragma once
 
 #ifndef LPL_CONTAINER_FLAT_ATOMIC_HASH_MAP_HPP
-    #define LPL_CONTAINER_FLAT_ATOMIC_HASH_MAP_HPP
+#    define LPL_CONTAINER_FLAT_ATOMIC_HASH_MAP_HPP
 
-    #include <lpl/core/Types.hpp>
-    #include <lpl/core/Assert.hpp>
+#    include <lpl/concurrency/SpinLock.hpp>
+#    include <lpl/core/Assert.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <atomic>
-    #include <functional>
-    #include <vector>
+#    include <atomic>
+#    include <memory>
+#    include <vector>
 
 namespace lpl::container {
 
 /**
- * @brief Lock-free flat hash map with contiguous value pool.
+ * @brief Lock-free flat hash map with contiguous value pool and slot recycling.
+ *
+ * Pool indices are recycled on removal via a free-list, and an activeSlots
+ * vector enables O(n_active) iteration instead of O(capacity).
+ *
  * @tparam V Value type.
  */
-template <typename V>
-class FlatAtomicHashMap final {
+template <typename V> class FlatAtomicHashMap final {
 public:
-    static constexpr core::u64 kEmpty     = 0;
+    static constexpr core::u64 kEmpty = 0;
     static constexpr core::u64 kTombstone = ~core::u64{0};
-    static constexpr core::u32 kKeyBits   = 42;
+    static constexpr core::u32 kKeyBits = 42;
     static constexpr core::u32 kIndexBits = 22;
 
     /**
      * @brief Construct the map with a fixed capacity.
-     * @param capacity Maximum number of entries (must be power of two).
+     * @param capacity Maximum number of pool entries.
+     *                 Map capacity is 2x rounded to power of two.
      */
     explicit FlatAtomicHashMap(core::u32 capacity);
 
@@ -55,41 +60,79 @@ public:
     [[nodiscard]] const V *get(core::u64 key) const;
 
     /**
-     * @brief Lock-free insertion (CAS).
+     * @brief Insert with default-constructed value.
      * @param key Morton key.
-     * @return Pointer to the newly inserted value, or nullptr on failure.
+     * @return Pointer to the value, or the existing value if key already present.
+     *         nullptr if pool exhausted.
      */
     V *insert(core::u64 key);
 
     /**
-     * @brief Lock-free removal via tombstone.
+     * @brief Insert with move semantics — value is fully written to pool
+     *        BEFORE the map entry becomes visible (no data race window).
+     * @param key Morton key.
+     * @param value Value to move into the pool slot.
+     * @return Pointer to the stored value, or the existing value if key
+     *         already present. nullptr if pool exhausted.
+     */
+    V *insert(core::u64 key, V &&value);
+
+    /**
+     * @brief Lock-free removal via tombstone + pool slot recycling.
      * @param key Morton key.
      * @return True if the entry was found and removed.
      */
     bool remove(core::u64 key);
 
     /**
-     * @brief Iterate over all live entries under a lock snapshot.
-     * @tparam Fn Callable(core::u64 key, V &value).
+     * @brief Iterate over active entries only — O(n_active).
+     *        Takes a snapshot of activeSlots under lock, then iterates
+     *        lock-free.
+     * @tparam Fn Callable(V &value).
      * @param fn Visitor.
      */
-    template <typename Fn>
-    void forEach(Fn &&fn);
+    template <typename Fn> void forEach(Fn &&fn);
 
-    [[nodiscard]] core::u32 size()     const { return _size.load(std::memory_order_relaxed); }
-    [[nodiscard]] core::u32 capacity() const { return _capacity; }
+    /**
+     * @brief Parallel iteration over active slots using a thread pool.
+     * @tparam TP Thread pool type (must have enqueue() returning future).
+     * @tparam Fn Callable(V&) or Callable(V&, core::u32 batchIdx).
+     * @param pool Thread pool reference.
+     * @param fn Function to execute per element.
+     * @param minPerThread Minimum items per batch to avoid overhead.
+     */
+    template <typename TP, typename Fn> void forEachParallel(TP &pool, Fn &&fn, core::u32 minPerThread = 64);
+
+    /**
+     * @brief Copy active pool indices snapshot (thread-safe).
+     */
+    void snapshotActiveSlots(std::vector<core::u32> &out);
+
+    /**
+     * @brief Direct access to a pool element by index.
+     * @param poolIdx Must come from snapshotActiveSlots().
+     */
+    [[nodiscard]] V &getByPoolIndex(core::u32 poolIdx) noexcept;
+
+    [[nodiscard]] core::u32 size() const { return _size.load(std::memory_order_relaxed); }
+    [[nodiscard]] core::u32 capacity() const { return _poolCapacity; }
 
 private:
-    std::vector<std::atomic<core::u64>> _entries;
-    std::vector<V>                      _pool;
-    std::atomic<core::u32>              _poolNext{0};
-    std::atomic<core::u32>              _size{0};
-    core::u32                           _capacity = 0;
-    core::u32                           _mask     = 0;
+    [[nodiscard]] bool linkKeyToSlot(core::u64 key, core::u32 slotIndex);
+
+    std::unique_ptr<std::atomic<core::u64>[]> _entries;
+    std::unique_ptr<V[]> _pool;
+    std::vector<core::u32> _freeIndices;
+    std::vector<core::u32> _activeSlots;
+    mutable concurrency::SpinLock _allocLock;
+    std::atomic<core::u32> _size{0};
+    core::u32 _poolCapacity = 0;
+    core::u32 _mapCapacity = 0;
+    core::u32 _mask = 0;
 };
 
 } // namespace lpl::container
 
-    #include "FlatAtomicHashMap.inl"
+#    include "FlatAtomicHashMap.inl"
 
 #endif // LPL_CONTAINER_FLAT_ATOMIC_HASH_MAP_HPP

@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_DESCRIPTOR_HPP_
-    #define LPL_RENDER_VK_DESCRIPTOR_HPP_
+#define LPL_RENDER_VK_DESCRIPTOR_HPP_
 
 #include "buffers/Buffer.hpp"
 
@@ -38,7 +38,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class Descriptor {
-  public:
+public:
     /**
      * @brief Creates the descriptor set layout.
      *
@@ -110,7 +110,7 @@ class Descriptor {
      */
     [[nodiscard]] const std::vector<VkDescriptorSet> &GetDescriptorSets() const { return _descriptorSets; }
 
-  private:
+private:
     VkDescriptorSetLayout _descriptorSetLayout;
     VkDescriptorPool _descriptorPool;
     std::vector<VkDescriptorSet> _descriptorSets;

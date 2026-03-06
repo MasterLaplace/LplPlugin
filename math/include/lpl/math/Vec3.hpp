@@ -15,15 +15,14 @@
 #pragma once
 
 #ifndef LPL_MATH_VEC3_HPP
-    #define LPL_MATH_VEC3_HPP
+#    define LPL_MATH_VEC3_HPP
 
-    #include <lpl/core/Concepts.hpp>
-    #include <lpl/core/Platform.hpp>
+#    include <lpl/core/Concepts.hpp>
+#    include <lpl/core/Platform.hpp>
 
 namespace lpl::math {
 
-template <core::Arithmetic T>
-struct Vec3 final {
+template <core::Arithmetic T> struct Vec3 final {
     T x{};
     T y{};
     T z{};
@@ -33,18 +32,18 @@ struct Vec3 final {
 
     [[nodiscard]] LPL_HD constexpr Vec3 operator+(Vec3 rhs) const;
     [[nodiscard]] LPL_HD constexpr Vec3 operator-(Vec3 rhs) const;
-    [[nodiscard]] LPL_HD constexpr Vec3 operator*(T scalar)  const;
-    [[nodiscard]] LPL_HD constexpr Vec3 operator/(T scalar)  const;
-    [[nodiscard]] LPL_HD constexpr Vec3 operator-()          const;
+    [[nodiscard]] LPL_HD constexpr Vec3 operator*(T scalar) const;
+    [[nodiscard]] LPL_HD constexpr Vec3 operator/(T scalar) const;
+    [[nodiscard]] LPL_HD constexpr Vec3 operator-() const;
 
     constexpr Vec3 &operator+=(Vec3 rhs);
     constexpr Vec3 &operator-=(Vec3 rhs);
     constexpr Vec3 &operator*=(T scalar);
 
-    [[nodiscard]] LPL_HD constexpr T    dot(Vec3 rhs)      const;
-    [[nodiscard]] LPL_HD constexpr Vec3 cross(Vec3 rhs)    const;
-    [[nodiscard]] LPL_HD constexpr T    lengthSquared()    const;
-    [[nodiscard]] constexpr Vec3        normalize()        const;
+    [[nodiscard]] LPL_HD constexpr T dot(Vec3 rhs) const;
+    [[nodiscard]] LPL_HD constexpr Vec3 cross(Vec3 rhs) const;
+    [[nodiscard]] LPL_HD constexpr T lengthSquared() const;
+    [[nodiscard]] constexpr Vec3 normalize() const;
 
     static constexpr Vec3 zero();
     static constexpr Vec3 unitX();
@@ -52,11 +51,11 @@ struct Vec3 final {
     static constexpr Vec3 unitZ();
 };
 
-using Vec3f  = Vec3<float>;
-using Vec3d  = Vec3<double>;
+using Vec3f = Vec3<float>;
+using Vec3d = Vec3<double>;
 
 } // namespace lpl::math
 
-    #include "Vec3.inl"
+#    include "Vec3.inl"
 
 #endif // LPL_MATH_VEC3_HPP

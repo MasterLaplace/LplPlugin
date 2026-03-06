@@ -11,20 +11,20 @@
 #pragma once
 
 #ifndef LPL_ECS_PARTITION_HPP
-    #define LPL_ECS_PARTITION_HPP
+#    define LPL_ECS_PARTITION_HPP
 
-#include <lpl/ecs/Entity.hpp>
-#include <lpl/ecs/Component.hpp>
-#include <lpl/ecs/Archetype.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Constants.hpp>
-#include <lpl/core/Expected.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Constants.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Archetype.hpp>
+#    include <lpl/ecs/Component.hpp>
+#    include <lpl/ecs/Entity.hpp>
 
-#include <cstddef>
-#include <memory>
-#include <span>
-#include <vector>
+#    include <cstddef>
+#    include <memory>
+#    include <span>
+#    include <vector>
 
 namespace lpl::ecs {
 
@@ -37,8 +37,7 @@ namespace lpl::ecs {
  * @c kChunkCapacity. Two buffers (front/back) enable lock-free read
  * during write.
  */
-class Chunk final : public core::NonCopyable<Chunk>
-{
+class Chunk final : public core::NonCopyable<Chunk> {
 public:
     static constexpr core::u32 kChunkCapacity = 256;
 
@@ -47,8 +46,7 @@ public:
      * @param archetype The archetype this chunk stores.
      * @param layouts   Span of component layouts.
      */
-    Chunk(const Archetype& archetype,
-          std::span<const ComponentLayout> layouts);
+    Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts);
 
     ~Chunk();
 
@@ -77,20 +75,33 @@ public:
      * @param id Component to access.
      * @return Pointer to the front array, or nullptr if not present.
      */
-    [[nodiscard]] const void* readComponent(ComponentId id) const noexcept;
+    [[nodiscard]] const void *readComponent(ComponentId id) const noexcept;
 
     /**
      * @brief Gets a writable pointer to the back buffer of a component.
      * @param id Component to access.
      * @return Pointer to the back array, or nullptr if not present.
      */
-    [[nodiscard]] void* writeComponent(ComponentId id) noexcept;
+    [[nodiscard]] void *writeComponent(ComponentId id) noexcept;
 
     /** @brief Swaps front and back buffers (publish step at tick boundary). */
     void swapBuffers() noexcept;
 
     /** @brief Returns the archetype of this chunk. */
-    [[nodiscard]] const Archetype& archetype() const noexcept;
+    [[nodiscard]] const Archetype &archetype() const noexcept;
+
+    /** @brief Returns a span of entity IDs in this chunk (count() elements). */
+    [[nodiscard]] std::span<const EntityId> entities() const noexcept;
+
+    /**
+     * @brief Finds the local index of an entity by its ID in O(1).
+     *
+     * Uses the internal sparse set: no linear scan of the dense array.
+     *
+     * @param id Entity to look up.
+     * @return Local index within [0, count()), or std::nullopt if not found.
+     */
+    [[nodiscard]] std::optional<core::u32> findLocalIndex(EntityId id) const noexcept;
 
 private:
     struct Impl;
@@ -103,16 +114,14 @@ private:
  *
  * Grows automatically by allocating new Chunks when existing ones are full.
  */
-class Partition final : public core::NonCopyable<Partition>
-{
+class Partition final : public core::NonCopyable<Partition> {
 public:
     /**
      * @brief Constructs a partition for the given archetype.
      * @param archetype  Archetype of entities stored here.
      * @param layouts    Component layouts for the archetype.
      */
-    Partition(Archetype archetype,
-              std::vector<ComponentLayout> layouts);
+    Partition(Archetype archetype, std::vector<ComponentLayout> layouts);
 
     ~Partition();
 
@@ -126,9 +135,9 @@ public:
     /**
      * @brief Removes an entity by its reference.
      * @param ref Reference obtained from @ref insert or a lookup.
-     * @return OK on success.
+     * @return Swapped EntityId on success, or error.
      */
-    [[nodiscard]] core::Expected<void> erase(const EntityRef& ref);
+    [[nodiscard]] core::Expected<EntityId> erase(const EntityRef &ref);
 
     /** @brief Returns the total number of live entities across all chunks. */
     [[nodiscard]] core::u32 entityCount() const noexcept;
@@ -140,11 +149,11 @@ public:
     void swapAllBuffers() noexcept;
 
     /** @brief Returns the archetype. */
-    [[nodiscard]] const Archetype& archetype() const noexcept;
+    [[nodiscard]] const Archetype &archetype() const noexcept;
 
 private:
-    Archetype                          _archetype;
-    std::vector<ComponentLayout>       _layouts;
+    Archetype _archetype;
+    std::vector<ComponentLayout> _layouts;
     std::vector<std::unique_ptr<Chunk>> _chunks;
 };
 

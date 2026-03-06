@@ -11,14 +11,14 @@
 #pragma once
 
 #ifndef LPL_INPUT_INPUTSTATE_HPP
-    #define LPL_INPUT_INPUTSTATE_HPP
+#    define LPL_INPUT_INPUTSTATE_HPP
 
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/Quat.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Quat.hpp>
+#    include <lpl/math/Vec3.hpp>
 
-#include <bitset>
+#    include <bitset>
 
 namespace lpl::input {
 
@@ -26,8 +26,7 @@ namespace lpl::input {
  * @enum ButtonId
  * @brief Enumeration of all supported buttons / actions.
  */
-enum class ButtonId : core::u8
-{
+enum class ButtonId : core::u8 {
     MoveForward = 0,
     MoveBack,
     MoveLeft,
@@ -48,12 +47,11 @@ enum class ButtonId : core::u8
  *
  * All values are Fixed32 for determinism. Look direction is a quaternion.
  */
-struct InputState
-{
+struct InputState {
     std::bitset<static_cast<core::usize>(ButtonId::Count)> buttons{};
-    math::Vec3<math::Fixed32>   moveAxis{};
-    math::Quat<math::Fixed32>   lookOrientation{};
-    core::u32                   sequence{0};
+    math::Vec3<math::Fixed32> moveAxis{};
+    math::Quat<math::Fixed32> lookOrientation{};
+    core::u32 sequence{0};
 };
 
 } // namespace lpl::input

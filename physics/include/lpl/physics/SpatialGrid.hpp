@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_PHYSICS_SPATIALGRID_HPP
-    #define LPL_PHYSICS_SPATIALGRID_HPP
+#    define LPL_PHYSICS_SPATIALGRID_HPP
 
-#include <lpl/physics/ISpatialIndex.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/physics/ISpatialIndex.hpp>
 
-#include <memory>
+#    include <memory>
 
 namespace lpl::physics {
 
@@ -25,9 +25,7 @@ namespace lpl::physics {
  * @brief Fixed-cell-size hash grid. Best for uniformly distributed
  *        objects of similar size. O(1) insert / remove, O(k) query.
  */
-class SpatialGrid final : public ISpatialIndex,
-                          public core::NonCopyable<SpatialGrid>
-{
+class SpatialGrid final : public ISpatialIndex, public core::NonCopyable<SpatialGrid> {
 public:
     /**
      * @brief Constructs a grid with the given cell size.
@@ -36,16 +34,13 @@ public:
     explicit SpatialGrid(math::Fixed32 cellSize);
     ~SpatialGrid() override;
 
-    void insert(core::u32 objectId,
-                const math::AABB<math::Fixed32>& aabb) override;
+    void insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) override;
 
-    void update(core::u32 objectId,
-                const math::AABB<math::Fixed32>& aabb) override;
+    void update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) override;
 
     void remove(core::u32 objectId) override;
 
-    void query(const math::AABB<math::Fixed32>& region,
-               const std::function<void(core::u32)>& callback) const override;
+    void query(const math::AABB<math::Fixed32> &region, const std::function<void(core::u32)> &callback) const override;
 
     void rebuild() override;
 

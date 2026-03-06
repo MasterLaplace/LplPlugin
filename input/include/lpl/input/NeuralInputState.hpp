@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_INPUT_NEURALINPUTSTATE_HPP
-    #define LPL_INPUT_NEURALINPUTSTATE_HPP
+#    define LPL_INPUT_NEURALINPUTSTATE_HPP
 
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/math/FixedPoint.hpp>
 
-#include <array>
+#    include <array>
 
 namespace lpl::input {
 
@@ -27,8 +27,7 @@ namespace lpl::input {
  * Values are normalised Fixed32 in [0, 1]. The BCI adapter populates this
  * struct each tick from the raw EEG pipeline.
  */
-struct NeuralInputState
-{
+struct NeuralInputState {
     /** @brief Number of control channels. */
     static constexpr core::u32 kChannels = 8;
 

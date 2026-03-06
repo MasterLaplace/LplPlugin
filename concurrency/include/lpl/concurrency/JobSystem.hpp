@@ -11,18 +11,17 @@
 #pragma once
 
 #ifndef LPL_CONCURRENCY_JOBSYSTEM_HPP
-    #define LPL_CONCURRENCY_JOBSYSTEM_HPP
+#    define LPL_CONCURRENCY_JOBSYSTEM_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/concurrency/ChaseLevDeque.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <atomic>
-#include <deque>
-#include <functional>
-#include <memory>
-#include <mutex>
-#include <thread>
-#include <vector>
+#    include <atomic>
+#    include <functional>
+#    include <memory>
+#    include <thread>
+#    include <vector>
 
 namespace lpl::concurrency {
 
@@ -30,8 +29,7 @@ namespace lpl::concurrency {
  * @struct JobHandle
  * @brief Opaque handle used to wait on a group of jobs via an atomic counter.
  */
-struct JobHandle
-{
+struct JobHandle {
     std::atomic<core::i32> counter{0};
 };
 
@@ -51,8 +49,7 @@ struct JobHandle
  *   js.waitForCounter(handle, 0);
  * @endcode
  */
-class JobSystem final : public core::NonCopyable<JobSystem>
-{
+class JobSystem final : public core::NonCopyable<JobSystem> {
 public:
     /**
      * @brief Creates a job system with the given number of worker threads.
@@ -73,7 +70,7 @@ public:
      * @param handle Associated handle whose counter is decremented on
      *        completion.
      */
-    void kickJob(std::function<void()> job, JobHandle& handle);
+    void kickJob(std::function<void()> job, JobHandle &handle);
 
     /**
      * @brief Spins (assisting with work) until @p handle.counter reaches
@@ -81,26 +78,32 @@ public:
      * @param handle Handle to wait on.
      * @param targetValue Target counter value (typically 0).
      */
-    void waitForCounter(const JobHandle& handle, core::i32 targetValue) const;
+    void waitForCounter(const JobHandle &handle, core::i32 targetValue) const;
 
     /** @brief Returns the worker thread count. */
     [[nodiscard]] core::u32 workerCount() const noexcept;
 
 private:
-    struct WorkerData
-    {
-        std::deque<std::pair<std::function<void()>, JobHandle*>> localQueue;
-        std::mutex                                                mutex;
+    struct Job {
+        std::function<void()> func;
+        JobHandle *handle;
+    };
+
+    struct WorkerData {
+        ChaseLevDeque<Job *> localQueue;
     };
 
     void workerLoop(core::u32 workerIndex);
 
-    bool trySteal(core::u32 thiefIndex,
-                  std::pair<std::function<void()>, JobHandle*>& outJob);
+    bool trySteal(core::u32 thiefIndex, Job *&outJob);
 
-    std::vector<std::thread>                     _workers;
-    std::vector<std::unique_ptr<WorkerData>>     _workerData;
-    std::atomic<bool>                            _stopping{false};
+    std::vector<std::thread> _workers;
+    std::vector<std::unique_ptr<WorkerData>> _workerData;
+    std::atomic<bool> _stopping{false};
+
+    /** @brief Shared MPSC queue for external job submissions (thread-safe). */
+    std::mutex _submissionMutex;
+    std::vector<Job *> _submissionQueue;
 };
 
 } // namespace lpl::concurrency

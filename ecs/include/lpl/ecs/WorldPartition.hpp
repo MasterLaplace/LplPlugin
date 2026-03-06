@@ -11,19 +11,24 @@
 #pragma once
 
 #ifndef LPL_ECS_WORLDPARTITION_HPP
-    #define LPL_ECS_WORLDPARTITION_HPP
+#    define LPL_ECS_WORLDPARTITION_HPP
 
-#include <lpl/ecs/Entity.hpp>
-#include <lpl/math/Morton.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/container/FlatAtomicHashMap.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/container/FlatAtomicHashMap.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Entity.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Morton.hpp>
+#    include <lpl/math/Vec3.hpp>
 
-#include <memory>
-#include <vector>
+#    include <functional>
+#    include <memory>
+#    include <vector>
+
+namespace lpl::gpu {
+class IComputeBackend;
+}
 
 namespace lpl::ecs {
 
@@ -51,8 +56,7 @@ public:
      * @param pos World-space position.
      * @return OK on success.
      */
-    [[nodiscard]] core::Expected<void> insertOrUpdate(EntityId id,
-                                                      const math::Vec3<math::Fixed32>& pos);
+    [[nodiscard]] core::Expected<void> insertOrUpdate(EntityId id, const math::Vec3<math::Fixed32> &pos);
 
     /**
      * @brief Removes an entity from its current cell.
@@ -67,9 +71,8 @@ public:
      * @param radius Query radius.
      * @param[out] results Populated with entity IDs in range.
      */
-    void queryRadius(const math::Vec3<math::Fixed32>& center,
-                     math::Fixed32 radius,
-                     std::vector<EntityId>& results) const;
+    void queryRadius(const math::Vec3<math::Fixed32> &center, math::Fixed32 radius,
+                     std::vector<EntityId> &results) const;
 
     /**
      * @brief Runs one physics tick, auto-selecting CPU or GPU backend.
@@ -83,6 +86,19 @@ public:
     void step(core::f32 dt);
 
     /**
+     * @brief Re-assigns all tracked entities to the correct spatial cell
+     *        based on a position-provider callback.
+     *
+     * Must be called post-physics to fix entities that moved across cell
+     * boundaries. The callback receives an entity raw ID and must return
+     * its current world-space position.
+     *
+     * @param positionOf Callback: (core::u32 rawId) → Vec3<Fixed32> position.
+     * @return Number of entities that migrated to a different cell.
+     */
+    core::u32 migrateEntities(const std::function<math::Vec3<math::Fixed32>(core::u32)> &positionOf);
+
+    /**
      * @brief Garbage-collects empty Morton cells.
      *
      * Should be called periodically (e.g., every N ticks) to release
@@ -93,7 +109,7 @@ public:
     core::u32 gcEmptyCells();
 
     /** @brief Returns the Morton code for a world-space position. */
-    [[nodiscard]] core::u64 mortonForPosition(const math::Vec3<math::Fixed32>& pos) const noexcept;
+    [[nodiscard]] core::u64 mortonForPosition(const math::Vec3<math::Fixed32> &pos) const noexcept;
 
     /** @brief Returns the number of active cells. */
     [[nodiscard]] core::u32 cellCount() const noexcept;
@@ -101,6 +117,17 @@ public:
 public:
     /** @brief GPU dispatch threshold (entity count). */
     static constexpr core::u32 kGpuThreshold = 4096;
+
+    /**
+     * @brief Registers an optional GPU backend for physics dispatch.
+     *
+     * When the backend is set and entity count exceeds @c kGpuThreshold,
+     * @c step() automatically offloads physics computation to the GPU.
+     * Pass @c nullptr to revert to CPU-only.
+     *
+     * @param backend GPU backend (non-owning pointer; lifetime managed by caller).
+     */
+    void setGpuBackend(gpu::IComputeBackend *backend) noexcept;
 
 private:
     struct Impl;

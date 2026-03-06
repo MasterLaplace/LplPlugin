@@ -10,18 +10,18 @@
 #pragma once
 
 #ifndef LPL_ENGINE_GAMELOOP_HPP
-    #define LPL_ENGINE_GAMELOOP_HPP
+#    define LPL_ENGINE_GAMELOOP_HPP
 
-#include <lpl/engine/Config.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <functional>
+#    include <atomic>
+#    include <functional>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/engine/Config.hpp>
 
 namespace lpl::engine {
 
 /** @brief Callbacks the game loop invokes each frame. */
-struct LoopCallbacks
-{
+struct LoopCallbacks {
     /** @brief Called once per fixed tick (dt = 1/tickRate). */
     std::function<void(core::f64 dt)> fixedUpdate;
 
@@ -36,21 +36,20 @@ struct LoopCallbacks
 };
 
 /** @brief Fixed time-step game loop. */
-class GameLoop
-{
+class GameLoop {
 public:
     /// @param config Engine configuration (provides tickRate).
-    explicit GameLoop(const Config& config);
+    explicit GameLoop(const Config &config);
     ~GameLoop();
 
-    GameLoop(const GameLoop&) = delete;
-    GameLoop& operator=(const GameLoop&) = delete;
+    GameLoop(const GameLoop &) = delete;
+    GameLoop &operator=(const GameLoop &) = delete;
 
     /**
      * @brief Run the loop until requestStop() is called.
      * @param callbacks Tick / render callbacks.
      */
-    void run(const LoopCallbacks& callbacks);
+    void run(const LoopCallbacks &callbacks);
 
     /** @brief Request graceful loop termination. */
     void requestStop() noexcept;
@@ -63,7 +62,7 @@ public:
 
 private:
     core::f64 _fixedDt;
-    bool _running{false};
+    std::atomic<bool> _running{false};
     core::u64 _tickCount{0};
 };
 

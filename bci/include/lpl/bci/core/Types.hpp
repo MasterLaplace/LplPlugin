@@ -130,7 +130,9 @@ struct NeuralState {
      * @brief Constructs a zero-initialized NeuralState for the given channel count.
      */
     explicit NeuralState(std::size_t channelCount = 0)
-        : channelAlpha(channelCount, 0.0f), channelBeta(channelCount, 0.0f) {}
+        : channelAlpha(channelCount, 0.0f), channelBeta(channelCount, 0.0f)
+    {
+    }
 };
 
 // ─── Source Info ─────────────────────────────────────────────────────────────
@@ -172,12 +174,13 @@ enum class AcquisitionMode : std::uint8_t {
  */
 [[nodiscard]] constexpr std::string_view acquisitionModeName(AcquisitionMode mode) noexcept
 {
-    switch (mode) {
-        case AcquisitionMode::kSerial:    return "Serial (OpenBCI)";
-        case AcquisitionMode::kSynthetic: return "Synthetic";
-        case AcquisitionMode::kLsl:       return "LSL Inlet";
-        case AcquisitionMode::kCsvReplay: return "CSV Replay";
-        case AcquisitionMode::kBrainFlow: return "BrainFlow";
+    switch (mode)
+    {
+    case AcquisitionMode::kSerial: return "Serial (OpenBCI)";
+    case AcquisitionMode::kSynthetic: return "Synthetic";
+    case AcquisitionMode::kLsl: return "LSL Inlet";
+    case AcquisitionMode::kCsvReplay: return "CSV Replay";
+    case AcquisitionMode::kBrainFlow: return "BrainFlow";
     }
     return "Unknown";
 }

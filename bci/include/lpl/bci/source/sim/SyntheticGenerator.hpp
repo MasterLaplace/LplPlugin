@@ -38,15 +38,15 @@ struct BandOscillator {
 struct SyntheticProfile {
     std::vector<BandOscillator> oscillators = {
         {10.0f, 15.0f, 0.0f},
-        {20.0f,  8.0f, 0.3f},
-        {50.0f,  3.0f, 0.7f},
+        {20.0f, 8.0f,  0.3f},
+        {50.0f, 3.0f,  0.7f},
     };
 
-    float noiseAmplitudeUv    = 2.0f;
-    float blinkProbability    = 0.005f;
-    float blinkAmplitudeUv    = 200.0f;
-    float blinkDurationSec    = 0.15f;
-    float channelPhaseSpread  = 0.2f;
+    float noiseAmplitudeUv = 2.0f;
+    float blinkProbability = 0.005f;
+    float blinkAmplitudeUv = 200.0f;
+    float blinkDurationSec = 0.15f;
+    float channelPhaseSpread = 0.2f;
 };
 
 /**
@@ -66,9 +66,7 @@ public:
      * @param seed Random seed (0 = time-based non-deterministic)
      * @param channelCount Number of EEG channels to generate
      */
-    explicit SyntheticGenerator(
-        std::uint64_t seed = 0,
-        std::size_t channelCount = kDefaultChannelCount);
+    explicit SyntheticGenerator(std::uint64_t seed = 0, std::size_t channelCount = kDefaultChannelCount);
 
     /**
      * @brief Replaces the current generation profile.

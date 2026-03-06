@@ -14,20 +14,20 @@
 #pragma once
 
 #ifndef LPL_MATH_SIMD_HPP
-    #define LPL_MATH_SIMD_HPP
+#    define LPL_MATH_SIMD_HPP
 
-    #include <lpl/core/Platform.hpp>
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Platform.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #if defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)
-        #include <immintrin.h>
-    #elif defined(LPL_ARCH_ARM64)
-        #include <arm_neon.h>
-    #endif
+#    if defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)
+#        include <immintrin.h>
+#    elif defined(LPL_ARCH_ARM64)
+#        include <arm_neon.h>
+#    endif
 
 namespace lpl::math::simd {
 
-#if defined(LPL_ARCH_X64)
+#    if defined(LPL_ARCH_X64)
 
 /**
  * @brief 128-bit SIMD register wrapping 4 floats (SSE).
@@ -37,7 +37,7 @@ struct SimdFloat4 {
 
     static SimdFloat4 load(const float *ptr);
     static SimdFloat4 splat(float val);
-    void              store(float *ptr) const;
+    void store(float *ptr) const;
 
     SimdFloat4 operator+(SimdFloat4 rhs) const;
     SimdFloat4 operator-(SimdFloat4 rhs) const;
@@ -47,14 +47,16 @@ struct SimdFloat4 {
 };
 
 /**
- * @brief 256-bit SIMD register wrapping 8 floats (AVX2).
+ * @brief 256-bit SIMD register wrapping 8 floats (AVX/AVX2).
+ * @note Only available when compiled with -mavx or -mavx2.
  */
+#        ifdef __AVX__
 struct SimdFloat8 {
     __m256 reg;
 
     static SimdFloat8 load(const float *ptr);
     static SimdFloat8 splat(float val);
-    void              store(float *ptr) const;
+    void store(float *ptr) const;
 
     SimdFloat8 operator+(SimdFloat8 rhs) const;
     SimdFloat8 operator-(SimdFloat8 rhs) const;
@@ -62,15 +64,16 @@ struct SimdFloat8 {
 
     static SimdFloat8 fma(SimdFloat8 a, SimdFloat8 b, SimdFloat8 c);
 };
+#        endif // __AVX__
 
-#elif defined(LPL_ARCH_ARM64)
+#    elif defined(LPL_ARCH_ARM64)
 
 struct SimdFloat4 {
     float32x4_t reg;
 
     static SimdFloat4 load(const float *ptr);
     static SimdFloat4 splat(float val);
-    void              store(float *ptr) const;
+    void store(float *ptr) const;
 
     SimdFloat4 operator+(SimdFloat4 rhs) const;
     SimdFloat4 operator-(SimdFloat4 rhs) const;
@@ -79,14 +82,14 @@ struct SimdFloat4 {
     static SimdFloat4 fma(SimdFloat4 a, SimdFloat4 b, SimdFloat4 c);
 };
 
-#else
+#    else
 
 struct SimdFloat4 {
     float data[4];
 
     static SimdFloat4 load(const float *ptr);
     static SimdFloat4 splat(float val);
-    void              store(float *ptr) const;
+    void store(float *ptr) const;
 
     SimdFloat4 operator+(SimdFloat4 rhs) const;
     SimdFloat4 operator-(SimdFloat4 rhs) const;
@@ -95,7 +98,7 @@ struct SimdFloat4 {
     static SimdFloat4 fma(SimdFloat4 a, SimdFloat4 b, SimdFloat4 c);
 };
 
-#endif
+#    endif
 
 } // namespace lpl::math::simd
 

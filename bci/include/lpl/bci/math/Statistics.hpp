@@ -38,10 +38,8 @@ public:
      * @param upperBin  Last bin index (inclusive)
      * @return Integrated power in the range
      */
-    [[nodiscard]] static float integratePsd(
-        std::span<const float> psd,
-        std::size_t lowerBin,
-        std::size_t upperBin) noexcept;
+    [[nodiscard]] static float integratePsd(std::span<const float> psd, std::size_t lowerBin,
+                                            std::size_t upperBin) noexcept;
 
     /**
      * @brief Converts a frequency in Hz to the corresponding FFT bin index.
@@ -51,10 +49,7 @@ public:
      * @param fftSize    Number of FFT points
      * @return Bin index (truncated)
      */
-    [[nodiscard]] static std::size_t hzToBin(
-        float hz,
-        float sampleRate,
-        std::size_t fftSize) noexcept;
+    [[nodiscard]] static std::size_t hzToBin(float hz, float sampleRate, std::size_t fftSize) noexcept;
 
     /**
      * @brief Computes the RMS over the last windowSize elements of the data.
@@ -63,9 +58,7 @@ public:
      * @param windowSize Number of trailing elements to consider
      * @return RMS value, or 0 if insufficient data
      */
-    [[nodiscard]] static float slidingWindowRms(
-        std::span<const float> data,
-        std::size_t windowSize) noexcept;
+    [[nodiscard]] static float slidingWindowRms(std::span<const float> data, std::size_t windowSize) noexcept;
 
     /**
      * @brief Computes the mean and population standard deviation.
@@ -73,8 +66,7 @@ public:
      * @param data Input values
      * @return Baseline with mean and stdDev fields
      */
-    [[nodiscard]] static Baseline computeBaseline(
-        std::span<const float> data) noexcept;
+    [[nodiscard]] static Baseline computeBaseline(std::span<const float> data) noexcept;
 };
 
 } // namespace lpl::bci::math

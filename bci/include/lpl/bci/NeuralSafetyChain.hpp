@@ -10,27 +10,25 @@
 #pragma once
 
 #ifndef LPL_BCI_NEURALSAFETYCHAIN_HPP
-    #define LPL_BCI_NEURALSAFETYCHAIN_HPP
+#    define LPL_BCI_NEURALSAFETYCHAIN_HPP
 
-#include <lpl/input/NeuralInputState.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <memory>
-#include <vector>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/input/NeuralInputState.hpp>
+#    include <memory>
+#    include <vector>
 
 namespace lpl::bci {
 
 /** @brief Result of a safety check. */
-enum class SafetyVerdict : core::u8
-{
+enum class SafetyVerdict : core::u8 {
     Pass,
     Warn,
     Reject
 };
 
 /** @brief Abstract safety check link. */
-class ISafetyCheck
-{
+class ISafetyCheck {
 public:
     virtual ~ISafetyCheck() = default;
 
@@ -39,11 +37,10 @@ public:
      * @param state The neural input to validate.
      * @return Verdict (Pass / Warn / Reject).
      */
-    [[nodiscard]] virtual SafetyVerdict evaluate(
-        const input::NeuralInputState& state) const noexcept = 0;
+    [[nodiscard]] virtual SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept = 0;
 
     /** @brief Human-readable name of the check. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 /**
@@ -52,14 +49,13 @@ public:
  * Evaluates each check in order. Returns Reject on first rejection,
  * Warn if any check warns, Pass if all pass.
  */
-class NeuralSafetyChain
-{
+class NeuralSafetyChain {
 public:
     NeuralSafetyChain();
     ~NeuralSafetyChain();
 
-    NeuralSafetyChain(const NeuralSafetyChain&) = delete;
-    NeuralSafetyChain& operator=(const NeuralSafetyChain&) = delete;
+    NeuralSafetyChain(const NeuralSafetyChain &) = delete;
+    NeuralSafetyChain &operator=(const NeuralSafetyChain &) = delete;
 
     /** @brief Append a check to the chain. */
     void addCheck(std::unique_ptr<ISafetyCheck> check);
@@ -69,8 +65,7 @@ public:
      * @param state Neural input to validate.
      * @return Final aggregated verdict.
      */
-    [[nodiscard]] SafetyVerdict evaluate(
-        const input::NeuralInputState& state) const noexcept;
+    [[nodiscard]] SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept;
 
     /** @brief Number of checks in the chain. */
     [[nodiscard]] core::usize checkCount() const noexcept;
@@ -84,39 +79,33 @@ private:
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** @brief Rejects signals where any channel exceeds an amplitude bound. */
-class AmplitudeBoundsCheck final : public ISafetyCheck
-{
+class AmplitudeBoundsCheck final : public ISafetyCheck {
 public:
     explicit AmplitudeBoundsCheck(core::f32 maxAbsValue = 500.0f);
-    [[nodiscard]] SafetyVerdict evaluate(
-        const input::NeuralInputState& state) const noexcept override;
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     core::f32 _maxAbsValue;
 };
 
 /** @brief Rejects signals below a confidence threshold. */
-class ConfidenceCheck final : public ISafetyCheck
-{
+class ConfidenceCheck final : public ISafetyCheck {
 public:
     explicit ConfidenceCheck(core::f32 minConfidence = 0.5f);
-    [[nodiscard]] SafetyVerdict evaluate(
-        const input::NeuralInputState& state) const noexcept override;
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     core::f32 _minConfidence;
 };
 
 /** @brief Warns if the rate-of-change between ticks exceeds a threshold. */
-class RateOfChangeCheck final : public ISafetyCheck
-{
+class RateOfChangeCheck final : public ISafetyCheck {
 public:
     explicit RateOfChangeCheck(core::f32 maxDelta = 100.0f);
-    [[nodiscard]] SafetyVerdict evaluate(
-        const input::NeuralInputState& state) const noexcept override;
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     core::f32 _maxDelta;

@@ -16,13 +16,13 @@
 #pragma once
 
 #ifndef LPL_CONTAINER_SPARSE_SET_HPP
-    #define LPL_CONTAINER_SPARSE_SET_HPP
+#    define LPL_CONTAINER_SPARSE_SET_HPP
 
-    #include <lpl/core/Constants.hpp>
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Constants.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <vector>
-    #include <optional>
+#    include <optional>
+#    include <vector>
 
 namespace lpl::container {
 
@@ -30,8 +30,7 @@ namespace lpl::container {
  * @brief Generational sparse set.
  * @tparam T Dense-stored payload type.
  */
-template <typename T>
-class SparseSet final {
+template <typename T> class SparseSet final {
 public:
     /**
      * @brief Construct a sparse set with a given sparse-array capacity.
@@ -59,7 +58,7 @@ public:
      * @param id Raw (slot) ID.
      * @return Pointer to the dense value, or nullptr.
      */
-    [[nodiscard]] T       *find(core::u32 id);
+    [[nodiscard]] T *find(core::u32 id);
     [[nodiscard]] const T *find(core::u32 id) const;
 
     /**
@@ -67,19 +66,19 @@ public:
      */
     [[nodiscard]] bool contains(core::u32 id) const;
 
-    [[nodiscard]] core::u32    size()  const { return static_cast<core::u32>(_dense.size()); }
-    [[nodiscard]] const auto & dense() const { return _dense; }
+    [[nodiscard]] core::u32 size() const { return static_cast<core::u32>(_dense.size()); }
+    [[nodiscard]] const auto &dense() const { return _dense; }
 
 private:
     static constexpr core::u32 kInvalid = ~core::u32{0};
 
     std::vector<core::u32> _sparse;
-    std::vector<T>         _dense;
+    std::vector<T> _dense;
     std::vector<core::u32> _denseToSparse;
 };
 
 } // namespace lpl::container
 
-    #include "SparseSet.inl"
+#    include "SparseSet.inl"
 
 #endif // LPL_CONTAINER_SPARSE_SET_HPP

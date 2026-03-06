@@ -11,13 +11,16 @@
 #pragma once
 
 #ifndef LPL_NET_SESSION_SESSION_HPP
-    #define LPL_NET_SESSION_SESSION_HPP
+#    define LPL_NET_SESSION_SESSION_HPP
 
-#include <lpl/ecs/Entity.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Entity.hpp>
 
-#include <chrono>
+#    include <chrono>
+#    include <cstring>
+#    include <netinet/in.h>
+#    include <sys/socket.h>
 
 namespace lpl::net::session {
 
@@ -25,8 +28,7 @@ namespace lpl::net::session {
  * @enum SessionState
  * @brief Lifecycle states of a client session.
  */
-enum class SessionState : core::u8
-{
+enum class SessionState : core::u8 {
     Connecting,
     Connected,
     Disconnecting,
@@ -38,10 +40,9 @@ enum class SessionState : core::u8
  * @brief Per-client state including entity binding, RTT, and sequence
  *        tracking.
  */
-class Session final : public core::NonCopyable<Session>
-{
+class Session final : public core::NonCopyable<Session> {
 public:
-    using Clock     = std::chrono::steady_clock;
+    using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
     /**
@@ -84,13 +85,34 @@ public:
     /** @brief Marks activity (heartbeat). */
     void touch() noexcept;
 
+    /** @brief Stores the client's network address (sockaddr_storage). */
+    void setAddress(const void *addr, core::u32 addrLen) noexcept
+    {
+        if (addr && addrLen <= sizeof(_address))
+        {
+            std::memcpy(&_address, addr, addrLen);
+            _addressLen = addrLen;
+        }
+    }
+
+    /** @brief Returns a pointer to the stored address (or nullptr if none). */
+    [[nodiscard]] const void *address() const noexcept
+    {
+        return _addressLen > 0 ? static_cast<const void *>(&_address) : nullptr;
+    }
+
+    /** @brief Returns the stored address length. */
+    [[nodiscard]] core::u32 addressLen() const noexcept { return _addressLen; }
+
 private:
-    core::u32     _playerId;
-    SessionState  _state{SessionState::Connecting};
+    core::u32 _playerId;
+    SessionState _state{SessionState::Connecting};
     ecs::EntityId _entity{};
-    core::f32     _smoothedRtt{0.0f};
-    core::u32     _lastInputSeq{0};
-    TimePoint     _lastActivity;
+    core::f32 _smoothedRtt{0.0f};
+    core::u32 _lastInputSeq{0};
+    TimePoint _lastActivity;
+    sockaddr_storage _address{};
+    core::u32 _addressLen{0};
 };
 
 } // namespace lpl::net::session

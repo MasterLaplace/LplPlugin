@@ -9,24 +9,67 @@
  */
 
 #include <lpl/ecs/WorldPartition.hpp>
+#include <lpl/gpu/IComputeBackend.hpp>
+#include <lpl/container/FlatAtomicHashMap.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/core/Log.hpp>
 
+#include <algorithm>
+#include <cstring>
 #include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 namespace lpl::ecs {
+
+// ========================================================================== //
+//  SpatialCell                                                               //
+// ========================================================================== //
+
+/**
+ * @brief Lightweight cell stored in the FlatAtomicHashMap.
+ *
+ * Each cell holds a small vector of entity raw IDs that reside within the
+ * corresponding Morton-coded grid cube.
+ */
+struct SpatialCell
+{
+    core::u64              mortonKey{0};
+    std::vector<core::u32> entities;
+
+    void insert(core::u32 raw) { entities.push_back(raw); }
+
+    void erase(core::u32 raw)
+    {
+        auto it = std::find(entities.begin(), entities.end(), raw);
+        if (it != entities.end())
+        {
+            *it = entities.back();
+            entities.pop_back();
+        }
+    }
+
+    [[nodiscard]] bool empty() const noexcept { return entities.empty(); }
+};
 
 // ========================================================================== //
 //  Impl                                                                      //
 // ========================================================================== //
 
+/// Legacy used WORLD_CAPACITY = 1 << 16 = 65536 cells.
+static constexpr core::u32 kWorldCapacity = 1u << 16u;
+
 struct WorldPartition::Impl
 {
-    math::Fixed32                                                cellSize;
-    std::unordered_map<core::u64, std::unordered_set<core::u32>> cells;
-    std::unordered_map<core::u32, core::u64>                     entityToMorton;
+    math::Fixed32                                    cellSize;
+    container::FlatAtomicHashMap<SpatialCell>         cells;
+    std::unordered_map<core::u32, core::u64>         entityToMorton;
+    gpu::IComputeBackend*                            gpuBackend{nullptr};
 
-    explicit Impl(math::Fixed32 cs) : cellSize{cs} {}
+    explicit Impl(math::Fixed32 cs)
+        : cellSize{cs}
+        , cells{kWorldCapacity}
+    {
+    }
 };
 
 // ========================================================================== //
@@ -56,14 +99,27 @@ core::Expected<void> WorldPartition::insertOrUpdate(
             return {};
         }
 
-        _impl->cells[it->second].erase(raw);
-        if (_impl->cells[it->second].empty())
+        // Remove from old cell
+        if (auto* oldCell = _impl->cells.get(it->second))
         {
-            _impl->cells.erase(it->second);
+            oldCell->erase(raw);
         }
     }
 
-    _impl->cells[morton].insert(raw);
+    // Insert into new cell (create cell if absent)
+    auto* cell = _impl->cells.get(morton);
+    if (!cell)
+    {
+        SpatialCell newCell;
+        newCell.mortonKey = morton;
+        cell = _impl->cells.insert(morton, std::move(newCell));
+        if (!cell)
+        {
+            return core::makeError(core::ErrorCode::OutOfMemory,
+                                   "WorldPartition cell pool exhausted");
+        }
+    }
+    cell->insert(raw);
     _impl->entityToMorton[raw] = morton;
 
     return {};
@@ -78,10 +134,9 @@ core::Expected<void> WorldPartition::remove(EntityId id)
         return core::makeError(core::ErrorCode::NotFound, "Entity not in world partition");
     }
 
-    _impl->cells[it->second].erase(raw);
-    if (_impl->cells[it->second].empty())
+    if (auto* cell = _impl->cells.get(it->second))
     {
-        _impl->cells.erase(it->second);
+        cell->erase(raw);
     }
     _impl->entityToMorton.erase(it);
 
@@ -117,13 +172,13 @@ void WorldPartition::queryRadius(
                 const core::u64 morton = math::morton::encode3D(
                     cx + dx, cy + dy, cz + dz);
 
-                auto it = _impl->cells.find(morton);
-                if (it == _impl->cells.end())
+                auto* cell = _impl->cells.get(morton);
+                if (!cell)
                 {
                     continue;
                 }
 
-                for (const core::u32 raw : it->second)
+                for (const core::u32 raw : cell->entities)
                 {
                     results.push_back(EntityId{raw});
                 }
@@ -142,27 +197,125 @@ core::u64 WorldPartition::mortonForPosition(const math::Vec3<math::Fixed32>& pos
     return math::morton::encode3D(toGrid(pos.x), toGrid(pos.y), toGrid(pos.z));
 }
 
-void WorldPartition::step(core::f32 /*dt*/)
+void WorldPartition::setGpuBackend(gpu::IComputeBackend* backend) noexcept
 {
-    // TODO: auto-select GPU backend when entity count > kGpuThreshold
-    // For now, CPU-only — physics handled by CpuPhysicsBackend through SystemScheduler
-    // This method serves as the integration point for legacy stepCPU/stepGPU dispatch
+    _impl->gpuBackend = backend;
+    if (backend)
+    {
+        core::Log::info("WorldPartition", "GPU backend registered");
+        core::Log::info("WorldPartition", backend->name());
+    }
+    else
+    {
+        core::Log::info("WorldPartition", "GPU backend cleared, falling back to CPU");
+    }
+}
+
+void WorldPartition::step(core::f32 dt)
+{
+    const core::u32 entityCount =
+        static_cast<core::u32>(_impl->entityToMorton.size());
+
+    if (_impl->gpuBackend && entityCount >= kGpuThreshold)
+    {
+        // ── GPU path ────────────────────────────────────────────────────────
+        // Pack entity raw IDs into a host buffer, upload, dispatch, download.
+        // The physics kernel (gpu/src/PhysicsKernel.cu) expects:
+        //   args[0..3]  float dt
+        //   args[4..7]  u32   entity count
+        // followed by the raw entity IDs as u32[entityCount].
+        const core::usize payloadBytes =
+            sizeof(core::f32) + sizeof(core::u32) +
+            static_cast<core::usize>(entityCount) * sizeof(core::u32);
+
+        std::vector<core::byte> argBuf(payloadBytes);
+        core::byte* ptr = argBuf.data();
+
+        std::memcpy(ptr, &dt, sizeof(dt));            ptr += sizeof(dt);
+        std::memcpy(ptr, &entityCount, sizeof(entityCount)); ptr += sizeof(entityCount);
+
+        for (const auto& [raw, _cellMorton] : _impl->entityToMorton)
+        {
+            std::memcpy(ptr, &raw, sizeof(raw));
+            ptr += sizeof(raw);
+        }
+
+        constexpr core::u32 kBlockDim = 256;
+        const core::u32 gridDim =
+            (entityCount + kBlockDim - 1) / kBlockDim;
+
+        if (auto res = _impl->gpuBackend->dispatch(
+                "physics_step", gridDim, kBlockDim,
+                std::span<const core::byte>{argBuf});
+            !res)
+        {
+            core::Log::warn("WorldPartition",
+                            "GPU dispatch failed, falling back to CPU this tick");
+            goto cpu_fallback;
+        }
+
+        [[maybe_unused]] auto sync = _impl->gpuBackend->synchronize();
+        return;
+    }
+
+cpu_fallback:
+    // ── CPU path ─────────────────────────────────────────────────────────────
+    // Physics integration is delegated to CpuPhysicsBackend through the
+    // SystemScheduler (PhysicsSystem / SpatialGrid). WorldPartition::step()
+    // serves only as the GPU dispatch gateway; nothing to do here on the
+    // CPU path.
+    (void)dt;
+}
+
+core::u32 WorldPartition::migrateEntities(
+    const std::function<math::Vec3<math::Fixed32>(core::u32)>& positionOf)
+{
+    core::u32 migrated = 0;
+
+    // Iterate all tracked entity→morton mappings
+    // Collect entities that need migration
+    std::vector<std::pair<core::u32, math::Vec3<math::Fixed32>>> toMigrate;
+
+    for (auto& [raw, oldMorton] : _impl->entityToMorton)
+    {
+        auto pos = positionOf(raw);
+        core::u64 newMorton = mortonForPosition(pos);
+
+        if (newMorton != oldMorton)
+        {
+            toMigrate.push_back({raw, pos});
+        }
+    }
+
+    // Apply migrations
+    for (auto& [raw, pos] : toMigrate)
+    {
+        auto entityId = EntityId{raw};
+        [[maybe_unused]] auto res = insertOrUpdate(entityId, pos);
+        ++migrated;
+    }
+
+    return migrated;
 }
 
 core::u32 WorldPartition::gcEmptyCells()
 {
     core::u32 removed = 0;
 
-    for (auto it = _impl->cells.begin(); it != _impl->cells.end(); )
-    {
-        if (it->second.empty())
+    // Collect empty cells and remove them from the FlatAtomicHashMap
+    std::vector<core::u64> emptyKeys;
+    _impl->cells.forEach([&](SpatialCell& cell) {
+        if (cell.empty())
         {
-            it = _impl->cells.erase(it);
-            ++removed;
+            emptyKeys.push_back(cell.mortonKey);
         }
-        else
+    });
+
+    for (core::u64 key : emptyKeys)
+    {
+        if (_impl->cells.remove(key))
         {
-            ++it;
+            ++removed;
         }
     }
 
@@ -171,7 +324,7 @@ core::u32 WorldPartition::gcEmptyCells()
 
 core::u32 WorldPartition::cellCount() const noexcept
 {
-    return static_cast<core::u32>(_impl->cells.size());
+    return _impl->cells.size();
 }
 
 } // namespace lpl::ecs

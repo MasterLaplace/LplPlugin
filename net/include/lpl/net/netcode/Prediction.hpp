@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_NET_NETCODE_PREDICTION_HPP
-    #define LPL_NET_NETCODE_PREDICTION_HPP
+#    define LPL_NET_NETCODE_PREDICTION_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <vector>
+#    include <vector>
 
 namespace lpl::net::netcode {
 
@@ -24,10 +24,9 @@ namespace lpl::net::netcode {
  * @struct PredictedInput
  * @brief An input frame stored for potential re-simulation.
  */
-struct PredictedInput
-{
-    core::u32                   sequence;
-    std::vector<core::byte>     data;
+struct PredictedInput {
+    core::u32 sequence;
+    std::vector<core::byte> data;
 };
 
 /**
@@ -38,8 +37,7 @@ struct PredictedInput
  * Once the server confirms a sequence, all predictions up to and including
  * that sequence are discarded.
  */
-class Prediction final : public core::NonCopyable<Prediction>
-{
+class Prediction final : public core::NonCopyable<Prediction> {
 public:
     /**
      * @brief Constructs with a maximum prediction window.
@@ -61,8 +59,8 @@ public:
     [[nodiscard]] core::u32 pendingCount() const noexcept;
 
 private:
-    core::u32                       _maxPrediction;
-    std::vector<PredictedInput>     _buffer;
+    core::u32 _maxPrediction;
+    std::vector<PredictedInput> _buffer;
 };
 
 } // namespace lpl::net::netcode

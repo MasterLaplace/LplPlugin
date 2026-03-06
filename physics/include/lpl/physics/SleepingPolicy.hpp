@@ -11,11 +11,11 @@
 #pragma once
 
 #ifndef LPL_PHYSICS_SLEEPINGPOLICY_HPP
-    #define LPL_PHYSICS_SLEEPINGPOLICY_HPP
+#    define LPL_PHYSICS_SLEEPINGPOLICY_HPP
 
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Vec3.hpp>
 
 namespace lpl::physics {
 
@@ -26,8 +26,7 @@ namespace lpl::physics {
  * A body is put to sleep when its linear and angular velocity stay below
  * the configured thresholds for @c kSleepFrames consecutive ticks.
  */
-class SleepingPolicy
-{
+class SleepingPolicy {
 public:
     static constexpr core::u32 kSleepFrames = 60;
 
@@ -38,16 +37,15 @@ public:
      * @param sleepCounter    Mutable counter for consecutive idle frames.
      * @return @c true if the body should sleep.
      */
-    [[nodiscard]] static bool shouldSleep(
-        const math::Vec3<math::Fixed32>& linearVelocity,
-        const math::Vec3<math::Fixed32>& angularVelocity,
-        core::u32& sleepCounter) noexcept;
+    [[nodiscard]] static bool shouldSleep(const math::Vec3<math::Fixed32> &linearVelocity,
+                                          const math::Vec3<math::Fixed32> &angularVelocity,
+                                          core::u32 &sleepCounter) noexcept;
 
     /** @brief Forces a body awake (resets its counter). */
-    static void wake(core::u32& sleepCounter) noexcept;
+    static void wake(core::u32 &sleepCounter) noexcept;
 
 private:
-    static constexpr math::Fixed32 kLinearThreshold  = math::Fixed32::fromRaw(655);
+    static constexpr math::Fixed32 kLinearThreshold = math::Fixed32::fromRaw(655);
     static constexpr math::Fixed32 kAngularThreshold = math::Fixed32::fromRaw(655);
 };
 

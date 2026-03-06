@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_SWAPCHAIN_HPP_
-    #define LPL_RENDER_VK_SWAPCHAIN_HPP_
+#define LPL_RENDER_VK_SWAPCHAIN_HPP_
 
 #include "queueFamilies/QueueFamilies.hpp"
 
@@ -49,7 +49,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class SwapChain {
-  public:
+public:
     /**
      * @brief Details of the swap chain support.
      *
@@ -60,7 +60,7 @@ class SwapChain {
         std::vector<VkPresentModeKHR> presentModes;
     };
 
-  public:
+public:
     /**
      * @brief Query the support of the swap chain.
      *
@@ -131,7 +131,7 @@ class SwapChain {
      */
     [[nodiscard]] const std::vector<VkImage> &GetSwapChainImages() const { return _swapChainImages; }
 
-  private:
+private:
     /**
      * @brief Choose the swap surface format.
      *
@@ -161,7 +161,7 @@ class SwapChain {
     [[nodiscard]] VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities, const uint32_t width,
                                               const uint32_t height) const;
 
-  private:
+private:
     SupportDetails _supportDetails;
     VkSwapchainKHR _swapChain = VK_NULL_HANDLE;
     std::vector<VkImage> _swapChainImages;

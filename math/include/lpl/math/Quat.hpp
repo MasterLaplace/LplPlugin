@@ -15,14 +15,13 @@
 #pragma once
 
 #ifndef LPL_MATH_QUAT_HPP
-    #define LPL_MATH_QUAT_HPP
+#    define LPL_MATH_QUAT_HPP
 
-    #include "Vec3.hpp"
+#    include "Vec3.hpp"
 
 namespace lpl::math {
 
-template <core::Arithmetic T>
-struct Quat final {
+template <core::Arithmetic T> struct Quat final {
     T w{};
     T x{};
     T y{};
@@ -31,13 +30,13 @@ struct Quat final {
     constexpr Quat() = default;
     constexpr Quat(T w, T x, T y, T z);
 
-    [[nodiscard]] constexpr Quat  operator*(Quat rhs)       const;
-    [[nodiscard]] constexpr Vec3<T> rotate(Vec3<T> v)        const;
-    [[nodiscard]] constexpr Quat  conjugate()                const;
-    [[nodiscard]] constexpr Quat  inverse()                  const;
-    [[nodiscard]] constexpr T     dot(Quat rhs)              const;
-    [[nodiscard]] constexpr T     lengthSquared()            const;
-    [[nodiscard]] constexpr Quat  normalize()                const;
+    [[nodiscard]] constexpr Quat operator*(Quat rhs) const;
+    [[nodiscard]] constexpr Vec3<T> rotate(Vec3<T> v) const;
+    [[nodiscard]] constexpr Quat conjugate() const;
+    [[nodiscard]] constexpr Quat inverse() const;
+    [[nodiscard]] constexpr T dot(Quat rhs) const;
+    [[nodiscard]] constexpr T lengthSquared() const;
+    [[nodiscard]] constexpr Quat normalize() const;
 
     static constexpr Quat identity();
     static constexpr Quat fromAxisAngle(Vec3<T> axis, T angleRad);
@@ -50,6 +49,6 @@ using Quatf = Quat<float>;
 
 } // namespace lpl::math
 
-    #include "Quat.inl"
+#    include "Quat.inl"
 
 #endif // LPL_MATH_QUAT_HPP

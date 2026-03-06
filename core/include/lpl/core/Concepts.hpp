@@ -13,12 +13,12 @@
 #pragma once
 
 #ifndef LPL_CORE_CONCEPTS_HPP
-    #define LPL_CORE_CONCEPTS_HPP
+#    define LPL_CORE_CONCEPTS_HPP
 
-    #include "Types.hpp"
+#    include "Types.hpp"
 
-    #include <concepts>
-    #include <type_traits>
+#    include <concepts>
+#    include <type_traits>
 
 namespace lpl::core {
 
@@ -29,7 +29,7 @@ template <typename T>
 concept Arithmetic = std::is_arithmetic_v<T> || requires(T a, T b) {
     { a + b } -> std::convertible_to<T>;
     { a - b } -> std::convertible_to<T>;
-    { a * b } -> std::convertible_to<T>;
+    { a *b } -> std::convertible_to<T>;
     { a / b } -> std::convertible_to<T>;
 };
 
@@ -71,7 +71,7 @@ concept Lockable = requires(T &m) {
  */
 template <typename A>
 concept AllocatorLike = requires(A a, typename A::value_type *p, usize n) {
-    { a.allocate(n) }     -> std::same_as<typename A::value_type *>;
+    { a.allocate(n) } -> std::same_as<typename A::value_type *>;
     { a.deallocate(p, n) };
 };
 

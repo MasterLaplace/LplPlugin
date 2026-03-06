@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_SHADERMODULE_HPP_
-    #define LPL_RENDER_VK_SHADERMODULE_HPP_
+#define LPL_RENDER_VK_SHADERMODULE_HPP_
 
 #include <fstream>
 
@@ -45,7 +45,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class ShaderModule {
-  public:
+public:
     /**
      * @brief ShaderPaths struct.
      *
@@ -75,7 +75,7 @@ class ShaderModule {
         std::pair<std::string /*path*/, std::string /*pName*/> fragment;
     };
 
-  public:
+public:
     /**
      * @brief Loads an SPV file.
      *

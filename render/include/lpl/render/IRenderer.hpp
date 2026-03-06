@@ -11,10 +11,10 @@
 #pragma once
 
 #ifndef LPL_RENDER_IRENDERER_HPP
-    #define LPL_RENDER_IRENDERER_HPP
+#    define LPL_RENDER_IRENDERER_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
 namespace lpl::render {
 
@@ -25,14 +25,12 @@ namespace lpl::render {
  * Concrete implementations: OpenGL ES, Vulkan, etc.
  * The renderer operates exclusively in float space (no Fixed32).
  */
-class IRenderer
-{
+class IRenderer {
 public:
     virtual ~IRenderer() = default;
 
     /** @brief Initializes the rendering context. */
-    [[nodiscard]] virtual core::Expected<void> init(core::u32 width,
-                                                     core::u32 height) = 0;
+    [[nodiscard]] virtual core::Expected<void> init(core::u32 width, core::u32 height) = 0;
 
     /** @brief Begins a new frame. */
     virtual void beginFrame() = 0;
@@ -47,7 +45,7 @@ public:
     virtual void shutdown() = 0;
 
     /** @brief Returns a human-readable name. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::render

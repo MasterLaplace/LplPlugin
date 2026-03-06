@@ -14,11 +14,11 @@
 #pragma once
 
 #ifndef LPL_CORE_LOG_HPP
-    #define LPL_CORE_LOG_HPP
+#    define LPL_CORE_LOG_HPP
 
-    #include "Types.hpp"
+#    include "Types.hpp"
 
-    #include <string_view>
+#    include <string_view>
 
 namespace lpl::core {
 
@@ -62,14 +62,14 @@ public:
     static void setMinLevel(LogLevel level);
 
     static void debug(std::string_view tag, std::string_view msg);
-    static void info (std::string_view tag, std::string_view msg);
-    static void warn (std::string_view tag, std::string_view msg);
+    static void info(std::string_view tag, std::string_view msg);
+    static void warn(std::string_view tag, std::string_view msg);
     static void error(std::string_view tag, std::string_view msg);
     static void fatal(std::string_view tag, std::string_view msg);
 
     static void debug(std::string_view msg) { debug("lpl", msg); }
-    static void info (std::string_view msg) { info ("lpl", msg); }
-    static void warn (std::string_view msg) { warn ("lpl", msg); }
+    static void info(std::string_view msg) { info("lpl", msg); }
+    static void warn(std::string_view msg) { warn("lpl", msg); }
     static void error(std::string_view msg) { error("lpl", msg); }
     static void fatal(std::string_view msg) { fatal("lpl", msg); }
 };

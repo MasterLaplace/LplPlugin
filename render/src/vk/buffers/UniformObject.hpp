@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_UNIFORMOBJECT_HPP_
-    #define LPL_RENDER_VK_UNIFORMOBJECT_HPP_
+#define LPL_RENDER_VK_UNIFORMOBJECT_HPP_
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE

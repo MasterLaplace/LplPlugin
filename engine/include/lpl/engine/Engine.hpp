@@ -10,12 +10,12 @@
 #pragma once
 
 #ifndef LPL_ENGINE_ENGINE_HPP
-    #define LPL_ENGINE_ENGINE_HPP
+#    define LPL_ENGINE_ENGINE_HPP
 
-#include <lpl/engine/Config.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <memory>
+#    include <lpl/core/Command.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/engine/Config.hpp>
+#    include <memory>
 
 namespace lpl::engine {
 
@@ -25,15 +25,14 @@ namespace lpl::engine {
  * Owns all subsystem instances, initialises them in dependency
  * order, runs the game loop, and shuts down cleanly.
  */
-class Engine
-{
+class Engine {
 public:
     /// @param config Immutable engine configuration.
     explicit Engine(Config config);
     ~Engine();
 
-    Engine(const Engine&) = delete;
-    Engine& operator=(const Engine&) = delete;
+    Engine(const Engine &) = delete;
+    Engine &operator=(const Engine &) = delete;
 
     /**
      * @brief Initialise all subsystems.
@@ -50,8 +49,11 @@ public:
     /** @brief Shut down all subsystems in reverse init order. */
     void shutdown();
 
+    /** @brief Submit a deferred command to run at the start of the next frame. */
+    void submitCommand(std::unique_ptr<core::ICommand> cmd);
+
     /** @brief Access the active configuration. */
-    [[nodiscard]] const Config& config() const noexcept;
+    [[nodiscard]] const Config &config() const noexcept;
 
 private:
     struct Impl;

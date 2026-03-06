@@ -29,7 +29,7 @@ namespace lpl::bci::metric {
  */
 struct StabilityConfig {
     std::size_t historySize = 30;
-    float stableThreshold   = 0.3f;
+    float stableThreshold = 0.3f;
     float unstableThreshold = 0.7f;
 };
 
@@ -38,9 +38,9 @@ struct StabilityConfig {
  */
 struct StabilityResult {
     float currentDistance = 0.0f;
-    float meanDistance    = 0.0f;
-    float rmsDistance     = 0.0f;
-    bool isStable        = false;
+    float meanDistance = 0.0f;
+    float rmsDistance = 0.0f;
+    bool isStable = false;
 };
 
 /**
@@ -57,7 +57,7 @@ public:
      *
      * @param config Stability parameters
      */
-    explicit StabilityMetric(const StabilityConfig& config = {});
+    explicit StabilityMetric(const StabilityConfig &config = {});
 
     /**
      * @brief Feeds a new covariance matrix and returns the stability assessment.
@@ -68,7 +68,7 @@ public:
      * @param covariance Current trial's covariance matrix (SPD)
      * @return Stability result, or Error if Riemannian computation fails
      */
-    [[nodiscard]] Expected<StabilityResult> update(const Eigen::MatrixXf& covariance);
+    [[nodiscard]] Expected<StabilityResult> update(const Eigen::MatrixXf &covariance);
 
     /**
      * @brief Returns the number of distance samples in the history.

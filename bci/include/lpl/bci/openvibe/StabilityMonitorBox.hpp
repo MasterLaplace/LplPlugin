@@ -34,19 +34,19 @@ namespace lpl::bci::openvibe {
  * @brief Configuration for the stability monitor box.
  */
 struct StabilityMonitorConfig {
-    float smoothingFactor   = 0.1f;
-    float maxExpectedDist   = 5.0f;
+    float smoothingFactor = 0.1f;
+    float maxExpectedDist = 5.0f;
     std::size_t historySize = 30;
-    float stableThreshold   = 0.3f;
+    float stableThreshold = 0.3f;
 };
 
 /**
  * @brief Smoothed stability result.
  */
 struct StabilityMonitorResult {
-    float rawDistance        = 0.0f;
+    float rawDistance = 0.0f;
     float smoothedStability = 0.5f;
-    bool isStable           = false;
+    bool isStable = false;
 };
 
 /**
@@ -62,7 +62,7 @@ public:
      *
      * @param config Smoothing and normalization parameters
      */
-    explicit StabilityMonitorBox(const StabilityMonitorConfig& config = {});
+    explicit StabilityMonitorBox(const StabilityMonitorConfig &config = {});
 
     /**
      * @brief Feeds a new covariance matrix and returns smoothed stability.
@@ -70,8 +70,7 @@ public:
      * @param covariance Current trial's covariance matrix (SPD)
      * @return Smoothed stability result, or Error on Riemannian computation failure
      */
-    [[nodiscard]] Expected<StabilityMonitorResult> update(
-        const Eigen::MatrixXf& covariance);
+    [[nodiscard]] Expected<StabilityMonitorResult> update(const Eigen::MatrixXf &covariance);
 
     /**
      * @brief Returns the last smoothed stability value.

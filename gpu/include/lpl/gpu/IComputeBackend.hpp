@@ -11,13 +11,13 @@
 #pragma once
 
 #ifndef LPL_GPU_ICOMPUTEBACKEND_HPP
-    #define LPL_GPU_ICOMPUTEBACKEND_HPP
+#    define LPL_GPU_ICOMPUTEBACKEND_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <cstddef>
-#include <span>
+#    include <cstddef>
+#    include <span>
 
 namespace lpl::gpu {
 
@@ -29,8 +29,7 @@ namespace lpl::gpu {
  *   - @c CudaBackend          — NVIDIA CUDA.
  *   - @c VulkanComputeBackend — Vulkan Compute (stub).
  */
-class IComputeBackend
-{
+class IComputeBackend {
 public:
     virtual ~IComputeBackend() = default;
 
@@ -45,18 +44,16 @@ public:
      * @param bytes Number of bytes.
      * @return Device pointer on success.
      */
-    [[nodiscard]] virtual core::Expected<void*> allocate(core::usize bytes) = 0;
+    [[nodiscard]] virtual core::Expected<void *> allocate(core::usize bytes) = 0;
 
     /** @brief Frees device memory. */
-    virtual void free(void* ptr) = 0;
+    virtual void free(void *ptr) = 0;
 
     /** @brief Copies data from host to device. */
-    [[nodiscard]] virtual core::Expected<void> uploadSync(
-        void* dst, const void* src, core::usize bytes) = 0;
+    [[nodiscard]] virtual core::Expected<void> uploadSync(void *dst, const void *src, core::usize bytes) = 0;
 
     /** @brief Copies data from device to host. */
-    [[nodiscard]] virtual core::Expected<void> downloadSync(
-        void* dst, const void* src, core::usize bytes) = 0;
+    [[nodiscard]] virtual core::Expected<void> downloadSync(void *dst, const void *src, core::usize bytes) = 0;
 
     /**
      * @brief Dispatches a compute kernel identified by name.
@@ -65,17 +62,14 @@ public:
      * @param blockDim    Number of threads per block.
      * @param args        Opaque argument buffer.
      */
-    [[nodiscard]] virtual core::Expected<void> dispatch(
-        const char* kernelName,
-        core::u32 gridDim,
-        core::u32 blockDim,
-        std::span<const core::byte> args) = 0;
+    [[nodiscard]] virtual core::Expected<void> dispatch(const char *kernelName, core::u32 gridDim, core::u32 blockDim,
+                                                        std::span<const core::byte> args) = 0;
 
     /** @brief Waits for all dispatched work to complete. */
     [[nodiscard]] virtual core::Expected<void> synchronize() = 0;
 
     /** @brief Returns a human-readable name. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::gpu

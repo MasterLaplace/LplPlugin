@@ -22,7 +22,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_PHYSICALDEVICE_HPP_
-    #define LPL_RENDER_VK_PHYSICALDEVICE_HPP_
+#define LPL_RENDER_VK_PHYSICALDEVICE_HPP_
 
 #include "swapChain/SwapChain.hpp"
 
@@ -68,7 +68,7 @@ public:
 
     /**
      * @brief Gets the maximum usable MSAA sample count.
-     * 
+     *
      * @return The maximum usable sample count flag bit.
      */
     [[nodiscard]] VkSampleCountFlagBits GetMaxUsableSampleCount() const { return _msaaSamples; }

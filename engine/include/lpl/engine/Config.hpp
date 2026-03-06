@@ -10,29 +10,31 @@
 #pragma once
 
 #ifndef LPL_ENGINE_CONFIG_HPP
-    #define LPL_ENGINE_CONFIG_HPP
+#    define LPL_ENGINE_CONFIG_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Constants.hpp>
+#    include <lpl/core/Constants.hpp>
+#    include <lpl/core/Types.hpp>
+
+#    include <string>
 
 namespace lpl::engine {
 
 /** @brief Immutable engine configuration. */
-class Config
-{
+class Config {
 public:
     /** @brief Fluent builder for Config. */
-    class Builder
-    {
+    class Builder {
     public:
-        Builder& tickRate(core::u32 hz) noexcept;
-        Builder& maxEntities(core::u32 n) noexcept;
-        Builder& maxChunks(core::u32 n) noexcept;
-        Builder& serverMode(bool enabled) noexcept;
-        Builder& headless(bool enabled) noexcept;
-        Builder& arenaSize(core::usize bytes) noexcept;
-        Builder& enableBci(bool enabled) noexcept;
-        Builder& enableGpu(bool enabled) noexcept;
+        Builder &tickRate(core::u32 hz) noexcept;
+        Builder &maxEntities(core::u32 n) noexcept;
+        Builder &maxChunks(core::u32 n) noexcept;
+        Builder &serverMode(bool enabled) noexcept;
+        Builder &headless(bool enabled) noexcept;
+        Builder &arenaSize(core::usize bytes) noexcept;
+        Builder &enableBci(bool enabled) noexcept;
+        Builder &enableGpu(bool enabled) noexcept;
+        Builder &serverAddress(std::string addr) noexcept;
+        Builder &serverPort(core::u16 port) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
 
@@ -45,28 +47,34 @@ public:
         core::usize _arenaSize{64 * 1024 * 1024};
         bool _enableBci{false};
         bool _enableGpu{false};
+        std::string _serverAddress{"127.0.0.1"};
+        core::u16 _serverPort{4242};
     };
 
-    [[nodiscard]] core::u32  tickRate()    const noexcept { return _tickRate; }
-    [[nodiscard]] core::u32  maxEntities() const noexcept { return _maxEntities; }
-    [[nodiscard]] core::u32  maxChunks()   const noexcept { return _maxChunks; }
-    [[nodiscard]] bool       serverMode()  const noexcept { return _serverMode; }
-    [[nodiscard]] bool       headless()    const noexcept { return _headless; }
-    [[nodiscard]] core::usize arenaSize()  const noexcept { return _arenaSize; }
-    [[nodiscard]] bool       enableBci()   const noexcept { return _enableBci; }
-    [[nodiscard]] bool       enableGpu()   const noexcept { return _enableGpu; }
+    [[nodiscard]] core::u32 tickRate() const noexcept { return _tickRate; }
+    [[nodiscard]] core::u32 maxEntities() const noexcept { return _maxEntities; }
+    [[nodiscard]] core::u32 maxChunks() const noexcept { return _maxChunks; }
+    [[nodiscard]] bool serverMode() const noexcept { return _serverMode; }
+    [[nodiscard]] bool headless() const noexcept { return _headless; }
+    [[nodiscard]] core::usize arenaSize() const noexcept { return _arenaSize; }
+    [[nodiscard]] bool enableBci() const noexcept { return _enableBci; }
+    [[nodiscard]] bool enableGpu() const noexcept { return _enableGpu; }
+    [[nodiscard]] const std::string &serverAddress() const noexcept { return _serverAddress; }
+    [[nodiscard]] core::u16 serverPort() const noexcept { return _serverPort; }
 
 private:
     friend class Builder;
 
-    core::u32  _tickRate{core::kTickRate};
-    core::u32  _maxEntities{core::kMaxEntities};
-    core::u32  _maxChunks{core::kMaxChunks};
-    bool       _serverMode{false};
-    bool       _headless{false};
+    core::u32 _tickRate{core::kTickRate};
+    core::u32 _maxEntities{core::kMaxEntities};
+    core::u32 _maxChunks{core::kMaxChunks};
+    bool _serverMode{false};
+    bool _headless{false};
     core::usize _arenaSize{64 * 1024 * 1024};
-    bool       _enableBci{false};
-    bool       _enableGpu{false};
+    bool _enableBci{false};
+    bool _enableGpu{false};
+    std::string _serverAddress{"127.0.0.1"};
+    core::u16 _serverPort{4242};
 };
 
 } // namespace lpl::engine

@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_GRAPHICSPIPELINE_HPP_
-    #define LPL_RENDER_VK_GRAPHICSPIPELINE_HPP_
+#define LPL_RENDER_VK_GRAPHICSPIPELINE_HPP_
 
 #include "buffers/Buffer.hpp"
 #include "shaderModule/ShaderModule.hpp"
@@ -38,7 +38,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class GraphicsPipeline {
-  public:
+public:
     /**
      * @brief Creates a graphics pipeline.
      *
@@ -81,7 +81,7 @@ class GraphicsPipeline {
      */
     [[nodiscard]] const VkPipelineLayout &GetLayout() const { return _pipelineLayout; }
 
-  private:
+private:
     /**
      * @brief Sets up the color blend attachment.
      *
@@ -94,7 +94,7 @@ class GraphicsPipeline {
     void SetupColorBlendAttachment(VkPipelineColorBlendAttachmentState &colorBlendAttachment,
                                    const VkBool32 enableBlend);
 
-  private:
+private:
     VkPipelineLayout _pipelineLayout;
     VkPipeline _graphicsPipeline;
 };

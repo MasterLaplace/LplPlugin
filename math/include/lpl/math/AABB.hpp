@@ -12,32 +12,31 @@
 #pragma once
 
 #ifndef LPL_MATH_AABB_HPP
-    #define LPL_MATH_AABB_HPP
+#    define LPL_MATH_AABB_HPP
 
-    #include "Vec3.hpp"
-    #include <type_traits>
+#    include "Vec3.hpp"
+#    include <type_traits>
 
 namespace lpl::math {
 
-template <core::Arithmetic T>
-struct AABB final {
+template <core::Arithmetic T> struct AABB final {
     Vec3<T> min{};
     Vec3<T> max{};
 
     constexpr AABB() = default;
     constexpr AABB(Vec3<T> min, Vec3<T> max);
 
-    [[nodiscard]] LPL_HD constexpr bool contains(Vec3<T> point)   const;
-    [[nodiscard]] LPL_HD constexpr bool intersects(AABB other)    const;
-    [[nodiscard]] constexpr AABB        merge(AABB other)         const;
-    [[nodiscard]] constexpr AABB        expand(T margin)          const;
-    [[nodiscard]] constexpr Vec3<T>     center()                  const;
-    [[nodiscard]] constexpr Vec3<T>     halfExtents()             const;
-    [[nodiscard]] constexpr T           volume()                  const;
+    [[nodiscard]] LPL_HD constexpr bool contains(Vec3<T> point) const;
+    [[nodiscard]] LPL_HD constexpr bool intersects(AABB other) const;
+    [[nodiscard]] constexpr AABB merge(AABB other) const;
+    [[nodiscard]] constexpr AABB expand(T margin) const;
+    [[nodiscard]] constexpr Vec3<T> center() const;
+    [[nodiscard]] constexpr Vec3<T> halfExtents() const;
+    [[nodiscard]] constexpr T volume() const;
 };
 
 } // namespace lpl::math
 
-#include "AABB.inl"
+#    include "AABB.inl"
 
 #endif // LPL_MATH_AABB_HPP

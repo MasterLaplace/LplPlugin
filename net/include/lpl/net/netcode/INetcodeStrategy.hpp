@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_NET_NETCODE_INETCODESTRATEGY_HPP
-    #define LPL_NET_NETCODE_INETCODESTRATEGY_HPP
+#    define LPL_NET_NETCODE_INETCODESTRATEGY_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <span>
+#    include <span>
 
 namespace lpl::net::netcode {
 
@@ -28,8 +28,7 @@ namespace lpl::net::netcode {
  *   - @c AuthoritativeStrategy — server-authoritative with client prediction.
  *   - @c RollbackStrategy — GGPO-style rollback for competitive scenarios.
  */
-class INetcodeStrategy
-{
+class INetcodeStrategy {
 public:
     virtual ~INetcodeStrategy() = default;
 
@@ -39,19 +38,16 @@ public:
      * @param inputData Serialised input bits.
      * @param sequence  Sequence number of the input.
      */
-    [[nodiscard]] virtual core::Expected<void> onInputReceived(
-        core::u32 playerId,
-        std::span<const core::byte> inputData,
-        core::u32 sequence) = 0;
+    [[nodiscard]] virtual core::Expected<void>
+    onInputReceived(core::u32 playerId, std::span<const core::byte> inputData, core::u32 sequence) = 0;
 
     /**
      * @brief Processes a received state snapshot / delta.
      * @param snapshotData Serialised state bytes.
      * @param sequence     Server tick number.
      */
-    [[nodiscard]] virtual core::Expected<void> onStateReceived(
-        std::span<const core::byte> snapshotData,
-        core::u32 sequence) = 0;
+    [[nodiscard]] virtual core::Expected<void> onStateReceived(std::span<const core::byte> snapshotData,
+                                                               core::u32 sequence) = 0;
 
     /**
      * @brief Advances the netcode by one tick.
@@ -60,7 +56,7 @@ public:
     virtual void tick(core::f32 dt) = 0;
 
     /** @brief Returns a human-readable name. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::net::netcode

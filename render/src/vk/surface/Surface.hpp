@@ -22,7 +22,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_SURFACE_HPP_
-    #define LPL_RENDER_VK_SURFACE_HPP_
+#define LPL_RENDER_VK_SURFACE_HPP_
 
 #include "queueFamilies/QueueFamilies.hpp"
 
@@ -43,7 +43,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class Surface {
-  public:
+public:
     /**
      * @brief Creates a surface for the Vulkan API.
      *
@@ -75,7 +75,7 @@ class Surface {
      */
     [[nodiscard]] const VkSurfaceKHR &Get() const { return _surface; }
 
-  private:
+private:
     VkSurfaceKHR _surface;
 };
 

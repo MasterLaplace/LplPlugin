@@ -33,7 +33,7 @@ namespace lpl::bci::math {
  * @param spd Symmetric positive-definite matrix
  * @return Matrix square root, or Error if matrix is not valid SPD
  */
-[[nodiscard]] Expected<Eigen::MatrixXf> matrixSqrt(const Eigen::MatrixXf& spd);
+[[nodiscard]] Expected<Eigen::MatrixXf> matrixSqrt(const Eigen::MatrixXf &spd);
 
 /**
  * @brief Computes the inverse matrix square root of a SPD matrix.
@@ -43,7 +43,7 @@ namespace lpl::bci::math {
  * @param spd Symmetric positive-definite matrix
  * @return Inverse square root, or Error if matrix is not valid SPD
  */
-[[nodiscard]] Expected<Eigen::MatrixXf> matrixSqrtInv(const Eigen::MatrixXf& spd);
+[[nodiscard]] Expected<Eigen::MatrixXf> matrixSqrtInv(const Eigen::MatrixXf &spd);
 
 /**
  * @brief Computes the matrix logarithm of a SPD matrix.
@@ -53,7 +53,7 @@ namespace lpl::bci::math {
  * @param spd Symmetric positive-definite matrix
  * @return Matrix logarithm, or Error if matrix is not valid SPD
  */
-[[nodiscard]] Expected<Eigen::MatrixXf> matrixLog(const Eigen::MatrixXf& spd);
+[[nodiscard]] Expected<Eigen::MatrixXf> matrixLog(const Eigen::MatrixXf &spd);
 
 /**
  * @brief Computes the affine-invariant Riemannian distance between two SPD matrices.
@@ -64,9 +64,7 @@ namespace lpl::bci::math {
  * @param b Second SPD matrix
  * @return Geodesic distance, or Error on invalid input
  */
-[[nodiscard]] Expected<float> riemannianDistance(
-    const Eigen::MatrixXf& a,
-    const Eigen::MatrixXf& b);
+[[nodiscard]] Expected<float> riemannianDistance(const Eigen::MatrixXf &a, const Eigen::MatrixXf &b);
 
 /**
  * @brief Computes the Mahalanobis distance between a vector and a distribution.
@@ -78,10 +76,8 @@ namespace lpl::bci::math {
  * @param cov    Covariance matrix (must be invertible)
  * @return Mahalanobis distance, or Error on singular covariance
  */
-[[nodiscard]] Expected<float> mahalanobisDistance(
-    const Eigen::VectorXf& sample,
-    const Eigen::VectorXf& mean,
-    const Eigen::MatrixXf& cov);
+[[nodiscard]] Expected<float> mahalanobisDistance(const Eigen::VectorXf &sample, const Eigen::VectorXf &mean,
+                                                  const Eigen::MatrixXf &cov);
 
 /**
  * @brief Computes the Fréchet mean (geometric mean) of SPD matrices.
@@ -96,9 +92,7 @@ namespace lpl::bci::math {
  * @param tolerance  Convergence threshold on the Frobenius norm (default: 1e-6)
  * @return Fréchet mean matrix, or Error on invalid input
  */
-[[nodiscard]] Expected<Eigen::MatrixXf> frechetMean(
-    std::span<const Eigen::MatrixXf> matrices,
-    std::size_t maxIter = 50,
-    float tolerance = 1e-6f);
+[[nodiscard]] Expected<Eigen::MatrixXf> frechetMean(std::span<const Eigen::MatrixXf> matrices, std::size_t maxIter = 50,
+                                                    float tolerance = 1e-6f);
 
 } // namespace lpl::bci::math

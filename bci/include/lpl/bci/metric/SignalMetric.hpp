@@ -26,9 +26,9 @@ namespace lpl::bci::metric {
 struct SignalMetricConfig {
     float sampleRate = 250.0f;
     std::size_t fftSize = 256;
-    FrequencyBand theta = { .low = 4.0f, .high = 8.0f };
-    FrequencyBand alpha = { .low = 8.0f, .high = 13.0f };
-    FrequencyBand beta  = { .low = 13.0f, .high = 30.0f };
+    FrequencyBand theta = {.low = 4.0f, .high = 8.0f};
+    FrequencyBand alpha = {.low = 8.0f, .high = 13.0f};
+    FrequencyBand beta = {.low = 13.0f, .high = 30.0f};
 };
 
 /**
@@ -37,8 +37,8 @@ struct SignalMetricConfig {
 struct SignalMetricResult {
     float thetaPower = 0.0f;
     float alphaPower = 0.0f;
-    float betaPower  = 0.0f;
-    float ratio      = 0.0f;
+    float betaPower = 0.0f;
+    float ratio = 0.0f;
 };
 
 /**
@@ -54,7 +54,7 @@ public:
      *
      * @param config Frequency band definitions and FFT parameters
      */
-    explicit SignalMetric(const SignalMetricConfig& config = {});
+    explicit SignalMetric(const SignalMetricConfig &config = {});
 
     /**
      * @brief Computes the Schumacher ratio for each channel.
@@ -62,8 +62,7 @@ public:
      * @param psd        Per-channel PSD arrays [channelCount][bins]
      * @return Per-channel metric results
      */
-    [[nodiscard]] std::vector<SignalMetricResult> compute(
-        std::span<const std::vector<float>> psd) const noexcept;
+    [[nodiscard]] std::vector<SignalMetricResult> compute(std::span<const std::vector<float>> psd) const noexcept;
 
     /**
      * @brief Computes the mean Schumacher ratio across all channels.
@@ -71,8 +70,7 @@ public:
      * @param psd Per-channel PSD arrays
      * @return Average ratio, or 0 if no channels
      */
-    [[nodiscard]] float computeMean(
-        std::span<const std::vector<float>> psd) const noexcept;
+    [[nodiscard]] float computeMean(std::span<const std::vector<float>> psd) const noexcept;
 
 private:
     std::size_t _thetaLow;

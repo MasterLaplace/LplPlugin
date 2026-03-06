@@ -9,7 +9,6 @@
  */
 
 #include <lpl/net/ServerMesh.hpp>
-#include <stdexcept>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -60,12 +59,16 @@ core::Expected<void> ServerMesh::migrateEntity(
     core::u32 /*targetNodeId*/,
     std::span<const core::byte> /*entityData*/)
 {
+    /// @todo Serialize entity data and send to target node via transport.
+    ///       Required for Server Meshing (multi-server worlds).
     LPL_ASSERT(false && "unimplemented");
     return {};
 }
 
 void ServerMesh::heartbeat()
 {
+    /// @todo Send heartbeat ping to all registered mesh nodes and
+    ///       mark unresponsive nodes for removal.
     LPL_ASSERT(false && "unimplemented");
 }
 

@@ -11,15 +11,15 @@
 #pragma once
 
 #ifndef LPL_NET_PACKETQUEUE_HPP
-    #define LPL_NET_PACKETQUEUE_HPP
+#    define LPL_NET_PACKETQUEUE_HPP
 
-#include <lpl/net/protocol/Protocol.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/net/protocol/Protocol.hpp>
 
-#include <mutex>
-#include <queue>
-#include <vector>
+#    include <mutex>
+#    include <queue>
+#    include <vector>
 
 namespace lpl::net {
 
@@ -27,24 +27,19 @@ namespace lpl::net {
  * @struct QueuedPacket
  * @brief A packet awaiting transmission, with priority metadata.
  */
-struct QueuedPacket
-{
-    core::u8                    priority;
-    protocol::PacketHeader      header;
-    std::vector<core::byte>     payload;
+struct QueuedPacket {
+    core::u8 priority;
+    protocol::PacketHeader header;
+    std::vector<core::byte> payload;
 
-    [[nodiscard]] bool operator<(const QueuedPacket& other) const noexcept
-    {
-        return priority < other.priority;
-    }
+    [[nodiscard]] bool operator<(const QueuedPacket &other) const noexcept { return priority < other.priority; }
 };
 
 /**
  * @class PacketQueue
  * @brief Thread-safe max-priority queue of outbound packets.
  */
-class PacketQueue final : public core::NonCopyable<PacketQueue>
-{
+class PacketQueue final : public core::NonCopyable<PacketQueue> {
 public:
     PacketQueue() = default;
     ~PacketQueue() = default;
@@ -57,7 +52,7 @@ public:
      * @param[out] out Filled with the packet if available.
      * @return @c true if a packet was dequeued.
      */
-    bool pop(QueuedPacket& out);
+    bool pop(QueuedPacket &out);
 
     /** @brief Returns @c true if the queue is empty. */
     [[nodiscard]] bool empty() const noexcept;
@@ -69,8 +64,8 @@ public:
     void clear();
 
 private:
-    mutable std::mutex                                   _mutex;
-    std::priority_queue<QueuedPacket>                    _queue;
+    mutable std::mutex _mutex;
+    std::priority_queue<QueuedPacket> _queue;
 };
 
 } // namespace lpl::net

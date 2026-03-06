@@ -11,16 +11,16 @@
 #pragma once
 
 #ifndef LPL_ECS_ARCHETYPE_HPP
-    #define LPL_ECS_ARCHETYPE_HPP
+#    define LPL_ECS_ARCHETYPE_HPP
 
-#include <lpl/ecs/Component.hpp>
-#include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Component.hpp>
 
-#include <algorithm>
-#include <array>
-#include <bitset>
-#include <cstddef>
-#include <span>
+#    include <algorithm>
+#    include <array>
+#    include <bitset>
+#    include <cstddef>
+#    include <span>
 
 namespace lpl::ecs {
 
@@ -32,11 +32,9 @@ namespace lpl::ecs {
  * @c ComponentId(N).  Two entities sharing the same Archetype are stored
  * in the same Partition chunk(s).
  */
-class Archetype final
-{
+class Archetype final {
 public:
-    static constexpr core::usize kMaxComponents =
-        static_cast<core::usize>(ComponentId::Count);
+    static constexpr core::usize kMaxComponents = static_cast<core::usize>(ComponentId::Count);
 
     using Mask = std::bitset<kMaxComponents>;
 
@@ -59,16 +57,16 @@ public:
     [[nodiscard]] bool has(ComponentId id) const noexcept;
 
     /** @brief Tests whether this archetype is a superset of @p other. */
-    [[nodiscard]] bool contains(const Archetype& other) const noexcept;
+    [[nodiscard]] bool contains(const Archetype &other) const noexcept;
 
     /** @brief Returns the raw bitmask. */
-    [[nodiscard]] const Mask& mask() const noexcept;
+    [[nodiscard]] const Mask &mask() const noexcept;
 
     /** @brief Returns the number of component types in this archetype. */
     [[nodiscard]] core::usize count() const noexcept;
 
     /** @brief Equality. */
-    [[nodiscard]] bool operator==(const Archetype& other) const noexcept;
+    [[nodiscard]] bool operator==(const Archetype &other) const noexcept;
 
 private:
     Mask _mask{};
@@ -76,6 +74,6 @@ private:
 
 } // namespace lpl::ecs
 
-#include "Archetype.inl"
+#    include "Archetype.inl"
 
 #endif // LPL_ECS_ARCHETYPE_HPP

@@ -11,14 +11,14 @@
 #pragma once
 
 #ifndef LPL_PHYSICS_COLLISIONDETECTOR_HPP
-    #define LPL_PHYSICS_COLLISIONDETECTOR_HPP
+#    define LPL_PHYSICS_COLLISIONDETECTOR_HPP
 
-#include <lpl/math/AABB.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/math/AABB.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Vec3.hpp>
 
-#include <optional>
+#    include <optional>
 
 namespace lpl::physics {
 
@@ -26,21 +26,19 @@ namespace lpl::physics {
  * @struct ContactPoint
  * @brief Single contact between two colliding bodies.
  */
-struct ContactPoint
-{
+struct ContactPoint {
     math::Vec3<math::Fixed32> position;
     math::Vec3<math::Fixed32> normal;
-    math::Fixed32             penetrationDepth;
+    math::Fixed32 penetrationDepth;
 };
 
 /**
  * @struct CollisionResult
  * @brief Result of a narrow-phase test between two bodies.
  */
-struct CollisionResult
-{
-    bool                          colliding{false};
-    ContactPoint                  contact{};
+struct CollisionResult {
+    bool colliding{false};
+    ContactPoint contact{};
 };
 
 /**
@@ -49,8 +47,7 @@ struct CollisionResult
  *
  * All functions are deterministic (Fixed32 math only).
  */
-class CollisionDetector
-{
+class CollisionDetector {
 public:
     /**
      * @brief AABB vs AABB intersection test.
@@ -58,9 +55,8 @@ public:
      * @param b Second bounding box.
      * @return Collision result with contact if overlapping.
      */
-    [[nodiscard]] static CollisionResult testAABBvsAABB(
-        const math::AABB<math::Fixed32>& a,
-        const math::AABB<math::Fixed32>& b) noexcept;
+    [[nodiscard]] static CollisionResult testAABBvsAABB(const math::AABB<math::Fixed32> &a,
+                                                        const math::AABB<math::Fixed32> &b) noexcept;
 
     /**
      * @brief Sphere vs sphere intersection test.
@@ -70,25 +66,22 @@ public:
      * @param radiusB Radius of sphere B.
      * @return Collision result.
      */
-    [[nodiscard]] static CollisionResult testSphereVsSphere(
-        const math::Vec3<math::Fixed32>& centerA, math::Fixed32 radiusA,
-        const math::Vec3<math::Fixed32>& centerB, math::Fixed32 radiusB) noexcept;
+    [[nodiscard]] static CollisionResult testSphereVsSphere(const math::Vec3<math::Fixed32> &centerA,
+                                                            math::Fixed32 radiusA,
+                                                            const math::Vec3<math::Fixed32> &centerB,
+                                                            math::Fixed32 radiusB) noexcept;
 
     /**
      * @brief GJK convex vs convex support-mapping test (stub).
      * @return Collision result.
      */
-    [[nodiscard]] static CollisionResult testGJK(
-        const void* shapeA,
-        const void* shapeB) noexcept;
+    [[nodiscard]] static CollisionResult testGJK(const void *shapeA, const void *shapeB) noexcept;
 
     /**
      * @brief SAT (Separating Axis Theorem) test for oriented boxes (stub).
      * @return Collision result.
      */
-    [[nodiscard]] static CollisionResult testSAT(
-        const void* obbA,
-        const void* obbB) noexcept;
+    [[nodiscard]] static CollisionResult testSAT(const void *obbA, const void *obbB) noexcept;
 };
 
 } // namespace lpl::physics

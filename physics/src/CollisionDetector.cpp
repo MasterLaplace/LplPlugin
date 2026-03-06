@@ -9,7 +9,6 @@
  */
 
 #include <lpl/physics/CollisionDetector.hpp>
-#include <stdexcept>
 #include <lpl/core/Assert.hpp>
 #include <algorithm>
 
@@ -93,6 +92,8 @@ CollisionResult CollisionDetector::testGJK(
     const void* /*shapeA*/,
     const void* /*shapeB*/) noexcept
 {
+    /// @todo Implement GJK (Gilbert-Johnson-Keerthi) convex hull collision
+    ///       detection. Required for non-AABB/sphere convex shapes.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }
@@ -101,6 +102,8 @@ CollisionResult CollisionDetector::testSAT(
     const void* /*obbA*/,
     const void* /*obbB*/) noexcept
 {
+    /// @todo Implement SAT (Separating Axis Theorem) for OBB vs OBB.
+    ///       Needed for oriented bounding box collisions in physics.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }

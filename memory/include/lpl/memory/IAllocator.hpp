@@ -14,9 +14,9 @@
 #pragma once
 
 #ifndef LPL_MEMORY_IALLOCATOR_HPP
-    #define LPL_MEMORY_IALLOCATOR_HPP
+#    define LPL_MEMORY_IALLOCATOR_HPP
 
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
 
 namespace lpl::memory {
 

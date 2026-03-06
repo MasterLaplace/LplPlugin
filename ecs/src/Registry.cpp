@@ -146,6 +146,17 @@ core::Expected<EntityId> Registry::createEntity(const Archetype& archetype)
     }
 
     info.ref = refResult.value();
+
+    // Assign partitionIndex so destroyEntity finds the correct partition
+    for (core::u32 pi = 0; pi < static_cast<core::u32>(_impl->partitions.size()); ++pi)
+    {
+        if (_impl->partitions[pi].get() == &partition)
+        {
+            info.partitionIndex = pi;
+            break;
+        }
+    }
+
     _impl->liveCount.fetch_add(1, std::memory_order_relaxed);
 
     return id;
@@ -166,6 +177,12 @@ core::Expected<void> Registry::destroyEntity(EntityId id)
     if (!eraseResult.has_value())
     {
         return core::makeError(eraseResult.error().code(), eraseResult.error().message());
+    }
+
+    EntityId swappedId = eraseResult.value();
+    if (swappedId != id)
+    {
+        _impl->slots[swappedId.slot()].ref.localIndex = info.ref.localIndex;
     }
 
     // Bump generation (prevents stale EntityId from matching after recycle)
@@ -214,7 +231,7 @@ Partition& Registry::getOrCreatePartition(const Archetype& archetype)
         const auto cid = static_cast<ComponentId>(i);
         if (archetype.has(cid))
         {
-            layouts.push_back(ComponentLayout{cid, 0, 0});
+            layouts.push_back(defaultLayout(cid));
         }
     }
 

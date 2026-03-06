@@ -16,12 +16,12 @@
 #pragma once
 
 #ifndef LPL_MEMORY_POOL_ALLOCATOR_HPP
-    #define LPL_MEMORY_POOL_ALLOCATOR_HPP
+#    define LPL_MEMORY_POOL_ALLOCATOR_HPP
 
-    #include "IAllocator.hpp"
+#    include "IAllocator.hpp"
 
-    #include <lpl/core/Assert.hpp>
-    #include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Assert.hpp>
+#    include <lpl/core/NonCopyable.hpp>
 
 namespace lpl::memory {
 
@@ -29,8 +29,7 @@ namespace lpl::memory {
  * @brief Statically-typed object pool with intrusive free-list.
  * @tparam T Pooled type (must be at least pointer-sized).
  */
-template <typename T>
-class PoolAllocator final : public IAllocator, private core::NonCopyable<PoolAllocator<T>> {
+template <typename T> class PoolAllocator final : public IAllocator, private core::NonCopyable<PoolAllocator<T>> {
 public:
     /**
      * @brief Construct a pool pre-allocating storage for @p count objects.
@@ -58,17 +57,19 @@ public:
     [[nodiscard]] core::usize freeCount() const { return _freeCount; }
 
 private:
-    struct FreeNode { FreeNode *next; };
+    struct FreeNode {
+        FreeNode *next;
+    };
 
-    char       *_memory    = nullptr;
-    FreeNode   *_head      = nullptr;
+    char *_memory = nullptr;
+    FreeNode *_head = nullptr;
     core::usize _blockSize = 0;
-    core::usize _count     = 0;
+    core::usize _count = 0;
     core::usize _freeCount = 0;
 };
 
 } // namespace lpl::memory
 
-    #include "PoolAllocator.inl"
+#    include "PoolAllocator.inl"
 
 #endif // LPL_MEMORY_POOL_ALLOCATOR_HPP

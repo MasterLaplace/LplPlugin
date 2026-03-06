@@ -10,20 +10,19 @@
 #pragma once
 
 #ifndef LPL_SERIAL_REPLAYRECORDER_HPP
-    #define LPL_SERIAL_REPLAYRECORDER_HPP
+#    define LPL_SERIAL_REPLAYRECORDER_HPP
 
-#include <lpl/serial/StateSnapshot.hpp>
-#include <lpl/input/InputState.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <vector>
-#include <string_view>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/input/InputState.hpp>
+#    include <lpl/serial/StateSnapshot.hpp>
+#    include <string_view>
+#    include <vector>
 
 namespace lpl::serial {
 
 /** @brief One frame of replay data. */
-struct ReplayFrame
-{
+struct ReplayFrame {
     core::u64 tick{0};
     input::InputState inputState{};
 };
@@ -33,19 +32,19 @@ struct ReplayFrame
  *
  * Snapshots are taken every N ticks (configurable) to allow
  * fast-forward / seek during playback.
+ * @todo Stub implementation.
  */
-class ReplayRecorder
-{
+class ReplayRecorder {
 public:
     /// @param snapshotInterval Ticks between automatic snapshots.
     explicit ReplayRecorder(core::u32 snapshotInterval = 144);
     ~ReplayRecorder();
 
-    ReplayRecorder(const ReplayRecorder&) = delete;
-    ReplayRecorder& operator=(const ReplayRecorder&) = delete;
+    ReplayRecorder(const ReplayRecorder &) = delete;
+    ReplayRecorder &operator=(const ReplayRecorder &) = delete;
 
     /** @brief Record one tick's input. */
-    void recordFrame(const ReplayFrame& frame);
+    void recordFrame(const ReplayFrame &frame);
 
     /** @brief Record a full state snapshot. */
     void recordSnapshot(StateSnapshot snapshot);
@@ -57,7 +56,7 @@ public:
     [[nodiscard]] core::usize snapshotCount() const noexcept;
 
     /** @brief Access a recorded frame by index. */
-    [[nodiscard]] const ReplayFrame& frame(core::usize index) const;
+    [[nodiscard]] const ReplayFrame &frame(core::usize index) const;
 
     /**
      * @brief Save the replay to a binary file.

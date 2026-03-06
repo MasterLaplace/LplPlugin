@@ -10,7 +10,7 @@
 #pragma once
 
 #ifndef LPL_CORE_NON_COPYABLE_HPP
-    #define LPL_CORE_NON_COPYABLE_HPP
+#    define LPL_CORE_NON_COPYABLE_HPP
 
 namespace lpl::core {
 
@@ -18,17 +18,16 @@ namespace lpl::core {
  * @brief Inherit (privately) to disable copy construction and assignment.
  * @tparam Derived The CRTP derived class.
  */
-template <typename Derived>
-class NonCopyable {
+template <typename Derived> class NonCopyable {
 protected:
-    NonCopyable()  = default;
+    NonCopyable() = default;
     ~NonCopyable() = default;
 
-    NonCopyable(const NonCopyable &)            = delete;
-    NonCopyable &operator=(const NonCopyable &)  = delete;
+    NonCopyable(const NonCopyable &) = delete;
+    NonCopyable &operator=(const NonCopyable &) = delete;
 
-    NonCopyable(NonCopyable &&)                 = default;
-    NonCopyable &operator=(NonCopyable &&)       = default;
+    NonCopyable(NonCopyable &&) = default;
+    NonCopyable &operator=(NonCopyable &&) = default;
 };
 
 } // namespace lpl::core

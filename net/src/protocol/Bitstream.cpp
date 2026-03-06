@@ -61,6 +61,20 @@ void Bitstream::writeU8(core::u8 value) { writeBits(value, 8); }
 void Bitstream::writeU16(core::u16 value) { writeBits(value, 16); }
 void Bitstream::writeU32(core::u32 value) { writeBits(value, 32); }
 
+void Bitstream::writeI32(core::i32 value)
+{
+    core::u32 bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    writeU32(bits);
+}
+
+void Bitstream::writeFloat(float value)
+{
+    core::u32 bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    writeU32(bits);
+}
+
 void Bitstream::writeBytes(std::span<const core::byte> bytes)
 {
     for (auto b : bytes)
@@ -119,6 +133,26 @@ core::Expected<core::u16> Bitstream::readU16()
 core::Expected<core::u32> Bitstream::readU32()
 {
     return readBits(32);
+}
+
+core::Expected<core::i32> Bitstream::readI32()
+{
+    auto r = readU32();
+    if (!r.has_value()) return core::makeError(r.error().code(), r.error().message());
+    core::i32 val;
+    core::u32 bits = r.value();
+    std::memcpy(&val, &bits, sizeof(val));
+    return val;
+}
+
+core::Expected<float> Bitstream::readFloat()
+{
+    auto r = readU32();
+    if (!r.has_value()) return core::makeError(r.error().code(), r.error().message());
+    float val;
+    core::u32 bits = r.value();
+    std::memcpy(&val, &bits, sizeof(val));
+    return val;
 }
 
 core::Expected<std::vector<core::byte>> Bitstream::readBytes(core::u32 count)

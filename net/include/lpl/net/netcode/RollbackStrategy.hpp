@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_NET_NETCODE_ROLLBACKSTRATEGY_HPP
-    #define LPL_NET_NETCODE_ROLLBACKSTRATEGY_HPP
+#    define LPL_NET_NETCODE_ROLLBACKSTRATEGY_HPP
 
-#include <lpl/net/netcode/INetcodeStrategy.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/net/netcode/INetcodeStrategy.hpp>
 
-#include <memory>
+#    include <memory>
 
 namespace lpl::net::netcode {
 
@@ -28,9 +28,7 @@ namespace lpl::net::netcode {
  * simulated tick, the world state is rolled back to that tick, re-simulated
  * with the corrected input, and fast-forwarded to the present.
  */
-class RollbackStrategy final : public INetcodeStrategy,
-                                public core::NonCopyable<RollbackStrategy>
-{
+class RollbackStrategy final : public INetcodeStrategy, public core::NonCopyable<RollbackStrategy> {
 public:
     /**
      * @brief Constructs a rollback strategy.
@@ -40,18 +38,15 @@ public:
     explicit RollbackStrategy(core::u32 maxRollbackFrames = 8);
     ~RollbackStrategy() override;
 
-    [[nodiscard]] core::Expected<void> onInputReceived(
-        core::u32 playerId,
-        std::span<const core::byte> inputData,
-        core::u32 sequence) override;
+    [[nodiscard]] core::Expected<void> onInputReceived(core::u32 playerId, std::span<const core::byte> inputData,
+                                                       core::u32 sequence) override;
 
-    [[nodiscard]] core::Expected<void> onStateReceived(
-        std::span<const core::byte> snapshotData,
-        core::u32 sequence) override;
+    [[nodiscard]] core::Expected<void> onStateReceived(std::span<const core::byte> snapshotData,
+                                                       core::u32 sequence) override;
 
     void tick(core::f32 dt) override;
 
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     struct Impl;

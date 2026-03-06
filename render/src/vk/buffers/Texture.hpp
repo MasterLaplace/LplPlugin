@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_TEXTURE_HPP_
-    #define LPL_RENDER_VK_TEXTURE_HPP_
+#define LPL_RENDER_VK_TEXTURE_HPP_
 
 #include "debugMessenger/DebugMessenger.hpp"
 
@@ -32,7 +32,7 @@ namespace lpl::render::vk {
  * This class is used to load and contain Vulkan texture data.
  */
 class Texture {
-  public:
+public:
     /**
      * @brief Construct a new Texture object.
      */
@@ -97,8 +97,8 @@ class Texture {
 
     /**
      * @brief Get the Mip levels
-     * 
-     * @return uint32_t  The number of mip levels. 
+     *
+     * @return uint32_t  The number of mip levels.
      */
     [[nodiscard]] uint32_t GetMipLevels() const { return _mipLevels; }
 
@@ -137,8 +137,8 @@ class Texture {
      */
     [[nodiscard]] VkSampler &GetSampler() { return textureSampler; }
 
-  protected:
-  private:
+protected:
+private:
     uint8_t *_pixels = nullptr;
     int _width = 0;
     int _height = 0;

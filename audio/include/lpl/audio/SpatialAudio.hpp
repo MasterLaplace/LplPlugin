@@ -11,12 +11,12 @@
 #pragma once
 
 #ifndef LPL_AUDIO_SPATIALAUDIO_HPP
-    #define LPL_AUDIO_SPATIALAUDIO_HPP
+#    define LPL_AUDIO_SPATIALAUDIO_HPP
 
-#include <lpl/audio/IAudioEngine.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/audio/IAudioEngine.hpp>
+#    include <lpl/core/NonCopyable.hpp>
 
-#include <memory>
+#    include <memory>
 
 namespace lpl::audio {
 
@@ -25,10 +25,9 @@ namespace lpl::audio {
  * @brief Spatial audio using head-related transfer functions (HRTF).
  *
  * Provides 3D positional sound rendering for VR immersion.
+ * @todo Stub implementation.
  */
-class SpatialAudio final : public IAudioEngine,
-                           public core::NonCopyable<SpatialAudio>
-{
+class SpatialAudio final : public IAudioEngine, public core::NonCopyable<SpatialAudio> {
 public:
     SpatialAudio();
     ~SpatialAudio() override;
@@ -36,17 +35,14 @@ public:
     [[nodiscard]] core::Expected<void> init() override;
     void shutdown() override;
 
-    void setListenerPosition(const math::Vec3<core::f32>& position,
-                             const math::Vec3<core::f32>& forward,
-                             const math::Vec3<core::f32>& up) override;
+    void setListenerPosition(const math::Vec3<core::f32> &position, const math::Vec3<core::f32> &forward,
+                             const math::Vec3<core::f32> &up) override;
 
-    void playAt(core::u32 soundId,
-                const math::Vec3<core::f32>& position,
-                core::f32 volume) override;
+    void playAt(core::u32 soundId, const math::Vec3<core::f32> &position, core::f32 volume) override;
 
     void stopAll() override;
 
-    [[nodiscard]] const char* name() const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override;
 
 private:
     struct Impl;

@@ -10,19 +10,18 @@
 #pragma once
 
 #ifndef LPL_SERIAL_REPLAYPLAYER_HPP
-    #define LPL_SERIAL_REPLAYPLAYER_HPP
+#    define LPL_SERIAL_REPLAYPLAYER_HPP
 
-#include <lpl/serial/ReplayRecorder.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <string_view>
-#include <memory>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/serial/ReplayRecorder.hpp>
+#    include <memory>
+#    include <string_view>
 
 namespace lpl::serial {
 
 /** @brief Playback state. */
-enum class PlaybackState : core::u8
-{
+enum class PlaybackState : core::u8 {
     Idle,
     Playing,
     Paused,
@@ -34,15 +33,15 @@ enum class PlaybackState : core::u8
  *
  * Loads from disk, seeks to a snapshot for fast-forward, then
  * replays inputs tick-by-tick through the simulation.
+ * @todo Stub implementation.
  */
-class ReplayPlayer
-{
+class ReplayPlayer {
 public:
     ReplayPlayer();
     ~ReplayPlayer();
 
-    ReplayPlayer(const ReplayPlayer&) = delete;
-    ReplayPlayer& operator=(const ReplayPlayer&) = delete;
+    ReplayPlayer(const ReplayPlayer &) = delete;
+    ReplayPlayer &operator=(const ReplayPlayer &) = delete;
 
     /**
      * @brief Load a replay file from disk.

@@ -28,13 +28,13 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_GUI_HPP_
-    #define LPL_RENDER_VK_GUI_HPP_
+#define LPL_RENDER_VK_GUI_HPP_
 
 #include "buffers/Buffer.hpp"
-#include "queueFamilies/QueueFamilies.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
+#include "queueFamilies/QueueFamilies.hpp"
 #include <memory>
 
 namespace lpl::render::vk {
@@ -60,7 +60,7 @@ namespace lpl::render::vk {
  * lpl::render::vk::GUI::DestroyInstance();
  */
 class GUI {
-  public:
+public:
     struct CreateInfo {
         GLFWwindow *window;
         VkInstance instance;
@@ -88,7 +88,8 @@ class GUI {
 
     static inline GUI &GetInstance()
     {
-        if (!_instance) {
+        if (!_instance)
+        {
             ::lpl::core::Log::fatal("GUI instance not created!");
             std::abort();
         }
@@ -135,7 +136,7 @@ class GUI {
 
     static void check_vk_result(VkResult err);
 
-  private:
+private:
     static inline std::unique_ptr<GUI> _instance = nullptr;
     VkPipelineCache _pipelineCache = VK_NULL_HANDLE;
     bool _show_demo_window = true;

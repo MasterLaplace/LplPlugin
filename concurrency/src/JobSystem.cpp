@@ -12,7 +12,7 @@
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Platform.hpp>
 
-#include <random>
+#include <mutex>
 
 namespace lpl::concurrency {
 
@@ -62,12 +62,13 @@ void JobSystem::kickJob(std::function<void()> job, JobHandle& handle)
 {
     handle.counter.fetch_add(1, std::memory_order_acq_rel);
 
-    thread_local static std::mt19937 rng{std::random_device{}()};
-    const core::u32 target = rng() % static_cast<core::u32>(_workerData.size());
+    Job* newJob = new Job{std::move(job), &handle};
 
+    // Push to shared submission queue (thread-safe from any thread).
+    // Workers drain this queue into their local deques.
     {
-        std::lock_guard<std::mutex> lock{_workerData[target]->mutex};
-        _workerData[target]->localQueue.emplace_back(std::move(job), &handle);
+        std::lock_guard lock{_submissionMutex};
+        _submissionQueue.push_back(newJob);
     }
 }
 
@@ -94,18 +95,19 @@ void JobSystem::workerLoop(core::u32 workerIndex)
 
     while (!_stopping.load(std::memory_order_acquire))
     {
-        std::pair<std::function<void()>, JobHandle*> job{nullptr, nullptr};
-
+        // Drain one job from the shared submission queue into our local deque
         {
-            std::lock_guard<std::mutex> lock{data.mutex};
-            if (!data.localQueue.empty())
+            std::lock_guard lock{_submissionMutex};
+            if (!_submissionQueue.empty())
             {
-                job = std::move(data.localQueue.front());
-                data.localQueue.pop_front();
+                data.localQueue.push(_submissionQueue.back());
+                _submissionQueue.pop_back();
             }
         }
 
-        if (!job.first)
+        Job* job = data.localQueue.pop();
+
+        if (!job)
         {
             if (!trySteal(workerIndex, job))
             {
@@ -114,26 +116,28 @@ void JobSystem::workerLoop(core::u32 workerIndex)
             }
         }
 
-        job.first();
-        job.second->counter.fetch_sub(1, std::memory_order_acq_rel);
+        if (job)
+        {
+            job->func();
+            job->handle->counter.fetch_sub(1, std::memory_order_acq_rel);
+            delete job;
+        }
     }
 }
 
-bool JobSystem::trySteal(core::u32 thiefIndex,
-                         std::pair<std::function<void()>, JobHandle*>& outJob)
+bool JobSystem::trySteal(core::u32 thiefIndex, JobSystem::Job*& outJob)
 {
     const auto workerCount = static_cast<core::u32>(_workerData.size());
 
+    // Basic work-stealing loop: examine other workers' deques
     for (core::u32 offset = 1; offset < workerCount; ++offset)
     {
         const core::u32 victimIndex = (thiefIndex + offset) % workerCount;
         auto& victim = *_workerData[victimIndex];
 
-        std::lock_guard<std::mutex> lock{victim.mutex};
-        if (!victim.localQueue.empty())
+        outJob = victim.localQueue.steal();
+        if (outJob)
         {
-            outJob = std::move(victim.localQueue.back());
-            victim.localQueue.pop_back();
             return true;
         }
     }

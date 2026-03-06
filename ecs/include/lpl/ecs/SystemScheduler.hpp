@@ -11,16 +11,17 @@
 #pragma once
 
 #ifndef LPL_ECS_SYSTEMSCHEDULER_HPP
-    #define LPL_ECS_SYSTEMSCHEDULER_HPP
+#    define LPL_ECS_SYSTEMSCHEDULER_HPP
 
-#include <lpl/ecs/System.hpp>
-#include <lpl/concurrency/ThreadPool.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/NonCopyable.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/concurrency/ThreadPool.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/System.hpp>
 
-#include <memory>
-#include <vector>
+#    include <functional>
+#    include <memory>
+#    include <vector>
 
 namespace lpl::ecs {
 
@@ -38,14 +39,13 @@ namespace lpl::ecs {
  * 4. Each wave is dispatched to the ThreadPool in parallel; a latch waits
  *    for all systems in the wave to finish before advancing.
  */
-class SystemScheduler final : public core::NonCopyable<SystemScheduler>
-{
+class SystemScheduler final : public core::NonCopyable<SystemScheduler> {
 public:
     /**
      * @brief Constructs a scheduler backed by the given thread pool.
      * @param pool Thread pool used for parallel dispatch.
      */
-    explicit SystemScheduler(concurrency::ThreadPool& pool);
+    explicit SystemScheduler(concurrency::ThreadPool &pool);
 
     ~SystemScheduler();
 
@@ -75,6 +75,19 @@ public:
      * @param dt Fixed delta-time.
      */
     void tick(core::f32 dt);
+
+    /**
+     * @brief Registers a callback to be invoked once after the last system
+     *        of @p afterPhase finishes and before the first system of the
+     *        next phase begins.
+     *
+     * Typical use: insert `registry.swapAllBuffers()` between Physics and
+     * Network phases so that Broadcast reads the freshly computed data.
+     *
+     * @param afterPhase  The phase after which the callback fires.
+     * @param callback    Invocable called with zero arguments.
+     */
+    void setPhaseCallback(SchedulePhase afterPhase, std::function<void()> callback);
 
     /** @brief Returns the number of registered systems. */
     [[nodiscard]] core::u32 systemCount() const noexcept;

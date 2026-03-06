@@ -16,19 +16,19 @@
 #pragma once
 
 #ifndef LPL_INPUT_INPUTMANAGER_HPP
-    #define LPL_INPUT_INPUTMANAGER_HPP
+#    define LPL_INPUT_INPUTMANAGER_HPP
 
-#include <lpl/input/IInputSource.hpp>
-#include <lpl/input/InputState.hpp>
-#include <lpl/input/NeuralInputState.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/input/IInputSource.hpp>
+#    include <lpl/input/InputState.hpp>
+#    include <lpl/input/NeuralInputState.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Vec3.hpp>
 
-#include <memory>
-#include <vector>
+#    include <memory>
+#    include <vector>
 
 namespace lpl::input {
 
@@ -38,11 +38,10 @@ namespace lpl::input {
  *
  * Used by the movement system to modulate speed and trigger blink-based jumps.
  */
-struct NeuralControl
-{
-    float alpha          = 0.0f;
-    float beta           = 0.0f;
-    float concentration  = 0.0f;
+struct NeuralControl {
+    float alpha = 0.0f;
+    float beta = 0.0f;
+    float concentration = 0.0f;
 };
 
 /**
@@ -52,29 +51,36 @@ struct NeuralControl
  * Mirrors the legacy InputState struct from engine/InputManager.hpp but uses
  * the new Fixed32-based types where possible.
  */
-struct PerEntityInput
-{
+struct PerEntityInput {
     static constexpr core::u32 kMaxKeys = 512;
     static constexpr core::u32 kMaxAxes = 16;
 
-    bool   keys[kMaxKeys]  = {};
-    float  axes[kMaxAxes]  = {};
+    bool keys[kMaxKeys] = {};
+    float axes[kMaxAxes] = {};
 
     NeuralControl neural{};
 
     /** @brief Previous blink state for rising-edge detection. */
-    bool blinkPrev    = false;
+    bool blinkPrev = false;
     /** @brief Whether the entity is currently on the ground. */
-    bool isGrounded   = false;
+    bool isGrounded = false;
 
     /** @brief Gets key state. */
     [[nodiscard]] bool getKey(core::u16 key) const noexcept { return key < kMaxKeys && keys[key]; }
     /** @brief Sets key state. */
-    void setKey(core::u16 key, bool pressed) noexcept { if (key < kMaxKeys) keys[key] = pressed; }
+    void setKey(core::u16 key, bool pressed) noexcept
+    {
+        if (key < kMaxKeys)
+            keys[key] = pressed;
+    }
     /** @brief Gets axis value. */
     [[nodiscard]] float getAxis(core::u8 axisId) const noexcept { return axisId < kMaxAxes ? axes[axisId] : 0.f; }
     /** @brief Sets axis value. */
-    void setAxis(core::u8 axisId, float value) noexcept { if (axisId < kMaxAxes) axes[axisId] = value; }
+    void setAxis(core::u8 axisId, float value) noexcept
+    {
+        if (axisId < kMaxAxes)
+            axes[axisId] = value;
+    }
 };
 
 /**
@@ -89,8 +95,7 @@ struct PerEntityInput
  * Blink detection uses rising-edge (previous=false, current=true) to prevent
  * repeated jumps. Grounded state prevents double-jump.
  */
-class InputManager final : public core::NonCopyable<InputManager>
-{
+class InputManager final : public core::NonCopyable<InputManager> {
 public:
     InputManager();
     ~InputManager();
@@ -129,8 +134,7 @@ public:
      * @param concentration Concentration level [0..1].
      * @param blink    True if blink detected this tick.
      */
-    void setNeural(core::u32 entityId, float alpha, float beta,
-                   float concentration, bool blink);
+    void setNeural(core::u32 entityId, float alpha, float beta, float concentration, bool blink);
 
     /** @brief Returns input state for an entity (nullptr if not found). */
     [[nodiscard]] const PerEntityInput *getState(core::u32 entityId) const;
@@ -153,8 +157,7 @@ public:
      * @param currentVelY Vertical velocity component.
      * @param threshold Velocity threshold for grounded detection (default 0.5f).
      */
-    void updateGroundedState(core::u32 entityId, float currentVelY,
-                             float threshold = 0.5f);
+    void updateGroundedState(core::u32 entityId, float currentVelY, float threshold = 0.5f);
 
     /**
      * @brief Computes movement velocity from WASD + neural modulation.
@@ -168,20 +171,18 @@ public:
      * @param speed     Base movement speed (default 50).
      * @return Modified velocity vector.
      */
-    [[nodiscard]] math::Vec3<float> computeMovementVelocity(
-        core::u32 entityId,
-        math::Vec3<float> currentVel,
-        float speed = 50.f);
+    [[nodiscard]] math::Vec3<float> computeMovementVelocity(core::u32 entityId, math::Vec3<float> currentVel,
+                                                            float speed = 50.f);
 
     // --------------------------------------------------------------------- //
     //  Global state                                                           //
     // --------------------------------------------------------------------- //
 
     /** @brief Returns the latest classical input state (global, not per-entity). */
-    [[nodiscard]] const InputState& currentState() const noexcept;
+    [[nodiscard]] const InputState &currentState() const noexcept;
 
     /** @brief Returns the latest neural input state (global, not per-entity). */
-    [[nodiscard]] const NeuralInputState& currentNeuralState() const noexcept;
+    [[nodiscard]] const NeuralInputState &currentNeuralState() const noexcept;
 
 private:
     struct Impl;

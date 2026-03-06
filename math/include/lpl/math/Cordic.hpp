@@ -14,9 +14,9 @@
 #pragma once
 
 #ifndef LPL_MATH_CORDIC_HPP
-    #define LPL_MATH_CORDIC_HPP
+#    define LPL_MATH_CORDIC_HPP
 
-    #include "FixedPoint.hpp"
+#    include "FixedPoint.hpp"
 
 namespace lpl::math {
 

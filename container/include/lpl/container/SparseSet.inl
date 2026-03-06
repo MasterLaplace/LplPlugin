@@ -5,18 +5,13 @@
  */
 
 #ifndef LPL_CONTAINER_SPARSE_SET_INL
-    #define LPL_CONTAINER_SPARSE_SET_INL
+#define LPL_CONTAINER_SPARSE_SET_INL
 
 namespace lpl::container {
 
-template <typename T>
-SparseSet<T>::SparseSet(core::u32 sparseCapacity)
-    : _sparse(sparseCapacity, kInvalid)
-{
-}
+template <typename T> SparseSet<T>::SparseSet(core::u32 sparseCapacity) : _sparse(sparseCapacity, kInvalid) {}
 
-template <typename T>
-bool SparseSet<T>::insert(core::u32 id, T val)
+template <typename T> bool SparseSet<T>::insert(core::u32 id, T val)
 {
     if (id >= _sparse.size())
         return false;
@@ -29,8 +24,7 @@ bool SparseSet<T>::insert(core::u32 id, T val)
     return true;
 }
 
-template <typename T>
-bool SparseSet<T>::remove(core::u32 id)
+template <typename T> bool SparseSet<T>::remove(core::u32 id)
 {
     if (id >= _sparse.size())
         return false;
@@ -40,11 +34,12 @@ bool SparseSet<T>::remove(core::u32 id)
         return false;
 
     core::u32 lastDenseIdx = static_cast<core::u32>(_dense.size()) - 1;
-    if (denseIdx != lastDenseIdx) {
+    if (denseIdx != lastDenseIdx)
+    {
         core::u32 lastSparseId = _denseToSparse[lastDenseIdx];
-        _dense[denseIdx]         = std::move(_dense[lastDenseIdx]);
+        _dense[denseIdx] = std::move(_dense[lastDenseIdx]);
         _denseToSparse[denseIdx] = lastSparseId;
-        _sparse[lastSparseId]    = denseIdx;
+        _sparse[lastSparseId] = denseIdx;
     }
 
     _dense.pop_back();
@@ -53,8 +48,7 @@ bool SparseSet<T>::remove(core::u32 id)
     return true;
 }
 
-template <typename T>
-T *SparseSet<T>::find(core::u32 id)
+template <typename T> T *SparseSet<T>::find(core::u32 id)
 {
     if (id >= _sparse.size())
         return nullptr;
@@ -66,14 +60,12 @@ T *SparseSet<T>::find(core::u32 id)
     return &_dense[denseIdx];
 }
 
-template <typename T>
-const T *SparseSet<T>::find(core::u32 id) const
+template <typename T> const T *SparseSet<T>::find(core::u32 id) const
 {
     return const_cast<SparseSet *>(this)->find(id);
 }
 
-template <typename T>
-bool SparseSet<T>::contains(core::u32 id) const
+template <typename T> bool SparseSet<T>::contains(core::u32 id) const
 {
     if (id >= _sparse.size())
         return false;

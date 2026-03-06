@@ -11,15 +11,15 @@
 #pragma once
 
 #ifndef LPL_NET_NETCODE_RECONCILIATION_HPP
-    #define LPL_NET_NETCODE_RECONCILIATION_HPP
+#    define LPL_NET_NETCODE_RECONCILIATION_HPP
 
-#include <lpl/net/netcode/Prediction.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/net/netcode/Prediction.hpp>
 
-#include <functional>
-#include <span>
+#    include <functional>
+#    include <span>
 
 namespace lpl::net::netcode {
 
@@ -28,18 +28,16 @@ namespace lpl::net::netcode {
  * @brief Applies authoritative state, then re-applies unacknowledged
  *        predicted inputs for smooth client-side correction.
  */
-class Reconciliation final : public core::NonCopyable<Reconciliation>
-{
+class Reconciliation final : public core::NonCopyable<Reconciliation> {
 public:
     /** @brief Callback type for re-simulating a single input frame. */
-    using ResimulateCallback = std::function<void(std::span<const core::byte> inputData,
-                                                   core::f32 dt)>;
+    using ResimulateCallback = std::function<void(std::span<const core::byte> inputData, core::f32 dt)>;
 
     /**
      * @brief Constructs a reconciliation module.
      * @param prediction Reference to the prediction buffer.
      */
-    explicit Reconciliation(Prediction& prediction);
+    explicit Reconciliation(Prediction &prediction);
     ~Reconciliation();
 
     /**
@@ -50,15 +48,13 @@ public:
      * @param applyState         Callable to apply raw state bytes.
      * @param resimulate         Callable to re-simulate a single input.
      */
-    [[nodiscard]] core::Expected<void> reconcile(
-        std::span<const core::byte> authoritativeState,
-        core::u32 ackedSequence,
-        core::f32 dt,
-        const std::function<void(std::span<const core::byte>)>& applyState,
-        const ResimulateCallback& resimulate);
+    [[nodiscard]] core::Expected<void> reconcile(std::span<const core::byte> authoritativeState,
+                                                 core::u32 ackedSequence, core::f32 dt,
+                                                 const std::function<void(std::span<const core::byte>)> &applyState,
+                                                 const ResimulateCallback &resimulate);
 
 private:
-    Prediction& _prediction;
+    Prediction &_prediction;
 };
 
 } // namespace lpl::net::netcode

@@ -14,12 +14,12 @@
 #pragma once
 
 #ifndef LPL_MATH_LOOKUP_TABLE_HPP
-    #define LPL_MATH_LOOKUP_TABLE_HPP
+#    define LPL_MATH_LOOKUP_TABLE_HPP
 
-    #include "FixedPoint.hpp"
+#    include "FixedPoint.hpp"
 
-    #include <array>
-    #include <cmath>
+#    include <array>
+#    include <cmath>
 
 namespace lpl::math {
 
@@ -27,8 +27,7 @@ namespace lpl::math {
  * @brief Fixed-size trigonometric LUT with linear interpolation.
  * @tparam Size Number of entries covering [0, 2*pi).
  */
-template <core::u32 Size = 4096>
-class LookupTable final {
+template <core::u32 Size = 4096> class LookupTable final {
 public:
     LookupTable() = delete;
 
@@ -49,7 +48,8 @@ public:
 private:
     static constexpr auto kTable = [] {
         std::array<core::i32, Size> tbl{};
-        for (core::u32 i = 0; i < Size; ++i) {
+        for (core::u32 i = 0; i < Size; ++i)
+        {
             double angle = (static_cast<double>(i) / Size) * 2.0 * 3.14159265358979323846;
             tbl[i] = static_cast<core::i32>(std::sin(angle) * Fixed32::kOne);
         }

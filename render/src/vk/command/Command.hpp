@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_COMMAND_HPP_
-    #define LPL_RENDER_VK_COMMAND_HPP_
+#define LPL_RENDER_VK_COMMAND_HPP_
 
 #include "gui/GUI.hpp"
 
@@ -45,7 +45,7 @@ namespace lpl::render::vk {
  * @endcode
  */
 class Command {
-  public:
+public:
     /**
      * @brief RecordInfo struct.
      *
@@ -77,7 +77,7 @@ class Command {
         uint32_t indexCount;
     };
 
-  public:
+public:
     /**
      * @brief Creates a command pool and command buffers.
      *
@@ -158,7 +158,7 @@ class Command {
      */
     inline void SetGui(bool isGui) { _isGuiEnabled = isGui; }
 
-  private:
+private:
     VkCommandPool _commandPool;
     QueueFamilies _queueFamilies;
     std::vector<VkCommandBuffer> _commandBuffers;

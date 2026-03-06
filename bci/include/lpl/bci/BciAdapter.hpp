@@ -10,19 +10,18 @@
 #pragma once
 
 #ifndef LPL_BCI_BCIADAPTER_HPP
-    #define LPL_BCI_BCIADAPTER_HPP
+#    define LPL_BCI_BCIADAPTER_HPP
 
-#include <lpl/bci/IBciDriver.hpp>
-#include <lpl/input/NeuralInputState.hpp>
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <memory>
+#    include <lpl/bci/IBciDriver.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/input/NeuralInputState.hpp>
+#    include <memory>
 
 namespace lpl::bci {
 
 /** @brief Configuration for the BCI adapter DSP pipeline. */
-struct BciAdapterConfig
-{
+struct BciAdapterConfig {
     core::f32 sampleRateHz{256.0f};
     core::f32 lowCutHz{1.0f};
     core::f32 highCutHz{50.0f};
@@ -37,17 +36,15 @@ struct BciAdapterConfig
  * Adapter pattern: wraps an IBciDriver and exposes a high-level
  * update() method that the InputManager can call each tick.
  */
-class BciAdapter
-{
+class BciAdapter {
 public:
     /// @param driver Owned BCI driver instance.
     /// @param config DSP pipeline configuration.
-    explicit BciAdapter(std::unique_ptr<IBciDriver> driver,
-                        const BciAdapterConfig& config = {});
+    explicit BciAdapter(std::unique_ptr<IBciDriver> driver, const BciAdapterConfig &config = {});
     ~BciAdapter();
 
-    BciAdapter(const BciAdapter&) = delete;
-    BciAdapter& operator=(const BciAdapter&) = delete;
+    BciAdapter(const BciAdapter &) = delete;
+    BciAdapter &operator=(const BciAdapter &) = delete;
 
     /** @brief Connect and start streaming from the BCI device. */
     [[nodiscard]] core::Expected<void> start();
@@ -81,7 +78,7 @@ public:
     [[nodiscard]] bool isCalibrated() const noexcept;
 
     /** @brief Access the underlying driver (read-only). */
-    [[nodiscard]] const IBciDriver& driver() const noexcept;
+    [[nodiscard]] const IBciDriver &driver() const noexcept;
 
 private:
     struct Impl;

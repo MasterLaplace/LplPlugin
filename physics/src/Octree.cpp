@@ -16,6 +16,7 @@
 
 #include <lpl/physics/Octree.hpp>
 #include <lpl/math/Morton.hpp>
+#include <lpl/memory/PinnedAllocator.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -51,10 +52,13 @@ struct Octree::Impl
         math::AABB<math::Fixed32> aabb;
     };
 
+    using PinnedNode  = memory::PinnedAllocator<FlatNode>;
+    using PinnedEntry = memory::PinnedAllocator<EntityEntry>;
+
     math::AABB<math::Fixed32>                   worldBounds;
-    std::vector<FlatNode>                        nodes;
-    std::vector<EntityEntry>                     sortedEntries;
-    std::vector<EntityEntry>                     tempEntries;
+    std::vector<FlatNode, PinnedNode>            nodes;
+    std::vector<EntityEntry, PinnedEntry>        sortedEntries;
+    std::vector<EntityEntry, PinnedEntry>        tempEntries;
     std::unordered_map<core::u32, core::u32>     idToIndex;
     bool                                         dirty{false};
 

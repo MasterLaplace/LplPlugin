@@ -5,25 +5,24 @@
  */
 
 #ifndef LPL_MEMORY_POOL_ALLOCATOR_INL
-    #define LPL_MEMORY_POOL_ALLOCATOR_INL
+#define LPL_MEMORY_POOL_ALLOCATOR_INL
 
-    #include <algorithm>
-    #include <cstdlib>
-    #include <cstdint>
+#include <algorithm>
+#include <cstdint>
+#include <cstdlib>
 
 namespace lpl::memory {
 
 template <typename T>
 PoolAllocator<T>::PoolAllocator(core::usize count)
-    : _blockSize(std::max(sizeof(T), sizeof(FreeNode)))
-    , _count(count)
-    , _freeCount(count)
+    : _blockSize(std::max(sizeof(T), sizeof(FreeNode))), _count(count), _freeCount(count)
 {
     _memory = static_cast<char *>(std::aligned_alloc(alignof(T), _blockSize * count));
 
     _head = reinterpret_cast<FreeNode *>(_memory);
     auto *current = _head;
-    for (core::usize i = 1; i < count; ++i) {
+    for (core::usize i = 1; i < count; ++i)
+    {
         auto *next = reinterpret_cast<FreeNode *>(_memory + i * _blockSize);
         current->next = next;
         current = next;
@@ -31,11 +30,7 @@ PoolAllocator<T>::PoolAllocator(core::usize count)
     current->next = nullptr;
 }
 
-template <typename T>
-PoolAllocator<T>::~PoolAllocator()
-{
-    std::free(_memory);
-}
+template <typename T> PoolAllocator<T>::~PoolAllocator() { std::free(_memory); }
 
 template <typename T>
 void *PoolAllocator<T>::allocate([[maybe_unused]] core::usize size, [[maybe_unused]] core::usize alignment)
@@ -43,22 +38,16 @@ void *PoolAllocator<T>::allocate([[maybe_unused]] core::usize size, [[maybe_unus
     return acquire();
 }
 
-template <typename T>
-void PoolAllocator<T>::deallocate(void *ptr)
-{
-    release(static_cast<T *>(ptr));
-}
+template <typename T> void PoolAllocator<T>::deallocate(void *ptr) { release(static_cast<T *>(ptr)); }
 
-template <typename T>
-bool PoolAllocator<T>::ownsPtr(const void *ptr) const
+template <typename T> bool PoolAllocator<T>::ownsPtr(const void *ptr) const
 {
     auto addr = reinterpret_cast<std::uintptr_t>(ptr);
     auto base = reinterpret_cast<std::uintptr_t>(_memory);
     return addr >= base && addr < base + _blockSize * _count;
 }
 
-template <typename T>
-T *PoolAllocator<T>::acquire()
+template <typename T> T *PoolAllocator<T>::acquire()
 {
     if (!_head)
         return nullptr;
@@ -69,8 +58,7 @@ T *PoolAllocator<T>::acquire()
     return reinterpret_cast<T *>(node);
 }
 
-template <typename T>
-void PoolAllocator<T>::release(T *ptr)
+template <typename T> void PoolAllocator<T>::release(T *ptr)
 {
     LPL_ASSERT(ownsPtr(ptr));
 

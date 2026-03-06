@@ -11,14 +11,14 @@
 #pragma once
 
 #ifndef LPL_NET_TRANSPORT_ITRANSPORT_HPP
-    #define LPL_NET_TRANSPORT_ITRANSPORT_HPP
+#    define LPL_NET_TRANSPORT_ITRANSPORT_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <cstddef>
-#include <functional>
-#include <span>
+#    include <cstddef>
+#    include <functional>
+#    include <span>
 
 namespace lpl::net::transport {
 
@@ -30,8 +30,7 @@ namespace lpl::net::transport {
  *   - @c SocketTransport  — standard BSD/POSIX UDP sockets.
  *   - @c KernelTransport  — zero-copy via the LPL kernel module.
  */
-class ITransport
-{
+class ITransport {
 public:
     virtual ~ITransport() = default;
 
@@ -50,9 +49,7 @@ public:
      * @param address Opaque address (cast to sockaddr_in, etc.).
      * @return Number of bytes sent, or error.
      */
-    [[nodiscard]] virtual core::Expected<core::u32> send(
-        std::span<const core::byte> data,
-        const void* address) = 0;
+    [[nodiscard]] virtual core::Expected<core::u32> send(std::span<const core::byte> data, const void *address) = 0;
 
     /**
      * @brief Non-blocking receive.
@@ -60,12 +57,10 @@ public:
      * @param[out] fromAddress Filled with sender address.
      * @return Number of bytes received (0 if nothing available), or error.
      */
-    [[nodiscard]] virtual core::Expected<core::u32> receive(
-        std::span<core::byte> buffer,
-        void* fromAddress) = 0;
+    [[nodiscard]] virtual core::Expected<core::u32> receive(std::span<core::byte> buffer, void *fromAddress) = 0;
 
     /** @brief Returns a human-readable name for this transport. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::net::transport

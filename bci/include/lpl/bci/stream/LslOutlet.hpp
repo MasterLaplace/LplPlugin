@@ -48,7 +48,7 @@ public:
      * @param config Stream parameters
      * @return Error on failure
      */
-    [[nodiscard]] ExpectedVoid open(const LslOutletConfig& config);
+    [[nodiscard]] ExpectedVoid open(const LslOutletConfig &config);
 
     /**
      * @brief Pushes a single multi-channel sample.
@@ -65,7 +65,7 @@ public:
      *
      * @param state Neural state to broadcast
      */
-    void pushNeuralState(const NeuralState& state) noexcept;
+    void pushNeuralState(const NeuralState &state) noexcept;
 
     /**
      * @brief Checks if the outlet is currently open.

@@ -48,7 +48,7 @@ public:
      *
      * @param config Normalization parameters
      */
-    explicit NeuralMetric(const NeuralMetricConfig& config = {});
+    explicit NeuralMetric(const NeuralMetricConfig &config = {});
 
     /**
      * @brief Sets the per-channel baselines used for normalization.
@@ -67,16 +67,11 @@ public:
      * @param betaPowers  Per-channel beta power values
      * @return NeuralState with normalized per-channel values in [0, 1]
      */
-    [[nodiscard]] NeuralState compute(
-        std::span<const float> alphaPowers,
-        std::span<const float> betaPowers) const noexcept;
+    [[nodiscard]] NeuralState compute(std::span<const float> alphaPowers,
+                                      std::span<const float> betaPowers) const noexcept;
 
 private:
-    [[nodiscard]] static float normalize(
-        float value,
-        float mean,
-        float stdDev,
-        float kSigma) noexcept;
+    [[nodiscard]] static float normalize(float value, float mean, float stdDev, float kSigma) noexcept;
 
     NeuralMetricConfig _config;
     std::vector<ChannelBaseline> _baselines;

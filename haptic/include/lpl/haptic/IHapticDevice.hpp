@@ -10,18 +10,17 @@
 #pragma once
 
 #ifndef LPL_HAPTIC_IHAPTICDEVICE_HPP
-    #define LPL_HAPTIC_IHAPTICDEVICE_HPP
+#    define LPL_HAPTIC_IHAPTICDEVICE_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedPoint.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/Types.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Vec3.hpp>
 
 namespace lpl::haptic {
 
 /** @brief Haptic feedback effect descriptor. */
-struct HapticEffect
-{
+struct HapticEffect {
     core::u16 motorId{0};
     core::f32 intensity{0.0f};
     core::f32 durationMs{0.0f};
@@ -29,8 +28,7 @@ struct HapticEffect
 };
 
 /** @brief Haptic device capabilities. */
-struct HapticCapabilities
-{
+struct HapticCapabilities {
     core::u16 motorCount{0};
     bool supportsFrequency{false};
     bool supportsDirectional{false};
@@ -42,8 +40,7 @@ struct HapticCapabilities
  * Strategy pattern: concrete implementations handle specific
  * haptic hardware (gloves, vests, controllers, BCI actuators).
  */
-class IHapticDevice
-{
+class IHapticDevice {
 public:
     virtual ~IHapticDevice() = default;
 
@@ -64,13 +61,13 @@ public:
      * @param effect Effect descriptor.
      * @return Success or error.
      */
-    [[nodiscard]] virtual core::Expected<void> submitEffect(const HapticEffect& effect) = 0;
+    [[nodiscard]] virtual core::Expected<void> submitEffect(const HapticEffect &effect) = 0;
 
     /** @brief Cancel all pending effects. */
     virtual void cancelAll() = 0;
 
     /** @brief Human-readable device name. */
-    [[nodiscard]] virtual const char* name() const noexcept = 0;
+    [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::haptic

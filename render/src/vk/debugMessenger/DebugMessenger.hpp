@@ -20,7 +20,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_DEBUGMESSENGER_HPP_
-    #define LPL_RENDER_VK_DEBUGMESSENGER_HPP_
+#define LPL_RENDER_VK_DEBUGMESSENGER_HPP_
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -30,11 +30,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "exception/VkWrapperError.hpp"
+#include "utils/vkwrapper_config.h"
+#include <cstdlib>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
-#include <cstdlib>
-#include "utils/vkwrapper_config.h"
-#include "exception/VkWrapperError.hpp"
 
 namespace lpl::render::vk {
 
@@ -58,7 +58,7 @@ constexpr bool enableValidationLayers = false;
  * @endcode
  */
 class DebugMessenger {
-  public:
+public:
     DebugMessenger() = default;
     ~DebugMessenger();
 
@@ -112,7 +112,7 @@ class DebugMessenger {
      */
     void DestroyDebugUtilsMessengerEXT(const VkInstance &instance, const VkAllocationCallbacks *pAllocator);
 
-  private:
+private:
     /**
      * @brief Creates the debug messenger.
      *
@@ -127,10 +127,9 @@ class DebugMessenger {
                                           const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
                                           const VkAllocationCallbacks *pAllocator);
 
-  private:
+private:
     VkDebugUtilsMessengerEXT _debugMessenger = VK_NULL_HANDLE;
     VkInstance _instance = VK_NULL_HANDLE;
-
 };
 
 } // namespace lpl::render::vk

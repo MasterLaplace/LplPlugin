@@ -1,6 +1,12 @@
 // /////////////////////////////////////////////////////////////////////////////
-/// @file Placeholder.cpp
-/// @brief Empty translation unit for the lpl-render static library.
+/**
+ * @file Placeholder.cpp
+ * @brief Empty translation unit for the lpl-render static library.
+ * @author MasterLaplace
+ * @version 0.1.0
+ * @date 2026-03-05
+ * @copyright MIT License
+ */
 // /////////////////////////////////////////////////////////////////////////////
 
 namespace lpl::render {} // NOLINT

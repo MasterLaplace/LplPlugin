@@ -12,9 +12,9 @@
 #pragma once
 
 #ifndef LPL_MEMORY_CACHE_LINE_ALIGNED_HPP
-    #define LPL_MEMORY_CACHE_LINE_ALIGNED_HPP
+#    define LPL_MEMORY_CACHE_LINE_ALIGNED_HPP
 
-    #include <lpl/core/Platform.hpp>
+#    include <lpl/core/Platform.hpp>
 
 namespace lpl::memory {
 
@@ -25,14 +25,13 @@ namespace lpl::memory {
  *
  * @tparam T The value type to wrap.
  */
-template <typename T>
-struct alignas(kCacheLineSize) CacheLineAligned {
+template <typename T> struct alignas(kCacheLineSize) CacheLineAligned {
     T value;
 
     CacheLineAligned() = default;
     explicit CacheLineAligned(T v) : value(v) {}
 
-    operator T &()             { return value; }
+    operator T &() { return value; }
     operator const T &() const { return value; }
 };
 

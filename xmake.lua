@@ -86,5 +86,6 @@ includes(
     "serial",
     "kernel",
     "engine",
-    "apps"
+    "apps",
+    "tests"
 )

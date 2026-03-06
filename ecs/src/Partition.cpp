@@ -9,12 +9,14 @@
  */
 
 #include <lpl/ecs/Partition.hpp>
+#include <lpl/container/SparseSet.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/memory/PinnedAllocator.hpp>
 
 #include <algorithm>
-#include <cstdlib>
 #include <cstring>
-#include <unordered_map>
+#include <array>
+#include <optional>
 
 namespace lpl::ecs {
 
@@ -24,11 +26,17 @@ namespace lpl::ecs {
 
 struct Chunk::Impl
 {
+    using Alloc = memory::PinnedAllocator<core::byte>;
+
     Archetype                                           archetype;
     std::vector<ComponentLayout>                        layouts;
-    std::unordered_map<ComponentId, std::pair<void*, void*>> buffers;
+    std::array<std::pair<void*, void*>, static_cast<core::usize>(ComponentId::Count)> buffers{};
     std::vector<EntityId>                               entities;
+    /// Sparse set for O(1) slot → localIndex lookup.
+    /// Capacity = 2^kSlotBits (16 384) to cover all valid entity slots.
+    container::SparseSet<core::u32>                     slotToLocal{1u << EntityId::kSlotBits};
     core::u32                                           count{0};
+    Alloc                                               alloc{};
 
     explicit Impl(const Archetype& arch,
                   std::span<const ComponentLayout> lyts)
@@ -45,20 +53,20 @@ struct Chunk::Impl
             }
 
             const core::usize bytes = static_cast<core::usize>(layout.size) * kChunkCapacity;
-            void* front = std::aligned_alloc(layout.alignment, bytes);
-            void* back  = std::aligned_alloc(layout.alignment, bytes);
+            auto* front = alloc.allocate(bytes);
+            auto* back  = alloc.allocate(bytes);
             std::memset(front, 0, bytes);
             std::memset(back,  0, bytes);
-            buffers[layout.id] = {front, back};
+            buffers[static_cast<core::usize>(layout.id)] = {front, back};
         }
     }
 
     ~Impl()
     {
-        for (auto& [id, pair] : buffers)
+        for (auto& pair : buffers)
         {
-            std::free(pair.first);
-            std::free(pair.second);
+            if (pair.first) alloc.deallocate(static_cast<core::byte*>(pair.first), 0);
+            if (pair.second) alloc.deallocate(static_cast<core::byte*>(pair.second), 0);
         }
     }
 };
@@ -93,6 +101,7 @@ core::Expected<core::u32> Chunk::add(EntityId id)
 
     const core::u32 idx = _impl->count++;
     _impl->entities[idx] = id;
+    _impl->slotToLocal.insert(id.slot(), idx);
     return idx;
 }
 
@@ -104,29 +113,36 @@ core::Expected<EntityId> Chunk::remove(core::u32 localIndex)
     }
 
     const core::u32 last = _impl->count - 1;
-    EntityId swapped = _impl->entities[last];
+    EntityId        removed  = _impl->entities[localIndex];   // entity being evicted
+    EntityId        swapped  = _impl->entities[last];         // entity moved into the gap
+
+    // Remove the evicted entity from the sparse set first.
+    _impl->slotToLocal.remove(removed.slot());
 
     if (localIndex != last)
     {
         _impl->entities[localIndex] = _impl->entities[last];
+        // Update the moved entity's mapping to its new local index.
+        _impl->slotToLocal.insert(swapped.slot(), localIndex);
 
-        for (auto& [compId, pair] : _impl->buffers)
+        for (const auto& layout : _impl->layouts)
         {
-            const auto it = std::find_if(
-                _impl->layouts.begin(), _impl->layouts.end(),
-                [compId = compId](const ComponentLayout& l) { return l.id == compId; });
-
-            if (it == _impl->layouts.end())
+            if (!_impl->archetype.has(layout.id))
             {
                 continue;
             }
 
-            auto* front = static_cast<core::byte*>(pair.first);
-            auto* back  = static_cast<core::byte*>(pair.second);
-            const core::u32 sz = it->size;
+            const core::usize cid = static_cast<core::usize>(layout.id);
+            auto* front = static_cast<core::byte*>(_impl->buffers[cid].first);
+            auto* back  = static_cast<core::byte*>(_impl->buffers[cid].second);
+            const core::u32 sz = layout.size;
 
-            std::memcpy(front + localIndex * sz, front + last * sz, sz);
-            std::memcpy(back  + localIndex * sz, back  + last * sz, sz);
+            std::memcpy(front + static_cast<core::usize>(localIndex) * sz,
+                        front + static_cast<core::usize>(last) * sz,
+                        sz);
+            std::memcpy(back  + static_cast<core::usize>(localIndex) * sz,
+                        back  + static_cast<core::usize>(last) * sz,
+                        sz);
         }
     }
 
@@ -134,31 +150,53 @@ core::Expected<EntityId> Chunk::remove(core::u32 localIndex)
     return swapped;
 }
 
+std::optional<core::u32> Chunk::findLocalIndex(EntityId id) const noexcept
+{
+    const core::u32* p = _impl->slotToLocal.find(id.slot());
+    if (!p)
+        return std::nullopt;
+    // Guard: confirm the entity at that index still carries the same generation
+    // (handles the case where the slot was recycled but the chunk still lives).
+    const core::u32 local = *p;
+    if (local >= _impl->count || _impl->entities[local] != id)
+        return std::nullopt;
+    return local;
+}
+
 const void* Chunk::readComponent(ComponentId id) const noexcept
 {
-    auto it = _impl->buffers.find(id);
-    if (it == _impl->buffers.end())
+    const core::usize cid = static_cast<core::usize>(id);
+    if (cid >= static_cast<core::usize>(ComponentId::Count))
     {
         return nullptr;
     }
-    return it->second.first;
+    return _impl->buffers[cid].first;
 }
 
 void* Chunk::writeComponent(ComponentId id) noexcept
 {
-    auto it = _impl->buffers.find(id);
-    if (it == _impl->buffers.end())
+    const core::usize cid = static_cast<core::usize>(id);
+    if (cid >= static_cast<core::usize>(ComponentId::Count))
     {
         return nullptr;
     }
-    return it->second.second;
+    return _impl->buffers[cid].second;
 }
 
 void Chunk::swapBuffers() noexcept
 {
-    for (auto& [id, pair] : _impl->buffers)
+    // Copy back (write) → front (read) so the new write buffer starts
+    // with up-to-date data after the swap (prevents 2-frame-stale reads).
+    for (const auto& layout : _impl->layouts)
     {
-        std::swap(pair.first, pair.second);
+        if (!_impl->archetype.has(layout.id))
+            continue;
+
+        const core::usize cid = static_cast<core::usize>(layout.id);
+        const core::usize bytes = static_cast<core::usize>(layout.size) * static_cast<core::usize>(_impl->count);
+        std::memcpy(_impl->buffers[cid].first, _impl->buffers[cid].second, bytes);
+
+        std::swap(_impl->buffers[cid].first, _impl->buffers[cid].second);
     }
 }
 
@@ -167,8 +205,12 @@ const Archetype& Chunk::archetype() const noexcept
     return _impl->archetype;
 }
 
-// ========================================================================== //
-//  Partition                                                                  //
+std::span<const EntityId> Chunk::entities() const noexcept
+{
+    return {_impl->entities.data(), _impl->count};
+}
+
+
 // ========================================================================== //
 
 Partition::Partition(Archetype archetype,
@@ -205,7 +247,7 @@ core::Expected<EntityRef> Partition::insert(EntityId id)
     return EntityRef{id, ci, result.value()};
 }
 
-core::Expected<void> Partition::erase(const EntityRef& ref)
+core::Expected<EntityId> Partition::erase(const EntityRef& ref)
 {
     if (ref.chunkIndex >= static_cast<core::u32>(_chunks.size()))
     {
@@ -217,7 +259,7 @@ core::Expected<void> Partition::erase(const EntityRef& ref)
     {
         return core::makeError(result.error().code(), result.error().message());
     }
-    return {};
+    return result.value();
 }
 
 core::u32 Partition::entityCount() const noexcept

@@ -11,17 +11,23 @@
 #include <lpl/physics/SpatialGrid.hpp>
 #include <lpl/core/Assert.hpp>
 
-#include <unordered_map>
-#include <unordered_set>
+#include <algorithm>
+#include <map>
+#include <set>
 #include <vector>
 
 namespace lpl::physics {
 
 struct SpatialGrid::Impl
 {
-    math::Fixed32                                         cellSize;
-    std::unordered_map<core::u64, std::unordered_set<core::u32>> cells;
-    std::unordered_map<core::u32, math::AABB<math::Fixed32>>     objects;
+    math::Fixed32                                              cellSize;
+    /// Sorted map (key = spatial hash) ensures deterministic iteration order.
+    /// Each cell stores entity IDs in a sorted vector (binary-search O(log n)
+    /// insert/erase) to avoid the non-determinism of unordered_set.
+    std::map<core::u64, std::vector<core::u32>>                cells;
+    /// Sorted by entity ID so that algorithms operating over all objects
+    /// produce the same sequence every run.
+    std::map<core::u32, math::AABB<math::Fixed32>>             objects;
 
     explicit Impl(math::Fixed32 cs) : cellSize{cs} {}
 
@@ -53,7 +59,11 @@ struct SpatialGrid::Impl
             {
                 for (core::i32 cz = minCz; cz <= maxCz; ++cz)
                 {
-                    cells[hashCell(cx, cy, cz)].insert(objectId);
+                    auto& vec = cells[hashCell(cx, cy, cz)];
+                    // Sorted insertion — maintains deterministic order and deduplication.
+                    auto pos = std::lower_bound(vec.begin(), vec.end(), objectId);
+                    if (pos == vec.end() || *pos != objectId)
+                        vec.insert(pos, objectId);
                 }
             }
         }
@@ -77,11 +87,12 @@ struct SpatialGrid::Impl
                     auto it = cells.find(hashCell(cx, cy, cz));
                     if (it != cells.end())
                     {
-                        it->second.erase(objectId);
-                        if (it->second.empty())
-                        {
+                        auto& vec = it->second;
+                        auto pos = std::lower_bound(vec.begin(), vec.end(), objectId);
+                        if (pos != vec.end() && *pos == objectId)
+                            vec.erase(pos);
+                        if (vec.empty())
                             cells.erase(it);
-                        }
                     }
                 }
             }
@@ -125,7 +136,8 @@ void SpatialGrid::remove(core::u32 objectId)
 void SpatialGrid::query(const math::AABB<math::Fixed32>& region,
                         const std::function<void(core::u32)>& callback) const
 {
-    std::unordered_set<core::u32> visited;
+    // std::set keeps insertion order deterministic (sorted by entity ID).
+    std::set<core::u32> visited;
 
     const core::i32 minCx = _impl->toCell(region.min.x);
     const core::i32 minCy = _impl->toCell(region.min.y);

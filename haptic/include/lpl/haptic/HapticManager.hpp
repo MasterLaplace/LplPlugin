@@ -10,28 +10,28 @@
 #pragma once
 
 #ifndef LPL_HAPTIC_HAPTICMANAGER_HPP
-    #define LPL_HAPTIC_HAPTICMANAGER_HPP
+#    define LPL_HAPTIC_HAPTICMANAGER_HPP
 
-#include <lpl/haptic/IHapticDevice.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <memory>
-#include <vector>
+#    include <lpl/haptic/IHapticDevice.hpp>
+#    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/Vec3.hpp>
+#    include <memory>
+#    include <vector>
 
 namespace lpl::haptic {
 
 /**
  * @brief Façade that aggregates multiple IHapticDevice instances and
  *        provides a unified API for haptic feedback dispatch.
+ * @todo Stub implementation.
  */
-class HapticManager
-{
+class HapticManager {
 public:
     HapticManager();
     ~HapticManager();
 
-    HapticManager(const HapticManager&) = delete;
-    HapticManager& operator=(const HapticManager&) = delete;
+    HapticManager(const HapticManager &) = delete;
+    HapticManager &operator=(const HapticManager &) = delete;
 
     /**
      * @brief Register a haptic device.
@@ -52,7 +52,7 @@ public:
      * @brief Submit a haptic pulse to all devices (broadcast).
      * @param effect Effect descriptor.
      */
-    void broadcast(const HapticEffect& effect);
+    void broadcast(const HapticEffect &effect);
 
     /**
      * @brief Submit a spatial haptic event.
@@ -62,8 +62,7 @@ public:
      * @param worldPosition Contact position in world space.
      * @param intensity Normalized intensity [0, 1].
      */
-    void playAtPosition(const math::Vec3<math::Fixed32>& worldPosition,
-                        core::f32 intensity);
+    void playAtPosition(const math::Vec3<math::Fixed32> &worldPosition, core::f32 intensity);
 
     /** @brief Cancel all effects on all devices. */
     void cancelAll();

@@ -21,7 +21,7 @@
  **************************************************************************/
 
 #ifndef LPL_RENDER_VK_INSTANCE_HPP_
-    #define LPL_RENDER_VK_INSTANCE_HPP_
+#define LPL_RENDER_VK_INSTANCE_HPP_
 
 #include <algorithm>
 #include <cstdlib>
@@ -29,10 +29,10 @@
 
 #include "command/Command.hpp"
 #include "descriptor/Descriptor.hpp"
-#include "framebuffer/Framebuffer.hpp"
-#include "graphicsPipeline/GraphicsPipeline.hpp"
 #include "device/LogicalDevice.hpp"
 #include "device/PhysicalDevice.hpp"
+#include "framebuffer/Framebuffer.hpp"
+#include "graphicsPipeline/GraphicsPipeline.hpp"
 #include "renderPass/RenderPass.hpp"
 #include "surface/Surface.hpp"
 
@@ -81,7 +81,7 @@ enum class Result : bool {
  * @endcode
  */
 class Instance {
-  public:
+public:
     /**
      * @brief Constructor for the Instance class.
      *
@@ -173,9 +173,9 @@ class Instance {
      * @param models  The models used in the graphics pipeline.
      * @param isDepth  Whether to enable depth testing.
      */
-    void CreateGraphicsPipeline(
-        const ShaderModule::ShaderPaths &shaders, const std::unordered_map<core::u32, std::unique_ptr<Texture>> &textures,
-        const std::unordered_map<core::u32, std::unique_ptr<Model>> &models, bool isDepth);
+    void CreateGraphicsPipeline(const ShaderModule::ShaderPaths &shaders,
+                                const std::unordered_map<core::u32, std::unique_ptr<Texture>> &textures,
+                                const std::unordered_map<core::u32, std::unique_ptr<Model>> &models, bool isDepth);
 
     /**
      * @brief Create synchronization objects for the Vulkan API.
@@ -236,7 +236,7 @@ class Instance {
      */
     void SetClearColor(const glm::vec4 &color) { _command.SetClearColor(color); }
 
-  private:
+private:
     /**
      * @brief Checks if the required Vulkan validation layers are supported.
      *
@@ -270,7 +270,7 @@ class Instance {
      */
     void CleanupSwapChain(const VkDevice &device);
 
-  private:
+private:
     VkAllocationCallbacks *_allocator = nullptr;
     VkInstance _instance;
     DebugMessenger _debugMessenger;

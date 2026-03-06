@@ -11,16 +11,16 @@
 #pragma once
 
 #ifndef LPL_NET_PROTOCOL_BITSTREAM_HPP
-    #define LPL_NET_PROTOCOL_BITSTREAM_HPP
+#    define LPL_NET_PROTOCOL_BITSTREAM_HPP
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Expected.hpp>
-#include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Expected.hpp>
+#    include <lpl/core/NonCopyable.hpp>
+#    include <lpl/core/Types.hpp>
 
-#include <cstddef>
-#include <cstring>
-#include <span>
-#include <vector>
+#    include <cstddef>
+#    include <cstring>
+#    include <span>
+#    include <vector>
 
 namespace lpl::net::protocol {
 
@@ -32,8 +32,7 @@ namespace lpl::net::protocol {
  * operations are deterministic and endian-safe (values stored big-endian
  * in the bit buffer).
  */
-class Bitstream final : public core::NonCopyable<Bitstream>
-{
+class Bitstream final : public core::NonCopyable<Bitstream> {
 public:
     /** @brief Constructs an empty writable bitstream. */
     Bitstream() noexcept;
@@ -70,6 +69,12 @@ public:
     /** @brief Writes an unsigned 32-bit value. */
     void writeU32(core::u32 value);
 
+    /** @brief Writes a signed 32-bit value (bit-cast to u32). */
+    void writeI32(core::i32 value);
+
+    /** @brief Writes a 32-bit float (bit-cast to u32). */
+    void writeFloat(float value);
+
     /** @brief Writes raw bytes (byte-aligned). */
     void writeBytes(std::span<const core::byte> bytes);
 
@@ -92,6 +97,12 @@ public:
     /** @brief Reads an unsigned 32-bit value. */
     [[nodiscard]] core::Expected<core::u32> readU32();
 
+    /** @brief Reads a signed 32-bit value. */
+    [[nodiscard]] core::Expected<core::i32> readI32();
+
+    /** @brief Reads a 32-bit float. */
+    [[nodiscard]] core::Expected<float> readFloat();
+
     /** @brief Reads @p count raw bytes. */
     [[nodiscard]] core::Expected<std::vector<core::byte>> readBytes(core::u32 count);
 
@@ -113,10 +124,10 @@ public:
 
 private:
     std::vector<core::byte> _buffer;
-    core::u32               _writeBit{0};
-    core::u32               _readBit{0};
-    core::u32               _totalBits{0};
-    bool                    _readOnly{false};
+    core::u32 _writeBit{0};
+    core::u32 _readBit{0};
+    core::u32 _totalBits{0};
+    bool _readOnly{false};
 };
 
 } // namespace lpl::net::protocol

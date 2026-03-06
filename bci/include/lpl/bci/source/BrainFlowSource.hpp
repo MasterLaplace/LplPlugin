@@ -15,7 +15,7 @@
 #include "ISource.hpp"
 
 #ifdef LPL_HAS_BRAINFLOW
-#include <board_shim.h>
+#    include <board_shim.h>
 #endif
 
 #include <memory>

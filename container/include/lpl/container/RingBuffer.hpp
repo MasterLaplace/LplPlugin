@@ -17,14 +17,14 @@
 #pragma once
 
 #ifndef LPL_CONTAINER_RING_BUFFER_HPP
-    #define LPL_CONTAINER_RING_BUFFER_HPP
+#    define LPL_CONTAINER_RING_BUFFER_HPP
 
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <atomic>
-    #include <array>
-    #include <span>
-    #include <type_traits>
+#    include <array>
+#    include <atomic>
+#    include <span>
+#    include <type_traits>
 
 namespace lpl::container {
 
@@ -36,7 +36,7 @@ namespace lpl::container {
  * full sequential consistency overhead.
  */
 template <typename T, core::usize Capacity>
-    requires (std::has_single_bit(Capacity) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(Capacity) && std::is_trivially_copyable_v<T>)
 class RingBuffer final {
 public:
     /**
@@ -60,20 +60,20 @@ public:
      */
     core::usize drain(std::span<T> out);
 
-    [[nodiscard]] bool        isFull()  const;
-    [[nodiscard]] bool        isEmpty() const;
-    [[nodiscard]] core::usize size()    const;
+    [[nodiscard]] bool isFull() const;
+    [[nodiscard]] bool isEmpty() const;
+    [[nodiscard]] core::usize size() const;
 
 private:
     static constexpr core::usize kMask = Capacity - 1;
 
-    std::array<T, Capacity>   _buffer{};
-    std::atomic<core::usize>  _head{0};
-    std::atomic<core::usize>  _tail{0};
+    std::array<T, Capacity> _buffer{};
+    std::atomic<core::usize> _head{0};
+    std::atomic<core::usize> _tail{0};
 };
 
 } // namespace lpl::container
 
-    #include "RingBuffer.inl"
+#    include "RingBuffer.inl"
 
 #endif // LPL_CONTAINER_RING_BUFFER_HPP

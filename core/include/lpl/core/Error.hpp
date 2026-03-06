@@ -14,13 +14,13 @@
 #pragma once
 
 #ifndef LPL_CORE_ERROR_HPP
-    #define LPL_CORE_ERROR_HPP
+#    define LPL_CORE_ERROR_HPP
 
-    #include "Types.hpp"
+#    include "Types.hpp"
 
-    #include <source_location>
-    #include <string>
-    #include <expected>
+#    include <expected>
+#    include <source_location>
+#    include <string>
 
 namespace lpl::core {
 
@@ -73,19 +73,19 @@ enum class ErrorCode : u16 {
     kInternalError,
 
     // Aliases (without k prefix) for convenience
-    OutOfMemory         = kOutOfMemory,
-    BufferOverflow      = kBufferOverflow,
-    BufferUnderflow     = kBufferUnderflow,
-    InvalidArgument     = kInvalidArgument,
-    InvalidState        = kInvalidState,
-    NotFound            = kNotFound,
-    AlreadyExists       = kAlreadyExists,
-    Timeout             = kTimeout,
-    OutOfRange          = kOutOfRange,
-    IoError             = kIoError,
-    NotSupported        = kNotSupported,
-    CorruptedData       = kCorruptedData,
-    NotImplemented      = kNotImplemented,
+    OutOfMemory = kOutOfMemory,
+    BufferOverflow = kBufferOverflow,
+    BufferUnderflow = kBufferUnderflow,
+    InvalidArgument = kInvalidArgument,
+    InvalidState = kInvalidState,
+    NotFound = kNotFound,
+    AlreadyExists = kAlreadyExists,
+    Timeout = kTimeout,
+    OutOfRange = kOutOfRange,
+    IoError = kIoError,
+    NotSupported = kNotSupported,
+    CorruptedData = kCorruptedData,
+    NotImplemented = kNotImplemented,
 };
 
 /**
@@ -102,34 +102,31 @@ public:
      * @param message Human-readable description.
      * @param loc     Source location (auto-filled by the compiler).
      */
-    explicit Error(
-        ErrorCode code,
-        std::string message,
-        std::source_location loc = std::source_location::current()
-    ) : _code(code), _message(std::move(message)), _location(loc) {}
+    explicit Error(ErrorCode code, std::string message, std::source_location loc = std::source_location::current())
+        : _code(code), _message(std::move(message)), _location(loc)
+    {
+    }
 
-    [[nodiscard]] ErrorCode           code()     const { return _code; }
-    [[nodiscard]] const std::string & message()  const { return _message; }
+    [[nodiscard]] ErrorCode code() const { return _code; }
+    [[nodiscard]] const std::string &message() const { return _message; }
     [[nodiscard]] std::source_location location() const { return _location; }
 
 private:
-    ErrorCode            _code;
-    std::string          _message;
+    ErrorCode _code;
+    std::string _message;
     std::source_location _location;
 };
 
-/// @brief Convenience alias for std::unexpected<Error>.
+/** @brief Convenience alias for std::unexpected<Error>. */
 using Unexpected = std::unexpected<Error>;
 
-/// @brief Factory function to create an unexpected error.
+/** @brief Factory function to create an unexpected error. */
 /// @param code Error code.
 /// @param message Human-readable description.
 /// @param loc Source location (auto-filled).
 /// @return std::unexpected<Error>.
-[[nodiscard]] inline auto makeError(
-    ErrorCode code,
-    std::string message,
-    std::source_location loc = std::source_location::current())
+[[nodiscard]] inline auto makeError(ErrorCode code, std::string message,
+                                    std::source_location loc = std::source_location::current())
 {
     return std::unexpected<Error>(Error{code, std::move(message), loc});
 }

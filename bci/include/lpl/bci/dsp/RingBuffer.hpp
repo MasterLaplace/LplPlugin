@@ -40,7 +40,7 @@ namespace bci::dsp {
  * @endcode
  */
 template <typename T, std::size_t Capacity = 4096>
-    requires (std::has_single_bit(Capacity))
+requires(std::has_single_bit(Capacity))
 class RingBuffer {
 public:
     RingBuffer();
@@ -76,8 +76,7 @@ public:
      * @param callback Invoked once per dequeued element
      * @return Number of elements drained
      */
-    template <typename Func>
-    std::size_t drain(Func &&callback) noexcept;
+    template <typename Func> std::size_t drain(Func &&callback) noexcept;
 
     /**
      * @brief Returns an approximate count of elements in the buffer.

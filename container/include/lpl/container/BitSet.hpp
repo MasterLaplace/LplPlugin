@@ -15,12 +15,12 @@
 #pragma once
 
 #ifndef LPL_CONTAINER_BIT_SET_HPP
-    #define LPL_CONTAINER_BIT_SET_HPP
+#    define LPL_CONTAINER_BIT_SET_HPP
 
-    #include <lpl/core/Types.hpp>
+#    include <lpl/core/Types.hpp>
 
-    #include <array>
-    #include <bit>
+#    include <array>
+#    include <bit>
 
 namespace lpl::container {
 
@@ -28,23 +28,16 @@ namespace lpl::container {
  * @brief Fixed-capacity bitset with word-level skip iteration.
  * @tparam N Maximum number of bits.
  */
-template <core::u32 N>
-class BitSet final {
+template <core::u32 N> class BitSet final {
 public:
     static constexpr core::u32 kBitsPerWord = 64;
-    static constexpr core::u32 kWordCount   = (N + kBitsPerWord - 1) / kBitsPerWord;
+    static constexpr core::u32 kWordCount = (N + kBitsPerWord - 1) / kBitsPerWord;
 
     constexpr BitSet() = default;
 
-    constexpr void set(core::u32 index)
-    {
-        _words[index / kBitsPerWord] |= (core::u64{1} << (index % kBitsPerWord));
-    }
+    constexpr void set(core::u32 index) { _words[index / kBitsPerWord] |= (core::u64{1} << (index % kBitsPerWord)); }
 
-    constexpr void clear(core::u32 index)
-    {
-        _words[index / kBitsPerWord] &= ~(core::u64{1} << (index % kBitsPerWord));
-    }
+    constexpr void clear(core::u32 index) { _words[index / kBitsPerWord] &= ~(core::u64{1} << (index % kBitsPerWord)); }
 
     [[nodiscard]] constexpr bool test(core::u32 index) const
     {
@@ -70,12 +63,13 @@ public:
      * @tparam Fn Callable(core::u32 bitIndex).
      * @param fn  Visitor.
      */
-    template <typename Fn>
-    constexpr void forEachSet(Fn &&fn) const
+    template <typename Fn> constexpr void forEachSet(Fn &&fn) const
     {
-        for (core::u32 w = 0; w < kWordCount; ++w) {
+        for (core::u32 w = 0; w < kWordCount; ++w)
+        {
             auto word = _words[w];
-            while (word) {
+            while (word)
+            {
                 core::u32 bit = static_cast<core::u32>(std::countr_zero(word));
                 fn(w * kBitsPerWord + bit);
                 word &= word - 1;

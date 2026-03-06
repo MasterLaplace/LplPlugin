@@ -12,25 +12,24 @@
 #pragma once
 
 #ifndef LPL_MATH_MAT4_HPP
-    #define LPL_MATH_MAT4_HPP
+#    define LPL_MATH_MAT4_HPP
 
-    #include "Vec3.hpp"
-    #include "Quat.hpp"
+#    include "Quat.hpp"
+#    include "Vec3.hpp"
 
-    #include <array>
-    #include <cmath>
-    #include <type_traits>
+#    include <array>
+#    include <cmath>
+#    include <type_traits>
 
 namespace lpl::math {
 
-template <core::Arithmetic T>
-struct Mat4 final {
+template <core::Arithmetic T> struct Mat4 final {
     std::array<T, 16> m{};
 
     constexpr Mat4() = default;
 
     [[nodiscard]] constexpr T &operator()(core::u32 row, core::u32 col);
-    [[nodiscard]] constexpr T  operator()(core::u32 row, core::u32 col) const;
+    [[nodiscard]] constexpr T operator()(core::u32 row, core::u32 col) const;
 
     [[nodiscard]] constexpr Mat4 operator*(Mat4 rhs) const;
     [[nodiscard]] constexpr Vec3<T> transformPoint(Vec3<T> p) const;
@@ -48,6 +47,6 @@ using Mat4f = Mat4<float>;
 
 } // namespace lpl::math
 
-#include "Mat4.inl"
+#    include "Mat4.inl"
 
 #endif // LPL_MATH_MAT4_HPP
