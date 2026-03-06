@@ -76,3 +76,6 @@ apps/benchmark/benchmark
 apps/client/visual
 bci/tests/test_metrics
 bci/tests/test_riemannian
+
+# CI build cache
+.apt-cache/
