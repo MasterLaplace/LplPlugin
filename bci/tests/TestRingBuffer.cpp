@@ -44,7 +44,7 @@ TEST_CASE("RingBuffer drain retrieves all elements", "[dsp][ringbuffer]")
 
     std::vector<int> drained;
     auto count = buffer.drain([&](int val) { drained.push_back(val); });
-    
+
     REQUIRE(count == 10);
     REQUIRE(drained.size() == 10);
     REQUIRE(buffer.empty());
@@ -63,7 +63,5 @@ TEST_CASE("RingBuffer reports full when capacity reached", "[dsp][ringbuffer]")
     REQUIRE(buffer.push(4));
     REQUIRE_FALSE(buffer.push(5));
 }
-
-
 
 } // namespace lpl::bci

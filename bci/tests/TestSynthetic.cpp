@@ -17,12 +17,13 @@ TEST_CASE("SyntheticGenerator produces correct sample count", "[source][syntheti
 {
     const std::uint64_t seed = 42;
     const std::size_t channelCount = 4;
-    
+
     SyntheticGenerator gen(seed, channelCount);
     auto samples = gen.generate(100);
 
     REQUIRE(samples.size() == 100);
-    for (const auto& s : samples) {
+    for (const auto &s : samples)
+    {
         REQUIRE(s.channels.size() == 4);
     }
 }
@@ -38,12 +39,12 @@ TEST_CASE("SyntheticGenerator is deterministic with same seed", "[source][synthe
     auto samples1 = gen1.generate(50);
     auto samples2 = gen2.generate(50);
 
-    for (std::size_t i = 0; i < 50; ++i) {
-        for (std::size_t ch = 0; ch < 2; ++ch) {
-            REQUIRE_THAT(
-                static_cast<double>(samples1[i].channels[ch]),
-                Catch::Matchers::WithinAbs(
-                    static_cast<double>(samples2[i].channels[ch]), 1e-6));
+    for (std::size_t i = 0; i < 50; ++i)
+    {
+        for (std::size_t ch = 0; ch < 2; ++ch)
+        {
+            REQUIRE_THAT(static_cast<double>(samples1[i].channels[ch]),
+                         Catch::Matchers::WithinAbs(static_cast<double>(samples2[i].channels[ch]), 1e-6));
         }
     }
 }
@@ -51,17 +52,19 @@ TEST_CASE("SyntheticGenerator is deterministic with same seed", "[source][synthe
 TEST_CASE("SyntheticGenerator produces non-zero signal with oscillators", "[source][synthetic]")
 {
     SyntheticGenerator gen(42, 1);
-    
+
     SyntheticProfile profile;
-    profile.oscillators = {{.freqHz = 10.0f, .amplitudeUv = 50.0f, .phaseOffset = 0.0f}};
+    profile.oscillators = {
+        {.freqHz = 10.0f, .amplitudeUv = 50.0f, .phaseOffset = 0.0f}
+    };
     profile.noiseAmplitudeUv = 0.0f;
     profile.blinkProbability = 0.0f;
-    
+
     gen.setProfile(profile);
     auto samples = gen.generate(250);
 
     float maxVal = 0.0f;
-    for (const auto& s : samples)
+    for (const auto &s : samples)
         maxVal = std::max(maxVal, std::abs(s.channels[0]));
 
     REQUIRE(maxVal > 10.0f);

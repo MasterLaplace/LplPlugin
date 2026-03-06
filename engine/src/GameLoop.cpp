@@ -8,11 +8,11 @@
  * @copyright MIT License
  */
 
-#include <lpl/engine/GameLoop.hpp>
-#include <lpl/core/Assert.hpp>
-#include <lpl/core/Log.hpp>
 #include <chrono>
 #include <csignal>
+#include <lpl/core/Assert.hpp>
+#include <lpl/core/Log.hpp>
+#include <lpl/engine/GameLoop.hpp>
 
 namespace lpl::engine {
 
@@ -20,25 +20,24 @@ namespace lpl::engine {
 //  SIGINT handler (mirrors legacy Core::static_sigint_handler)               //
 // ────────────────────────────────────────────────────────────────────────── //
 
-static std::atomic<GameLoop*> s_activeLoop{nullptr};
+static std::atomic<GameLoop *> s_activeLoop{nullptr};
 
 static void sigintHandler(int /*sig*/)
 {
-    if (auto* loop = s_activeLoop.load(std::memory_order_relaxed))
+    if (auto *loop = s_activeLoop.load(std::memory_order_relaxed))
     {
         loop->requestStop();
     }
 }
 
-GameLoop::GameLoop(const Config& config)
-    : _fixedDt{1.0 / static_cast<core::f64>(config.tickRate())}
+GameLoop::GameLoop(const Config &config) : _fixedDt{1.0 / static_cast<core::f64>(config.tickRate())}
 {
     LPL_ASSERT(config.tickRate() > 0);
 }
 
 GameLoop::~GameLoop() = default;
 
-void GameLoop::run(const LoopCallbacks& callbacks)
+void GameLoop::run(const LoopCallbacks &callbacks)
 {
     LPL_ASSERT(callbacks.fixedUpdate);
     _running.store(true, std::memory_order_relaxed);
@@ -46,9 +45,9 @@ void GameLoop::run(const LoopCallbacks& callbacks)
 
     // Install SIGINT handler for graceful shutdown (legacy parity)
     s_activeLoop.store(this, std::memory_order_relaxed);
-    struct sigaction sa{};
+    struct sigaction sa {};
     sa.sa_handler = sigintHandler;
-    sa.sa_flags = 0;    // SA_RESTART=0 so nanosleep/poll are interrupted
+    sa.sa_flags = 0; // SA_RESTART=0 so nanosleep/poll are interrupted
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, nullptr);
 
@@ -99,19 +98,10 @@ void GameLoop::run(const LoopCallbacks& callbacks)
     core::Log::info("GameLoop: stopped");
 }
 
-void GameLoop::requestStop() noexcept
-{
-    _running.store(false, std::memory_order_relaxed);
-}
+void GameLoop::requestStop() noexcept { _running.store(false, std::memory_order_relaxed); }
 
-bool GameLoop::isRunning() const noexcept
-{
-    return _running.load(std::memory_order_relaxed);
-}
+bool GameLoop::isRunning() const noexcept { return _running.load(std::memory_order_relaxed); }
 
-core::u64 GameLoop::tickCount() const noexcept
-{
-    return _tickCount;
-}
+core::u64 GameLoop::tickCount() const noexcept { return _tickCount; }
 
 } // namespace lpl::engine

@@ -14,11 +14,9 @@
 
 namespace lpl::physics {
 
-std::optional<RayHit> AntiTunneling::rayVsAABB(
-    const math::Vec3<math::Fixed32>& origin,
-    const math::Vec3<math::Fixed32>& direction,
-    const math::AABB<math::Fixed32>& aabb,
-    math::Fixed32 tMax) noexcept
+std::optional<RayHit> AntiTunneling::rayVsAABB(const math::Vec3<math::Fixed32> &origin,
+                                               const math::Vec3<math::Fixed32> &direction,
+                                               const math::AABB<math::Fixed32> &aabb, math::Fixed32 tMax) noexcept
 {
     auto invDir = [](math::Fixed32 d) -> math::Fixed32 {
         if (d == math::Fixed32{0})
@@ -47,7 +45,7 @@ std::optional<RayHit> AntiTunneling::rayVsAABB(
     const auto tMaxZ = std::max(t1z, t2z);
 
     const auto tEnter = std::max({tMinX, tMinY, tMinZ});
-    const auto tExit  = std::min({tMaxX, tMaxY, tMaxZ});
+    const auto tExit = std::min({tMaxX, tMaxY, tMaxZ});
 
     if (tEnter > tExit || tExit < math::Fixed32{0} || tEnter > tMax)
     {
@@ -59,13 +57,12 @@ std::optional<RayHit> AntiTunneling::rayVsAABB(
 
     if (tEnter == tMinX)
     {
-        hit.normal = {(direction.x > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1},
-                      math::Fixed32{0}, math::Fixed32{0}};
+        hit.normal = {(direction.x > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1}, math::Fixed32{0},
+                      math::Fixed32{0}};
     }
     else if (tEnter == tMinY)
     {
-        hit.normal = {math::Fixed32{0},
-                      (direction.y > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1},
+        hit.normal = {math::Fixed32{0}, (direction.y > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1},
                       math::Fixed32{0}};
     }
     else
@@ -77,17 +74,14 @@ std::optional<RayHit> AntiTunneling::rayVsAABB(
     return hit;
 }
 
-std::optional<math::Fixed32> AntiTunneling::sweptAABB(
-    const math::AABB<math::Fixed32>& movingAABB,
-    const math::Vec3<math::Fixed32>& displacement,
-    const math::AABB<math::Fixed32>& staticAABB) noexcept
+std::optional<math::Fixed32> AntiTunneling::sweptAABB(const math::AABB<math::Fixed32> &movingAABB,
+                                                      const math::Vec3<math::Fixed32> &displacement,
+                                                      const math::AABB<math::Fixed32> &staticAABB) noexcept
 {
     math::AABB<math::Fixed32> expanded{
-        {staticAABB.min.x - movingAABB.halfExtents().x,
-         staticAABB.min.y - movingAABB.halfExtents().y,
+        {staticAABB.min.x - movingAABB.halfExtents().x, staticAABB.min.y - movingAABB.halfExtents().y,
          staticAABB.min.z - movingAABB.halfExtents().z},
-        {staticAABB.max.x + movingAABB.halfExtents().x,
-         staticAABB.max.y + movingAABB.halfExtents().y,
+        {staticAABB.max.x + movingAABB.halfExtents().x, staticAABB.max.y + movingAABB.halfExtents().y,
          staticAABB.max.z + movingAABB.halfExtents().z}
     };
 

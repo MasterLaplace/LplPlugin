@@ -15,21 +15,19 @@
 
 namespace lpl::bci::metric {
 
-StabilityMetric::StabilityMetric(const StabilityConfig& config)
-    : _config(config)
-{
-}
+StabilityMetric::StabilityMetric(const StabilityConfig &config) : _config(config) {}
 
-Expected<StabilityResult> StabilityMetric::update(const Eigen::MatrixXf& covariance)
+Expected<StabilityResult> StabilityMetric::update(const Eigen::MatrixXf &covariance)
 {
-    if (!_hasPrevious) {
+    if (!_hasPrevious)
+    {
         _previousCov = covariance;
         _hasPrevious = true;
         return StabilityResult{
             .currentDistance = 0.0f,
-            .meanDistance    = 0.0f,
-            .rmsDistance     = 0.0f,
-            .isStable        = true,
+            .meanDistance = 0.0f,
+            .rmsDistance = 0.0f,
+            .isStable = true,
         };
     }
 
@@ -46,8 +44,7 @@ Expected<StabilityResult> StabilityMetric::update(const Eigen::MatrixXf& covaria
 
     const auto n = static_cast<float>(_distanceHistory.size());
 
-    const float meanDist = std::accumulate(
-        _distanceHistory.begin(), _distanceHistory.end(), 0.0f) / n;
+    const float meanDist = std::accumulate(_distanceHistory.begin(), _distanceHistory.end(), 0.0f) / n;
 
     float sumSq = 0.0f;
     for (const float d : _distanceHistory)
@@ -57,16 +54,13 @@ Expected<StabilityResult> StabilityMetric::update(const Eigen::MatrixXf& covaria
 
     return StabilityResult{
         .currentDistance = *distance,
-        .meanDistance    = meanDist,
-        .rmsDistance     = rmsDist,
-        .isStable        = (rmsDist < _config.stableThreshold),
+        .meanDistance = meanDist,
+        .rmsDistance = rmsDist,
+        .isStable = (rmsDist < _config.stableThreshold),
     };
 }
 
-std::size_t StabilityMetric::historySize() const noexcept
-{
-    return _distanceHistory.size();
-}
+std::size_t StabilityMetric::historySize() const noexcept { return _distanceHistory.size(); }
 
 void StabilityMetric::reset() noexcept
 {

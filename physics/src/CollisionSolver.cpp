@@ -12,17 +12,16 @@
 
 namespace lpl::physics {
 
-void CollisionSolver::solve(std::span<BodyState> bodies,
-                            std::span<const CollisionPair> pairs) noexcept
+void CollisionSolver::solve(std::span<BodyState> bodies, std::span<const CollisionPair> pairs) noexcept
 {
     for (core::u32 iter = 0; iter < kIterations; ++iter)
     {
-        for (const auto& pair : pairs)
+        for (const auto &pair : pairs)
         {
-            auto& a = bodies[pair.indexA];
-            auto& b = bodies[pair.indexB];
+            auto &a = bodies[pair.indexA];
+            auto &b = bodies[pair.indexB];
 
-            const auto& n = pair.contact.normal;
+            const auto &n = pair.contact.normal;
 
             const auto relVel = b.velocity - a.velocity;
             const auto velAlongNormal = relVel.dot(n);

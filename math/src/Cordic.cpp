@@ -43,23 +43,24 @@ Fixed32 Cordic::cos([[maybe_unused]] Fixed32 angle)
     return c;
 }
 
-void Cordic::sincos(
-    [[maybe_unused]] Fixed32 angle,
-    [[maybe_unused]] Fixed32 &outSin,
-    [[maybe_unused]] Fixed32 &outCos
-) {
+void Cordic::sincos([[maybe_unused]] Fixed32 angle, [[maybe_unused]] Fixed32 &outSin, [[maybe_unused]] Fixed32 &outCos)
+{
     core::i32 x = kGain;
     core::i32 y = 0;
     core::i32 z = angle.raw();
 
-    for (core::u32 i = 0; i < kIterations; ++i) {
+    for (core::u32 i = 0; i < kIterations; ++i)
+    {
         core::i32 dx = y >> i;
         core::i32 dy = x >> i;
-        if (z >= 0) {
+        if (z >= 0)
+        {
             x -= dx;
             y += dy;
             z -= kAtanTable[i];
-        } else {
+        }
+        else
+        {
             x += dx;
             y -= dy;
             z += kAtanTable[i];
@@ -76,14 +77,18 @@ Fixed32 Cordic::atan2([[maybe_unused]] Fixed32 yVal, [[maybe_unused]] Fixed32 xV
     core::i32 y = yVal.raw();
     core::i32 z = 0;
 
-    for (core::u32 i = 0; i < kIterations; ++i) {
+    for (core::u32 i = 0; i < kIterations; ++i)
+    {
         core::i32 dx = y >> i;
         core::i32 dy = x >> i;
-        if (y >= 0) {
+        if (y >= 0)
+        {
             x += dx;
             y -= dy;
             z += kAtanTable[i];
-        } else {
+        }
+        else
+        {
             x -= dx;
             y += dy;
             z -= kAtanTable[i];

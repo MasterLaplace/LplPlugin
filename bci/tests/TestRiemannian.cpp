@@ -38,8 +38,7 @@ TEST_CASE("matrixSqrt of diagonal matrix", "[math][riemannian]")
 TEST_CASE("matrixSqrtInv is inverse of matrixSqrt", "[math][riemannian]")
 {
     Eigen::MatrixXf spd(2, 2);
-    spd << 2, 1,
-           1, 3;
+    spd << 2, 1, 1, 3;
 
     auto sq = matrixSqrt(spd);
     auto sqInv = matrixSqrtInv(spd);
@@ -63,8 +62,7 @@ TEST_CASE("matrixLog of identity is zero", "[math][riemannian]")
 TEST_CASE("riemannianDistance of matrix with itself is zero", "[math][riemannian]")
 {
     Eigen::MatrixXf spd(2, 2);
-    spd << 2, 0.5f,
-           0.5f, 3;
+    spd << 2, 0.5f, 0.5f, 3;
 
     auto dist = riemannianDistance(spd, spd);
     REQUIRE(dist.has_value());
@@ -74,12 +72,10 @@ TEST_CASE("riemannianDistance of matrix with itself is zero", "[math][riemannian
 TEST_CASE("riemannianDistance is symmetric", "[math][riemannian]")
 {
     Eigen::MatrixXf a(2, 2);
-    a << 2, 0.3f,
-         0.3f, 2;
+    a << 2, 0.3f, 0.3f, 2;
 
     Eigen::MatrixXf b(2, 2);
-    b << 3, 0.5f,
-         0.5f, 4;
+    b << 3, 0.5f, 0.5f, 4;
 
     auto dAB = riemannianDistance(a, b);
     auto dBA = riemannianDistance(b, a);
@@ -104,8 +100,7 @@ TEST_CASE("mahalanobisDistance zero for matching sample and mean", "[math][riema
 TEST_CASE("frechetMean of identical matrices returns that matrix", "[math][riemannian]")
 {
     Eigen::MatrixXf spd(2, 2);
-    spd << 3, 1,
-           1, 3;
+    spd << 3, 1, 1, 3;
 
     std::vector<Eigen::MatrixXf> matrices = {spd, spd, spd};
     auto mean = frechetMean(matrices);

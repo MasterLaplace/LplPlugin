@@ -1,6 +1,6 @@
 #include "device/PhysicalDevice.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -10,7 +10,10 @@ void PhysicalDevice::PickPhysicalDevice(const VkInstance &instance, const VkSurf
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 
     if (deviceCount == 0)
-        { ::lpl::core::Log::fatal("failed to find GPUs with Vulkan support!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to find GPUs with Vulkan support!");
+        std::abort();
+    }
 
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
@@ -26,7 +29,10 @@ void PhysicalDevice::PickPhysicalDevice(const VkInstance &instance, const VkSurf
     }
 
     if (_physicalDevice == VK_NULL_HANDLE)
-        { ::lpl::core::Log::fatal("failed to find a suitable GPU!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to find a suitable GPU!");
+        std::abort();
+    }
 }
 
 bool PhysicalDevice::IsDeviceSuitable(const VkPhysicalDevice &device, const VkSurfaceKHR &surface)
@@ -96,12 +102,36 @@ void PhysicalDevice::DetermineMaxUsableSampleCount()
     VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts &
                                 physicalDeviceProperties.limits.framebufferDepthSampleCounts;
 
-    if (counts & VK_SAMPLE_COUNT_64_BIT) { _msaaSamples = VK_SAMPLE_COUNT_64_BIT; return; }
-    if (counts & VK_SAMPLE_COUNT_32_BIT) { _msaaSamples = VK_SAMPLE_COUNT_32_BIT; return; }
-    if (counts & VK_SAMPLE_COUNT_16_BIT) { _msaaSamples = VK_SAMPLE_COUNT_16_BIT; return; }
-    if (counts & VK_SAMPLE_COUNT_8_BIT)  { _msaaSamples =  VK_SAMPLE_COUNT_8_BIT; return; }
-    if (counts & VK_SAMPLE_COUNT_4_BIT)  { _msaaSamples =  VK_SAMPLE_COUNT_4_BIT; return; }
-    if (counts & VK_SAMPLE_COUNT_2_BIT)  { _msaaSamples =  VK_SAMPLE_COUNT_2_BIT; return; }
+    if (counts & VK_SAMPLE_COUNT_64_BIT)
+    {
+        _msaaSamples = VK_SAMPLE_COUNT_64_BIT;
+        return;
+    }
+    if (counts & VK_SAMPLE_COUNT_32_BIT)
+    {
+        _msaaSamples = VK_SAMPLE_COUNT_32_BIT;
+        return;
+    }
+    if (counts & VK_SAMPLE_COUNT_16_BIT)
+    {
+        _msaaSamples = VK_SAMPLE_COUNT_16_BIT;
+        return;
+    }
+    if (counts & VK_SAMPLE_COUNT_8_BIT)
+    {
+        _msaaSamples = VK_SAMPLE_COUNT_8_BIT;
+        return;
+    }
+    if (counts & VK_SAMPLE_COUNT_4_BIT)
+    {
+        _msaaSamples = VK_SAMPLE_COUNT_4_BIT;
+        return;
+    }
+    if (counts & VK_SAMPLE_COUNT_2_BIT)
+    {
+        _msaaSamples = VK_SAMPLE_COUNT_2_BIT;
+        return;
+    }
 
     _msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 }

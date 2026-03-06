@@ -12,10 +12,8 @@
 
 namespace lpl::physics {
 
-bool SleepingPolicy::shouldSleep(
-    const math::Vec3<math::Fixed32>& linearVelocity,
-    const math::Vec3<math::Fixed32>& angularVelocity,
-    core::u32& sleepCounter) noexcept
+bool SleepingPolicy::shouldSleep(const math::Vec3<math::Fixed32> &linearVelocity,
+                                 const math::Vec3<math::Fixed32> &angularVelocity, core::u32 &sleepCounter) noexcept
 {
     const auto linSq = linearVelocity.lengthSquared();
     const auto angSq = angularVelocity.lengthSquared();
@@ -33,9 +31,6 @@ bool SleepingPolicy::shouldSleep(
     return false;
 }
 
-void SleepingPolicy::wake(core::u32& sleepCounter) noexcept
-{
-    sleepCounter = 0;
-}
+void SleepingPolicy::wake(core::u32 &sleepCounter) noexcept { sleepCounter = 0; }
 
 } // namespace lpl::physics

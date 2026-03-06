@@ -18,7 +18,7 @@ namespace {
 
 class TempCsvFile {
 public:
-    explicit TempCsvFile(const std::string& content)
+    explicit TempCsvFile(const std::string &content)
         : _path(std::filesystem::temp_directory_path() / "lpl_bci_test.csv")
     {
         std::ofstream ofs(_path);

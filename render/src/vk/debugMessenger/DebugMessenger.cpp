@@ -1,7 +1,6 @@
 #include "debugMessenger/DebugMessenger.hpp"
-#include <lpl/core/Log.hpp>
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -20,7 +19,10 @@ void DebugMessenger::SetupDebugMessenger(const VkInstance &instance)
     PopulateDebugMessengerCreateInfo(createInfo);
 
     if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to set up debug messenger!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to set up debug messenger!");
+        std::abort();
+    }
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessenger::Callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -37,7 +39,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessenger::Callback(VkDebugUtilsMessageSever
         ::lpl::core::Log::info(msg);
     else
         ::lpl::core::Log::debug(msg);
-        
+
     return VK_FALSE;
 }
 

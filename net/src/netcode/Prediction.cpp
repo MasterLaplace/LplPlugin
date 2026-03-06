@@ -14,11 +14,7 @@
 
 namespace lpl::net::netcode {
 
-Prediction::Prediction(core::u32 maxPrediction)
-    : _maxPrediction{maxPrediction}
-{
-    _buffer.reserve(maxPrediction);
-}
+Prediction::Prediction(core::u32 maxPrediction) : _maxPrediction{maxPrediction} { _buffer.reserve(maxPrediction); }
 
 Prediction::~Prediction() = default;
 
@@ -33,18 +29,15 @@ void Prediction::push(PredictedInput input)
 
 void Prediction::acknowledge(core::u32 sequence)
 {
-    _buffer.erase(
-        std::remove_if(_buffer.begin(), _buffer.end(),
-                       [sequence](const PredictedInput& p) {
-                           return p.sequence <= sequence;
-                       }),
-        _buffer.end());
+    _buffer.erase(std::remove_if(_buffer.begin(), _buffer.end(),
+                                 [sequence](const PredictedInput &p) { return p.sequence <= sequence; }),
+                  _buffer.end());
 }
 
 std::vector<PredictedInput> Prediction::getUnacknowledged(core::u32 fromSequence) const
 {
     std::vector<PredictedInput> result;
-    for (const auto& p : _buffer)
+    for (const auto &p : _buffer)
     {
         if (p.sequence > fromSequence)
         {
@@ -54,9 +47,6 @@ std::vector<PredictedInput> Prediction::getUnacknowledged(core::u32 fromSequence
     return result;
 }
 
-core::u32 Prediction::pendingCount() const noexcept
-{
-    return static_cast<core::u32>(_buffer.size());
-}
+core::u32 Prediction::pendingCount() const noexcept { return static_cast<core::u32>(_buffer.size()); }
 
 } // namespace lpl::net::netcode

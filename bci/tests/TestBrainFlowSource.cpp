@@ -8,8 +8,8 @@
  * @copyright MIT License
  */
 
-#include <catch2/catch_test_macros.hpp>
 #include "lpl/bci/source/BrainFlowSource.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 namespace lpl::bci {
 
@@ -23,15 +23,17 @@ TEST_CASE("BrainFlowSource start/stop behavior", "[source][brainflow]")
 
     BrainFlowSource src(cfg);
     auto res = src.start();
-    if (res) {
+    if (res)
+    {
         // if it succeeded, we should be able to stop cleanly
         src.stop();
         SUCCEED();
-    } else {
+    }
+    else
+    {
         // expect initialization failure when hardware not available
         auto code = res.error().code;
-        REQUIRE((code == ErrorCode::kBrainFlowInitFailed ||
-                 code == ErrorCode::kBrainFlowStreamFailed));
+        REQUIRE((code == ErrorCode::kBrainFlowInitFailed || code == ErrorCode::kBrainFlowStreamFailed));
     }
 }
 

@@ -18,14 +18,14 @@ void PacketQueue::push(QueuedPacket packet)
     _queue.push(std::move(packet));
 }
 
-bool PacketQueue::pop(QueuedPacket& out)
+bool PacketQueue::pop(QueuedPacket &out)
 {
     std::lock_guard<std::mutex> lock{_mutex};
     if (_queue.empty())
     {
         return false;
     }
-    out = std::move(const_cast<QueuedPacket&>(_queue.top()));
+    out = std::move(const_cast<QueuedPacket &>(_queue.top()));
     _queue.pop();
     return true;
 }

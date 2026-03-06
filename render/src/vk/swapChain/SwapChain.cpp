@@ -1,7 +1,7 @@
 #include "swapChain/SwapChain.hpp"
-#include <lpl/core/Log.hpp>
-#include <cstdlib>
 #include <array>
+#include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -77,7 +77,10 @@ void SwapChain::Create(const VkDevice &device, const VkPhysicalDevice &physicalD
     createInfo.oldSwapchain = (_swapChain != VK_NULL_HANDLE) ? _swapChain : VK_NULL_HANDLE;
 
     if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &_swapChain) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create swap chain!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create swap chain!");
+        std::abort();
+    }
 
     vkGetSwapchainImagesKHR(device, _swapChain, &imageCount, nullptr);
     _swapChainImages.resize(imageCount);

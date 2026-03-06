@@ -8,11 +8,11 @@
  * @copyright MIT License
  */
 
-#include <lpl/ecs/WorldPartition.hpp>
-#include <lpl/gpu/IComputeBackend.hpp>
 #include <lpl/container/FlatAtomicHashMap.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/ecs/WorldPartition.hpp>
+#include <lpl/gpu/IComputeBackend.hpp>
 
 #include <algorithm>
 #include <cstring>
@@ -31,9 +31,8 @@ namespace lpl::ecs {
  * Each cell holds a small vector of entity raw IDs that reside within the
  * corresponding Morton-coded grid cube.
  */
-struct SpatialCell
-{
-    core::u64              mortonKey{0};
+struct SpatialCell {
+    core::u64 mortonKey{0};
     std::vector<core::u32> entities;
 
     void insert(core::u32 raw) { entities.push_back(raw); }
@@ -58,35 +57,27 @@ struct SpatialCell
 /// Legacy used WORLD_CAPACITY = 1 << 16 = 65536 cells.
 static constexpr core::u32 kWorldCapacity = 1u << 16u;
 
-struct WorldPartition::Impl
-{
-    math::Fixed32                                    cellSize;
-    container::FlatAtomicHashMap<SpatialCell>         cells;
-    std::unordered_map<core::u32, core::u64>         entityToMorton;
-    gpu::IComputeBackend*                            gpuBackend{nullptr};
+struct WorldPartition::Impl {
+    math::Fixed32 cellSize;
+    container::FlatAtomicHashMap<SpatialCell> cells;
+    std::unordered_map<core::u32, core::u64> entityToMorton;
+    gpu::IComputeBackend *gpuBackend{nullptr};
 
-    explicit Impl(math::Fixed32 cs)
-        : cellSize{cs}
-        , cells{kWorldCapacity}
-    {
-    }
+    explicit Impl(math::Fixed32 cs) : cellSize{cs}, cells{kWorldCapacity} {}
 };
 
 // ========================================================================== //
 //  Public API                                                                //
 // ========================================================================== //
 
-WorldPartition::WorldPartition(math::Fixed32 cellSize)
-    : _impl{std::make_unique<Impl>(cellSize)}
+WorldPartition::WorldPartition(math::Fixed32 cellSize) : _impl{std::make_unique<Impl>(cellSize)}
 {
     LPL_ASSERT(cellSize > math::Fixed32{0});
 }
 
 WorldPartition::~WorldPartition() = default;
 
-core::Expected<void> WorldPartition::insertOrUpdate(
-    EntityId id,
-    const math::Vec3<math::Fixed32>& pos)
+core::Expected<void> WorldPartition::insertOrUpdate(EntityId id, const math::Vec3<math::Fixed32> &pos)
 {
     const core::u64 morton = mortonForPosition(pos);
     const core::u32 raw = id.raw();
@@ -100,14 +91,14 @@ core::Expected<void> WorldPartition::insertOrUpdate(
         }
 
         // Remove from old cell
-        if (auto* oldCell = _impl->cells.get(it->second))
+        if (auto *oldCell = _impl->cells.get(it->second))
         {
             oldCell->erase(raw);
         }
     }
 
     // Insert into new cell (create cell if absent)
-    auto* cell = _impl->cells.get(morton);
+    auto *cell = _impl->cells.get(morton);
     if (!cell)
     {
         SpatialCell newCell;
@@ -115,8 +106,7 @@ core::Expected<void> WorldPartition::insertOrUpdate(
         cell = _impl->cells.insert(morton, std::move(newCell));
         if (!cell)
         {
-            return core::makeError(core::ErrorCode::OutOfMemory,
-                                   "WorldPartition cell pool exhausted");
+            return core::makeError(core::ErrorCode::OutOfMemory, "WorldPartition cell pool exhausted");
         }
     }
     cell->insert(raw);
@@ -134,7 +124,7 @@ core::Expected<void> WorldPartition::remove(EntityId id)
         return core::makeError(core::ErrorCode::NotFound, "Entity not in world partition");
     }
 
-    if (auto* cell = _impl->cells.get(it->second))
+    if (auto *cell = _impl->cells.get(it->second))
     {
         cell->erase(raw);
     }
@@ -143,10 +133,8 @@ core::Expected<void> WorldPartition::remove(EntityId id)
     return {};
 }
 
-void WorldPartition::queryRadius(
-    const math::Vec3<math::Fixed32>& center,
-    math::Fixed32 radius,
-    std::vector<EntityId>& results) const
+void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::Fixed32 radius,
+                                 std::vector<EntityId> &results) const
 {
     // Compute the grid-space bounding box for the query sphere
     const auto toGrid = [&](math::Fixed32 v) -> core::i32 {
@@ -159,8 +147,7 @@ void WorldPartition::queryRadius(
     const core::i32 cz = toGrid(center.z);
 
     // Radius in grid cells (ceiling)
-    const core::i32 cellRadius = static_cast<core::i32>(
-        (radius / _impl->cellSize).toInt()) + 1;
+    const core::i32 cellRadius = static_cast<core::i32>((radius / _impl->cellSize).toInt()) + 1;
 
     // Enumerate all cells within the bounding box
     for (core::i32 dx = -cellRadius; dx <= cellRadius; ++dx)
@@ -169,10 +156,9 @@ void WorldPartition::queryRadius(
         {
             for (core::i32 dz = -cellRadius; dz <= cellRadius; ++dz)
             {
-                const core::u64 morton = math::morton::encode3D(
-                    cx + dx, cy + dy, cz + dz);
+                const core::u64 morton = math::morton::encode3D(cx + dx, cy + dy, cz + dz);
 
-                auto* cell = _impl->cells.get(morton);
+                auto *cell = _impl->cells.get(morton);
                 if (!cell)
                 {
                     continue;
@@ -187,7 +173,7 @@ void WorldPartition::queryRadius(
     }
 }
 
-core::u64 WorldPartition::mortonForPosition(const math::Vec3<math::Fixed32>& pos) const noexcept
+core::u64 WorldPartition::mortonForPosition(const math::Vec3<math::Fixed32> &pos) const noexcept
 {
     const auto toGrid = [&](math::Fixed32 v) -> core::i32 {
         const auto intVal = (v / _impl->cellSize).toInt();
@@ -197,7 +183,7 @@ core::u64 WorldPartition::mortonForPosition(const math::Vec3<math::Fixed32>& pos
     return math::morton::encode3D(toGrid(pos.x), toGrid(pos.y), toGrid(pos.z));
 }
 
-void WorldPartition::setGpuBackend(gpu::IComputeBackend* backend) noexcept
+void WorldPartition::setGpuBackend(gpu::IComputeBackend *backend) noexcept
 {
     _impl->gpuBackend = backend;
     if (backend)
@@ -213,8 +199,7 @@ void WorldPartition::setGpuBackend(gpu::IComputeBackend* backend) noexcept
 
 void WorldPartition::step(core::f32 dt)
 {
-    const core::u32 entityCount =
-        static_cast<core::u32>(_impl->entityToMorton.size());
+    const core::u32 entityCount = static_cast<core::u32>(_impl->entityToMorton.size());
 
     if (_impl->gpuBackend && entityCount >= kGpuThreshold)
     {
@@ -225,32 +210,30 @@ void WorldPartition::step(core::f32 dt)
         //   args[4..7]  u32   entity count
         // followed by the raw entity IDs as u32[entityCount].
         const core::usize payloadBytes =
-            sizeof(core::f32) + sizeof(core::u32) +
-            static_cast<core::usize>(entityCount) * sizeof(core::u32);
+            sizeof(core::f32) + sizeof(core::u32) + static_cast<core::usize>(entityCount) * sizeof(core::u32);
 
         std::vector<core::byte> argBuf(payloadBytes);
-        core::byte* ptr = argBuf.data();
+        core::byte *ptr = argBuf.data();
 
-        std::memcpy(ptr, &dt, sizeof(dt));            ptr += sizeof(dt);
-        std::memcpy(ptr, &entityCount, sizeof(entityCount)); ptr += sizeof(entityCount);
+        std::memcpy(ptr, &dt, sizeof(dt));
+        ptr += sizeof(dt);
+        std::memcpy(ptr, &entityCount, sizeof(entityCount));
+        ptr += sizeof(entityCount);
 
-        for (const auto& [raw, _cellMorton] : _impl->entityToMorton)
+        for (const auto &[raw, _cellMorton] : _impl->entityToMorton)
         {
             std::memcpy(ptr, &raw, sizeof(raw));
             ptr += sizeof(raw);
         }
 
         constexpr core::u32 kBlockDim = 256;
-        const core::u32 gridDim =
-            (entityCount + kBlockDim - 1) / kBlockDim;
+        const core::u32 gridDim = (entityCount + kBlockDim - 1) / kBlockDim;
 
-        if (auto res = _impl->gpuBackend->dispatch(
-                "physics_step", gridDim, kBlockDim,
-                std::span<const core::byte>{argBuf});
+        if (auto res =
+                _impl->gpuBackend->dispatch("physics_step", gridDim, kBlockDim, std::span<const core::byte>{argBuf});
             !res)
         {
-            core::Log::warn("WorldPartition",
-                            "GPU dispatch failed, falling back to CPU this tick");
+            core::Log::warn("WorldPartition", "GPU dispatch failed, falling back to CPU this tick");
             goto cpu_fallback;
         }
 
@@ -264,11 +247,10 @@ cpu_fallback:
     // SystemScheduler (PhysicsSystem / SpatialGrid). WorldPartition::step()
     // serves only as the GPU dispatch gateway; nothing to do here on the
     // CPU path.
-    (void)dt;
+    (void) dt;
 }
 
-core::u32 WorldPartition::migrateEntities(
-    const std::function<math::Vec3<math::Fixed32>(core::u32)>& positionOf)
+core::u32 WorldPartition::migrateEntities(const std::function<math::Vec3<math::Fixed32>(core::u32)> &positionOf)
 {
     core::u32 migrated = 0;
 
@@ -276,7 +258,7 @@ core::u32 WorldPartition::migrateEntities(
     // Collect entities that need migration
     std::vector<std::pair<core::u32, math::Vec3<math::Fixed32>>> toMigrate;
 
-    for (auto& [raw, oldMorton] : _impl->entityToMorton)
+    for (auto &[raw, oldMorton] : _impl->entityToMorton)
     {
         auto pos = positionOf(raw);
         core::u64 newMorton = mortonForPosition(pos);
@@ -288,7 +270,7 @@ core::u32 WorldPartition::migrateEntities(
     }
 
     // Apply migrations
-    for (auto& [raw, pos] : toMigrate)
+    for (auto &[raw, pos] : toMigrate)
     {
         auto entityId = EntityId{raw};
         [[maybe_unused]] auto res = insertOrUpdate(entityId, pos);
@@ -304,7 +286,7 @@ core::u32 WorldPartition::gcEmptyCells()
 
     // Collect empty cells and remove them from the FlatAtomicHashMap
     std::vector<core::u64> emptyKeys;
-    _impl->cells.forEach([&](SpatialCell& cell) {
+    _impl->cells.forEach([&](SpatialCell &cell) {
         if (cell.empty())
         {
             emptyKeys.push_back(cell.mortonKey);
@@ -322,9 +304,6 @@ core::u32 WorldPartition::gcEmptyCells()
     return removed;
 }
 
-core::u32 WorldPartition::cellCount() const noexcept
-{
-    return _impl->cells.size();
-}
+core::u32 WorldPartition::cellCount() const noexcept { return _impl->cells.size(); }
 
 } // namespace lpl::ecs

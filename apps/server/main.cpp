@@ -8,24 +8,24 @@
  * @copyright MIT License
  */
 
-#include <lpl/engine/Engine.hpp>
-#include <lpl/engine/Config.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/core/Types.hpp>
+#include <lpl/engine/Config.hpp>
+#include <lpl/engine/Engine.hpp>
 
-int main(int /*argc*/, char* /*argv*/[])
+int main(int /*argc*/, char * /*argv*/[])
 {
     lpl::core::Log::info("=== LplPlugin Server ===");
 
     auto config = lpl::engine::Config::Builder{}
-        .tickRate(144)
-        .maxEntities(10000)
-        .serverMode(true)
-        .headless(true)
-        .arenaSize(128 * 1024 * 1024)
-        .enableGpu(false)
-        .enableBci(false)
-        .build();
+                      .tickRate(144)
+                      .maxEntities(10000)
+                      .serverMode(true)
+                      .headless(true)
+                      .arenaSize(128 * 1024 * 1024)
+                      .enableGpu(false)
+                      .enableBci(false)
+                      .build();
 
     lpl::engine::Engine engine{config};
 

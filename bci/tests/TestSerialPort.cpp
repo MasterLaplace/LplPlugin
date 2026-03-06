@@ -9,13 +9,13 @@
  */
 
 #ifdef __unix__
-#include <catch2/catch_test_macros.hpp>
-#include "lpl/bci/source/serial/SerialPort.hpp"
+#    include "lpl/bci/source/serial/SerialPort.hpp"
+#    include <catch2/catch_test_macros.hpp>
 
-#include <pty.h>
-#include <unistd.h>
-#include <array>
-#include <string>
+#    include <array>
+#    include <pty.h>
+#    include <string>
+#    include <unistd.h>
 
 namespace lpl::bci {
 
@@ -34,13 +34,13 @@ TEST_CASE("SerialPort open/read/write/close", "[serial]")
     REQUIRE(port.isOpen());
 
     std::string msg = "hello";
-    auto w = port.write(std::span((const uint8_t *)msg.data(), msg.size()));
+    auto w = port.write(std::span((const uint8_t *) msg.data(), msg.size()));
     REQUIRE(w.has_value());
     REQUIRE(w.value() == msg.size());
 
     std::array<char, 10> buf;
     auto n = ::read(master, buf.data(), buf.size());
-    REQUIRE(n == (int)msg.size());
+    REQUIRE(n == (int) msg.size());
     REQUIRE(std::string(buf.data(), n) == msg);
 
     // test read via SerialPort by writing to master
@@ -50,7 +50,7 @@ TEST_CASE("SerialPort open/read/write/close", "[serial]")
     auto r2 = port.read(buf2);
     REQUIRE(r2.has_value());
     REQUIRE(r2.value() == msg2.size());
-    REQUIRE(std::string((char *)buf2.data(), r2.value()) == msg2);
+    REQUIRE(std::string((char *) buf2.data(), r2.value()) == msg2);
 
     port.close();
     REQUIRE(!port.isOpen());

@@ -12,61 +12,61 @@
 
 namespace lpl::engine {
 
-Config::Builder& Config::Builder::tickRate(core::u32 hz) noexcept
+Config::Builder &Config::Builder::tickRate(core::u32 hz) noexcept
 {
     _tickRate = hz;
     return *this;
 }
 
-Config::Builder& Config::Builder::maxEntities(core::u32 n) noexcept
+Config::Builder &Config::Builder::maxEntities(core::u32 n) noexcept
 {
     _maxEntities = n;
     return *this;
 }
 
-Config::Builder& Config::Builder::maxChunks(core::u32 n) noexcept
+Config::Builder &Config::Builder::maxChunks(core::u32 n) noexcept
 {
     _maxChunks = n;
     return *this;
 }
 
-Config::Builder& Config::Builder::serverMode(bool enabled) noexcept
+Config::Builder &Config::Builder::serverMode(bool enabled) noexcept
 {
     _serverMode = enabled;
     return *this;
 }
 
-Config::Builder& Config::Builder::headless(bool enabled) noexcept
+Config::Builder &Config::Builder::headless(bool enabled) noexcept
 {
     _headless = enabled;
     return *this;
 }
 
-Config::Builder& Config::Builder::arenaSize(core::usize bytes) noexcept
+Config::Builder &Config::Builder::arenaSize(core::usize bytes) noexcept
 {
     _arenaSize = bytes;
     return *this;
 }
 
-Config::Builder& Config::Builder::enableBci(bool enabled) noexcept
+Config::Builder &Config::Builder::enableBci(bool enabled) noexcept
 {
     _enableBci = enabled;
     return *this;
 }
 
-Config::Builder& Config::Builder::enableGpu(bool enabled) noexcept
+Config::Builder &Config::Builder::enableGpu(bool enabled) noexcept
 {
     _enableGpu = enabled;
     return *this;
 }
 
-Config::Builder& Config::Builder::serverAddress(std::string addr) noexcept
+Config::Builder &Config::Builder::serverAddress(std::string addr) noexcept
 {
     _serverAddress = std::move(addr);
     return *this;
 }
 
-Config::Builder& Config::Builder::serverPort(core::u16 port) noexcept
+Config::Builder &Config::Builder::serverPort(core::u16 port) noexcept
 {
     _serverPort = port;
     return *this;
@@ -75,16 +75,16 @@ Config::Builder& Config::Builder::serverPort(core::u16 port) noexcept
 Config Config::Builder::build() const noexcept
 {
     Config cfg;
-    cfg._tickRate       = _tickRate;
-    cfg._maxEntities    = _maxEntities;
-    cfg._maxChunks      = _maxChunks;
-    cfg._serverMode     = _serverMode;
-    cfg._headless       = _headless;
-    cfg._arenaSize      = _arenaSize;
-    cfg._enableBci      = _enableBci;
-    cfg._enableGpu      = _enableGpu;
-    cfg._serverAddress  = _serverAddress;
-    cfg._serverPort     = _serverPort;
+    cfg._tickRate = _tickRate;
+    cfg._maxEntities = _maxEntities;
+    cfg._maxChunks = _maxChunks;
+    cfg._serverMode = _serverMode;
+    cfg._headless = _headless;
+    cfg._arenaSize = _arenaSize;
+    cfg._enableBci = _enableBci;
+    cfg._enableGpu = _enableGpu;
+    cfg._serverAddress = _serverAddress;
+    cfg._serverPort = _serverPort;
     return cfg;
 }
 

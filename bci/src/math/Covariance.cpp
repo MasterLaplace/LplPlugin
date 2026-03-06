@@ -7,7 +7,7 @@
 
 namespace lpl::bci::math {
 
-Eigen::MatrixXf batchCovariance(const Eigen::MatrixXf& data) noexcept
+Eigen::MatrixXf batchCovariance(const Eigen::MatrixXf &data) noexcept
 {
     const auto rows = data.rows();
     const auto cols = data.cols();
@@ -20,9 +20,7 @@ Eigen::MatrixXf batchCovariance(const Eigen::MatrixXf& data) noexcept
     return (centered.transpose() * centered) / static_cast<float>(rows - 1);
 }
 
-Eigen::MatrixXf regularizeCovariance(
-    const Eigen::MatrixXf& cov,
-    float alpha) noexcept
+Eigen::MatrixXf regularizeCovariance(const Eigen::MatrixXf &cov, float alpha) noexcept
 {
     const auto p = cov.rows();
 
@@ -34,11 +32,9 @@ Eigen::MatrixXf regularizeCovariance(
 }
 
 WelfordCovariance::WelfordCovariance(std::size_t channelCount)
-    : _channelCount(channelCount)
-    , _mean(Eigen::VectorXf::Zero(static_cast<Eigen::Index>(channelCount)))
-    , _coProduct(Eigen::MatrixXf::Zero(
-          static_cast<Eigen::Index>(channelCount),
-          static_cast<Eigen::Index>(channelCount)))
+    : _channelCount(channelCount), _mean(Eigen::VectorXf::Zero(static_cast<Eigen::Index>(channelCount))),
+      _coProduct(
+          Eigen::MatrixXf::Zero(static_cast<Eigen::Index>(channelCount), static_cast<Eigen::Index>(channelCount)))
 {
 }
 
@@ -60,22 +56,15 @@ void WelfordCovariance::update(std::span<const float> sample) noexcept
 Eigen::MatrixXf WelfordCovariance::covariance() const noexcept
 {
     if (_n < 2)
-        return Eigen::MatrixXf::Zero(
-            static_cast<Eigen::Index>(_channelCount),
-            static_cast<Eigen::Index>(_channelCount));
+        return Eigen::MatrixXf::Zero(static_cast<Eigen::Index>(_channelCount),
+                                     static_cast<Eigen::Index>(_channelCount));
 
     return _coProduct / static_cast<float>(_n - 1);
 }
 
-const Eigen::VectorXf& WelfordCovariance::mean() const noexcept
-{
-    return _mean;
-}
+const Eigen::VectorXf &WelfordCovariance::mean() const noexcept { return _mean; }
 
-std::size_t WelfordCovariance::count() const noexcept
-{
-    return _n;
-}
+std::size_t WelfordCovariance::count() const noexcept { return _n; }
 
 void WelfordCovariance::reset() noexcept
 {

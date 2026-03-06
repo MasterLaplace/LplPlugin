@@ -8,8 +8,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/physics/SpatialGrid.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/physics/SpatialGrid.hpp>
 
 #include <algorithm>
 #include <map>
@@ -18,23 +18,19 @@
 
 namespace lpl::physics {
 
-struct SpatialGrid::Impl
-{
-    math::Fixed32                                              cellSize;
+struct SpatialGrid::Impl {
+    math::Fixed32 cellSize;
     /// Sorted map (key = spatial hash) ensures deterministic iteration order.
     /// Each cell stores entity IDs in a sorted vector (binary-search O(log n)
     /// insert/erase) to avoid the non-determinism of unordered_set.
-    std::map<core::u64, std::vector<core::u32>>                cells;
+    std::map<core::u64, std::vector<core::u32>> cells;
     /// Sorted by entity ID so that algorithms operating over all objects
     /// produce the same sequence every run.
-    std::map<core::u32, math::AABB<math::Fixed32>>             objects;
+    std::map<core::u32, math::AABB<math::Fixed32>> objects;
 
     explicit Impl(math::Fixed32 cs) : cellSize{cs} {}
 
-    [[nodiscard]] core::i32 toCell(math::Fixed32 v) const
-    {
-        return (v / cellSize).toInt();
-    }
+    [[nodiscard]] core::i32 toCell(math::Fixed32 v) const { return (v / cellSize).toInt(); }
 
     [[nodiscard]] core::u64 hashCell(core::i32 cx, core::i32 cy, core::i32 cz) const
     {
@@ -44,7 +40,7 @@ struct SpatialGrid::Impl
         return h;
     }
 
-    void insertCells(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
+    void insertCells(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
     {
         const core::i32 minCx = toCell(aabb.min.x);
         const core::i32 minCy = toCell(aabb.min.y);
@@ -59,7 +55,7 @@ struct SpatialGrid::Impl
             {
                 for (core::i32 cz = minCz; cz <= maxCz; ++cz)
                 {
-                    auto& vec = cells[hashCell(cx, cy, cz)];
+                    auto &vec = cells[hashCell(cx, cy, cz)];
                     // Sorted insertion — maintains deterministic order and deduplication.
                     auto pos = std::lower_bound(vec.begin(), vec.end(), objectId);
                     if (pos == vec.end() || *pos != objectId)
@@ -69,7 +65,7 @@ struct SpatialGrid::Impl
         }
     }
 
-    void removeCells(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
+    void removeCells(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
     {
         const core::i32 minCx = toCell(aabb.min.x);
         const core::i32 minCy = toCell(aabb.min.y);
@@ -87,7 +83,7 @@ struct SpatialGrid::Impl
                     auto it = cells.find(hashCell(cx, cy, cz));
                     if (it != cells.end())
                     {
-                        auto& vec = it->second;
+                        auto &vec = it->second;
                         auto pos = std::lower_bound(vec.begin(), vec.end(), objectId);
                         if (pos != vec.end() && *pos == objectId)
                             vec.erase(pos);
@@ -100,21 +96,20 @@ struct SpatialGrid::Impl
     }
 };
 
-SpatialGrid::SpatialGrid(math::Fixed32 cellSize)
-    : _impl{std::make_unique<Impl>(cellSize)}
+SpatialGrid::SpatialGrid(math::Fixed32 cellSize) : _impl{std::make_unique<Impl>(cellSize)}
 {
     LPL_ASSERT(cellSize > math::Fixed32{0});
 }
 
 SpatialGrid::~SpatialGrid() = default;
 
-void SpatialGrid::insert(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
+void SpatialGrid::insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 {
     _impl->objects[objectId] = aabb;
     _impl->insertCells(objectId, aabb);
 }
 
-void SpatialGrid::update(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
+void SpatialGrid::update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 {
     auto it = _impl->objects.find(objectId);
     if (it != _impl->objects.end())
@@ -133,8 +128,7 @@ void SpatialGrid::remove(core::u32 objectId)
     _impl->objects.erase(it);
 }
 
-void SpatialGrid::query(const math::AABB<math::Fixed32>& region,
-                        const std::function<void(core::u32)>& callback) const
+void SpatialGrid::query(const math::AABB<math::Fixed32> &region, const std::function<void(core::u32)> &callback) const
 {
     // std::set keeps insertion order deterministic (sorted by entity ID).
     std::set<core::u32> visited;
@@ -162,7 +156,7 @@ void SpatialGrid::query(const math::AABB<math::Fixed32>& region,
                 {
                     if (visited.insert(objId).second)
                     {
-                        const auto& objAabb = _impl->objects.at(objId);
+                        const auto &objAabb = _impl->objects.at(objId);
                         if (objAabb.intersects(region))
                         {
                             callback(objId);
@@ -179,9 +173,6 @@ void SpatialGrid::rebuild()
     // no-op for hash grid
 }
 
-core::u32 SpatialGrid::count() const noexcept
-{
-    return static_cast<core::u32>(_impl->objects.size());
-}
+core::u32 SpatialGrid::count() const noexcept { return static_cast<core::u32>(_impl->objects.size()); }
 
 } // namespace lpl::physics

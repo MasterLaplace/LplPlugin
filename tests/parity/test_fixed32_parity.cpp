@@ -11,23 +11,22 @@
  * @copyright MIT License
  */
 
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/core/Log.hpp>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
+#include <lpl/math/FixedPoint.hpp>
 
 using namespace lpl;
 
 static int failures = 0;
 
-static void check(const char* label, float expected, float actual, float tolerance)
+static void check(const char *label, float expected, float actual, float tolerance)
 {
     const float diff = std::fabs(expected - actual);
     if (diff > tolerance)
     {
-        std::printf("  FAIL: %-40s expected=%.6f actual=%.6f diff=%.6f\n",
-                    label, expected, actual, diff);
+        std::printf("  FAIL: %-40s expected=%.6f actual=%.6f diff=%.6f\n", label, expected, actual, diff);
         ++failures;
     }
     else

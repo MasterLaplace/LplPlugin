@@ -1,44 +1,33 @@
 #include <lpl/engine/systems/InputSendSystem.hpp>
 #include <lpl/input/InputManager.hpp>
-#include <lpl/net/transport/ITransport.hpp>
-#include <lpl/net/protocol/PacketBuilder.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
+#include <lpl/net/protocol/PacketBuilder.hpp>
+#include <lpl/net/transport/ITransport.hpp>
 #include <vector>
 
 #ifdef LPL_HAS_RENDERER
-#include <GLFW/glfw3.h>
+#    include <GLFW/glfw3.h>
 #endif
 
 namespace lpl::engine::systems {
 
-static const ecs::SystemDescriptor kInputSendSystemDesc{
-    "InputSendSystem",
-    ecs::SchedulePhase::Network,
-    {}
-};
+static const ecs::SystemDescriptor kInputSendSystemDesc{"InputSendSystem", ecs::SchedulePhase::Network, {}};
 
-InputSendSystem::InputSendSystem(input::InputManager& inputManager,
-                                 std::shared_ptr<net::transport::ITransport> transport,
-                                 const core::u32& myEntityId,
-                                 const bool& connected)
-    : _inputManager(inputManager)
-    , _transport(std::move(transport))
-    , _myEntityId(myEntityId)
-    , _connected(connected)
+InputSendSystem::InputSendSystem(input::InputManager &inputManager,
+                                 std::shared_ptr<net::transport::ITransport> transport, const core::u32 &myEntityId,
+                                 const bool &connected)
+    : _inputManager(inputManager), _transport(std::move(transport)), _myEntityId(myEntityId), _connected(connected)
 {
 }
 
-const ecs::SystemDescriptor& InputSendSystem::descriptor() const noexcept
-{
-    return kInputSendSystemDesc;
-}
+const ecs::SystemDescriptor &InputSendSystem::descriptor() const noexcept { return kInputSendSystemDesc; }
 
 void InputSendSystem::execute(core::f32 /*dt*/)
 {
     if (!_connected || _myEntityId == 0 || !_transport)
         return;
 
-    const auto* state = _inputManager.getState(_myEntityId);
+    const auto *state = _inputManager.getState(_myEntityId);
     if (!state)
         return;
 
@@ -48,7 +37,7 @@ void InputSendSystem::execute(core::f32 /*dt*/)
     stream.writeU32(_myEntityId);
 
 #ifdef LPL_HAS_RENDERER
-    constexpr int trackedKeys[] = {GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D,
+    constexpr int trackedKeys[] = {GLFW_KEY_W,    GLFW_KEY_A,     GLFW_KEY_S,  GLFW_KEY_D,
                                    GLFW_KEY_LEFT, GLFW_KEY_RIGHT, GLFW_KEY_UP, GLFW_KEY_DOWN};
     const core::u16 keyCount = sizeof(trackedKeys) / sizeof(trackedKeys[0]);
     stream.writeU16(keyCount);

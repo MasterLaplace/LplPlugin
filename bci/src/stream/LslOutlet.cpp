@@ -15,20 +15,13 @@ struct LslOutlet::Impl {
     std::size_t channelCount = 0;
 };
 
-ExpectedVoid LslOutlet::open(const LslOutletConfig& config)
+ExpectedVoid LslOutlet::open(const LslOutletConfig &config)
 {
     if (_impl && _impl->outlet)
-        return std::unexpected(Error{
-            ErrorCode::kInvalidState,
-            "LSL outlet already open"});
+        return std::unexpected(Error{ErrorCode::kInvalidState, "LSL outlet already open"});
 
-    lsl::stream_info info(
-        config.streamName,
-        config.streamType,
-        static_cast<int>(config.channelCount),
-        static_cast<double>(config.sampleRate),
-        lsl::cf_float32,
-        config.streamName + "_uid");
+    lsl::stream_info info(config.streamName, config.streamType, static_cast<int>(config.channelCount),
+                          static_cast<double>(config.sampleRate), lsl::cf_float32, config.streamName + "_uid");
 
     _impl = std::make_unique<Impl>();
     _impl->channelCount = config.channelCount;
@@ -45,13 +38,13 @@ void LslOutlet::pushSample(std::span<const float> data) noexcept
     _impl->outlet->push_sample(data.data());
 }
 
-void LslOutlet::pushNeuralState(const NeuralState& state) noexcept
+void LslOutlet::pushNeuralState(const NeuralState &state) noexcept
 {
     if (!_impl || !_impl->outlet)
         return;
 
     const std::size_t alphaCount = state.channelAlpha.size();
-    const std::size_t betaCount  = state.channelBeta.size();
+    const std::size_t betaCount = state.channelBeta.size();
 
     std::vector<float> buffer;
     buffer.reserve(alphaCount + betaCount + 2);
@@ -64,14 +57,8 @@ void LslOutlet::pushNeuralState(const NeuralState& state) noexcept
     _impl->outlet->push_sample(buffer.data());
 }
 
-bool LslOutlet::isOpen() const noexcept
-{
-    return _impl && _impl->outlet != nullptr;
-}
+bool LslOutlet::isOpen() const noexcept { return _impl && _impl->outlet != nullptr; }
 
-void LslOutlet::close() noexcept
-{
-    _impl.reset();
-}
+void LslOutlet::close() noexcept { _impl.reset(); }
 
 } // namespace lpl::bci::stream

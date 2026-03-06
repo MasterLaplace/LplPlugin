@@ -90,7 +90,7 @@ GUI::GUI(const CreateInfo &info)
     init_info.PipelineInfoMain.RenderPass = info.renderPass;
     init_info.PipelineInfoMain.Subpass = 0;
     init_info.MinImageCount = 2; // >= 2
-    init_info.ImageCount = 2; // >= MinImageCount
+    init_info.ImageCount = 2;    // >= MinImageCount
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.Allocator = info.allocator;
     init_info.CheckVkResultFn = GUI::check_vk_result;

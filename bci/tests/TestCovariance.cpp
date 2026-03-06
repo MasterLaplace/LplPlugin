@@ -18,10 +18,7 @@ TEST_CASE("batchCovariance produces correct result", "[math][covariance]")
     SECTION("identity-like data")
     {
         Eigen::MatrixXf data(4, 2);
-        data << 1, 2,
-                3, 4,
-                5, 6,
-                7, 8;
+        data << 1, 2, 3, 4, 5, 6, 7, 8;
 
         auto cov = batchCovariance(data);
 
@@ -44,8 +41,7 @@ TEST_CASE("batchCovariance produces correct result", "[math][covariance]")
 TEST_CASE("regularizeCovariance shrinks towards identity", "[math][covariance]")
 {
     Eigen::MatrixXf cov(2, 2);
-    cov << 4, 2,
-           2, 4;
+    cov << 4, 2, 2, 4;
 
     auto reg = regularizeCovariance(cov, 1.0f);
     const float expectedDiag = cov.trace() / 2.0f;
@@ -57,7 +53,8 @@ TEST_CASE("regularizeCovariance shrinks towards identity", "[math][covariance]")
 TEST_CASE("WelfordCovariance converges to batch result", "[math][covariance]")
 {
     Eigen::MatrixXf data(100, 3);
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 100; ++i)
+    {
         data(i, 0) = static_cast<float>(i);
         data(i, 1) = static_cast<float>(i * 2);
         data(i, 2) = static_cast<float>(i * 3 + 1);
@@ -66,7 +63,8 @@ TEST_CASE("WelfordCovariance converges to batch result", "[math][covariance]")
     auto batchCov = batchCovariance(data);
 
     WelfordCovariance welford(3);
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 100; ++i)
+    {
         std::array<float, 3> sample = {data(i, 0), data(i, 1), data(i, 2)};
         welford.update(sample);
     }
@@ -74,11 +72,11 @@ TEST_CASE("WelfordCovariance converges to batch result", "[math][covariance]")
     REQUIRE(welford.count() == 100);
 
     auto onlineCov = welford.covariance();
-    for (int r = 0; r < 3; ++r) {
-        for (int c = 0; c < 3; ++c) {
-            REQUIRE_THAT(
-                static_cast<double>(onlineCov(r, c)),
-                WithinAbs(static_cast<double>(batchCov(r, c)), 0.1));
+    for (int r = 0; r < 3; ++r)
+    {
+        for (int c = 0; c < 3; ++c)
+        {
+            REQUIRE_THAT(static_cast<double>(onlineCov(r, c)), WithinAbs(static_cast<double>(batchCov(r, c)), 0.1));
         }
     }
 }

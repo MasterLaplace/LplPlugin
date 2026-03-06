@@ -28,7 +28,8 @@ TEST_CASE("SignalMetric computes Schumacher ratio", "[metric][signal]")
     auto results = metric.compute(psd);
     REQUIRE(results.size() == 2);
 
-    for (const auto& r : results) {
+    for (const auto &r : results)
+    {
         REQUIRE(r.thetaPower > 0.0f);
         REQUIRE(r.alphaPower > 0.0f);
         REQUIRE(r.betaPower > 0.0f);
@@ -59,12 +60,13 @@ TEST_CASE("NeuralMetric normalizes to [0,1]", "[metric][neural]")
     metric.setBaselines(baselines);
 
     std::vector<float> alpha = {10.0f, 10.0f};
-    std::vector<float> beta  = {5.0f, 5.0f};
+    std::vector<float> beta = {5.0f, 5.0f};
 
     auto state = metric.compute(alpha, beta);
     REQUIRE(state.channelAlpha.size() == 2);
 
-    for (const float v : state.channelAlpha) {
+    for (const float v : state.channelAlpha)
+    {
         REQUIRE(v >= 0.0f);
         REQUIRE(v <= 1.0f);
     }
@@ -82,7 +84,7 @@ TEST_CASE("NeuralMetric clamps extremes", "[metric][neural]")
     metric.setBaselines(baselines);
 
     std::vector<float> highAlpha = {100.0f};
-    std::vector<float> lowBeta   = {-100.0f};
+    std::vector<float> lowBeta = {-100.0f};
 
     auto state = metric.compute(highAlpha, lowBeta);
 
@@ -95,8 +97,7 @@ TEST_CASE("StabilityMetric first update returns stable", "[metric][stability]")
     StabilityMetric metric;
 
     Eigen::MatrixXf spd(2, 2);
-    spd << 2, 0.5f,
-           0.5f, 3;
+    spd << 2, 0.5f, 0.5f, 3;
 
     auto result = metric.update(spd);
     REQUIRE(result.has_value());
@@ -112,12 +113,10 @@ TEST_CASE("StabilityMetric detects instability", "[metric][stability]")
     StabilityMetric metric(config);
 
     Eigen::MatrixXf a(2, 2);
-    a << 2, 0,
-         0, 2;
+    a << 2, 0, 0, 2;
 
     Eigen::MatrixXf b(2, 2);
-    b << 10, 0,
-         0,  10;
+    b << 10, 0, 0, 10;
 
     auto res1 = metric.update(a);
     REQUIRE(res1.has_value());
@@ -132,8 +131,7 @@ TEST_CASE("StabilityMetric builds history", "[metric][stability]")
     StabilityMetric metric;
 
     Eigen::MatrixXf spd(2, 2);
-    spd << 3, 1,
-           1, 3;
+    spd << 3, 1, 1, 3;
 
     auto res1 = metric.update(spd);
     REQUIRE(res1.has_value());

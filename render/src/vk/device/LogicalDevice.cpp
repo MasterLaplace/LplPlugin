@@ -1,6 +1,6 @@
 #include "device/LogicalDevice.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -47,7 +47,10 @@ void LogicalDevice::Create(const VkPhysicalDevice &physicalDevice, const VkSurfa
 #endif
 
     if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &_device) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("Failed to create logical device!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("Failed to create logical device!");
+        std::abort();
+    }
 
     vkGetDeviceQueue(_device, indices.graphicsFamily.value(), 0, &_graphicsQueue);
     vkGetDeviceQueue(_device, indices.presentFamily.value(), 0, &_presentQueue);

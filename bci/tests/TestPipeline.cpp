@@ -22,7 +22,8 @@ static SignalBlock makeConstantBlock(std::size_t samples, std::size_t channels, 
     block.sampleRate = 250.0f;
     block.channelCount = channels;
     block.data.resize(samples);
-    for (auto& sample : block.data) {
+    for (auto &sample : block.data)
+    {
         sample.assign(channels, value);
     }
     return block;
@@ -45,9 +46,7 @@ TEST_CASE("HannWindow applies window coefficients", "[dsp][windowing]")
     auto result = window.process(block);
 
     REQUIRE(result.has_value());
-    REQUIRE_THAT(
-        static_cast<double>(result->data[0][0]),
-        Catch::Matchers::WithinAbs(0.0, 1e-3));
+    REQUIRE_THAT(static_cast<double>(result->data[0][0]), Catch::Matchers::WithinAbs(0.0, 1e-3));
     REQUIRE(result->data[128][0] > 0.9f);
 }
 
@@ -65,7 +64,8 @@ TEST_CASE("FftProcessor produces half-spectrum PSD", "[dsp][fft]")
     FftProcessor fft(256);
     auto block = makeConstantBlock(256, 2, 0.0f);
 
-    for (std::size_t i = 0; i < 256; ++i) {
+    for (std::size_t i = 0; i < 256; ++i)
+    {
         block.data[i][0] = std::sin(2.0f * 3.14159265f * 10.0f * static_cast<float>(i) / 250.0f);
         block.data[i][1] = 0.0f;
     }
@@ -88,7 +88,7 @@ TEST_CASE("FftProcessor rejects non-power-of-two size", "[dsp][fft]")
 TEST_CASE("BandExtractor extracts correct frequency bands", "[dsp][band]")
 {
     std::vector<FrequencyBand> bands = {
-        {.low = 8.0f, .high = 13.0f},
+        {.low = 8.0f,  .high = 13.0f},
         {.low = 13.0f, .high = 30.0f},
     };
 

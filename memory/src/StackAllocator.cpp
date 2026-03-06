@@ -9,21 +9,17 @@
  */
 #include "lpl/memory/StackAllocator.hpp"
 
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 
 namespace lpl::memory {
 
-StackAllocator::StackAllocator(core::usize capacity)
-    : _capacity(capacity)
+StackAllocator::StackAllocator(core::usize capacity) : _capacity(capacity)
 {
     _memory = static_cast<char *>(std::aligned_alloc(alignof(std::max_align_t), capacity));
 }
 
-StackAllocator::~StackAllocator()
-{
-    std::free(_memory);
-}
+StackAllocator::~StackAllocator() { std::free(_memory); }
 
 void *StackAllocator::allocate(core::usize size, core::usize alignment)
 {

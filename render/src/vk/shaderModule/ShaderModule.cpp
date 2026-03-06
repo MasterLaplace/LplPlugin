@@ -1,17 +1,23 @@
 #include "shaderModule/ShaderModule.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
 std::vector<char> ShaderModule::LoadSPVfile(const std::string &filename)
 {
     if (!filename.ends_with(".spv"))
-        { ::lpl::core::Log::fatal("file is not an spv file: " + filename); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("file is not an spv file: " + filename);
+        std::abort();
+    }
 
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
     if (!file.is_open())
-        { ::lpl::core::Log::fatal("failed to open file: " + filename); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to open file: " + filename);
+        std::abort();
+    }
 
     auto fileSize = static_cast<size_t>(file.tellg());
     std::vector<char> buffer(fileSize);
@@ -32,7 +38,10 @@ VkShaderModule ShaderModule::Create(const VkDevice &device, const std::vector<ch
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create shader module!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create shader module!");
+        std::abort();
+    }
 
     return shaderModule;
 }

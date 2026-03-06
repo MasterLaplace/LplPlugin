@@ -19,9 +19,8 @@ namespace lpl::concurrency {
 
 ThreadPool::ThreadPool(core::u32 threadCount)
 {
-    const core::u32 count = (threadCount == 0)
-        ? static_cast<core::u32>(std::thread::hardware_concurrency())
-        : threadCount;
+    const core::u32 count =
+        (threadCount == 0) ? static_cast<core::u32>(std::thread::hardware_concurrency()) : threadCount;
 
     LPL_ASSERT(count > 0);
 
@@ -32,10 +31,7 @@ ThreadPool::ThreadPool(core::u32 threadCount)
     }
 }
 
-ThreadPool::~ThreadPool()
-{
-    shutdown();
-}
+ThreadPool::~ThreadPool() { shutdown(); }
 
 // -------------------------------------------------------------------------- //
 //  Lifecycle                                                                 //
@@ -50,7 +46,7 @@ void ThreadPool::shutdown()
 
     _cv.notify_all();
 
-    for (auto& worker : _workers)
+    for (auto &worker : _workers)
     {
         if (worker.joinable())
         {
@@ -59,10 +55,7 @@ void ThreadPool::shutdown()
     }
 }
 
-core::u32 ThreadPool::threadCount() const noexcept
-{
-    return static_cast<core::u32>(_workers.size());
-}
+core::u32 ThreadPool::threadCount() const noexcept { return static_cast<core::u32>(_workers.size()); }
 
 // -------------------------------------------------------------------------- //
 //  Private                                                                   //
@@ -76,9 +69,7 @@ void ThreadPool::workerLoop()
 
         {
             std::unique_lock<std::mutex> lock{_mutex};
-            _cv.wait(lock, [this] {
-                return _stopping.load(std::memory_order_relaxed) || !_tasks.empty();
-            });
+            _cv.wait(lock, [this] { return _stopping.load(std::memory_order_relaxed) || !_tasks.empty(); });
 
             if (_tasks.empty())
             {

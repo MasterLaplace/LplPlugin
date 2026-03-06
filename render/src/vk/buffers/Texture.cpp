@@ -6,8 +6,8 @@
 */
 
 #include "buffers/Texture.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -19,7 +19,10 @@ void Texture::Create(const std::string &texturePath)
     _pixels = stbi_load(texturePath.c_str(), &_width, &_height, &_channels, STBI_rgb_alpha);
 
     if (!_pixels)
-        { ::lpl::core::Log::fatal("failed to load texture image (" + texturePath + "): " + stbi_failure_reason()); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to load texture image (" + texturePath + "): " + stbi_failure_reason());
+        std::abort();
+    }
 
     _mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(_width, _height)))) + 1;
 }

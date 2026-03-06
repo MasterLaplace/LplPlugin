@@ -145,11 +145,13 @@ void Wrapper::AddShader(const std::string &shaderPath, const std::string &fname,
     }
 }
 
-Wrapper::Result Wrapper::DrawFrame() { 
-    if (_instance.DrawNextImage() == lpl::render::vk::Result::NeedResize) {
+Wrapper::Result Wrapper::DrawFrame()
+{
+    if (_instance.DrawNextImage() == lpl::render::vk::Result::NeedResize)
+    {
         return Wrapper::Result::NeedResize;
     }
-    return Wrapper::Result::Success; 
+    return Wrapper::Result::Success;
 }
 
 void Wrapper::Resize(GLFWwindow *window)

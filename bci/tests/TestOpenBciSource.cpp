@@ -9,16 +9,16 @@
  */
 
 #ifdef __unix__
-#include <catch2/catch_test_macros.hpp>
-#include "lpl/bci/source/OpenBciSource.hpp"
-#include "lpl/bci/core/Constants.hpp"
-#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#    include "lpl/bci/core/Constants.hpp"
+#    include "lpl/bci/source/OpenBciSource.hpp"
+#    include <catch2/catch_test_macros.hpp>
+#    include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include <pty.h>
-#include <unistd.h>
-#include <array>
-#include <thread>
-#include <chrono>
+#    include <array>
+#    include <chrono>
+#    include <pty.h>
+#    include <thread>
+#    include <unistd.h>
 
 namespace lpl::bci {
 

@@ -40,7 +40,7 @@ TEST_CASE("Calibration transitions Idle → Calibrating → Ready", "[calibratio
         REQUIRE(res.has_value());
 
         std::vector<float> alpha = {1.0f, 2.0f};
-        std::vector<float> beta  = {3.0f, 4.0f};
+        std::vector<float> beta = {3.0f, 4.0f};
 
         auto res1 = cal.addTrial(alpha, beta);
         REQUIRE(res1.has_value());
@@ -93,9 +93,10 @@ TEST_CASE("Calibration produces valid baselines", "[calibration]")
     REQUIRE(res.has_value());
 
     std::vector<float> alpha = {10.0f};
-    std::vector<float> beta  = {5.0f};
+    std::vector<float> beta = {5.0f};
 
-    for (std::size_t i = 0; i < 4; ++i) {
+    for (std::size_t i = 0; i < 4; ++i)
+    {
         auto res_trial = cal.addTrial(alpha, beta);
         REQUIRE(res_trial.has_value());
     }
@@ -104,11 +105,9 @@ TEST_CASE("Calibration produces valid baselines", "[calibration]")
     REQUIRE(baselines.has_value());
     REQUIRE(baselines->size() == 1);
 
-    REQUIRE_THAT(static_cast<double>((*baselines)[0].alpha.mean),
-        Catch::Matchers::WithinAbs(10.0, 1e-5));
+    REQUIRE_THAT(static_cast<double>((*baselines)[0].alpha.mean), Catch::Matchers::WithinAbs(10.0, 1e-5));
 
-    REQUIRE_THAT(static_cast<double>((*baselines)[0].alpha.stdDev),
-        Catch::Matchers::WithinAbs(0.0, 1e-5));
+    REQUIRE_THAT(static_cast<double>((*baselines)[0].alpha.stdDev), Catch::Matchers::WithinAbs(0.0, 1e-5));
 }
 
 TEST_CASE("Calibration observer is notified", "[calibration]")
@@ -120,9 +119,7 @@ TEST_CASE("Calibration observer is notified", "[calibration]")
     Calibration cal(config);
 
     int callCount = 0;
-    cal.onStateChange([&](CalibrationState, CalibrationState) {
-        ++callCount;
-    });
+    cal.onStateChange([&](CalibrationState, CalibrationState) { ++callCount; });
 
     auto res = cal.start();
     REQUIRE(res.has_value());

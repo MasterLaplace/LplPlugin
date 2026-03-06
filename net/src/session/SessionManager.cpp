@@ -8,8 +8,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/net/session/SessionManager.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/net/session/SessionManager.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -17,28 +17,24 @@
 
 namespace lpl::net::session {
 
-struct SessionManager::Impl
-{
+struct SessionManager::Impl {
     std::unordered_map<core::u32, std::unique_ptr<Session>> sessions;
 };
 
-SessionManager::SessionManager()
-    : _impl{std::make_unique<Impl>()}
-{}
+SessionManager::SessionManager() : _impl{std::make_unique<Impl>()} {}
 
 SessionManager::~SessionManager() = default;
 
-core::Expected<Session*> SessionManager::connect(core::u32 playerId)
+core::Expected<Session *> SessionManager::connect(core::u32 playerId)
 {
     if (_impl->sessions.contains(playerId))
     {
-        return core::makeError(core::ErrorCode::AlreadyExists,
-                               "Session already exists for player");
+        return core::makeError(core::ErrorCode::AlreadyExists, "Session already exists for player");
     }
 
     auto session = std::make_unique<Session>(playerId);
     session->setState(SessionState::Connected);
-    auto* ptr = session.get();
+    auto *ptr = session.get();
     _impl->sessions.emplace(playerId, std::move(session));
 
     core::Log::info("SessionManager: player connected");
@@ -60,21 +56,21 @@ core::Expected<void> SessionManager::disconnect(core::u32 playerId)
     return {};
 }
 
-Session* SessionManager::find(core::u32 playerId) noexcept
+Session *SessionManager::find(core::u32 playerId) noexcept
 {
     auto it = _impl->sessions.find(playerId);
     return (it != _impl->sessions.end()) ? it->second.get() : nullptr;
 }
 
-const Session* SessionManager::find(core::u32 playerId) const noexcept
+const Session *SessionManager::find(core::u32 playerId) const noexcept
 {
     auto it = _impl->sessions.find(playerId);
     return (it != _impl->sessions.end()) ? it->second.get() : nullptr;
 }
 
-void SessionManager::forEach(const std::function<void(Session&)>& callback)
+void SessionManager::forEach(const std::function<void(Session &)> &callback)
 {
-    for (auto& [id, session] : _impl->sessions)
+    for (auto &[id, session] : _impl->sessions)
     {
         callback(*session);
     }
@@ -85,10 +81,9 @@ core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs)
     const auto now = Session::Clock::now();
     core::u32 reaped = 0;
 
-    for (auto it = _impl->sessions.begin(); it != _impl->sessions.end(); )
+    for (auto it = _impl->sessions.begin(); it != _impl->sessions.end();)
     {
-        const auto elapsed = std::chrono::duration<core::f64, std::milli>(
-            now - it->second->lastActivity()).count();
+        const auto elapsed = std::chrono::duration<core::f64, std::milli>(now - it->second->lastActivity()).count();
 
         if (elapsed > timeoutMs)
         {
@@ -105,13 +100,9 @@ core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs)
     return reaped;
 }
 
-core::u32 SessionManager::activeCount() const noexcept
-{
-    return static_cast<core::u32>(_impl->sessions.size());
-}
+core::u32 SessionManager::activeCount() const noexcept { return static_cast<core::u32>(_impl->sessions.size()); }
 
-void SessionManager::broadcastState(transport::ITransport& transport,
-                                     std::span<const core::byte> data)
+void SessionManager::broadcastState(transport::ITransport &transport, std::span<const core::byte> data)
 {
     // Fragmentation: split data into kMaxPayloadSize chunks
     const core::u32 totalSize = static_cast<core::u32>(data.size());
@@ -123,7 +114,7 @@ void SessionManager::broadcastState(transport::ITransport& transport,
         auto fragment = data.subspan(offset, chunkSize);
 
         // Send to each active session
-        for (auto& [id, session] : _impl->sessions)
+        for (auto &[id, session] : _impl->sessions)
         {
             if (session->state() != SessionState::Connected)
             {
@@ -142,9 +133,6 @@ void SessionManager::broadcastState(transport::ITransport& transport,
     }
 }
 
-bool SessionManager::isDuplicate(core::u32 playerId) const noexcept
-{
-    return _impl->sessions.contains(playerId);
-}
+bool SessionManager::isDuplicate(core::u32 playerId) const noexcept { return _impl->sessions.contains(playerId); }
 
 } // namespace lpl::net::session

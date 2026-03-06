@@ -8,41 +8,28 @@
  * @copyright MIT License
  */
 
-#include <lpl/serial/ReplayRecorder.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/serial/ReplayRecorder.hpp>
 
 namespace lpl::serial {
 
-ReplayRecorder::ReplayRecorder(core::u32 snapshotInterval)
-    : _snapshotInterval{snapshotInterval}
+ReplayRecorder::ReplayRecorder(core::u32 snapshotInterval) : _snapshotInterval{snapshotInterval}
 {
     LPL_ASSERT(snapshotInterval > 0);
 }
 
 ReplayRecorder::~ReplayRecorder() = default;
 
-void ReplayRecorder::recordFrame(const ReplayFrame& frame)
-{
-    _frames.push_back(frame);
-}
+void ReplayRecorder::recordFrame(const ReplayFrame &frame) { _frames.push_back(frame); }
 
-void ReplayRecorder::recordSnapshot(StateSnapshot snapshot)
-{
-    _snapshots.push_back(std::move(snapshot));
-}
+void ReplayRecorder::recordSnapshot(StateSnapshot snapshot) { _snapshots.push_back(std::move(snapshot)); }
 
-core::usize ReplayRecorder::frameCount() const noexcept
-{
-    return _frames.size();
-}
+core::usize ReplayRecorder::frameCount() const noexcept { return _frames.size(); }
 
-core::usize ReplayRecorder::snapshotCount() const noexcept
-{
-    return _snapshots.size();
-}
+core::usize ReplayRecorder::snapshotCount() const noexcept { return _snapshots.size(); }
 
-const ReplayFrame& ReplayRecorder::frame(core::usize index) const
+const ReplayFrame &ReplayRecorder::frame(core::usize index) const
 {
     LPL_ASSERT(index < _frames.size());
     return _frames[index];

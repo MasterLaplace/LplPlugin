@@ -12,23 +12,22 @@
  * @copyright MIT License
  */
 
-#include <lpl/ecs/Registry.hpp>
-#include <lpl/ecs/Component.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/core/Log.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <lpl/core/Log.hpp>
+#include <lpl/ecs/Component.hpp>
+#include <lpl/ecs/Registry.hpp>
+#include <lpl/math/Vec3.hpp>
 #include <vector>
 
 using namespace lpl;
 
 static int failures = 0;
 
-struct RunResult
-{
-    std::vector<core::u32>  slots;
-    std::vector<float>      positions;  // x,y,z flattened
+struct RunResult {
+    std::vector<core::u32> slots;
+    std::vector<float> positions; // x,y,z flattened
 };
 
 /**
@@ -54,18 +53,17 @@ static RunResult runOnce(core::u32 entityCount)
     }
 
     // Write deterministic positions via back buffer, then swap
-    for (const auto& part : reg.partitions())
+    for (const auto &part : reg.partitions())
     {
         if (!part)
             continue;
-        for (const auto& chunk : part->chunks())
+        for (const auto &chunk : part->chunks())
         {
             const core::u32 n = chunk->count();
             if (n == 0)
                 continue;
 
-            auto* vel = static_cast<math::Vec3<float>*>(
-                chunk->writeComponent(ecs::ComponentId::Velocity));
+            auto *vel = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
             if (vel)
             {
                 auto ids = chunk->entities();
@@ -81,18 +79,17 @@ static RunResult runOnce(core::u32 entityCount)
     }
 
     // Read back positions from front buffer
-    for (const auto& part : reg.partitions())
+    for (const auto &part : reg.partitions())
     {
         if (!part)
             continue;
-        for (const auto& chunk : part->chunks())
+        for (const auto &chunk : part->chunks())
         {
             const core::u32 n = chunk->count();
             if (n == 0)
                 continue;
 
-            auto* vel = static_cast<const math::Vec3<float>*>(
-                chunk->readComponent(ecs::ComponentId::Velocity));
+            auto *vel = static_cast<const math::Vec3<float> *>(chunk->readComponent(ecs::ComponentId::Velocity));
             if (!vel)
                 continue;
 
@@ -119,8 +116,7 @@ int main()
     // Check slot assignments are deterministic
     if (result1.slots.size() != result2.slots.size())
     {
-        std::printf("  FAIL: Slot count mismatch %zu vs %zu\n",
-                    result1.slots.size(), result2.slots.size());
+        std::printf("  FAIL: Slot count mismatch %zu vs %zu\n", result1.slots.size(), result2.slots.size());
         ++failures;
     }
     else
@@ -130,8 +126,7 @@ int main()
         {
             if (result1.slots[i] != result2.slots[i])
             {
-                std::printf("  FAIL: Slot divergence at entity %zu: %u vs %u\n",
-                            i, result1.slots[i], result2.slots[i]);
+                std::printf("  FAIL: Slot divergence at entity %zu: %u vs %u\n", i, result1.slots[i], result2.slots[i]);
                 same = false;
                 ++failures;
                 break;
@@ -144,8 +139,7 @@ int main()
     // Check component data is deterministic
     if (result1.positions.size() != result2.positions.size())
     {
-        std::printf("  FAIL: Data size mismatch %zu vs %zu\n",
-                    result1.positions.size(), result2.positions.size());
+        std::printf("  FAIL: Data size mismatch %zu vs %zu\n", result1.positions.size(), result2.positions.size());
         ++failures;
     }
     else if (result1.positions.empty())
@@ -160,8 +154,8 @@ int main()
         {
             if (std::memcmp(&result1.positions[i], &result2.positions[i], sizeof(float)) != 0)
             {
-                std::printf("  FAIL: Data divergence at index %zu: %.6f vs %.6f\n",
-                            i, result1.positions[i], result2.positions[i]);
+                std::printf("  FAIL: Data divergence at index %zu: %.6f vs %.6f\n", i, result1.positions[i],
+                            result2.positions[i]);
                 identical = false;
                 ++failures;
                 break;
@@ -169,8 +163,7 @@ int main()
         }
         if (identical)
         {
-            std::printf("  PASS: %zu floats, bit-exact determinism\n",
-                        result1.positions.size());
+            std::printf("  PASS: %zu floats, bit-exact determinism\n", result1.positions.size());
         }
     }
 

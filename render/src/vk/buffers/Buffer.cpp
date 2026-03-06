@@ -1,6 +1,6 @@
 #include "buffers/Buffer.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -129,7 +129,8 @@ void Buffers::CreateTextureBuffer(const VkDevice &device, const VkPhysicalDevice
     auto &image = texture.GetImage();
 
     CreateImage(device, physicalDevice, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, texture);
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                texture);
 
     TransitionImageLayout(device, commandPool, graphicsQueue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture.GetMipLevels());
@@ -151,7 +152,10 @@ void Buffers::GenerateMipmaps(const VkDevice &device, const VkPhysicalDevice &ph
     vkGetPhysicalDeviceFormatProperties(physicalDevice, VK_FORMAT_R8G8B8A8_SRGB, &formatProperties);
 
     if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-        { ::lpl::core::Log::fatal("texture image format does not support linear blitting!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("texture image format does not support linear blitting!");
+        std::abort();
+    }
 
     VkCommandBuffer commandBuffer = BeginSingleTimeCommands(device, commandPool);
 
@@ -224,8 +228,8 @@ void Buffers::GenerateMipmaps(const VkDevice &device, const VkPhysicalDevice &ph
 
 void Buffers::CreateTextureView(const VkDevice &device, Texture &texture) const
 {
-    texture.SetTextureView(
-        ImageView::CreateImageView(device, texture.GetImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, texture.GetMipLevels()));
+    texture.SetTextureView(ImageView::CreateImageView(device, texture.GetImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                                                      VK_IMAGE_ASPECT_COLOR_BIT, texture.GetMipLevels()));
 }
 
 void Buffers::CreateTextureSampler(const VkDevice &device, const VkPhysicalDevice &physicalDevice,
@@ -253,7 +257,10 @@ void Buffers::CreateTextureSampler(const VkDevice &device, const VkPhysicalDevic
     samplerInfo.maxLod = static_cast<float>(texture.GetMipLevels());
 
     if (vkCreateSampler(device, &samplerInfo, nullptr, &texture.GetSampler()) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create texture sampler!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create texture sampler!");
+        std::abort();
+    }
 }
 
 void Buffers::CreateDepthResources(const VkDevice &device, const VkPhysicalDevice &physicalDevice,
@@ -270,13 +277,13 @@ void Buffers::CreateDepthResources(const VkDevice &device, const VkPhysicalDevic
 void Buffers::DestroyDepthResources(const VkDevice &device) { _depth.Destroy(device); }
 
 void Buffers::CreateColorResources(const VkDevice &device, const VkPhysicalDevice &physicalDevice,
-                                   const VkExtent2D &swapChainExtent, VkFormat format, VkSampleCountFlagBits msaaSamples)
+                                   const VkExtent2D &swapChainExtent, VkFormat format,
+                                   VkSampleCountFlagBits msaaSamples)
 {
     _color.Create(swapChainExtent.width, swapChainExtent.height);
     CreateImage(device, physicalDevice, format, VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, _color, msaaSamples);
-    _color.SetTextureView(
-        ImageView::CreateImageView(device, _color.GetImage(), format, VK_IMAGE_ASPECT_COLOR_BIT));
+    _color.SetTextureView(ImageView::CreateImageView(device, _color.GetImage(), format, VK_IMAGE_ASPECT_COLOR_BIT));
 }
 
 void Buffers::DestroyColorResources(const VkDevice &device) { _color.Destroy(device); }
@@ -296,7 +303,8 @@ void Buffers::Destroy(const VkDevice &device, [[maybe_unused]] const std::vector
     vkFreeMemory(device, _vertexBufferMemory, nullptr);
 }
 
-void Buffers::UpdateUniformBuffer(const VkDevice &/*device*/, const VkExtent2D swapChainExtent, const uint32_t currentImage)
+void Buffers::UpdateUniformBuffer(const VkDevice & /*device*/, const VkExtent2D swapChainExtent,
+                                  const uint32_t currentImage)
 {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -310,7 +318,8 @@ void Buffers::UpdateUniformBuffer(const VkDevice &/*device*/, const VkExtent2D s
         glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
     ubo.proj[1][1] *= -1;
 
-    if (!_uniformBuffersMapped.empty() && currentImage < _uniformBuffersMapped.size() && _uniformBuffersMapped[currentImage] != nullptr)
+    if (!_uniformBuffersMapped.empty() && currentImage < _uniformBuffersMapped.size() &&
+        _uniformBuffersMapped[currentImage] != nullptr)
     {
         memcpy(_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
@@ -327,7 +336,10 @@ void Buffers::CreateBuffer(const VkDevice &device, const VkPhysicalDevice &physi
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create vertex buffer!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create vertex buffer!");
+        std::abort();
+    }
 
     VkMemoryRequirements memRequirements{};
     vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
@@ -338,13 +350,17 @@ void Buffers::CreateBuffer(const VkDevice &device, const VkPhysicalDevice &physi
     allocInfo.memoryTypeIndex = FindMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
 
     if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to allocate vertex buffer memory!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to allocate vertex buffer memory!");
+        std::abort();
+    }
 
     vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
 
 void Buffers::CreateImage(const VkDevice &device, const VkPhysicalDevice &physicalDevice, VkFormat format,
-                          VkImageTiling tiling, VkImageUsageFlags usage, Texture &texture, VkSampleCountFlagBits numSamples) const
+                          VkImageTiling tiling, VkImageUsageFlags usage, Texture &texture,
+                          VkSampleCountFlagBits numSamples) const
 {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -365,7 +381,10 @@ void Buffers::CreateImage(const VkDevice &device, const VkPhysicalDevice &physic
     auto &imageMemory = texture.GetMemory();
 
     if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create image!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create image!");
+        std::abort();
+    }
 
     VkMemoryRequirements memRequirements{};
     vkGetImageMemoryRequirements(device, image, &memRequirements);
@@ -377,7 +396,10 @@ void Buffers::CreateImage(const VkDevice &device, const VkPhysicalDevice &physic
         FindMemoryType(physicalDevice, memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to allocate image memory!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to allocate image memory!");
+        std::abort();
+    }
 
     vkBindImageMemory(device, image, imageMemory, 0);
 }
@@ -392,7 +414,10 @@ uint32_t Buffers::FindMemoryType(const VkPhysicalDevice &physicalDevice, const u
         if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
             return i;
 
-    { ::lpl::core::Log::fatal("failed to find suitable memory type!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to find suitable memory type!");
+        std::abort();
+    }
 }
 
 void Buffers::CopyBuffer(const VkDevice &device, const VkCommandPool &commandPool, const VkQueue &graphicsQueue,
@@ -447,7 +472,10 @@ void Buffers::TransitionImageLayout(const VkDevice &device, const VkCommandPool 
     }
     else
     {
-        { ::lpl::core::Log::fatal("unsupported layout transition!"); std::abort(); }
+        {
+            ::lpl::core::Log::fatal("unsupported layout transition!");
+            std::abort();
+        }
     }
 
     vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
@@ -530,7 +558,10 @@ VkFormat Buffers::FindSupportedFormat(const VkPhysicalDevice &physicalDevice, co
         }
     }
 
-    { ::lpl::core::Log::fatal("failed to find supported format!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to find supported format!");
+        std::abort();
+    }
 }
 
 VkFormat Buffers::FindDepthFormat(const VkPhysicalDevice &physicalDevice) const

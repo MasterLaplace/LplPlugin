@@ -9,13 +9,13 @@
  * @copyright MIT License
  */
 
-#include <lpl/net/netcode/AuthoritativeStrategy.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/net/netcode/AuthoritativeStrategy.hpp>
 
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
-#include <algorithm>
 
 namespace lpl::net::netcode {
 
@@ -23,18 +23,16 @@ namespace lpl::net::netcode {
 //  Per-player input entry                                                     //
 // ========================================================================== //
 
-struct InputEntry
-{
-    core::u32                sequence;
-    std::vector<core::byte>  data;
+struct InputEntry {
+    core::u32 sequence;
+    std::vector<core::byte> data;
 };
 
 // ========================================================================== //
 //  Impl                                                                       //
 // ========================================================================== //
 
-struct AuthoritativeStrategy::Impl
-{
+struct AuthoritativeStrategy::Impl {
     core::u32 serverFrame{0};
     core::u32 lastAckedSequence{0};
 
@@ -49,16 +47,12 @@ struct AuthoritativeStrategy::Impl
 //  Public                                                                     //
 // ========================================================================== //
 
-AuthoritativeStrategy::AuthoritativeStrategy()
-    : _impl{std::make_unique<Impl>()}
-{}
+AuthoritativeStrategy::AuthoritativeStrategy() : _impl{std::make_unique<Impl>()} {}
 
 AuthoritativeStrategy::~AuthoritativeStrategy() = default;
 
-core::Expected<void> AuthoritativeStrategy::onInputReceived(
-    core::u32 playerId,
-    std::span<const core::byte> inputData,
-    core::u32 sequence)
+core::Expected<void> AuthoritativeStrategy::onInputReceived(core::u32 playerId, std::span<const core::byte> inputData,
+                                                            core::u32 sequence)
 {
     // Reject stale inputs (already processed)
     if (sequence <= _impl->lastAckedSequence && _impl->lastAckedSequence > 0)
@@ -74,29 +68,26 @@ core::Expected<void> AuthoritativeStrategy::onInputReceived(
     _impl->pendingInputs[playerId].push_back(std::move(entry));
 
     // Sort by sequence to process in order
-    auto& queue = _impl->pendingInputs[playerId];
+    auto &queue = _impl->pendingInputs[playerId];
     std::sort(queue.begin(), queue.end(),
-              [](const InputEntry& a, const InputEntry& b) {
-                  return a.sequence < b.sequence;
-              });
+              [](const InputEntry &a, const InputEntry &b) { return a.sequence < b.sequence; });
 
     return {};
 }
 
-core::Expected<void> AuthoritativeStrategy::onStateReceived(
-    std::span<const core::byte> snapshotData,
-    core::u32 sequence)
+core::Expected<void> AuthoritativeStrategy::onStateReceived(std::span<const core::byte> snapshotData,
+                                                            core::u32 sequence)
 {
     // Server-side: no-op (we ARE the authority).
     // In a distributed server mesh this would propagate state between nodes.
-    (void)snapshotData;
-    (void)sequence;
+    (void) snapshotData;
+    (void) sequence;
     return {};
 }
 
 void AuthoritativeStrategy::tick(core::f32 dt)
 {
-    (void)dt;
+    (void) dt;
 
     // Consume all pending inputs → move to consumedInputs for system access
     _impl->consumedInputs.clear();
@@ -107,10 +98,6 @@ void AuthoritativeStrategy::tick(core::f32 dt)
     _impl->lastAckedSequence = _impl->serverFrame;
 }
 
-const char* AuthoritativeStrategy::name() const noexcept
-{
-    return "AuthoritativeStrategy";
-}
+const char *AuthoritativeStrategy::name() const noexcept { return "AuthoritativeStrategy"; }
 
 } // namespace lpl::net::netcode
-

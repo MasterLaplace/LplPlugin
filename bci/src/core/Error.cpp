@@ -13,8 +13,8 @@ namespace lpl::bci {
 std::string Error::format() const
 {
     std::ostringstream os;
-    os << '[' << errorCodeName(code) << "] " << message
-       << " (" << location.file_name() << ':' << location.line() << ')';
+    os << '[' << errorCodeName(code) << "] " << message << " (" << location.file_name() << ':' << location.line()
+       << ')';
     return os.str();
 }
 

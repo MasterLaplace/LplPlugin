@@ -8,9 +8,9 @@
  * @copyright MIT License
  */
 
+#include <cmath>
 #include <lpl/bci/NeuralSafetyChain.hpp>
 #include <lpl/core/Log.hpp>
-#include <cmath>
 
 namespace lpl::bci {
 
@@ -21,17 +21,13 @@ namespace lpl::bci {
 NeuralSafetyChain::NeuralSafetyChain() = default;
 NeuralSafetyChain::~NeuralSafetyChain() = default;
 
-void NeuralSafetyChain::addCheck(std::unique_ptr<ISafetyCheck> check)
-{
-    _checks.push_back(std::move(check));
-}
+void NeuralSafetyChain::addCheck(std::unique_ptr<ISafetyCheck> check) { _checks.push_back(std::move(check)); }
 
-SafetyVerdict NeuralSafetyChain::evaluate(
-    const input::NeuralInputState& state) const noexcept
+SafetyVerdict NeuralSafetyChain::evaluate(const input::NeuralInputState &state) const noexcept
 {
     SafetyVerdict worst = SafetyVerdict::Pass;
 
-    for (const auto& check : _checks)
+    for (const auto &check : _checks)
     {
         const SafetyVerdict v = check->evaluate(state);
 
@@ -50,20 +46,15 @@ SafetyVerdict NeuralSafetyChain::evaluate(
     return worst;
 }
 
-core::usize NeuralSafetyChain::checkCount() const noexcept
-{
-    return _checks.size();
-}
+core::usize NeuralSafetyChain::checkCount() const noexcept { return _checks.size(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AmplitudeBoundsCheck
 // ─────────────────────────────────────────────────────────────────────────────
 
-AmplitudeBoundsCheck::AmplitudeBoundsCheck(core::f32 maxAbsValue)
-    : _maxAbsValue{maxAbsValue} {}
+AmplitudeBoundsCheck::AmplitudeBoundsCheck(core::f32 maxAbsValue) : _maxAbsValue{maxAbsValue} {}
 
-SafetyVerdict AmplitudeBoundsCheck::evaluate(
-    const input::NeuralInputState& state) const noexcept
+SafetyVerdict AmplitudeBoundsCheck::evaluate(const input::NeuralInputState &state) const noexcept
 {
     for (core::usize i = 0; i < input::NeuralInputState::kChannels; ++i)
     {
@@ -76,20 +67,15 @@ SafetyVerdict AmplitudeBoundsCheck::evaluate(
     return SafetyVerdict::Pass;
 }
 
-const char* AmplitudeBoundsCheck::name() const noexcept
-{
-    return "AmplitudeBoundsCheck";
-}
+const char *AmplitudeBoundsCheck::name() const noexcept { return "AmplitudeBoundsCheck"; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ConfidenceCheck
 // ─────────────────────────────────────────────────────────────────────────────
 
-ConfidenceCheck::ConfidenceCheck(core::f32 minConfidence)
-    : _minConfidence{minConfidence} {}
+ConfidenceCheck::ConfidenceCheck(core::f32 minConfidence) : _minConfidence{minConfidence} {}
 
-SafetyVerdict ConfidenceCheck::evaluate(
-    const input::NeuralInputState& state) const noexcept
+SafetyVerdict ConfidenceCheck::evaluate(const input::NeuralInputState &state) const noexcept
 {
     if (state.confidence.toFloat() < _minConfidence)
     {
@@ -98,20 +84,15 @@ SafetyVerdict ConfidenceCheck::evaluate(
     return SafetyVerdict::Pass;
 }
 
-const char* ConfidenceCheck::name() const noexcept
-{
-    return "ConfidenceCheck";
-}
+const char *ConfidenceCheck::name() const noexcept { return "ConfidenceCheck"; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RateOfChangeCheck
 // ─────────────────────────────────────────────────────────────────────────────
 
-RateOfChangeCheck::RateOfChangeCheck(core::f32 maxDelta)
-    : _maxDelta{maxDelta} {}
+RateOfChangeCheck::RateOfChangeCheck(core::f32 maxDelta) : _maxDelta{maxDelta} {}
 
-SafetyVerdict RateOfChangeCheck::evaluate(
-    const input::NeuralInputState& state) const noexcept
+SafetyVerdict RateOfChangeCheck::evaluate(const input::NeuralInputState &state) const noexcept
 {
     if (!_hasPrevious)
     {
@@ -127,8 +108,7 @@ SafetyVerdict RateOfChangeCheck::evaluate(
 
     for (core::usize i = 0; i < input::NeuralInputState::kChannels; ++i)
     {
-        const core::f32 delta = std::fabs(
-            state.channels[i].toFloat() - _previousChannels[i].toFloat());
+        const core::f32 delta = std::fabs(state.channels[i].toFloat() - _previousChannels[i].toFloat());
         if (delta > _maxDelta)
         {
             result = SafetyVerdict::Warn;
@@ -139,9 +119,6 @@ SafetyVerdict RateOfChangeCheck::evaluate(
     return result;
 }
 
-const char* RateOfChangeCheck::name() const noexcept
-{
-    return "RateOfChangeCheck";
-}
+const char *RateOfChangeCheck::name() const noexcept { return "RateOfChangeCheck"; }
 
 } // namespace lpl::bci

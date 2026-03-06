@@ -25,21 +25,21 @@
  * @copyright MIT License
  */
 
-#include <lpl/physics/CpuPhysicsBackend.hpp>
-#include <lpl/physics/CollisionDetector.hpp>
-#include <lpl/physics/CollisionSolver.hpp>
-#include <lpl/physics/SleepingPolicy.hpp>
-#include <lpl/physics/Octree.hpp>
-#include <lpl/ecs/Registry.hpp>
-#include <lpl/ecs/Component.hpp>
-#include <lpl/math/AABB.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/Simd.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/physics/CollisionEvent.hpp>
-#include <lpl/core/EventBus.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/core/EventBus.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/ecs/Component.hpp>
+#include <lpl/ecs/Registry.hpp>
+#include <lpl/math/AABB.hpp>
+#include <lpl/math/FixedPoint.hpp>
+#include <lpl/math/Simd.hpp>
+#include <lpl/math/Vec3.hpp>
+#include <lpl/physics/CollisionDetector.hpp>
+#include <lpl/physics/CollisionEvent.hpp>
+#include <lpl/physics/CollisionSolver.hpp>
+#include <lpl/physics/CpuPhysicsBackend.hpp>
+#include <lpl/physics/Octree.hpp>
+#include <lpl/physics/SleepingPolicy.hpp>
 
 #include <cmath>
 #include <vector>
@@ -50,27 +50,26 @@ namespace lpl::physics {
 //  Physics constants (ported from legacy Partition.hpp)                       //
 // ========================================================================== //
 
-static constexpr float kGravity                  = -9.81f;
-static constexpr float kVelocityDamping          = 0.995f;
-static constexpr float kRestitution              = 0.5f;
+static constexpr float kGravity = -9.81f;
+static constexpr float kVelocityDamping = 0.995f;
+static constexpr float kRestitution = 0.5f;
 static constexpr float kSleepVelocitySqThreshold = 0.01f;
 static constexpr core::u16 kSleepFramesThreshold = 30;
-static constexpr core::u32 kBruteForceThreshold  = 32;
-static constexpr core::u32 kSolverIterations     = 4;
+static constexpr core::u32 kBruteForceThreshold = 32;
+static constexpr core::u32 kSolverIterations = 4;
 
 // ========================================================================== //
 //  Impl                                                                      //
 // ========================================================================== //
 
-struct CpuPhysicsBackend::Impl
-{
-    ecs::Registry& registry;
+struct CpuPhysicsBackend::Impl {
+    ecs::Registry &registry;
 
     /** @brief Per-entity sleeping data (indexed by entity slot, not chunk-local). */
-    std::vector<bool>    sleeping;
+    std::vector<bool> sleeping;
     std::vector<core::u16> sleepCounter;
 
-    explicit Impl(ecs::Registry& r) : registry{r} {}
+    explicit Impl(ecs::Registry &r) : registry{r} {}
 
     /** @brief Ensures sleeping vectors are large enough for a given entity slot. */
     void ensureSleepCapacity(core::u32 entitySlot)
@@ -103,9 +102,7 @@ struct CpuPhysicsBackend::Impl
 //  Public API                                                                //
 // ========================================================================== //
 
-CpuPhysicsBackend::CpuPhysicsBackend(ecs::Registry& registry)
-    : _impl{std::make_unique<Impl>(registry)}
-{}
+CpuPhysicsBackend::CpuPhysicsBackend(ecs::Registry &registry) : _impl{std::make_unique<Impl>(registry)} {}
 
 CpuPhysicsBackend::~CpuPhysicsBackend() = default;
 
@@ -117,22 +114,21 @@ core::Expected<void> CpuPhysicsBackend::init()
 
 core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
 {
-    auto& registry = _impl->registry;
+    auto &registry = _impl->registry;
     const auto partitions = registry.partitions();
 
-    for (const auto& partition : partitions)
+    for (const auto &partition : partitions)
     {
-        const auto& archetype = partition->archetype();
+        const auto &archetype = partition->archetype();
 
         // Only process partitions that have the physics-relevant components
-        if (!archetype.has(ecs::ComponentId::Position) ||
-            !archetype.has(ecs::ComponentId::Velocity) ||
+        if (!archetype.has(ecs::ComponentId::Position) || !archetype.has(ecs::ComponentId::Velocity) ||
             !archetype.has(ecs::ComponentId::Mass))
         {
             continue;
         }
 
-        for (const auto& chunk : partition->chunks())
+        for (const auto &chunk : partition->chunks())
         {
             const core::u32 count = chunk->count();
             if (count == 0)
@@ -141,9 +137,9 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             }
 
             // Get SoA component arrays from chunk
-            auto* positions  = static_cast<math::Vec3<float>*>(chunk->writeComponent(ecs::ComponentId::Position));
-            auto* velocities = static_cast<math::Vec3<float>*>(chunk->writeComponent(ecs::ComponentId::Velocity));
-            auto* masses     = static_cast<const float*>(chunk->readComponent(ecs::ComponentId::Mass));
+            auto *positions = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Position));
+            auto *velocities = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+            auto *masses = static_cast<const float *>(chunk->readComponent(ecs::ComponentId::Mass));
 
             if (!positions || !velocities || !masses)
             {
@@ -151,12 +147,12 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             }
 
             // Optional: AABB for collision sizing
-            auto* aabbs = archetype.has(ecs::ComponentId::AABB)
-                ? static_cast<math::Vec3<float>*>(chunk->writeComponent(ecs::ComponentId::AABB))
-                : nullptr;
+            auto *aabbs = archetype.has(ecs::ComponentId::AABB) ?
+                              static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::AABB)) :
+                              nullptr;
 
             // Ensure sleeping buffers cover the entity slots in this chunk
-            const ecs::EntityId* entities = chunk->entities().data();
+            const ecs::EntityId *entities = chunk->entities().data();
             for (core::u32 i = 0; i < count; ++i)
             {
                 _impl->ensureSleepCapacity(entities[i].slot());
@@ -186,27 +182,20 @@ void CpuPhysicsBackend::shutdown()
     _impl->sleepCounter.clear();
 }
 
-const char* CpuPhysicsBackend::name() const noexcept
-{
-    return "CpuPhysicsBackend (legacy-ported)";
-}
+const char *CpuPhysicsBackend::name() const noexcept { return "CpuPhysicsBackend (legacy-ported)"; }
 
 // ========================================================================== //
 //  Private physics passes                                                    //
 // ========================================================================== //
 
-void CpuPhysicsBackend::integrateChunk(
-    const ecs::EntityId* entities,
-    math::Vec3<float>* positions,
-    math::Vec3<float>* velocities,
-    const float* masses,
-    core::u32 count,
-    core::f32 dt) const noexcept
+void CpuPhysicsBackend::integrateChunk(const ecs::EntityId *entities, math::Vec3<float> *positions,
+                                       math::Vec3<float> *velocities, const float *masses, core::u32 count,
+                                       core::f32 dt) const noexcept
 {
     using namespace math::simd;
 
-    const SimdFloat4 vDamping  = SimdFloat4::splat(kVelocityDamping);
-    const SimdFloat4 vDt       = SimdFloat4::splat(dt);
+    const SimdFloat4 vDamping = SimdFloat4::splat(kVelocityDamping);
+    const SimdFloat4 vDt = SimdFloat4::splat(dt);
 
     core::u32 i = 0;
 
@@ -215,15 +204,19 @@ void CpuPhysicsBackend::integrateChunk(
     for (; i + 3 < count; i += 4)
     {
         bool anySleeping = false;
-        for (core::u32 j = 0; j < 4; ++j) {
-            if (_impl->isSleeping(entities[i + j].slot())) {
+        for (core::u32 j = 0; j < 4; ++j)
+        {
+            if (_impl->isSleeping(entities[i + j].slot()))
+            {
                 anySleeping = true;
                 break;
             }
         }
-        if (anySleeping) {
+        if (anySleeping)
+        {
             // Process this block of 4 in scalar since some are sleeping
-            for (core::u32 j = 0; j < 4; ++j) {
+            for (core::u32 j = 0; j < 4; ++j)
+            {
                 const core::u32 k = i + j;
                 if (_impl->isSleeping(entities[k].slot()))
                     continue;
@@ -250,13 +243,13 @@ void CpuPhysicsBackend::integrateChunk(
         }
 
         // --- Load AoS -> SoA ---
-        float px[4] = { positions[i].x, positions[i+1].x, positions[i+2].x, positions[i+3].x };
-        float py[4] = { positions[i].y, positions[i+1].y, positions[i+2].y, positions[i+3].y };
-        float pz[4] = { positions[i].z, positions[i+1].z, positions[i+2].z, positions[i+3].z };
-        float vx[4] = { velocities[i].x, velocities[i+1].x, velocities[i+2].x, velocities[i+3].x };
-        float vy[4] = { velocities[i].y, velocities[i+1].y, velocities[i+2].y, velocities[i+3].y };
-        float vz[4] = { velocities[i].z, velocities[i+1].z, velocities[i+2].z, velocities[i+3].z };
-        float ms[4] = { masses[i], masses[i+1], masses[i+2], masses[i+3] };
+        float px[4] = {positions[i].x, positions[i + 1].x, positions[i + 2].x, positions[i + 3].x};
+        float py[4] = {positions[i].y, positions[i + 1].y, positions[i + 2].y, positions[i + 3].y};
+        float pz[4] = {positions[i].z, positions[i + 1].z, positions[i + 2].z, positions[i + 3].z};
+        float vx[4] = {velocities[i].x, velocities[i + 1].x, velocities[i + 2].x, velocities[i + 3].x};
+        float vy[4] = {velocities[i].y, velocities[i + 1].y, velocities[i + 2].y, velocities[i + 3].y};
+        float vz[4] = {velocities[i].z, velocities[i + 1].z, velocities[i + 2].z, velocities[i + 3].z};
+        float ms[4] = {masses[i], masses[i + 1], masses[i + 2], masses[i + 3]};
 
         SimdFloat4 posX = SimdFloat4::load(px);
         SimdFloat4 posY = SimdFloat4::load(py);
@@ -266,8 +259,10 @@ void CpuPhysicsBackend::integrateChunk(
         SimdFloat4 velZ = SimdFloat4::load(vz);
 
         // Gravity force — active if mass > 0.0001f
-        for (int j = 0; j < 4; ++j) {
-            if (ms[j] > 0.0001f) {
+        for (int j = 0; j < 4; ++j)
+        {
+            if (ms[j] > 0.0001f)
+            {
                 vy[j] += kGravity * dt;
             }
         }
@@ -291,16 +286,19 @@ void CpuPhysicsBackend::integrateChunk(
         velY.store(vy);
         velZ.store(vz);
 
-        for (int j = 0; j < 4; ++j) {
-            positions[i+j] = { px[j], py[j], pz[j] };
-            velocities[i+j] = { vx[j], vy[j], vz[j] };
+        for (int j = 0; j < 4; ++j)
+        {
+            positions[i + j] = {px[j], py[j], pz[j]};
+            velocities[i + j] = {vx[j], vy[j], vz[j]};
 
             // Ground collision
             constexpr float kDefaultHalfHeight = 0.5f;
-            if (positions[i+j].y < kDefaultHalfHeight) {
-                positions[i+j].y = kDefaultHalfHeight;
-                if (velocities[i+j].y < 0.0f) {
-                    velocities[i+j].y = -velocities[i+j].y * kRestitution;
+            if (positions[i + j].y < kDefaultHalfHeight)
+            {
+                positions[i + j].y = kDefaultHalfHeight;
+                if (velocities[i + j].y < 0.0f)
+                {
+                    velocities[i + j].y = -velocities[i + j].y * kRestitution;
                 }
             }
         }
@@ -332,17 +330,12 @@ void CpuPhysicsBackend::integrateChunk(
     }
 }
 
-void CpuPhysicsBackend::resolveCollisionsChunk(
-    const ecs::EntityId* entities,
-    math::Vec3<float>* positions,
-    math::Vec3<float>* velocities,
-    const float* masses,
-    const math::Vec3<float>* sizes,
-    core::u32 count) const noexcept
+void CpuPhysicsBackend::resolveCollisionsChunk(const ecs::EntityId *entities, math::Vec3<float> *positions,
+                                               math::Vec3<float> *velocities, const float *masses,
+                                               const math::Vec3<float> *sizes, core::u32 count) const noexcept
 {
     // Lambda for resolving a single collision pair (ported from legacy)
-    auto resolveCollision = [&](core::u32 a, core::u32 b)
-    {
+    auto resolveCollision = [&](core::u32 a, core::u32 b) {
         const core::u32 slotA = entities[a].slot();
         const core::u32 slotB = entities[b].slot();
 
@@ -424,9 +417,7 @@ void CpuPhysicsBackend::resolveCollisionsChunk(
 
         if (impulseMag > 0.0f)
         {
-            core::EventBus::instance().publish(CollisionEvent{
-                entities[a], entities[b], normal, impulseMag
-            });
+            core::EventBus::instance().publish(CollisionEvent{entities[a], entities[b], normal, impulseMag});
         }
     };
 
@@ -448,16 +439,10 @@ void CpuPhysicsBackend::resolveCollisionsChunk(
         {
             // Octree broad-phase for larger chunks (O(N log N) vs O(N²))
             // Build world-bounds from all entities
-            math::Vec3<math::Fixed32> wMin{
-                math::Fixed32::fromFloat(-500.0f),
-                math::Fixed32::fromFloat(-500.0f),
-                math::Fixed32::fromFloat(-500.0f)
-            };
-            math::Vec3<math::Fixed32> wMax{
-                math::Fixed32::fromFloat(500.0f),
-                math::Fixed32::fromFloat(500.0f),
-                math::Fixed32::fromFloat(500.0f)
-            };
+            math::Vec3<math::Fixed32> wMin{math::Fixed32::fromFloat(-500.0f), math::Fixed32::fromFloat(-500.0f),
+                                           math::Fixed32::fromFloat(-500.0f)};
+            math::Vec3<math::Fixed32> wMax{math::Fixed32::fromFloat(500.0f), math::Fixed32::fromFloat(500.0f),
+                                           math::Fixed32::fromFloat(500.0f)};
             Octree octree(math::AABB<math::Fixed32>{wMin, wMax});
 
             // Insert all entities into the octree
@@ -491,7 +476,7 @@ void CpuPhysicsBackend::resolveCollisionsChunk(
                 };
 
                 octree.query(queryRegion, [&](core::u32 j) {
-                    if (j > i)  // avoid duplicate pairs
+                    if (j > i) // avoid duplicate pairs
                     {
                         resolveCollision(i, j);
                     }
@@ -501,10 +486,8 @@ void CpuPhysicsBackend::resolveCollisionsChunk(
     }
 }
 
-void CpuPhysicsBackend::updateSleepingChunk(
-    const ecs::EntityId* entities,
-    math::Vec3<float>* velocities,
-    core::u32 count) const noexcept
+void CpuPhysicsBackend::updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<float> *velocities,
+                                            core::u32 count) const noexcept
 {
     for (core::u32 i = 0; i < count; ++i)
     {
@@ -517,9 +500,8 @@ void CpuPhysicsBackend::updateSleepingChunk(
 
         // Include all 3 axes (X+Y+Z) — legacy bug ignored Y causing
         // entities in free-fall to freeze
-        const float speedSq = velocities[i].x * velocities[i].x +
-                              velocities[i].y * velocities[i].y +
-                              velocities[i].z * velocities[i].z;
+        const float speedSq =
+            velocities[i].x * velocities[i].x + velocities[i].y * velocities[i].y + velocities[i].z * velocities[i].z;
 
         if (speedSq < kSleepVelocitySqThreshold)
         {

@@ -8,8 +8,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/engine/systems/WelcomeSystem.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/engine/systems/WelcomeSystem.hpp>
 
 namespace lpl::engine::systems {
 
@@ -17,54 +17,41 @@ namespace lpl::engine::systems {
 //  Descriptor                                                                //
 // ========================================================================== //
 
-static const ecs::SystemDescriptor kWelcomeDesc{
-    "Welcome",
-    ecs::SchedulePhase::Input,
-    {}
-};
+static const ecs::SystemDescriptor kWelcomeDesc{"Welcome", ecs::SchedulePhase::Input, {}};
 
 // ========================================================================== //
 //  Impl                                                                      //
 // ========================================================================== //
 
-struct WelcomeSystem::Impl
-{
-    EventQueues& queues;
-    core::u32&   myEntityId;
-    bool&        connected;
+struct WelcomeSystem::Impl {
+    EventQueues &queues;
+    core::u32 &myEntityId;
+    bool &connected;
 
-    Impl(EventQueues& q, core::u32& eid, bool& conn)
-        : queues{q}, myEntityId{eid}, connected{conn}
-    {
-    }
+    Impl(EventQueues &q, core::u32 &eid, bool &conn) : queues{q}, myEntityId{eid}, connected{conn} {}
 };
 
 // ========================================================================== //
 //  Public                                                                    //
 // ========================================================================== //
 
-WelcomeSystem::WelcomeSystem(EventQueues& queues,
-                             core::u32& myEntityId,
-                             bool& connected)
+WelcomeSystem::WelcomeSystem(EventQueues &queues, core::u32 &myEntityId, bool &connected)
     : _impl{std::make_unique<Impl>(queues, myEntityId, connected)}
 {
 }
 
 WelcomeSystem::~WelcomeSystem() = default;
 
-const ecs::SystemDescriptor& WelcomeSystem::descriptor() const noexcept
-{
-    return kWelcomeDesc;
-}
+const ecs::SystemDescriptor &WelcomeSystem::descriptor() const noexcept { return kWelcomeDesc; }
 
 void WelcomeSystem::execute(core::f32 /*dt*/)
 {
     auto events = _impl->queues.welcomes.drain();
 
-    for (const auto& ev : events)
+    for (const auto &ev : events)
     {
         _impl->myEntityId = ev.entityId;
-        _impl->connected  = true;
+        _impl->connected = true;
         core::Log::info("Welcome", "Server assigned local entity identity");
     }
 }

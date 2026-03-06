@@ -12,25 +12,22 @@
  * @copyright MIT License
  */
 
-#include <lpl/gpu/CudaBackend.hpp>
-#include <lpl/gpu/PhysicsKernel.cuh>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/gpu/CudaBackend.hpp>
+#include <lpl/gpu/PhysicsKernel.cuh>
 
 #ifdef LPL_HAS_CUDA
-    #include <cuda_runtime.h>
+#    include <cuda_runtime.h>
 #endif
 
 namespace lpl::gpu {
 
-struct CudaBackend::Impl
-{
+struct CudaBackend::Impl {
     bool initialised{false};
 };
 
-CudaBackend::CudaBackend()
-    : _impl{std::make_unique<Impl>()}
-{}
+CudaBackend::CudaBackend() : _impl{std::make_unique<Impl>()} {}
 
 CudaBackend::~CudaBackend()
 {
@@ -53,8 +50,7 @@ core::Expected<void> CudaBackend::init()
 
     cudaDeviceProp prop{};
     cudaGetDeviceProperties(&prop, 0);
-    core::Log::info("CudaBackend::init — {} (compute {}.{})",
-                    prop.name, prop.major, prop.minor);
+    core::Log::info("CudaBackend::init — {} (compute {}.{})", prop.name, prop.major, prop.minor);
 
     physics_gpu_init();
     _impl->initialised = true;
@@ -79,10 +75,10 @@ void CudaBackend::shutdown()
 #endif
 }
 
-core::Expected<void*> CudaBackend::allocate(core::usize bytes)
+core::Expected<void *> CudaBackend::allocate(core::usize bytes)
 {
 #ifdef LPL_HAS_CUDA
-    void* ptr = nullptr;
+    void *ptr = nullptr;
     cudaError_t err = cudaMalloc(&ptr, bytes);
     if (err != cudaSuccess)
     {
@@ -90,12 +86,12 @@ core::Expected<void*> CudaBackend::allocate(core::usize bytes)
     }
     return ptr;
 #else
-    (void)bytes;
+    (void) bytes;
     return core::makeError(core::ErrorCode::NotSupported, "CUDA not available");
 #endif
 }
 
-void CudaBackend::free(void* ptr)
+void CudaBackend::free(void *ptr)
 {
 #ifdef LPL_HAS_CUDA
     if (ptr)
@@ -103,11 +99,11 @@ void CudaBackend::free(void* ptr)
         cudaFree(ptr);
     }
 #else
-    (void)ptr;
+    (void) ptr;
 #endif
 }
 
-core::Expected<void> CudaBackend::uploadSync(void* dst, const void* src, core::usize bytes)
+core::Expected<void> CudaBackend::uploadSync(void *dst, const void *src, core::usize bytes)
 {
 #ifdef LPL_HAS_CUDA
     cudaError_t err = cudaMemcpy(dst, src, bytes, cudaMemcpyHostToDevice);
@@ -117,12 +113,14 @@ core::Expected<void> CudaBackend::uploadSync(void* dst, const void* src, core::u
     }
     return {};
 #else
-    (void)dst; (void)src; (void)bytes;
+    (void) dst;
+    (void) src;
+    (void) bytes;
     return core::makeError(core::ErrorCode::NotSupported, "CUDA not available");
 #endif
 }
 
-core::Expected<void> CudaBackend::downloadSync(void* dst, const void* src, core::usize bytes)
+core::Expected<void> CudaBackend::downloadSync(void *dst, const void *src, core::usize bytes)
 {
 #ifdef LPL_HAS_CUDA
     cudaError_t err = cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToHost);
@@ -132,59 +130,55 @@ core::Expected<void> CudaBackend::downloadSync(void* dst, const void* src, core:
     }
     return {};
 #else
-    (void)dst; (void)src; (void)bytes;
+    (void) dst;
+    (void) src;
+    (void) bytes;
     return core::makeError(core::ErrorCode::NotSupported, "CUDA not available");
 #endif
 }
 
-core::Expected<void> CudaBackend::dispatch(
-    const char* kernelName,
-    core::u32 gridDim,
-    core::u32 blockDim,
-    std::span<const core::byte> args)
+core::Expected<void> CudaBackend::dispatch(const char *kernelName, core::u32 gridDim, core::u32 blockDim,
+                                           std::span<const core::byte> args)
 {
 #ifdef LPL_HAS_CUDA
-    (void)gridDim;
-    (void)blockDim;
+    (void) gridDim;
+    (void) blockDim;
 
     // Dispatch known kernels by name
     if (std::strcmp(kernelName, "physics_tick") == 0)
     {
         // Args layout: [9 x float*][const float*][uint32_t count][float dt]
         // Total: 9 pointers + 1 pointer + 1 uint32_t + 1 float
-        struct PhysicsArgs
-        {
+        struct PhysicsArgs {
             float *posX, *posY, *posZ;
             float *velX, *velY, *velZ;
             float *frcX, *frcY, *frcZ;
-            const float* masses;
+            const float *masses;
             uint32_t count;
             float dt;
         };
 
         if (args.size() < sizeof(PhysicsArgs))
         {
-            return core::makeError(core::ErrorCode::InvalidArgument,
-                                   "physics_tick: args buffer too small");
+            return core::makeError(core::ErrorCode::InvalidArgument, "physics_tick: args buffer too small");
         }
 
         PhysicsArgs pa{};
         std::memcpy(&pa, args.data(), sizeof(PhysicsArgs));
 
         physics_gpu_timer_start();
-        launch_physics_kernel(
-            pa.posX, pa.posY, pa.posZ,
-            pa.velX, pa.velY, pa.velZ,
-            pa.frcX, pa.frcY, pa.frcZ,
-            pa.masses, pa.count, pa.dt);
+        launch_physics_kernel(pa.posX, pa.posY, pa.posZ, pa.velX, pa.velY, pa.velZ, pa.frcX, pa.frcY, pa.frcZ,
+                              pa.masses, pa.count, pa.dt);
 
         return {};
     }
 
-    return core::makeError(core::ErrorCode::InvalidArgument,
-                           "Unknown kernel name");
+    return core::makeError(core::ErrorCode::InvalidArgument, "Unknown kernel name");
 #else
-    (void)kernelName; (void)gridDim; (void)blockDim; (void)args;
+    (void) kernelName;
+    (void) gridDim;
+    (void) blockDim;
+    (void) args;
     return core::makeError(core::ErrorCode::NotSupported, "CUDA not available");
 #endif
 }
@@ -199,9 +193,6 @@ core::Expected<void> CudaBackend::synchronize()
 #endif
 }
 
-const char* CudaBackend::name() const noexcept
-{
-    return "CudaBackend";
-}
+const char *CudaBackend::name() const noexcept { return "CudaBackend"; }
 
 } // namespace lpl::gpu

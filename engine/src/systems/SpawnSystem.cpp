@@ -1,6 +1,6 @@
-#include <lpl/engine/systems/SpawnSystem.hpp>
-#include <lpl/ecs/Registry.hpp>
 #include <lpl/ecs/Partition.hpp>
+#include <lpl/ecs/Registry.hpp>
+#include <lpl/engine/systems/SpawnSystem.hpp>
 
 namespace lpl::engine::systems {
 
@@ -11,25 +11,15 @@ static const ecs::ComponentAccess kSpawnAccesses[] = {
     {ecs::ComponentId::Health,   ecs::AccessMode::ReadWrite},
 };
 
-static const ecs::SystemDescriptor kSpawnSystemDesc{
-    "SpawnSystem",
-    ecs::SchedulePhase::PrePhysics,
-    std::span<const ecs::ComponentAccess>{kSpawnAccesses}
-};
+static const ecs::SystemDescriptor kSpawnSystemDesc{"SpawnSystem", ecs::SchedulePhase::PrePhysics,
+                                                    std::span<const ecs::ComponentAccess>{kSpawnAccesses}};
 
-SpawnSystem::SpawnSystem(ecs::Registry& registry,
-                         const core::u32& myEntityId,
-                         const bool& connected)
-    : _registry(registry)
-    , _myEntityId(myEntityId)
-    , _connected(connected)
+SpawnSystem::SpawnSystem(ecs::Registry &registry, const core::u32 &myEntityId, const bool &connected)
+    : _registry(registry), _myEntityId(myEntityId), _connected(connected)
 {
 }
 
-const ecs::SystemDescriptor& SpawnSystem::descriptor() const noexcept
-{
-    return kSpawnSystemDesc;
-}
+const ecs::SystemDescriptor &SpawnSystem::descriptor() const noexcept { return kSpawnSystemDesc; }
 
 void SpawnSystem::execute(core::f32 /*dt*/)
 {

@@ -8,31 +8,28 @@
  * @copyright MIT License
  */
 
-#include <lpl/net/ServerMesh.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/net/ServerMesh.hpp>
 
 #include <algorithm>
 
 namespace lpl::net {
 
-struct ServerMesh::Impl
-{
-    transport::ITransport&  transport;
-    std::vector<MeshNode>   nodes;
+struct ServerMesh::Impl {
+    transport::ITransport &transport;
+    std::vector<MeshNode> nodes;
 
-    explicit Impl(transport::ITransport& t) : transport{t} {}
+    explicit Impl(transport::ITransport &t) : transport{t} {}
 };
 
-ServerMesh::ServerMesh(transport::ITransport& transport)
-    : _impl{std::make_unique<Impl>(transport)}
-{}
+ServerMesh::ServerMesh(transport::ITransport &transport) : _impl{std::make_unique<Impl>(transport)} {}
 
 ServerMesh::~ServerMesh() = default;
 
 core::Expected<void> ServerMesh::addNode(MeshNode node)
 {
-    for (const auto& n : _impl->nodes)
+    for (const auto &n : _impl->nodes)
     {
         if (n.nodeId == node.nodeId)
         {
@@ -46,7 +43,7 @@ core::Expected<void> ServerMesh::addNode(MeshNode node)
 core::Expected<void> ServerMesh::removeNode(core::u32 nodeId)
 {
     auto it = std::find_if(_impl->nodes.begin(), _impl->nodes.end(),
-                           [nodeId](const MeshNode& n) { return n.nodeId == nodeId; });
+                           [nodeId](const MeshNode &n) { return n.nodeId == nodeId; });
     if (it == _impl->nodes.end())
     {
         return core::makeError(core::ErrorCode::NotFound, "Node not found");
@@ -55,9 +52,7 @@ core::Expected<void> ServerMesh::removeNode(core::u32 nodeId)
     return {};
 }
 
-core::Expected<void> ServerMesh::migrateEntity(
-    core::u32 /*targetNodeId*/,
-    std::span<const core::byte> /*entityData*/)
+core::Expected<void> ServerMesh::migrateEntity(core::u32 /*targetNodeId*/, std::span<const core::byte> /*entityData*/)
 {
     /// @todo Serialize entity data and send to target node via transport.
     ///       Required for Server Meshing (multi-server worlds).
@@ -72,9 +67,6 @@ void ServerMesh::heartbeat()
     LPL_ASSERT(false && "unimplemented");
 }
 
-std::span<const MeshNode> ServerMesh::nodes() const noexcept
-{
-    return _impl->nodes;
-}
+std::span<const MeshNode> ServerMesh::nodes() const noexcept { return _impl->nodes; }
 
 } // namespace lpl::net

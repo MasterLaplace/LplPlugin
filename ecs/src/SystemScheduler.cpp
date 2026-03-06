@@ -8,8 +8,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/ecs/SystemScheduler.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/ecs/SystemScheduler.hpp>
 
 #include <algorithm>
 #include <functional>
@@ -24,26 +24,23 @@ namespace lpl::ecs {
 //  Impl                                                                      //
 // ========================================================================== //
 
-struct SystemScheduler::Impl
-{
-    concurrency::ThreadPool&                        pool;
-    std::vector<std::unique_ptr<ISystem>>           systems;
-    std::vector<std::vector<core::u32>>             waves;
-    bool                                            graphBuilt{false};
+struct SystemScheduler::Impl {
+    concurrency::ThreadPool &pool;
+    std::vector<std::unique_ptr<ISystem>> systems;
+    std::vector<std::vector<core::u32>> waves;
+    bool graphBuilt{false};
 
     // Phase boundary callbacks: indexed by SchedulePhase (fired after that phase)
     std::function<void()> phaseCallbacks[static_cast<core::u8>(SchedulePhase::Count)] = {};
 
-    explicit Impl(concurrency::ThreadPool& p) : pool{p} {}
+    explicit Impl(concurrency::ThreadPool &p) : pool{p} {}
 };
 
 // ========================================================================== //
 //  Public API                                                                //
 // ========================================================================== //
 
-SystemScheduler::SystemScheduler(concurrency::ThreadPool& pool)
-    : _impl{std::make_unique<Impl>(pool)}
-{}
+SystemScheduler::SystemScheduler(concurrency::ThreadPool &pool) : _impl{std::make_unique<Impl>(pool)} {}
 
 SystemScheduler::~SystemScheduler() = default;
 
@@ -67,11 +64,11 @@ core::Expected<void> SystemScheduler::buildGraph()
 
     for (core::u32 i = 0; i < n; ++i)
     {
-        const auto& descA = _impl->systems[i]->descriptor();
+        const auto &descA = _impl->systems[i]->descriptor();
 
         for (core::u32 j = i + 1; j < n; ++j)
         {
-            const auto& descB = _impl->systems[j]->descriptor();
+            const auto &descB = _impl->systems[j]->descriptor();
 
             if (descA.phase != descB.phase)
             {
@@ -89,18 +86,18 @@ core::Expected<void> SystemScheduler::buildGraph()
             }
 
             bool conflict = false;
-            for (const auto& a : descA.accesses)
+            for (const auto &a : descA.accesses)
             {
-                for (const auto& b : descB.accesses)
+                for (const auto &b : descB.accesses)
                 {
-                    if (a.id == b.id &&
-                        (a.mode == AccessMode::ReadWrite || b.mode == AccessMode::ReadWrite))
+                    if (a.id == b.id && (a.mode == AccessMode::ReadWrite || b.mode == AccessMode::ReadWrite))
                     {
                         conflict = true;
                         break;
                     }
                 }
-                if (conflict) break;
+                if (conflict)
+                    break;
             }
 
             if (conflict)
@@ -165,7 +162,7 @@ void SystemScheduler::tick(core::f32 dt)
     // Track which phase was last executed to detect phase transitions
     auto lastPhase = SchedulePhase::Count;
 
-    for (const auto& wave : _impl->waves)
+    for (const auto &wave : _impl->waves)
     {
         // Determine the phase of the first system in this wave.
         // All systems in a wave share the same phase (guaranteed by the DAG
@@ -214,16 +211,12 @@ void SystemScheduler::tick(core::f32 dt)
     }
 }
 
-void SystemScheduler::setPhaseCallback(SchedulePhase afterPhase,
-                                       std::function<void()> callback)
+void SystemScheduler::setPhaseCallback(SchedulePhase afterPhase, std::function<void()> callback)
 {
     const auto idx = static_cast<core::u8>(afterPhase);
     _impl->phaseCallbacks[idx] = std::move(callback);
 }
 
-core::u32 SystemScheduler::systemCount() const noexcept
-{
-    return static_cast<core::u32>(_impl->systems.size());
-}
+core::u32 SystemScheduler::systemCount() const noexcept { return static_cast<core::u32>(_impl->systems.size()); }
 
 } // namespace lpl::ecs

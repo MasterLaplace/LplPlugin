@@ -10,20 +10,16 @@
 
 namespace lpl::bci::source {
 
-SyntheticSource::SyntheticSource(
-    std::uint64_t seed, bool realtime, std::size_t channelCount, float sampleRate)
-    : _gen(seed, channelCount)
-    , _realtime(realtime)
-    , _sampleRate(sampleRate)
-    , _channelCount(channelCount)
+SyntheticSource::SyntheticSource(std::uint64_t seed, bool realtime, std::size_t channelCount, float sampleRate)
+    : _gen(seed, channelCount), _realtime(realtime), _sampleRate(sampleRate), _channelCount(channelCount)
 {
 }
 
 ExpectedVoid SyntheticSource::start()
 {
-    if (_running) {
-        return std::unexpected(
-            Error::make(ErrorCode::kAlreadyRunning, "SyntheticSource already running"));
+    if (_running)
+    {
+        return std::unexpected(Error::make(ErrorCode::kAlreadyRunning, "SyntheticSource already running"));
     }
 
     _running = true;
@@ -34,57 +30,49 @@ ExpectedVoid SyntheticSource::start()
 
 Expected<std::size_t> SyntheticSource::read(std::span<Sample> buffer)
 {
-    if (!_running) {
-        return std::unexpected(
-            Error::make(ErrorCode::kNotInitialized, "SyntheticSource not started"));
+    if (!_running)
+    {
+        return std::unexpected(Error::make(ErrorCode::kNotInitialized, "SyntheticSource not started"));
     }
 
-    if (buffer.empty()) {
+    if (buffer.empty())
+    {
         return std::size_t{0};
     }
 
     std::size_t samplesToGenerate;
-    if (_realtime) {
+    if (_realtime)
+    {
         auto now = std::chrono::steady_clock::now();
-        const float elapsed =
-            std::chrono::duration<float>(now - _lastRead).count();
+        const float elapsed = std::chrono::duration<float>(now - _lastRead).count();
         _lastRead = now;
 
-        samplesToGenerate = std::max(
-            std::size_t{1},
-            static_cast<std::size_t>(elapsed * _sampleRate));
+        samplesToGenerate = std::max(std::size_t{1}, static_cast<std::size_t>(elapsed * _sampleRate));
         samplesToGenerate = std::min(samplesToGenerate, kMaxSamplesPerUpdate);
-    } else {
+    }
+    else
+    {
         samplesToGenerate = kFftUpdateInterval;
     }
 
     samplesToGenerate = std::min(samplesToGenerate, buffer.size());
 
     auto generated = _gen.generate(samplesToGenerate);
-    for (std::size_t i = 0; i < samplesToGenerate; ++i) {
+    for (std::size_t i = 0; i < samplesToGenerate; ++i)
+    {
         buffer[i] = std::move(generated[i]);
     }
 
     return samplesToGenerate;
 }
 
-void SyntheticSource::stop() noexcept
-{
-    _running = false;
-}
+void SyntheticSource::stop() noexcept { _running = false; }
 
 SourceInfo SyntheticSource::info() const noexcept
 {
-    return SourceInfo{
-        .name = "Synthetic EEG",
-        .channelCount = _channelCount,
-        .sampleRate = _sampleRate
-    };
+    return SourceInfo{.name = "Synthetic EEG", .channelCount = _channelCount, .sampleRate = _sampleRate};
 }
 
-SyntheticGenerator &SyntheticSource::generator() noexcept
-{
-    return _gen;
-}
+SyntheticGenerator &SyntheticSource::generator() noexcept { return _gen; }
 
 } // namespace lpl::bci::source

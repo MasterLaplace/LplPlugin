@@ -22,9 +22,8 @@ namespace lpl::concurrency {
 
 JobSystem::JobSystem(core::u32 workerCount)
 {
-    const core::u32 count = (workerCount == 0)
-        ? static_cast<core::u32>(std::thread::hardware_concurrency())
-        : workerCount;
+    const core::u32 count =
+        (workerCount == 0) ? static_cast<core::u32>(std::thread::hardware_concurrency()) : workerCount;
 
     LPL_ASSERT(count > 0);
 
@@ -45,7 +44,7 @@ JobSystem::~JobSystem()
 {
     _stopping.store(true, std::memory_order_release);
 
-    for (auto& w : _workers)
+    for (auto &w : _workers)
     {
         if (w.joinable())
         {
@@ -58,11 +57,11 @@ JobSystem::~JobSystem()
 //  Public API                                                                //
 // -------------------------------------------------------------------------- //
 
-void JobSystem::kickJob(std::function<void()> job, JobHandle& handle)
+void JobSystem::kickJob(std::function<void()> job, JobHandle &handle)
 {
     handle.counter.fetch_add(1, std::memory_order_acq_rel);
 
-    Job* newJob = new Job{std::move(job), &handle};
+    Job *newJob = new Job{std::move(job), &handle};
 
     // Push to shared submission queue (thread-safe from any thread).
     // Workers drain this queue into their local deques.
@@ -72,7 +71,7 @@ void JobSystem::kickJob(std::function<void()> job, JobHandle& handle)
     }
 }
 
-void JobSystem::waitForCounter(const JobHandle& handle, core::i32 targetValue) const
+void JobSystem::waitForCounter(const JobHandle &handle, core::i32 targetValue) const
 {
     while (handle.counter.load(std::memory_order_acquire) != targetValue)
     {
@@ -80,10 +79,7 @@ void JobSystem::waitForCounter(const JobHandle& handle, core::i32 targetValue) c
     }
 }
 
-core::u32 JobSystem::workerCount() const noexcept
-{
-    return static_cast<core::u32>(_workers.size());
-}
+core::u32 JobSystem::workerCount() const noexcept { return static_cast<core::u32>(_workers.size()); }
 
 // -------------------------------------------------------------------------- //
 //  Private                                                                   //
@@ -91,7 +87,7 @@ core::u32 JobSystem::workerCount() const noexcept
 
 void JobSystem::workerLoop(core::u32 workerIndex)
 {
-    auto& data = *_workerData[workerIndex];
+    auto &data = *_workerData[workerIndex];
 
     while (!_stopping.load(std::memory_order_acquire))
     {
@@ -105,7 +101,7 @@ void JobSystem::workerLoop(core::u32 workerIndex)
             }
         }
 
-        Job* job = data.localQueue.pop();
+        Job *job = data.localQueue.pop();
 
         if (!job)
         {
@@ -125,7 +121,7 @@ void JobSystem::workerLoop(core::u32 workerIndex)
     }
 }
 
-bool JobSystem::trySteal(core::u32 thiefIndex, JobSystem::Job*& outJob)
+bool JobSystem::trySteal(core::u32 thiefIndex, JobSystem::Job *&outJob)
 {
     const auto workerCount = static_cast<core::u32>(_workerData.size());
 
@@ -133,7 +129,7 @@ bool JobSystem::trySteal(core::u32 thiefIndex, JobSystem::Job*& outJob)
     for (core::u32 offset = 1; offset < workerCount; ++offset)
     {
         const core::u32 victimIndex = (thiefIndex + offset) % workerCount;
-        auto& victim = *_workerData[victimIndex];
+        auto &victim = *_workerData[victimIndex];
 
         outJob = victim.localQueue.steal();
         if (outJob)

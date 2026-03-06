@@ -11,31 +11,28 @@
 
 namespace lpl::bci::source {
 
-BrainFlowSource::BrainFlowSource(BrainFlowConfig config)
-    : _config(std::move(config))
-{
-}
+BrainFlowSource::BrainFlowSource(BrainFlowConfig config) : _config(std::move(config)) {}
 
-BrainFlowSource::~BrainFlowSource()
-{
-    stop();
-}
+BrainFlowSource::~BrainFlowSource() { stop(); }
 
 #ifdef LPL_HAS_BRAINFLOW
 
 ExpectedVoid BrainFlowSource::start()
 {
-    if (_running) {
-        return std::unexpected(
-            Error::make(ErrorCode::kAlreadyRunning, "BrainFlowSource already running"));
+    if (_running)
+    {
+        return std::unexpected(Error::make(ErrorCode::kAlreadyRunning, "BrainFlowSource already running"));
     }
 
-    try {
+    try
+    {
         BrainFlowInputParams params;
-        if (!_config.serialPort.empty()) {
+        if (!_config.serialPort.empty())
+        {
             params.serial_port = _config.serialPort;
         }
-        if (!_config.serialNumber.empty()) {
+        if (!_config.serialNumber.empty())
+        {
             params.serial_number = _config.serialNumber;
         }
 
@@ -47,69 +44,76 @@ ExpectedVoid BrainFlowSource::start()
         _running = true;
 
         return {};
-    } catch (const BrainFlowException &e) {
-        return std::unexpected(
-            Error::make(ErrorCode::kBrainFlowInitFailed,
-                std::string(e.what()) + " (code: " + std::to_string(e.exit_code) + ")"));
+    }
+    catch (const BrainFlowException &e)
+    {
+        return std::unexpected(Error::make(ErrorCode::kBrainFlowInitFailed,
+                                           std::string(e.what()) + " (code: " + std::to_string(e.exit_code) + ")"));
     }
 }
 
 Expected<std::size_t> BrainFlowSource::read(std::span<Sample> buffer)
 {
-    if (!_running || !_board) {
-        return std::unexpected(
-            Error::make(ErrorCode::kNotInitialized, "BrainFlowSource not started"));
+    if (!_running || !_board)
+    {
+        return std::unexpected(Error::make(ErrorCode::kNotInitialized, "BrainFlowSource not started"));
     }
 
-    try {
+    try
+    {
         BrainFlowArray<double, 2> data = _board->get_board_data();
         const auto numSamples = static_cast<std::size_t>(data.get_size(1));
 
-        if (numSamples == 0) {
+        if (numSamples == 0)
+        {
             return std::size_t{0};
         }
 
-        const std::size_t chCount = std::min(
-            _eegChannels.size(), static_cast<std::size_t>(kDefaultChannelCount));
+        const std::size_t chCount = std::min(_eegChannels.size(), static_cast<std::size_t>(kDefaultChannelCount));
         const std::size_t count = std::min(numSamples, buffer.size());
 
-        for (std::size_t s = 0; s < count; ++s) {
+        for (std::size_t s = 0; s < count; ++s)
+        {
             buffer[s].channels.resize(chCount);
-            for (std::size_t ch = 0; ch < chCount; ++ch) {
-                buffer[s].channels[ch] =
-                    static_cast<float>(data.at(_eegChannels[ch], static_cast<int>(s)));
+            for (std::size_t ch = 0; ch < chCount; ++ch)
+            {
+                buffer[s].channels[ch] = static_cast<float>(data.at(_eegChannels[ch], static_cast<int>(s)));
             }
             buffer[s].timestamp = static_cast<double>(s) / static_cast<double>(_sampleRate);
         }
 
         return count;
-    } catch (const BrainFlowException &e) {
-        return std::unexpected(
-            Error::make(ErrorCode::kBrainFlowStreamFailed, e.what()));
+    }
+    catch (const BrainFlowException &e)
+    {
+        return std::unexpected(Error::make(ErrorCode::kBrainFlowStreamFailed, e.what()));
     }
 }
 
 void BrainFlowSource::stop() noexcept
 {
-    if (!_running || !_board) {
+    if (!_running || !_board)
+    {
         return;
     }
 
-    try {
+    try
+    {
         _board->stop_stream();
         _board->release_session();
-    } catch (...) { }
+    }
+    catch (...)
+    {
+    }
 
     _running = false;
 }
 
 SourceInfo BrainFlowSource::info() const noexcept
 {
-    return SourceInfo{
-        .name = "BrainFlow (board " + std::to_string(_config.boardId) + ")",
-        .channelCount = _eegChannels.size(),
-        .sampleRate = static_cast<float>(_sampleRate)
-    };
+    return SourceInfo{.name = "BrainFlow (board " + std::to_string(_config.boardId) + ")",
+                      .channelCount = _eegChannels.size(),
+                      .sampleRate = static_cast<float>(_sampleRate)};
 }
 
 #else // !LPL_HAS_BRAINFLOW
@@ -117,17 +121,15 @@ SourceInfo BrainFlowSource::info() const noexcept
 ExpectedVoid BrainFlowSource::start()
 {
     return std::unexpected(
-        Error::make(ErrorCode::kBrainFlowInitFailed,
-            "BrainFlow support not compiled (LPL_HAS_BRAINFLOW not defined)"));
+        Error::make(ErrorCode::kBrainFlowInitFailed, "BrainFlow support not compiled (LPL_HAS_BRAINFLOW not defined)"));
 }
 
 Expected<std::size_t> BrainFlowSource::read(std::span<Sample>)
 {
-    return std::unexpected(
-        Error::make(ErrorCode::kNotInitialized, "BrainFlow not available"));
+    return std::unexpected(Error::make(ErrorCode::kNotInitialized, "BrainFlow not available"));
 }
 
-void BrainFlowSource::stop() noexcept { }
+void BrainFlowSource::stop() noexcept {}
 
 SourceInfo BrainFlowSource::info() const noexcept
 {

@@ -16,9 +16,9 @@
  * @copyright MIT License
  */
 
-#include <lpl/net/netcode/RollbackStrategy.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/net/netcode/RollbackStrategy.hpp>
 
 #include <vector>
 
@@ -28,57 +28,45 @@ namespace lpl::net::netcode {
 //  Impl                                                                       //
 // ========================================================================== //
 
-struct RollbackStrategy::Impl
-{
-    core::u32  maxRollbackFrames;
-    core::u32  currentFrame{0};
+struct RollbackStrategy::Impl {
+    core::u32 maxRollbackFrames;
+    core::u32 currentFrame{0};
 
     /** @brief Ring buffer of serialised state snapshots. Index = frame % max. */
     std::vector<std::vector<core::byte>> stateHistory;
 
     /** @brief Latest authoritative state received from server. */
     std::vector<core::byte> latestServerState;
-    core::u32               latestServerSequence{0};
+    core::u32 latestServerSequence{0};
 
     /** @brief Frame at which rollback should start (0 = no rollback). */
-    core::u32               rollbackTargetFrame{0};
-    bool                    rollbackPending{false};
+    core::u32 rollbackTargetFrame{0};
+    bool rollbackPending{false};
 
-    explicit Impl(core::u32 maxFrames)
-        : maxRollbackFrames{maxFrames}
-    {
-        stateHistory.resize(maxFrames);
-    }
+    explicit Impl(core::u32 maxFrames) : maxRollbackFrames{maxFrames} { stateHistory.resize(maxFrames); }
 
     void saveState(core::u32 frame, std::span<const core::byte> data)
     {
-        auto& slot = stateHistory[frame % maxRollbackFrames];
+        auto &slot = stateHistory[frame % maxRollbackFrames];
         slot.assign(data.begin(), data.end());
     }
 
-    const std::vector<core::byte>& getState(core::u32 frame) const
-    {
-        return stateHistory[frame % maxRollbackFrames];
-    }
+    const std::vector<core::byte> &getState(core::u32 frame) const { return stateHistory[frame % maxRollbackFrames]; }
 };
 
 // ========================================================================== //
 //  Public                                                                     //
 // ========================================================================== //
 
-RollbackStrategy::RollbackStrategy(core::u32 maxRollbackFrames)
-    : _impl{std::make_unique<Impl>(maxRollbackFrames)}
-{}
+RollbackStrategy::RollbackStrategy(core::u32 maxRollbackFrames) : _impl{std::make_unique<Impl>(maxRollbackFrames)} {}
 
 RollbackStrategy::~RollbackStrategy() = default;
 
-core::Expected<void> RollbackStrategy::onInputReceived(
-    core::u32 playerId,
-    std::span<const core::byte> inputData,
-    core::u32 sequence)
+core::Expected<void> RollbackStrategy::onInputReceived(core::u32 playerId, std::span<const core::byte> inputData,
+                                                       core::u32 sequence)
 {
-    (void)playerId;
-    (void)inputData;
+    (void) playerId;
+    (void) inputData;
 
     // If the input is for a past frame within the rollback window, flag rollback
     if (sequence < _impl->currentFrame)
@@ -91,8 +79,7 @@ core::Expected<void> RollbackStrategy::onInputReceived(
             {
                 _impl->rollbackTargetFrame = sequence;
                 _impl->rollbackPending = true;
-                core::Log::debug("RollbackStrategy",
-                    "late input detected, rollback flagged");
+                core::Log::debug("RollbackStrategy", "late input detected, rollback flagged");
             }
         }
     }
@@ -100,9 +87,7 @@ core::Expected<void> RollbackStrategy::onInputReceived(
     return {};
 }
 
-core::Expected<void> RollbackStrategy::onStateReceived(
-    std::span<const core::byte> snapshotData,
-    core::u32 sequence)
+core::Expected<void> RollbackStrategy::onStateReceived(std::span<const core::byte> snapshotData, core::u32 sequence)
 {
     // Store the authoritative state for reconciliation
     _impl->latestServerState.assign(snapshotData.begin(), snapshotData.end());
@@ -118,8 +103,7 @@ core::Expected<void> RollbackStrategy::onStateReceived(
             {
                 _impl->rollbackTargetFrame = sequence;
                 _impl->rollbackPending = true;
-                core::Log::debug("RollbackStrategy",
-                    "server correction received, rollback flagged");
+                core::Log::debug("RollbackStrategy", "server correction received, rollback flagged");
             }
         }
     }
@@ -129,7 +113,7 @@ core::Expected<void> RollbackStrategy::onStateReceived(
 
 void RollbackStrategy::tick(core::f32 dt)
 {
-    (void)dt;
+    (void) dt;
 
     // If rollback is pending, external code should:
     // 1. Read rollbackTargetFrame
@@ -150,10 +134,6 @@ void RollbackStrategy::tick(core::f32 dt)
     _impl->currentFrame++;
 }
 
-const char* RollbackStrategy::name() const noexcept
-{
-    return "RollbackStrategy";
-}
+const char *RollbackStrategy::name() const noexcept { return "RollbackStrategy"; }
 
 } // namespace lpl::net::netcode
-

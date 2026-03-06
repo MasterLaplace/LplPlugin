@@ -1,9 +1,9 @@
-#include <lpl/render/VulkanRenderer.hpp>
-#include <lpl/render/Mesh.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/render/Mesh.hpp>
+#include <lpl/render/VulkanRenderer.hpp>
 
-#include "wrapper/Wrapper.hpp"
 #include "vk/wrapper/Wrapper.hpp"
+#include "wrapper/Wrapper.hpp"
 
 namespace lpl::render::vk {
 
@@ -14,7 +14,7 @@ namespace lpl::render::vk {
 // ---------------------------------------------------------------------------
 static ::lpl::render::Mesh makeCube()
 {
-    using V  = ::lpl::render::Vertex;
+    using V = ::lpl::render::Vertex;
     using u3 = ::lpl::core::u32;
 
     // clang-format off
@@ -59,7 +59,7 @@ static ::lpl::render::Mesh makeCube()
     for (u3 face = 0; face < 6; ++face)
     {
         u3 b = face * 4;
-        idx.insert(idx.end(), {b, b+1, b+2,  b, b+2, b+3});
+        idx.insert(idx.end(), {b, b + 1, b + 2, b, b + 2, b + 3});
     }
 
     ::lpl::render::Mesh mesh;
@@ -70,10 +70,7 @@ static ::lpl::render::Mesh makeCube()
 
 VulkanRenderer::VulkanRenderer() = default;
 
-VulkanRenderer::~VulkanRenderer()
-{
-    shutdown();
-}
+VulkanRenderer::~VulkanRenderer() { shutdown(); }
 
 core::Expected<void> VulkanRenderer::init(core::u32 /*width*/, core::u32 /*height*/)
 {
@@ -105,7 +102,7 @@ void VulkanRenderer::resize(core::u32 /*width*/, core::u32 /*height*/)
     // but we might need explicit bounds setting here.
 }
 
-void VulkanRenderer::initVulkanContext(GLFWwindow* window)
+void VulkanRenderer::initVulkanContext(GLFWwindow *window)
 {
     _wrapper->CreateInstance(window, "LplPlugin Client", 800, 600);
 
@@ -116,7 +113,7 @@ void VulkanRenderer::initVulkanContext(GLFWwindow* window)
 #ifdef LPL_SHADER_DIR
         std::string{LPL_SHADER_DIR};
 #else
-        std::string{"shaders/"};        // fallback: CWD-relative
+        std::string{"shaders/"}; // fallback: CWD-relative
 #endif
     _wrapper->AddShader(shaderDir + "vert.spv", "main", Wrapper::ShaderType::VERTEX);
     _wrapper->AddShader(shaderDir + "frag.spv", "main", Wrapper::ShaderType::FRAGMENT);
@@ -152,9 +149,6 @@ void VulkanRenderer::shutdown()
     _wrapper.reset();
 }
 
-Wrapper& VulkanRenderer::getWrapper() noexcept
-{
-    return *_wrapper;
-}
+Wrapper &VulkanRenderer::getWrapper() noexcept { return *_wrapper; }
 
 } // namespace lpl::render::vk

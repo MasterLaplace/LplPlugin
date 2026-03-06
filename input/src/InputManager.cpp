@@ -12,8 +12,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/input/InputManager.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/input/InputManager.hpp>
 
 #include <cmath>
 #include <unordered_map>
@@ -24,11 +24,10 @@ namespace lpl::input {
 //  Impl                                                                      //
 // ========================================================================== //
 
-struct InputManager::Impl
-{
+struct InputManager::Impl {
     std::vector<std::unique_ptr<IInputSource>> sources;
-    InputState                                 state{};
-    NeuralInputState                           neuralState{};
+    InputState state{};
+    NeuralInputState neuralState{};
     std::unordered_map<core::u32, PerEntityInput> entityStates;
 };
 
@@ -36,20 +35,15 @@ struct InputManager::Impl
 //  Source management                                                         //
 // ========================================================================== //
 
-InputManager::InputManager()
-    : _impl{std::make_unique<Impl>()}
-{}
+InputManager::InputManager() : _impl{std::make_unique<Impl>()} {}
 
 InputManager::~InputManager() = default;
 
-void InputManager::addSource(std::unique_ptr<IInputSource> source)
-{
-    _impl->sources.push_back(std::move(source));
-}
+void InputManager::addSource(std::unique_ptr<IInputSource> source) { _impl->sources.push_back(std::move(source)); }
 
 core::Expected<void> InputManager::init()
 {
-    for (auto& source : _impl->sources)
+    for (auto &source : _impl->sources)
     {
         auto result = source->init();
         if (!result.has_value())
@@ -62,7 +56,7 @@ core::Expected<void> InputManager::init()
 
 core::Expected<void> InputManager::poll()
 {
-    for (auto& source : _impl->sources)
+    for (auto &source : _impl->sources)
     {
         auto result = source->poll();
         if (!result.has_value())
@@ -76,7 +70,7 @@ core::Expected<void> InputManager::poll()
 
 void InputManager::shutdown()
 {
-    for (auto& source : _impl->sources)
+    for (auto &source : _impl->sources)
     {
         source->shutdown();
     }
@@ -102,10 +96,9 @@ void InputManager::setAxis(core::u32 entityId, core::u8 axisId, float value)
     getOrCreate(entityId).setAxis(axisId, value);
 }
 
-void InputManager::setNeural(core::u32 entityId, float alpha, float beta,
-                              float concentration, bool blink)
+void InputManager::setNeural(core::u32 entityId, float alpha, float beta, float concentration, bool blink)
 {
-    auto& state = getOrCreate(entityId);
+    auto &state = getOrCreate(entityId);
 
     // Rising-edge blink detection: only trigger if previous was false, current is true
     // This is idempotent — repeated calls with blink=true won't re-trigger
@@ -136,25 +129,15 @@ PerEntityInput *InputManager::getStateMut(core::u32 entityId)
     return it != _impl->entityStates.end() ? &it->second : nullptr;
 }
 
-PerEntityInput &InputManager::getOrCreate(core::u32 entityId)
-{
-    return _impl->entityStates[entityId];
-}
+PerEntityInput &InputManager::getOrCreate(core::u32 entityId) { return _impl->entityStates[entityId]; }
 
-void InputManager::removeEntity(core::u32 entityId)
-{
-    _impl->entityStates.erase(entityId);
-}
+void InputManager::removeEntity(core::u32 entityId) { _impl->entityStates.erase(entityId); }
 
-bool InputManager::hasEntity(core::u32 entityId) const
-{
-    return _impl->entityStates.contains(entityId);
-}
+bool InputManager::hasEntity(core::u32 entityId) const { return _impl->entityStates.contains(entityId); }
 
-void InputManager::updateGroundedState(core::u32 entityId, float currentVelY,
-                                        float threshold)
+void InputManager::updateGroundedState(core::u32 entityId, float currentVelY, float threshold)
 {
-    auto* state = getStateMut(entityId);
+    auto *state = getStateMut(entityId);
     if (!state)
     {
         return;
@@ -162,12 +145,9 @@ void InputManager::updateGroundedState(core::u32 entityId, float currentVelY,
     state->isGrounded = std::fabs(currentVelY) < threshold;
 }
 
-math::Vec3<float> InputManager::computeMovementVelocity(
-    core::u32 entityId,
-    math::Vec3<float> currentVel,
-    float speed)
+math::Vec3<float> InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<float> currentVel, float speed)
 {
-    auto* state = getStateMut(entityId);
+    auto *state = getStateMut(entityId);
     if (!state)
     {
         return currentVel;
@@ -177,10 +157,14 @@ math::Vec3<float> InputManager::computeMovementVelocity(
     float dx = 0.0f;
     float dz = 0.0f;
 
-    if (state->getKey(KEY_W)) dz -= 1.0f;
-    if (state->getKey(KEY_S)) dz += 1.0f;
-    if (state->getKey(KEY_A)) dx -= 1.0f;
-    if (state->getKey(KEY_D)) dx += 1.0f;
+    if (state->getKey(KEY_W))
+        dz -= 1.0f;
+    if (state->getKey(KEY_S))
+        dz += 1.0f;
+    if (state->getKey(KEY_A))
+        dx -= 1.0f;
+    if (state->getKey(KEY_D))
+        dx += 1.0f;
 
     // Neural speed modulation: concentration [0..1] → scale [0.70x..1.30x]
     float neuralScale = 1.0f;
@@ -213,14 +197,8 @@ math::Vec3<float> InputManager::computeMovementVelocity(
 //  Global state                                                              //
 // ========================================================================== //
 
-const InputState& InputManager::currentState() const noexcept
-{
-    return _impl->state;
-}
+const InputState &InputManager::currentState() const noexcept { return _impl->state; }
 
-const NeuralInputState& InputManager::currentNeuralState() const noexcept
-{
-    return _impl->neuralState;
-}
+const NeuralInputState &InputManager::currentNeuralState() const noexcept { return _impl->neuralState; }
 
 } // namespace lpl::input

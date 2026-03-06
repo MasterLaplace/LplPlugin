@@ -8,29 +8,29 @@
  * @copyright MIT License
  */
 
-#include <lpl/core/Types.hpp>
-#include <lpl/core/Log.hpp>
+#include <lpl/concurrency/ThreadPool.hpp>
+#include <lpl/container/FlatAtomicHashMap.hpp>
+#include <lpl/container/RingBuffer.hpp>
+#include <lpl/container/SparseSet.hpp>
 #include <lpl/core/Constants.hpp>
+#include <lpl/core/Log.hpp>
+#include <lpl/core/Types.hpp>
+#include <lpl/ecs/Archetype.hpp>
+#include <lpl/ecs/Registry.hpp>
+#include <lpl/ecs/WorldPartition.hpp>
+#include <lpl/math/Cordic.hpp>
+#include <lpl/math/FixedPoint.hpp>
+#include <lpl/math/Morton.hpp>
+#include <lpl/math/Vec3.hpp>
 #include <lpl/memory/ArenaAllocator.hpp>
 #include <lpl/memory/PoolAllocator.hpp>
-#include <lpl/container/RingBuffer.hpp>
-#include <lpl/container/FlatAtomicHashMap.hpp>
-#include <lpl/container/SparseSet.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/math/Morton.hpp>
-#include <lpl/math/Cordic.hpp>
-#include <lpl/ecs/Registry.hpp>
-#include <lpl/ecs/Archetype.hpp>
 #include <lpl/physics/CollisionDetector.hpp>
-#include <lpl/ecs/WorldPartition.hpp>
-#include <lpl/concurrency/ThreadPool.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <vector>
-#include <atomic>
 #include <future>
+#include <vector>
 
 using namespace lpl;
 
@@ -41,8 +41,7 @@ namespace {
 // ---------------------------------------------------------------------------
 
 /// Returns elapsed milliseconds for a single timed run of @p fn.
-template <typename Fn>
-core::f64 benchmarkMs(const char* label, Fn&& fn)
+template <typename Fn> core::f64 benchmarkMs(const char *label, Fn &&fn)
 {
     const auto start = std::chrono::steady_clock::now();
     fn();
@@ -53,22 +52,23 @@ core::f64 benchmarkMs(const char* label, Fn&& fn)
 }
 
 /// Converts a per-frame elapsed time to a human-readable frame-rate verdict.
-static const char* frameRateVerdict(core::f64 msPerFrame)
+static const char *frameRateVerdict(core::f64 msPerFrame)
 {
     const core::f64 fps = 1000.0 / (msPerFrame > 0.0 ? msPerFrame : 1.0);
-    if (fps >= 60.0) return "REAL-TIME  (>=60 fps)";
-    if (fps >= 30.0) return "PLAYABLE   (>=30 fps)";
+    if (fps >= 60.0)
+        return "REAL-TIME  (>=60 fps)";
+    if (fps >= 30.0)
+        return "PLAYABLE   (>=30 fps)";
     return "TOO SLOW   (<30 fps) ";
 }
 
 void benchmarkArena()
 {
     memory::ArenaAllocator arena{4 * 1024 * 1024};
-    benchmarkMs("ArenaAllocator 10k allocs", [&]()
-    {
+    benchmarkMs("ArenaAllocator 10k allocs", [&]() {
         for (int i = 0; i < 10000; ++i)
         {
-            [[maybe_unused]] auto* p = arena.allocate(128, 16);
+            [[maybe_unused]] auto *p = arena.allocate(128, 16);
         }
         arena.reset();
     });
@@ -76,8 +76,7 @@ void benchmarkArena()
 
 void benchmarkFixedMath()
 {
-    benchmarkMs("Fixed32 mul 1M ops", []()
-    {
+    benchmarkMs("Fixed32 mul 1M ops", []() {
         math::Fixed32 a = math::Fixed32::fromFloat(3.14159f);
         math::Fixed32 b = math::Fixed32::fromFloat(2.71828f);
         math::Fixed32 r{0};
@@ -92,26 +91,21 @@ void benchmarkFixedMath()
 
 void benchmarkMorton()
 {
-    benchmarkMs("Morton encode3D 1M", []()
-    {
+    benchmarkMs("Morton encode3D 1M", []() {
         for (core::u32 i = 0; i < 1000000; ++i)
         {
             [[maybe_unused]] auto code = math::morton::encode3D(
-                static_cast<core::i32>(i),
-                static_cast<core::i32>(i + 1),
-                static_cast<core::i32>(i + 2));
+                static_cast<core::i32>(i), static_cast<core::i32>(i + 1), static_cast<core::i32>(i + 2));
         }
     });
 }
 
 void benchmarkCordic()
 {
-    benchmarkMs("CORDIC sin 1M", []()
-    {
+    benchmarkMs("CORDIC sin 1M", []() {
         for (int i = 0; i < 1000000; ++i)
         {
-            [[maybe_unused]] auto s = math::Cordic::sin(
-                math::Fixed32{static_cast<core::i32>(i % 65536)});
+            [[maybe_unused]] auto s = math::Cordic::sin(math::Fixed32{static_cast<core::i32>(i % 65536)});
         }
     });
 }
@@ -122,17 +116,18 @@ void benchmarkRegistry()
     ecs::Archetype arch;
     arch.add(ecs::ComponentId::Position);
 
-    benchmarkMs("Registry create/destroy 10k entities", [&]()
-    {
+    benchmarkMs("Registry create/destroy 10k entities", [&]() {
         for (int i = 0; i < 10000; ++i)
         {
             auto e = reg.createEntity(arch);
-            if (e) { [[maybe_unused]] auto r = reg.destroyEntity(e.value()); }
+            if (e)
+            {
+                [[maybe_unused]] auto r = reg.destroyEntity(e.value());
+            }
         }
     });
 
-    benchmarkMs("Registry create batch 100k entities", [&]()
-    {
+    benchmarkMs("Registry create batch 100k entities", [&]() {
         for (int i = 0; i < 100000; ++i)
         {
             [[maybe_unused]] auto e = reg.createEntity(arch);
@@ -154,10 +149,7 @@ void benchmarkPhysics()
         [[maybe_unused]] auto e = reg.createEntity(arch);
     }
 
-    benchmarkMs("Physics tick (10k entities, broadphase)", [&]()
-    {
-        world.step(0.0166f);
-    });
+    benchmarkMs("Physics tick (10k entities, broadphase)", [&]() { world.step(0.0166f); });
 }
 
 void benchmarkPhysicsScalability()
@@ -185,14 +177,10 @@ void benchmarkPhysicsScalability()
         char label[64];
         std::snprintf(label, sizeof(label), "Physics step (%uk entities)", count / 1000);
 
-        const core::f64 ms = benchmarkMs(label, [&]()
-        {
-            world.step(0.0166f);
-        });
+        const core::f64 ms = benchmarkMs(label, [&]() { world.step(0.0166f); });
 
         const core::f64 entPerSec = static_cast<core::f64>(count) / (ms / 1000.0);
-        std::printf("    -> Throughput: %.0f ent/sec  [%s]\n",
-                    entPerSec, frameRateVerdict(ms));
+        std::printf("    -> Throughput: %.0f ent/sec  [%s]\n", entPerSec, frameRateVerdict(ms));
     }
 }
 
@@ -219,8 +207,7 @@ void benchmarkWorldPartition()
     std::vector<ecs::EntityId> entityIds;
     entityIds.reserve(kEntityCount);
 
-    benchmarkMs("WorldPartition create 10k entities", [&]()
-    {
+    benchmarkMs("WorldPartition create 10k entities", [&]() {
         for (int i = 0; i < kEntityCount; ++i)
         {
             auto entityResult = reg.createEntity(arch);
@@ -234,11 +221,8 @@ void benchmarkWorldPartition()
             float py = nextRand() * 100.0f;
             float pz = (nextRand() - 0.5f) * 10000.0f;
 
-            auto fixedPos = math::Vec3<math::Fixed32>{
-                math::Fixed32::fromFloat(px),
-                math::Fixed32::fromFloat(py),
-                math::Fixed32::fromFloat(pz)
-            };
+            auto fixedPos = math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(px), math::Fixed32::fromFloat(py),
+                                                      math::Fixed32::fromFloat(pz)};
             [[maybe_unused]] auto r = world.insertOrUpdate(entityId, fixedPos);
         }
     });
@@ -247,8 +231,7 @@ void benchmarkWorldPartition()
     for (int i = 0; i < 5; ++i)
         world.step(0.016f);
 
-    benchmarkMs("WorldPartition step 100 frames (10k ents)", [&]()
-    {
+    benchmarkMs("WorldPartition step 100 frames (10k ents)", [&]() {
         for (int i = 0; i < 100; ++i)
             world.step(0.016f);
     });
@@ -258,8 +241,7 @@ void benchmarkFlatAtomicHashMap()
 {
     static constexpr core::u32 kPoolCap = 16384;
 
-    benchmarkMs("FlatAtomicHashMap insert 16k", []()
-    {
+    benchmarkMs("FlatAtomicHashMap insert 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
@@ -267,8 +249,7 @@ void benchmarkFlatAtomicHashMap()
         }
     });
 
-    benchmarkMs("FlatAtomicHashMap get 16k", []()
-    {
+    benchmarkMs("FlatAtomicHashMap get 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
@@ -276,41 +257,37 @@ void benchmarkFlatAtomicHashMap()
         }
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
-            [[maybe_unused]] auto* v = map.get(static_cast<core::u64>(i + 1));
+            [[maybe_unused]] auto *v = map.get(static_cast<core::u64>(i + 1));
         }
     });
 
-    benchmarkMs("FlatAtomicHashMap forEach 16k", []()
-    {
+    benchmarkMs("FlatAtomicHashMap forEach 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
-            auto* v = map.insert(static_cast<core::u64>(i + 1));
+            auto *v = map.insert(static_cast<core::u64>(i + 1));
             if (v)
                 *v = static_cast<int>(i);
         }
         core::u64 sum = 0;
-        map.forEach([&sum](int& val) { sum += static_cast<core::u64>(val); });
+        map.forEach([&sum](int &val) { sum += static_cast<core::u64>(val); });
     });
 
-    benchmarkMs("FlatAtomicHashMap forEachParallel 16k", []()
-    {
+    benchmarkMs("FlatAtomicHashMap forEachParallel 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
-            auto* v = map.insert(static_cast<core::u64>(i + 1));
+            auto *v = map.insert(static_cast<core::u64>(i + 1));
             if (v)
                 *v = static_cast<int>(i);
         }
         concurrency::ThreadPool pool{4};
         std::atomic<core::u64> sum{0};
-        map.forEachParallel(pool, [&sum](int& val) {
-            sum.fetch_add(static_cast<core::u64>(val), std::memory_order_relaxed);
-        });
+        map.forEachParallel(
+            pool, [&sum](int &val) { sum.fetch_add(static_cast<core::u64>(val), std::memory_order_relaxed); });
     });
 
-    benchmarkMs("FlatAtomicHashMap insert/remove churn 16k", []()
-    {
+    benchmarkMs("FlatAtomicHashMap insert/remove churn 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         // Insert all
         for (core::u32 i = 0; i < kPoolCap; ++i)
@@ -328,18 +305,15 @@ void benchmarkThreadPool()
 {
     concurrency::ThreadPool pool{4};
 
-    benchmarkMs("ThreadPool dispatch 10k tasks", [&]()
-    {
+    benchmarkMs("ThreadPool dispatch 10k tasks", [&]() {
         std::atomic<core::u64> counter{0};
         std::vector<std::future<void>> futures;
         futures.reserve(10000);
         for (int i = 0; i < 10000; ++i)
         {
-            futures.push_back(pool.enqueue([&counter]() {
-                counter.fetch_add(1, std::memory_order_relaxed);
-            }));
+            futures.push_back(pool.enqueue([&counter]() { counter.fetch_add(1, std::memory_order_relaxed); }));
         }
-        for (auto& f : futures)
+        for (auto &f : futures)
             f.get();
     });
 }
@@ -355,27 +329,35 @@ void benchmarkSoA_vs_AoS()
     std::printf("\n  --- SoA vs AoS layout (%dM elements, sum-x) ---\n", kN / 1'000'000);
 
     // AoS: each element stores (x,y,z) interleaved
-    struct AoS_Vec3 { float x, y, z; };
+    struct AoS_Vec3 {
+        float x, y, z;
+    };
     std::vector<AoS_Vec3> aos(kN);
-    for (int i = 0; i < kN; ++i) aos[i] = {static_cast<float>(i), 1.0f, 2.0f};
+    for (int i = 0; i < kN; ++i)
+        aos[i] = {static_cast<float>(i), 1.0f, 2.0f};
 
     // SoA: three contiguous float arrays
     std::vector<float> xs(kN), ys(kN), zs(kN);
-    for (int i = 0; i < kN; ++i) { xs[i] = static_cast<float>(i); ys[i] = 1.0f; zs[i] = 2.0f; }
+    for (int i = 0; i < kN; ++i)
+    {
+        xs[i] = static_cast<float>(i);
+        ys[i] = 1.0f;
+        zs[i] = 2.0f;
+    }
 
     double sumAoS = 0.0;
-    benchmarkMs("Sum-x AoS (Vec3[]) 1M", [&]()
-    {
+    benchmarkMs("Sum-x AoS (Vec3[]) 1M", [&]() {
         double acc = 0.0;
-        for (int i = 0; i < kN; ++i) acc += static_cast<double>(aos[i].x);
+        for (int i = 0; i < kN; ++i)
+            acc += static_cast<double>(aos[i].x);
         sumAoS = acc;
     });
 
     double sumSoA = 0.0;
-    benchmarkMs("Sum-x SoA (float[]) 1M", [&]()
-    {
+    benchmarkMs("Sum-x SoA (float[]) 1M", [&]() {
         double acc = 0.0;
-        for (int i = 0; i < kN; ++i) acc += static_cast<double>(xs[i]);
+        for (int i = 0; i < kN; ++i)
+            acc += static_cast<double>(xs[i]);
         sumSoA = acc;
     });
 
@@ -401,7 +383,7 @@ void benchmarkEntityLookup()
     for (core::u32 i = 0; i < kN; ++i)
     {
         seed = seed * 6364136223846793005u + 1442695040888963407u;
-        const core::u32 slot = seed & 0x3FFF;  // 14-bit slot
+        const core::u32 slot = seed & 0x3FFF; // 14-bit slot
         sparseSet.insert(slot, i);
         denseVec.push_back(slot);
     }
@@ -409,30 +391,34 @@ void benchmarkEntityLookup()
     // Look up the LAST 1000 slots to stress worst-case for linear
     constexpr int kLookups = 1000;
 
-    benchmarkMs("SparseSet lookup 1k slots", [&]()
-    {
+    benchmarkMs("SparseSet lookup 1k slots", [&]() {
         core::u32 sink = 0;
         for (int i = 0; i < kLookups; ++i)
         {
             const core::u32 slot = denseVec[kN - 1 - static_cast<core::u32>(i) % kN];
-            if (const core::u32* p = sparseSet.find(slot))
+            if (const core::u32 *p = sparseSet.find(slot))
                 sink = *p;
         }
-        if (sink == ~0u) std::printf("[debug] sink=%u\n", sink);
+        if (sink == ~0u)
+            std::printf("[debug] sink=%u\n", sink);
     });
 
-    benchmarkMs("Linear scan lookup 1k slots in 10k vec", [&]()
-    {
+    benchmarkMs("Linear scan lookup 1k slots in 10k vec", [&]() {
         core::u32 sink = 0;
         for (int i = 0; i < kLookups; ++i)
         {
             const core::u32 target = denseVec[kN - 1 - static_cast<core::u32>(i) % kN];
             for (core::u32 j = 0; j < kN; ++j)
             {
-                if (denseVec[j] == target) { sink = j; break; }
+                if (denseVec[j] == target)
+                {
+                    sink = j;
+                    break;
+                }
             }
         }
-        if (sink == ~0u) std::printf("[debug] sink=%u\n", sink);
+        if (sink == ~0u)
+            std::printf("[debug] sink=%u\n", sink);
     });
 }
 
@@ -445,22 +431,29 @@ void benchmarkCollisionBroadphase()
     std::printf("\n  --- Collision N\u00b2 vs broad-phase (%d entities) ---\n", kN);
 
     // Simple AABB for N² test
-    struct AABB { float xmin, xmax, ymin, ymax, zmin, zmax; };
+    struct AABB {
+        float xmin, xmax, ymin, ymax, zmin, zmax;
+    };
     std::vector<AABB> boxes(kN);
     core::u32 rng = 99999;
     for (int i = 0; i < kN; ++i)
     {
-        rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
         const float cx = static_cast<float>(rng & 0xFFFF) / 65535.0f * 1000.0f;
-        rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
         const float cy = static_cast<float>(rng & 0xFFFF) / 65535.0f * 1000.0f;
-        rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
         const float cz = static_cast<float>(rng & 0xFFFF) / 65535.0f * 1000.0f;
         boxes[i] = {cx - 0.5f, cx + 0.5f, cy - 0.5f, cy + 0.5f, cz - 0.5f, cz + 0.5f};
     }
 
-    benchmarkMs("N\u00b2 AABB collision check (2k)", [&]()
-    {
+    benchmarkMs("N\u00b2 AABB collision check (2k)", [&]() {
         int pairs = 0;
         for (int a = 0; a < kN; ++a)
             for (int b = a + 1; b < kN; ++b)
@@ -469,7 +462,8 @@ void benchmarkCollisionBroadphase()
                     boxes[a].zmax >= boxes[b].zmin && boxes[b].zmax >= boxes[a].zmin)
                     ++pairs;
         // Prevent dead-code elimination
-        if (pairs < 0) std::printf("  [debug] pairs=%d\n", pairs);
+        if (pairs < 0)
+            std::printf("  [debug] pairs=%d\n", pairs);
     });
 
     // Broad-phase via WorldPartition queryRadius
@@ -483,34 +477,32 @@ void benchmarkCollisionBroadphase()
     {
         if (auto e = reg.createEntity(arch))
         {
-            math::Vec3<math::Fixed32> pos{
-                math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
-                math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
-                math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
+            math::Vec3<math::Fixed32> pos{math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
+                                          math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
+                                          math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
             [[maybe_unused]] auto r = world.insertOrUpdate(e.value(), pos);
         }
     }
 
-    benchmarkMs("Broad-phase queryRadius (2k, r=10)", [&]()
-    {
+    benchmarkMs("Broad-phase queryRadius (2k, r=10)", [&]() {
         core::u32 total = 0;
         for (int i = 0; i < kN; ++i)
         {
             std::vector<ecs::EntityId> hits;
-            const math::Vec3<math::Fixed32> center{
-                math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
-                math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
-                math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
+            const math::Vec3<math::Fixed32> center{math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
+                                                   math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
+                                                   math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
             world.queryRadius(center, math::Fixed32{10}, hits);
             total += static_cast<core::u32>(hits.size());
         }
-        if (total == ~0u) std::printf("[debug] total=%u\n", total);
+        if (total == ~0u)
+            std::printf("[debug] total=%u\n", total);
     });
 }
 
 } // anonymous namespace
 
-int main(int /*argc*/, char* /*argv*/[])
+int main(int /*argc*/, char * /*argv*/[])
 {
     core::Log::info("=== LplPlugin Benchmark ===");
     std::printf("\n");

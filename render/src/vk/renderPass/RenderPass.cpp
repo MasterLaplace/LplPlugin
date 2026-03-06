@@ -1,11 +1,12 @@
 #include "renderPass/RenderPass.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
 void RenderPass::Create(const VkDevice &device, const VkPhysicalDevice &physicalDevice,
-                        const VkFormat swapChainImageFormat, const VkSampleCountFlagBits msaaSamples, const Buffers &buffers)
+                        const VkFormat swapChainImageFormat, const VkSampleCountFlagBits msaaSamples,
+                        const Buffers &buffers)
 {
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = swapChainImageFormat;
@@ -77,7 +78,10 @@ void RenderPass::Create(const VkDevice &device, const VkPhysicalDevice &physical
     renderPassInfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &_renderPass) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create render pass!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create render pass!");
+        std::abort();
+    }
 }
 
 void RenderPass::Destroy(const VkDevice &device) { vkDestroyRenderPass(device, _renderPass, nullptr); }

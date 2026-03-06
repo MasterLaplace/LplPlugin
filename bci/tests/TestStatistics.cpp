@@ -18,30 +18,15 @@ TEST_CASE("Statistics::integratePsd sums bins inclusively", "[math][statistics]"
 {
     const std::vector<float> psd = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
 
-    SECTION("full range")
-    {
-        REQUIRE_THAT(Statistics::integratePsd(psd, 0, 4), WithinAbs(15.0f, 1e-5f));
-    }
+    SECTION("full range") { REQUIRE_THAT(Statistics::integratePsd(psd, 0, 4), WithinAbs(15.0f, 1e-5f)); }
 
-    SECTION("partial range")
-    {
-        REQUIRE_THAT(Statistics::integratePsd(psd, 1, 3), WithinAbs(9.0f, 1e-5f));
-    }
+    SECTION("partial range") { REQUIRE_THAT(Statistics::integratePsd(psd, 1, 3), WithinAbs(9.0f, 1e-5f)); }
 
-    SECTION("single bin")
-    {
-        REQUIRE_THAT(Statistics::integratePsd(psd, 2, 2), WithinAbs(3.0f, 1e-5f));
-    }
+    SECTION("single bin") { REQUIRE_THAT(Statistics::integratePsd(psd, 2, 2), WithinAbs(3.0f, 1e-5f)); }
 
-    SECTION("out of range returns zero")
-    {
-        REQUIRE_THAT(Statistics::integratePsd(psd, 3, 10), WithinAbs(0.0f, 1e-5f));
-    }
+    SECTION("out of range returns zero") { REQUIRE_THAT(Statistics::integratePsd(psd, 3, 10), WithinAbs(0.0f, 1e-5f)); }
 
-    SECTION("empty span returns zero")
-    {
-        REQUIRE_THAT(Statistics::integratePsd({}, 0, 0), WithinAbs(0.0f, 1e-5f));
-    }
+    SECTION("empty span returns zero") { REQUIRE_THAT(Statistics::integratePsd({}, 0, 0), WithinAbs(0.0f, 1e-5f)); }
 }
 
 TEST_CASE("Statistics::hzToBin converts frequency to bin index", "[math][statistics]")
@@ -69,10 +54,7 @@ TEST_CASE("Statistics::slidingWindowRms computes trailing RMS", "[math][statisti
         REQUIRE_THAT(rms, WithinAbs(expected, 1e-5f));
     }
 
-    SECTION("empty data returns zero")
-    {
-        REQUIRE_THAT(Statistics::slidingWindowRms({}, 5), WithinAbs(0.0f, 1e-5f));
-    }
+    SECTION("empty data returns zero") { REQUIRE_THAT(Statistics::slidingWindowRms({}, 5), WithinAbs(0.0f, 1e-5f)); }
 }
 
 TEST_CASE("Statistics::computeBaseline computes mean and stddev", "[math][statistics]")

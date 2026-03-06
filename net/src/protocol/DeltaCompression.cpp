@@ -8,19 +8,17 @@
  * @copyright MIT License
  */
 
-#include <lpl/net/protocol/DeltaCompression.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/net/protocol/DeltaCompression.hpp>
 
 namespace lpl::net::protocol {
 
-core::Expected<std::vector<core::byte>> DeltaCompression::encode(
-    std::span<const core::byte> baseline,
-    std::span<const core::byte> current)
+core::Expected<std::vector<core::byte>> DeltaCompression::encode(std::span<const core::byte> baseline,
+                                                                 std::span<const core::byte> current)
 {
     if (baseline.size() != current.size())
     {
-        return core::makeError(core::ErrorCode::InvalidArgument,
-                               "Baseline and current must be the same size");
+        return core::makeError(core::ErrorCode::InvalidArgument, "Baseline and current must be the same size");
     }
 
     std::vector<core::byte> delta;
@@ -31,8 +29,8 @@ core::Expected<std::vector<core::byte>> DeltaCompression::encode(
 
     while (i < n)
     {
-        const auto xorByte = static_cast<core::byte>(
-            static_cast<core::u8>(current[i]) ^ static_cast<core::u8>(baseline[i]));
+        const auto xorByte =
+            static_cast<core::byte>(static_cast<core::u8>(current[i]) ^ static_cast<core::u8>(baseline[i]));
 
         if (xorByte == core::byte{0})
         {
@@ -56,9 +54,8 @@ core::Expected<std::vector<core::byte>> DeltaCompression::encode(
     return delta;
 }
 
-core::Expected<std::vector<core::byte>> DeltaCompression::decode(
-    std::span<const core::byte> baseline,
-    std::span<const core::byte> delta)
+core::Expected<std::vector<core::byte>> DeltaCompression::decode(std::span<const core::byte> baseline,
+                                                                 std::span<const core::byte> delta)
 {
     std::vector<core::byte> result;
     result.reserve(baseline.size());
@@ -66,7 +63,7 @@ core::Expected<std::vector<core::byte>> DeltaCompression::decode(
     core::u32 baseIdx = 0;
     core::u32 deltaIdx = 0;
     const auto deltaSize = static_cast<core::u32>(delta.size());
-    const auto baseSize  = static_cast<core::u32>(baseline.size());
+    const auto baseSize = static_cast<core::u32>(baseline.size());
 
     while (deltaIdx < deltaSize && baseIdx < baseSize)
     {
@@ -75,8 +72,7 @@ core::Expected<std::vector<core::byte>> DeltaCompression::decode(
             ++deltaIdx;
             if (deltaIdx >= deltaSize)
             {
-                return core::makeError(core::ErrorCode::CorruptedData,
-                                       "Truncated zero-run in delta");
+                return core::makeError(core::ErrorCode::CorruptedData, "Truncated zero-run in delta");
             }
 
             const auto runLen = static_cast<core::u32>(static_cast<core::u8>(delta[deltaIdx]));
@@ -89,9 +85,8 @@ core::Expected<std::vector<core::byte>> DeltaCompression::decode(
         }
         else
         {
-            result.push_back(static_cast<core::byte>(
-                static_cast<core::u8>(baseline[baseIdx]) ^
-                static_cast<core::u8>(delta[deltaIdx])));
+            result.push_back(static_cast<core::byte>(static_cast<core::u8>(baseline[baseIdx]) ^
+                                                     static_cast<core::u8>(delta[deltaIdx])));
             ++baseIdx;
             ++deltaIdx;
         }

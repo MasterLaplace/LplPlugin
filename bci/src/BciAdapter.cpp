@@ -16,11 +16,11 @@
 #include <lpl/bci/BciAdapter.hpp>
 #include <lpl/bci/NeuralSafetyChain.hpp>
 #include <lpl/bci/calibration/Calibration.hpp>
-#include <lpl/bci/metric/NeuralMetric.hpp>
+#include <lpl/bci/dsp/BandExtractor.hpp>
+#include <lpl/bci/dsp/FftProcessor.hpp>
 #include <lpl/bci/dsp/Pipeline.hpp>
 #include <lpl/bci/dsp/Windowing.hpp>
-#include <lpl/bci/dsp/FftProcessor.hpp>
-#include <lpl/bci/dsp/BandExtractor.hpp>
+#include <lpl/bci/metric/NeuralMetric.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -34,32 +34,30 @@ namespace lpl::bci {
 //  Impl                                                                      //
 // ========================================================================== //
 
-struct BciAdapter::Impl
-{
-    std::unique_ptr<IBciDriver>    driver;
-    BciAdapterConfig               config{};
-    NeuralSafetyChain              safetyChain;
-    calibration::Calibration       calibration;
-    metric::NeuralMetric           neuralMetric;
-    core::u32                      tickSequence{0};
-    bool                           calibrated{false};
+struct BciAdapter::Impl {
+    std::unique_ptr<IBciDriver> driver;
+    BciAdapterConfig config{};
+    NeuralSafetyChain safetyChain;
+    calibration::Calibration calibration;
+    metric::NeuralMetric neuralMetric;
+    core::u32 tickSequence{0};
+    bool calibrated{false};
 
     // DSP pipeline state
-    std::optional<dsp::Pipeline>    pipeline;
-    std::vector<std::vector<float>> sampleBuffer;  // Per-channel accumulator
-    core::u32                       samplesAccumulated{0};
+    std::optional<dsp::Pipeline> pipeline;
+    std::vector<std::vector<float>> sampleBuffer; // Per-channel accumulator
+    core::u32 samplesAccumulated{0};
 
     // Per-window band powers (for calibration feeding)
-    std::vector<float>              lastAlphaPowers;
-    std::vector<float>              lastBetaPowers;
+    std::vector<float> lastAlphaPowers;
+    std::vector<float> lastBetaPowers;
 };
 
 // ========================================================================== //
 //  Public API                                                                //
 // ========================================================================== //
 
-BciAdapter::BciAdapter(std::unique_ptr<IBciDriver> driver,
-                       const BciAdapterConfig& config)
+BciAdapter::BciAdapter(std::unique_ptr<IBciDriver> driver, const BciAdapterConfig &config)
     : _impl{std::make_unique<Impl>()}
 {
     LPL_ASSERT(driver != nullptr);
@@ -68,8 +66,7 @@ BciAdapter::BciAdapter(std::unique_ptr<IBciDriver> driver,
 
     // Initialize safety chain with default checks
     _impl->safetyChain.addCheck(std::make_unique<AmplitudeBoundsCheck>(1000.0f));
-    _impl->safetyChain.addCheck(std::make_unique<ConfidenceCheck>(
-        config.confidenceThreshold));
+    _impl->safetyChain.addCheck(std::make_unique<ConfidenceCheck>(config.confidenceThreshold));
     _impl->safetyChain.addCheck(std::make_unique<RateOfChangeCheck>(500.0f));
 }
 
@@ -78,27 +75,30 @@ BciAdapter::~BciAdapter() { stop(); }
 core::Expected<void> BciAdapter::start()
 {
     auto res = _impl->driver->connect();
-    if (!res) { return res; }
+    if (!res)
+    {
+        return res;
+    }
 
     // Pre-allocate sample buffers for FFT window
     const core::u32 channels = input::NeuralInputState::kChannels;
     _impl->sampleBuffer.resize(channels);
-    for (auto& ch : _impl->sampleBuffer)
+    for (auto &ch : _impl->sampleBuffer)
     {
         ch.reserve(_impl->config.fftSize);
     }
     _impl->samplesAccumulated = 0;
 
     std::vector<FrequencyBand> bands = {
-        FrequencyBand{8.0f, 13.0f}, // Alpha
-        FrequencyBand{13.0f, 30.0f} // Beta
+        FrequencyBand{8.0f,  13.0f}, // Alpha
+        FrequencyBand{13.0f, 30.0f}  // Beta
     };
 
     _impl->pipeline = dsp::Pipeline::builder()
-        .add<dsp::HannWindow>(_impl->config.fftSize)
-        .add<dsp::FftProcessor>(_impl->config.fftSize)
-        .add<dsp::BandExtractor>(bands, _impl->config.sampleRateHz, _impl->config.fftSize)
-        .build();
+                          .add<dsp::HannWindow>(_impl->config.fftSize)
+                          .add<dsp::FftProcessor>(_impl->config.fftSize)
+                          .add<dsp::BandExtractor>(bands, _impl->config.sampleRateHz, _impl->config.fftSize)
+                          .build();
 
     core::Log::info("BciAdapter: DSP pipeline initialized");
     return _impl->driver->startStream();
@@ -122,10 +122,9 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
         return core::Unexpected(sampleResult.error());
     }
 
-    const auto& raw = sampleResult.value();
-    const core::usize channelCount = std::min(
-        static_cast<core::usize>(raw.channelCount),
-        static_cast<core::usize>(input::NeuralInputState::kChannels));
+    const auto &raw = sampleResult.value();
+    const core::usize channelCount = std::min(static_cast<core::usize>(raw.channelCount),
+                                              static_cast<core::usize>(input::NeuralInputState::kChannels));
 
     // Accumulate samples for FFT window
     for (core::usize ch = 0; ch < channelCount; ++ch)
@@ -151,33 +150,31 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
         if (!result)
         {
             core::Log::error("BciAdapter: Pipeline failed: {}", result.error().message);
-            for (auto& ch : _impl->sampleBuffer) ch.clear();
+            for (auto &ch : _impl->sampleBuffer)
+                ch.clear();
             _impl->samplesAccumulated = 0;
             return core::makeError(core::ErrorCode::InvalidState, result.error().message);
         }
 
-        const auto& bandPowers = result.value();
+        const auto &bandPowers = result.value();
         float totalAlpha = 0.0f;
-        float totalBeta  = 0.0f;
+        float totalBeta = 0.0f;
 
         for (core::usize ch = 0; ch < channelCount; ++ch)
         {
             float alphaPower = bandPowers.data[0][ch];
-            float betaPower  = bandPowers.data[1][ch];
+            float betaPower = bandPowers.data[1][ch];
 
             totalAlpha += alphaPower;
-            totalBeta  += betaPower;
+            totalBeta += betaPower;
 
             float totalPower = alphaPower + betaPower;
             float activation = (totalPower > 0.001f) ? betaPower / totalPower : 0.0f;
-            state.channels[ch] = math::Fixed32::fromFloat(
-                std::clamp(activation, 0.0f, 1.0f));
+            state.channels[ch] = math::Fixed32::fromFloat(std::clamp(activation, 0.0f, 1.0f));
         }
 
         float totalPower = totalAlpha + totalBeta;
-        float confidence = (totalPower > 0.001f)
-            ? std::clamp(totalBeta / totalPower, 0.0f, 1.0f)
-            : 0.0f;
+        float confidence = (totalPower > 0.001f) ? std::clamp(totalBeta / totalPower, 0.0f, 1.0f) : 0.0f;
         state.confidence = math::Fixed32::fromFloat(confidence);
 
         // ── Calibration feeding ──────────────────────────────────────
@@ -191,9 +188,8 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
         // Feed calibration if active
         if (_impl->calibration.state() == calibration::CalibrationState::kCalibrating)
         {
-            auto trial = _impl->calibration.addTrial(
-                _impl->lastAlphaPowers, _impl->lastBetaPowers);
-            (void)trial;
+            auto trial = _impl->calibration.addTrial(_impl->lastAlphaPowers, _impl->lastBetaPowers);
+            (void) trial;
 
             // Check if calibration just completed
             if (_impl->calibration.state() == calibration::CalibrationState::kReady)
@@ -211,8 +207,7 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
         // ── NeuralMetric normalization (if calibrated) ───────────────
         if (_impl->calibrated)
         {
-            auto neuralState = _impl->neuralMetric.compute(
-                _impl->lastAlphaPowers, _impl->lastBetaPowers);
+            auto neuralState = _impl->neuralMetric.compute(_impl->lastAlphaPowers, _impl->lastBetaPowers);
 
             // Map normalized alpha/beta to engine channels (alpha dominant)
             for (core::usize ch = 0; ch < channelCount && ch < neuralState.channelAlpha.size(); ++ch)
@@ -224,7 +219,7 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
         }
 
         // Reset sample buffer for next window
-        for (auto& ch : _impl->sampleBuffer)
+        for (auto &ch : _impl->sampleBuffer)
         {
             ch.clear();
         }
@@ -235,8 +230,7 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
         // Not enough samples yet — return raw conversion
         for (core::usize i = 0; i < channelCount; ++i)
         {
-            state.channels[i] = math::Fixed32::fromFloat(
-                std::clamp(raw.channels[i], 0.0f, 1.0f));
+            state.channels[i] = math::Fixed32::fromFloat(std::clamp(raw.channels[i], 0.0f, 1.0f));
         }
         state.confidence = math::Fixed32{0};
     }
@@ -248,7 +242,7 @@ core::Expected<input::NeuralInputState> BciAdapter::update()
     if (!state.validated)
     {
         // Safety chain rejected — zero out the state for safety
-        for (auto& ch : state.channels)
+        for (auto &ch : state.channels)
         {
             ch = math::Fixed32{0};
         }
@@ -263,22 +257,15 @@ core::Expected<void> BciAdapter::startCalibration()
     auto result = _impl->calibration.start();
     if (!result)
     {
-        return core::makeError(core::ErrorCode::InvalidState,
-                               "Failed to start BCI calibration");
+        return core::makeError(core::ErrorCode::InvalidState, "Failed to start BCI calibration");
     }
     _impl->calibrated = false;
     core::Log::info("BciAdapter: calibration started");
     return {};
 }
 
-bool BciAdapter::isCalibrated() const noexcept
-{
-    return _impl->calibrated;
-}
+bool BciAdapter::isCalibrated() const noexcept { return _impl->calibrated; }
 
-const IBciDriver& BciAdapter::driver() const noexcept
-{
-    return *_impl->driver;
-}
+const IBciDriver &BciAdapter::driver() const noexcept { return *_impl->driver; }
 
 } // namespace lpl::bci

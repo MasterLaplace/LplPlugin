@@ -14,11 +14,11 @@
  * @copyright MIT License
  */
 
-#include <lpl/physics/Octree.hpp>
-#include <lpl/math/Morton.hpp>
-#include <lpl/memory/PinnedAllocator.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/math/Morton.hpp>
+#include <lpl/memory/PinnedAllocator.hpp>
+#include <lpl/physics/Octree.hpp>
 
 #include <algorithm>
 #include <unordered_map>
@@ -30,45 +30,42 @@ namespace lpl::physics {
 //  Impl — Flat node tree with LSD radix sort                                 //
 // ========================================================================== //
 
-struct Octree::Impl
-{
-    static constexpr core::u8  kMaxDepth     = 8;
+struct Octree::Impl {
+    static constexpr core::u8 kMaxDepth = 8;
     static constexpr core::u32 kLeafCapacity = 32;
 
     /** @brief Flat node (POD, GPU-transferable). */
-    struct FlatNode
-    {
+    struct FlatNode {
         math::AABB<math::Fixed32> bound;
-        core::i32  firstChild{-1};
-        core::u32  entityStart{0};
-        core::u32  entityCount{0};
+        core::i32 firstChild{-1};
+        core::u32 entityStart{0};
+        core::u32 entityCount{0};
     };
 
     /** @brief Entity reference sorted by Morton key. */
-    struct EntityEntry
-    {
-        core::u32                  objectId;
-        core::u64                  morton;
+    struct EntityEntry {
+        core::u32 objectId;
+        core::u64 morton;
         math::AABB<math::Fixed32> aabb;
     };
 
-    using PinnedNode  = memory::PinnedAllocator<FlatNode>;
+    using PinnedNode = memory::PinnedAllocator<FlatNode>;
     using PinnedEntry = memory::PinnedAllocator<EntityEntry>;
 
-    math::AABB<math::Fixed32>                   worldBounds;
-    std::vector<FlatNode, PinnedNode>            nodes;
-    std::vector<EntityEntry, PinnedEntry>        sortedEntries;
-    std::vector<EntityEntry, PinnedEntry>        tempEntries;
-    std::unordered_map<core::u32, core::u32>     idToIndex;
-    bool                                         dirty{false};
+    math::AABB<math::Fixed32> worldBounds;
+    std::vector<FlatNode, PinnedNode> nodes;
+    std::vector<EntityEntry, PinnedEntry> sortedEntries;
+    std::vector<EntityEntry, PinnedEntry> tempEntries;
+    std::unordered_map<core::u32, core::u32> idToIndex;
+    bool dirty{false};
 
-    explicit Impl(const math::AABB<math::Fixed32>& wb) : worldBounds{wb} {}
+    explicit Impl(const math::AABB<math::Fixed32> &wb) : worldBounds{wb} {}
 
     // ────────────────────────────────────────────────────────────────────── //
     //  Morton computation                                                    //
     // ────────────────────────────────────────────────────────────────────── //
 
-    [[nodiscard]] core::u64 computeMorton(const math::AABB<math::Fixed32>& aabb) const
+    [[nodiscard]] core::u64 computeMorton(const math::AABB<math::Fixed32> &aabb) const
     {
         const auto c = aabb.center();
         const auto toGrid = [](math::Fixed32 v) -> core::i32 {
@@ -102,8 +99,8 @@ struct Octree::Impl
             tempEntries.resize(sortedEntries.size());
         }
 
-        EntityEntry* src = sortedEntries.data();
-        EntityEntry* dst = tempEntries.data();
+        EntityEntry *src = sortedEntries.data();
+        EntityEntry *dst = tempEntries.data();
 
         for (core::u8 pass = 0; pass < 4; ++pass)
         {
@@ -151,14 +148,13 @@ struct Octree::Impl
      * octant each entity belongs to. Since entities are pre-sorted by
      * Morton key, each octant forms a contiguous range.
      */
-    void recurseBuild(core::u32 nodeIdx, core::u32 start, core::u32 end,
-                      core::u8 depth)
+    void recurseBuild(core::u32 nodeIdx, core::u32 start, core::u32 end, core::u8 depth)
     {
         const core::u32 entityCount = end - start;
 
         if (entityCount <= kLeafCapacity || depth >= kMaxDepth)
         {
-            auto& node = nodes[nodeIdx];
+            auto &node = nodes[nodeIdx];
             node.entityStart = start;
             node.entityCount = entityCount;
             return;
@@ -169,7 +165,7 @@ struct Octree::Impl
         nodes.resize(firstChildIdx + 8);
         nodes[nodeIdx].firstChild = static_cast<core::i32>(firstChildIdx);
 
-        const auto& parentBound = nodes[nodeIdx].bound;
+        const auto &parentBound = nodes[nodeIdx].bound;
         const auto center = parentBound.center();
         const auto mn = parentBound.min;
         const auto mx = parentBound.max;
@@ -184,16 +180,40 @@ struct Octree::Impl
             math::Vec3<math::Fixed32> childMin, childMax;
 
             // X axis (bit 0)
-            if (octant & 1) { childMin.x = center.x; childMax.x = mx.x; }
-            else            { childMin.x = mn.x;     childMax.x = center.x; }
+            if (octant & 1)
+            {
+                childMin.x = center.x;
+                childMax.x = mx.x;
+            }
+            else
+            {
+                childMin.x = mn.x;
+                childMax.x = center.x;
+            }
 
             // Y axis (bit 1)
-            if (octant & 2) { childMin.y = center.y; childMax.y = mx.y; }
-            else            { childMin.y = mn.y;     childMax.y = center.y; }
+            if (octant & 2)
+            {
+                childMin.y = center.y;
+                childMax.y = mx.y;
+            }
+            else
+            {
+                childMin.y = mn.y;
+                childMax.y = center.y;
+            }
 
             // Z axis (bit 2)
-            if (octant & 4) { childMin.z = center.z; childMax.z = mx.z; }
-            else            { childMin.z = mn.z;     childMax.z = center.z; }
+            if (octant & 4)
+            {
+                childMin.z = center.z;
+                childMax.z = mx.z;
+            }
+            else
+            {
+                childMin.z = mn.z;
+                childMax.z = center.z;
+            }
 
             nodes[firstChildIdx + octant].bound = {childMin, childMax};
 
@@ -201,8 +221,7 @@ struct Octree::Impl
             const core::u32 childStart = current;
             while (current < end)
             {
-                const core::u8 entOctant = static_cast<core::u8>(
-                    (sortedEntries[current].morton >> shift) & 7u);
+                const core::u8 entOctant = static_cast<core::u8>((sortedEntries[current].morton >> shift) & 7u);
                 if (entOctant != octant)
                 {
                     break;
@@ -218,11 +237,10 @@ struct Octree::Impl
     //  Recursive AABB query                                                  //
     // ────────────────────────────────────────────────────────────────────── //
 
-    void queryRecurse(core::u32 nodeIdx,
-                      const math::AABB<math::Fixed32>& region,
-                      const std::function<void(core::u32)>& callback) const
+    void queryRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region,
+                      const std::function<void(core::u32)> &callback) const
     {
-        const auto& node = nodes[nodeIdx];
+        const auto &node = nodes[nodeIdx];
 
         // Early rejection: region doesn't intersect this node's bounds
         if (!node.bound.intersects(region))
@@ -233,7 +251,7 @@ struct Octree::Impl
         // Check leaf entities
         for (core::u32 i = 0; i < node.entityCount; ++i)
         {
-            const auto& entry = sortedEntries[node.entityStart + i];
+            const auto &entry = sortedEntries[node.entityStart + i];
             if (entry.aabb.intersects(region))
             {
                 callback(entry.objectId);
@@ -256,13 +274,11 @@ struct Octree::Impl
 //  Public API                                                                //
 // ========================================================================== //
 
-Octree::Octree(const math::AABB<math::Fixed32>& worldBounds)
-    : _impl{std::make_unique<Impl>(worldBounds)}
-{}
+Octree::Octree(const math::AABB<math::Fixed32> &worldBounds) : _impl{std::make_unique<Impl>(worldBounds)} {}
 
 Octree::~Octree() = default;
 
-void Octree::insert(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
+void Octree::insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 {
     const core::u32 idx = static_cast<core::u32>(_impl->sortedEntries.size());
     _impl->sortedEntries.push_back({objectId, _impl->computeMorton(aabb), aabb});
@@ -270,11 +286,11 @@ void Octree::insert(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
     _impl->dirty = true;
 }
 
-void Octree::update(core::u32 objectId, const math::AABB<math::Fixed32>& aabb)
+void Octree::update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 {
     auto it = _impl->idToIndex.find(objectId);
     LPL_ASSERT(it != _impl->idToIndex.end());
-    auto& entry = _impl->sortedEntries[it->second];
+    auto &entry = _impl->sortedEntries[it->second];
     entry.aabb = aabb;
     entry.morton = _impl->computeMorton(aabb);
     _impl->dirty = true;
@@ -298,13 +314,12 @@ void Octree::remove(core::u32 objectId)
     _impl->dirty = true;
 }
 
-void Octree::query(const math::AABB<math::Fixed32>& region,
-                   const std::function<void(core::u32)>& callback) const
+void Octree::query(const math::AABB<math::Fixed32> &region, const std::function<void(core::u32)> &callback) const
 {
     if (_impl->nodes.empty())
     {
         // Fallback: linear scan if tree not built yet
-        for (const auto& entry : _impl->sortedEntries)
+        for (const auto &entry : _impl->sortedEntries)
         {
             if (entry.aabb.intersects(region))
             {
@@ -349,9 +364,6 @@ void Octree::rebuild()
     _impl->dirty = false;
 }
 
-core::u32 Octree::count() const noexcept
-{
-    return static_cast<core::u32>(_impl->sortedEntries.size());
-}
+core::u32 Octree::count() const noexcept { return static_cast<core::u32>(_impl->sortedEntries.size()); }
 
 } // namespace lpl::physics

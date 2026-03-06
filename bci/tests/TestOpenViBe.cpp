@@ -47,8 +47,7 @@ TEST_CASE("StabilityMonitorBox initial update returns default stability", "[open
     StabilityMonitorBox box;
 
     Eigen::MatrixXf spd(2, 2);
-    spd << 3, 1,
-           1, 3;
+    spd << 3, 1, 1, 3;
 
     auto result = box.update(spd);
     REQUIRE(result.has_value());
@@ -60,10 +59,10 @@ TEST_CASE("StabilityMonitorBox stability converges for identical matrices", "[op
     StabilityMonitorBox box;
 
     Eigen::MatrixXf spd(2, 2);
-    spd << 3, 1,
-           1, 3;
+    spd << 3, 1, 1, 3;
 
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 20; ++i)
+    {
         auto res = box.update(spd);
         REQUIRE(res.has_value());
     }
@@ -76,8 +75,7 @@ TEST_CASE("StabilityMonitorBox reset returns to default", "[openvibe][stability]
     StabilityMonitorBox box;
 
     Eigen::MatrixXf spd(2, 2);
-    spd << 3, 1,
-           1, 3;
+    spd << 3, 1, 1, 3;
 
     auto res = box.update(spd);
     REQUIRE(res.has_value());

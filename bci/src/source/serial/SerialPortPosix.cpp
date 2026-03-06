@@ -23,10 +23,7 @@ struct SerialPort::Impl {
     int fd = -1;
 };
 
-SerialPort::SerialPort()
-    : _impl(new Impl)
-{
-}
+SerialPort::SerialPort() : _impl(new Impl) {}
 
 SerialPort::~SerialPort()
 {
@@ -34,15 +31,12 @@ SerialPort::~SerialPort()
     delete _impl;
 }
 
-SerialPort::SerialPort(SerialPort &&other) noexcept
-    : _impl(other._impl)
-{
-    other._impl = new Impl;
-}
+SerialPort::SerialPort(SerialPort &&other) noexcept : _impl(other._impl) { other._impl = new Impl; }
 
 SerialPort &SerialPort::operator=(SerialPort &&other) noexcept
 {
-    if (this == &other) {
+    if (this == &other)
+    {
         return *this;
     }
     close();
@@ -54,9 +48,9 @@ SerialPort &SerialPort::operator=(SerialPort &&other) noexcept
 
 ExpectedVoid SerialPort::open(const SerialConfig &config)
 {
-    if (_impl->fd >= 0) {
-        return std::unexpected(
-            Error::make(ErrorCode::kAlreadyRunning, "Serial port already open"));
+    if (_impl->fd >= 0)
+    {
+        return std::unexpected(Error::make(ErrorCode::kAlreadyRunning, "Serial port already open"));
     }
 
     int flags = O_RDWR | O_NOCTTY;
@@ -64,27 +58,27 @@ ExpectedVoid SerialPort::open(const SerialConfig &config)
         flags |= O_NONBLOCK;
 
     _impl->fd = ::open(config.portPath.c_str(), flags);
-    if (_impl->fd < 0) {
+    if (_impl->fd < 0)
+    {
         return std::unexpected(
-            Error::make(ErrorCode::kSerialPortNotFound,
-                config.portPath + ": " + std::strerror(errno)));
+            Error::make(ErrorCode::kSerialPortNotFound, config.portPath + ": " + std::strerror(errno)));
     }
 
-    if (::ioctl(_impl->fd, TIOCEXCL, nullptr) < 0) {
+    if (::ioctl(_impl->fd, TIOCEXCL, nullptr) < 0)
+    {
         ::close(_impl->fd);
         _impl->fd = -1;
         return std::unexpected(
-            Error::make(ErrorCode::kSerialPortConfigFailed,
-                "Failed to set exclusive access on " + config.portPath));
+            Error::make(ErrorCode::kSerialPortConfigFailed, "Failed to set exclusive access on " + config.portPath));
     }
 
-    struct termios tty{};
-    if (::tcgetattr(_impl->fd, &tty) != 0) {
+    struct termios tty {};
+    if (::tcgetattr(_impl->fd, &tty) != 0)
+    {
         ::close(_impl->fd);
         _impl->fd = -1;
         return std::unexpected(
-            Error::make(ErrorCode::kSerialPortConfigFailed,
-                std::string("tcgetattr: ") + std::strerror(errno)));
+            Error::make(ErrorCode::kSerialPortConfigFailed, std::string("tcgetattr: ") + std::strerror(errno)));
     }
 
     tty.c_cflag &= ~PARENB;
@@ -104,24 +98,25 @@ ExpectedVoid SerialPort::open(const SerialConfig &config)
     tty.c_cc[VTIME] = config.vtime;
 
     speed_t speed = B115200;
-    switch (config.baudRate) {
-        case 9600:   speed = B9600;   break;
-        case 19200:  speed = B19200;  break;
-        case 38400:  speed = B38400;  break;
-        case 57600:  speed = B57600;  break;
-        case 115200: speed = B115200; break;
-        case 230400: speed = B230400; break;
-        default:     speed = B115200; break;
+    switch (config.baudRate)
+    {
+    case 9600: speed = B9600; break;
+    case 19200: speed = B19200; break;
+    case 38400: speed = B38400; break;
+    case 57600: speed = B57600; break;
+    case 115200: speed = B115200; break;
+    case 230400: speed = B230400; break;
+    default: speed = B115200; break;
     }
     ::cfsetispeed(&tty, speed);
     ::cfsetospeed(&tty, speed);
 
-    if (::tcsetattr(_impl->fd, TCSANOW, &tty) != 0) {
+    if (::tcsetattr(_impl->fd, TCSANOW, &tty) != 0)
+    {
         ::close(_impl->fd);
         _impl->fd = -1;
         return std::unexpected(
-            Error::make(ErrorCode::kSerialPortConfigFailed,
-                std::string("tcsetattr: ") + std::strerror(errno)));
+            Error::make(ErrorCode::kSerialPortConfigFailed, std::string("tcsetattr: ") + std::strerror(errno)));
     }
 
     return {};
@@ -129,19 +124,18 @@ ExpectedVoid SerialPort::open(const SerialConfig &config)
 
 Expected<std::size_t> SerialPort::read(std::span<std::uint8_t> buffer)
 {
-    if (_impl->fd < 0) {
-        return std::unexpected(
-            Error::make(ErrorCode::kNotInitialized, "Serial port not open"));
+    if (_impl->fd < 0)
+    {
+        return std::unexpected(Error::make(ErrorCode::kNotInitialized, "Serial port not open"));
     }
 
     auto bytesRead = ::read(_impl->fd, buffer.data(), buffer.size());
-    if (bytesRead < 0) {
+    if (bytesRead < 0)
+    {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             return std::size_t{0};
 
-        return std::unexpected(
-            Error::make(ErrorCode::kSerialReadFailed,
-                std::string("read: ") + std::strerror(errno)));
+        return std::unexpected(Error::make(ErrorCode::kSerialReadFailed, std::string("read: ") + std::strerror(errno)));
     }
 
     return static_cast<std::size_t>(bytesRead);
@@ -149,16 +143,16 @@ Expected<std::size_t> SerialPort::read(std::span<std::uint8_t> buffer)
 
 Expected<std::size_t> SerialPort::write(std::span<const std::uint8_t> data)
 {
-    if (_impl->fd < 0) {
-        return std::unexpected(
-            Error::make(ErrorCode::kNotInitialized, "Serial port not open"));
+    if (_impl->fd < 0)
+    {
+        return std::unexpected(Error::make(ErrorCode::kNotInitialized, "Serial port not open"));
     }
 
     auto bytesWritten = ::write(_impl->fd, data.data(), data.size());
-    if (bytesWritten < 0) {
+    if (bytesWritten < 0)
+    {
         return std::unexpected(
-            Error::make(ErrorCode::kSerialWriteFailed,
-                std::string("write: ") + std::strerror(errno)));
+            Error::make(ErrorCode::kSerialWriteFailed, std::string("write: ") + std::strerror(errno)));
     }
 
     return static_cast<std::size_t>(bytesWritten);
@@ -166,15 +160,13 @@ Expected<std::size_t> SerialPort::write(std::span<const std::uint8_t> data)
 
 void SerialPort::close() noexcept
 {
-    if (_impl->fd >= 0) {
+    if (_impl->fd >= 0)
+    {
         ::close(_impl->fd);
         _impl->fd = -1;
     }
 }
 
-bool SerialPort::isOpen() const noexcept
-{
-    return _impl->fd >= 0;
-}
+bool SerialPort::isOpen() const noexcept { return _impl->fd >= 0; }
 
 } // namespace lpl::bci::source

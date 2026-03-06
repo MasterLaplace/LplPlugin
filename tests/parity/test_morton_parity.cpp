@@ -11,10 +11,10 @@
  * @copyright MIT License
  */
 
-#include <lpl/math/Morton.hpp>
-#include <lpl/core/Log.hpp>
 #include <cstdio>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
+#include <lpl/math/Morton.hpp>
 
 using namespace lpl;
 
@@ -28,14 +28,13 @@ static void checkMorton(core::i32 x, core::i32 y, core::i32 z)
 
     if (dx != x || dy != y || dz != z)
     {
-        std::printf("  FAIL: encode(%d,%d,%d)=%llu -> decode=(%d,%d,%d)\n",
-                    x, y, z, static_cast<unsigned long long>(code), dx, dy, dz);
+        std::printf("  FAIL: encode(%d,%d,%d)=%llu -> decode=(%d,%d,%d)\n", x, y, z,
+                    static_cast<unsigned long long>(code), dx, dy, dz);
         ++failures;
     }
     else
     {
-        std::printf("  PASS: roundtrip(%d,%d,%d) code=%llu\n",
-                    x, y, z, static_cast<unsigned long long>(code));
+        std::printf("  PASS: roundtrip(%d,%d,%d) code=%llu\n", x, y, z, static_cast<unsigned long long>(code));
     }
 }
 
@@ -77,8 +76,7 @@ int main()
         }
         else
         {
-            std::printf("  FAIL: ordering %llu >= %llu\n",
-                        static_cast<unsigned long long>(c1),
+            std::printf("  FAIL: ordering %llu >= %llu\n", static_cast<unsigned long long>(c1),
                         static_cast<unsigned long long>(c2));
             ++failures;
         }

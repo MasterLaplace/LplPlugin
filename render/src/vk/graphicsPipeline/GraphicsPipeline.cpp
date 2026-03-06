@@ -1,8 +1,8 @@
 #include "graphicsPipeline/GraphicsPipeline.hpp"
+#include <array>
+#include <cstdlib>
 #include <lpl/core/Log.hpp>
 #include <lpl/render/Mesh.hpp>
-#include <cstdlib>
-#include <array>
 
 namespace lpl::render::vk {
 
@@ -108,7 +108,10 @@ void GraphicsPipeline::Create(const VkDevice &device, const VkRenderPass &render
     pipelineLayoutInfo.pSetLayouts = &descriptorLayout;
 
     if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create pipeline layout!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create pipeline layout!");
+        std::abort();
+    }
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -128,7 +131,10 @@ void GraphicsPipeline::Create(const VkDevice &device, const VkRenderPass &render
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_graphicsPipeline) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create graphics pipeline!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create graphics pipeline!");
+        std::abort();
+    }
 
     ShaderModule::Destroy(device, frag);
     ShaderModule::Destroy(device, vertex);

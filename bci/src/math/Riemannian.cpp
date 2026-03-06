@@ -14,36 +14,29 @@ namespace {
 
 constexpr float kEigenvalueEpsilon = 1e-10f;
 
-Expected<Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf>> decomposeSpd(
-    const Eigen::MatrixXf& spd,
-    std::source_location loc = std::source_location::current())
+Expected<Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf>>
+decomposeSpd(const Eigen::MatrixXf &spd, std::source_location loc = std::source_location::current())
 {
     if (spd.rows() != spd.cols())
-        return std::unexpected(Error{
-            ErrorCode::kMathError,
-            std::format("expected square matrix, got {}x{}", spd.rows(), spd.cols()),
-            loc});
+        return std::unexpected(Error{ErrorCode::kMathError,
+                                     std::format("expected square matrix, got {}x{}", spd.rows(), spd.cols()), loc});
 
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(spd);
 
     if (solver.info() != Eigen::Success)
-        return std::unexpected(Error{
-            ErrorCode::kMathError,
-            "eigenvalue decomposition failed",
-            loc});
+        return std::unexpected(Error{ErrorCode::kMathError, "eigenvalue decomposition failed", loc});
 
     if (solver.eigenvalues().minCoeff() < kEigenvalueEpsilon)
-        return std::unexpected(Error{
-            ErrorCode::kMathError,
-            std::format("matrix is not SPD (min eigenvalue: {})", solver.eigenvalues().minCoeff()),
-            loc});
+        return std::unexpected(
+            Error{ErrorCode::kMathError,
+                  std::format("matrix is not SPD (min eigenvalue: {})", solver.eigenvalues().minCoeff()), loc});
 
     return solver;
 }
 
 } // namespace
 
-Expected<Eigen::MatrixXf> matrixSqrt(const Eigen::MatrixXf& spd)
+Expected<Eigen::MatrixXf> matrixSqrt(const Eigen::MatrixXf &spd)
 {
     auto solver = decomposeSpd(spd);
     if (!solver)
@@ -53,7 +46,7 @@ Expected<Eigen::MatrixXf> matrixSqrt(const Eigen::MatrixXf& spd)
     return solver->eigenvectors() * sqrtEv.asDiagonal() * solver->eigenvectors().transpose();
 }
 
-Expected<Eigen::MatrixXf> matrixSqrtInv(const Eigen::MatrixXf& spd)
+Expected<Eigen::MatrixXf> matrixSqrtInv(const Eigen::MatrixXf &spd)
 {
     auto solver = decomposeSpd(spd);
     if (!solver)
@@ -63,7 +56,7 @@ Expected<Eigen::MatrixXf> matrixSqrtInv(const Eigen::MatrixXf& spd)
     return solver->eigenvectors() * invSqrtEv.asDiagonal() * solver->eigenvectors().transpose();
 }
 
-Expected<Eigen::MatrixXf> matrixLog(const Eigen::MatrixXf& spd)
+Expected<Eigen::MatrixXf> matrixLog(const Eigen::MatrixXf &spd)
 {
     auto solver = decomposeSpd(spd);
     if (!solver)
@@ -73,9 +66,7 @@ Expected<Eigen::MatrixXf> matrixLog(const Eigen::MatrixXf& spd)
     return solver->eigenvectors() * logEv.asDiagonal() * solver->eigenvectors().transpose();
 }
 
-Expected<float> riemannianDistance(
-    const Eigen::MatrixXf& a,
-    const Eigen::MatrixXf& b)
+Expected<float> riemannianDistance(const Eigen::MatrixXf &a, const Eigen::MatrixXf &b)
 {
     auto sqrtInvA = matrixSqrtInv(a);
     if (!sqrtInvA)
@@ -90,46 +81,37 @@ Expected<float> riemannianDistance(
     return logInner->norm();
 }
 
-Expected<float> mahalanobisDistance(
-    const Eigen::VectorXf& sample,
-    const Eigen::VectorXf& mean,
-    const Eigen::MatrixXf& cov)
+Expected<float> mahalanobisDistance(const Eigen::VectorXf &sample, const Eigen::VectorXf &mean,
+                                    const Eigen::MatrixXf &cov)
 {
     if (sample.size() != mean.size() || sample.size() != cov.rows())
-        return std::unexpected(Error{
-            ErrorCode::kMathError,
-            std::format(
-                "dimension mismatch: sample({}), mean({}), cov({}x{})",
-                sample.size(), mean.size(), cov.rows(), cov.cols())});
+        return std::unexpected(
+            Error{ErrorCode::kMathError, std::format("dimension mismatch: sample({}), mean({}), cov({}x{})",
+                                                     sample.size(), mean.size(), cov.rows(), cov.cols())});
 
     const Eigen::VectorXf diff = sample - mean;
 
     Eigen::LLT<Eigen::MatrixXf> llt(cov);
     if (llt.info() != Eigen::Success)
-        return std::unexpected(Error{
-            ErrorCode::kMathError,
-            "covariance matrix is not positive-definite (Cholesky failed)"});
+        return std::unexpected(
+            Error{ErrorCode::kMathError, "covariance matrix is not positive-definite (Cholesky failed)"});
 
     const Eigen::VectorXf solved = llt.solve(diff);
     return std::sqrt(diff.dot(solved));
 }
 
-Expected<Eigen::MatrixXf> frechetMean(
-    std::span<const Eigen::MatrixXf> matrices,
-    std::size_t maxIter,
-    float tolerance)
+Expected<Eigen::MatrixXf> frechetMean(std::span<const Eigen::MatrixXf> matrices, std::size_t maxIter, float tolerance)
 {
     if (matrices.empty())
-        return std::unexpected(Error{
-            ErrorCode::kMathError,
-            "cannot compute Fréchet mean of empty set"});
+        return std::unexpected(Error{ErrorCode::kMathError, "cannot compute Fréchet mean of empty set"});
 
     const auto p = matrices[0].rows();
     const auto n = static_cast<float>(matrices.size());
 
     Eigen::MatrixXf mean = matrices[0];
 
-    for (std::size_t iter = 0; iter < maxIter; ++iter) {
+    for (std::size_t iter = 0; iter < maxIter; ++iter)
+    {
         auto sqrtMean = matrixSqrt(mean);
         if (!sqrtMean)
             return std::unexpected(sqrtMean.error());
@@ -140,7 +122,8 @@ Expected<Eigen::MatrixXf> frechetMean(
 
         Eigen::MatrixXf tangentSum = Eigen::MatrixXf::Zero(p, p);
 
-        for (const auto& ci : matrices) {
+        for (const auto &ci : matrices)
+        {
             const Eigen::MatrixXf projected = *sqrtInvMean * ci * *sqrtInvMean;
 
             auto logProjected = matrixLog(projected);
@@ -161,7 +144,8 @@ Expected<Eigen::MatrixXf> frechetMean(
 
         const Eigen::MatrixXf newMean = *sqrtMean * expTangent * *sqrtMean;
 
-        if ((newMean - mean).norm() < tolerance) {
+        if ((newMean - mean).norm() < tolerance)
+        {
             mean = newMean;
             break;
         }

@@ -1,6 +1,6 @@
 #include "imageView/ImageView.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -45,7 +45,10 @@ VkImageView ImageView::CreateImageView(const VkDevice &device, VkImage image, Vk
 
     VkImageView imageView{};
     if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create image view!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create image view!");
+        std::abort();
+    }
 
     return imageView;
 }

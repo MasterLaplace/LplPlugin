@@ -1,6 +1,6 @@
 #include "descriptor/Descriptor.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -28,7 +28,10 @@ void Descriptor::Create(const VkDevice &device)
     layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &_descriptorSetLayout) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create descriptor set layout!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create descriptor set layout!");
+        std::abort();
+    }
 }
 
 void Descriptor::CreateDescriptorPool(const VkDevice &device, VkAllocationCallbacks *allocator)
@@ -54,7 +57,10 @@ void Descriptor::CreateDescriptorPool(const VkDevice &device, VkAllocationCallba
     poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
 
     if (vkCreateDescriptorPool(device, &poolInfo, allocator, &_descriptorPool) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create descriptor pool!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create descriptor pool!");
+        std::abort();
+    }
 }
 
 void Descriptor::CreateDescriptorSet(const VkDevice &device, const std::vector<VkBuffer> &uniformBuffers,
@@ -70,7 +76,10 @@ void Descriptor::CreateDescriptorSet(const VkDevice &device, const std::vector<V
 
     _descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
     if (vkAllocateDescriptorSets(device, &allocInfo, _descriptorSets.data()) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to allocate descriptor sets!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to allocate descriptor sets!");
+        std::abort();
+    }
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {

@@ -16,9 +16,9 @@
  * @copyright MIT License
  */
 
-#include <lpl/engine/systems/MovementSystem.hpp>
-#include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Component.hpp>
+#include <lpl/ecs/Partition.hpp>
+#include <lpl/engine/systems/MovementSystem.hpp>
 #include <lpl/math/Vec3.hpp>
 
 namespace lpl::engine::systems {
@@ -29,47 +29,36 @@ namespace lpl::engine::systems {
 
 static const ecs::ComponentAccess kMovementAccesses[] = {
     {ecs::ComponentId::Velocity,      ecs::AccessMode::ReadWrite},
-    {ecs::ComponentId::InputSnapshot, ecs::AccessMode::ReadOnly},
-    {ecs::ComponentId::BciInput,      ecs::AccessMode::ReadOnly},
+    {ecs::ComponentId::InputSnapshot, ecs::AccessMode::ReadOnly },
+    {ecs::ComponentId::BciInput,      ecs::AccessMode::ReadOnly },
 };
 
-static const ecs::SystemDescriptor kMovementDesc{
-    "Movement",
-    ecs::SchedulePhase::PrePhysics,
-    std::span<const ecs::ComponentAccess>{kMovementAccesses}
-};
+static const ecs::SystemDescriptor kMovementDesc{"Movement", ecs::SchedulePhase::PrePhysics,
+                                                 std::span<const ecs::ComponentAccess>{kMovementAccesses}};
 
 // ========================================================================== //
 //  Impl                                                                      //
 // ========================================================================== //
 
-struct MovementSystem::Impl
-{
-    input::InputManager& inputManager;
-    ecs::Registry&       registry;
+struct MovementSystem::Impl {
+    input::InputManager &inputManager;
+    ecs::Registry &registry;
 
-    Impl(input::InputManager& im, ecs::Registry& reg)
-        : inputManager{im}, registry{reg}
-    {
-    }
+    Impl(input::InputManager &im, ecs::Registry &reg) : inputManager{im}, registry{reg} {}
 };
 
 // ========================================================================== //
 //  Public                                                                    //
 // ========================================================================== //
 
-MovementSystem::MovementSystem(input::InputManager& inputManager,
-                               ecs::Registry& registry)
+MovementSystem::MovementSystem(input::InputManager &inputManager, ecs::Registry &registry)
     : _impl{std::make_unique<Impl>(inputManager, registry)}
 {
 }
 
 MovementSystem::~MovementSystem() = default;
 
-const ecs::SystemDescriptor& MovementSystem::descriptor() const noexcept
-{
-    return kMovementDesc;
-}
+const ecs::SystemDescriptor &MovementSystem::descriptor() const noexcept { return kMovementDesc; }
 
 void MovementSystem::execute(core::f32 /*dt*/)
 {
@@ -80,8 +69,8 @@ void MovementSystem::execute(core::f32 /*dt*/)
     // Legacy equivalent: Systems.hpp "movement" lambda calling
     //   computeMovementVelocity() per entity and writing into _velocities[writeIdx].
 
-    const auto& partitions = _impl->registry.partitions();
-    for (const auto& part : partitions)
+    const auto &partitions = _impl->registry.partitions();
+    for (const auto &part : partitions)
     {
         if (!part)
             continue;
@@ -89,14 +78,13 @@ void MovementSystem::execute(core::f32 /*dt*/)
         if (!part->archetype().has(ecs::ComponentId::Velocity))
             continue;
 
-        for (const auto& chunk : part->chunks())
+        for (const auto &chunk : part->chunks())
         {
             const core::u32 count = chunk->count();
             if (count == 0)
                 continue;
 
-            auto* velocities = static_cast<math::Vec3<float>*>(
-                chunk->writeComponent(ecs::ComponentId::Velocity));
+            auto *velocities = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
             if (!velocities)
                 continue;
 
@@ -104,9 +92,9 @@ void MovementSystem::execute(core::f32 /*dt*/)
             auto entityIds = chunk->entities();
 
             // Optional: SleepState for wake-on-input
-            auto* sleepStates = part->archetype().has(ecs::ComponentId::SleepState)
-                ? static_cast<core::u8*>(chunk->writeComponent(ecs::ComponentId::SleepState))
-                : nullptr;
+            auto *sleepStates = part->archetype().has(ecs::ComponentId::SleepState) ?
+                                    static_cast<core::u8 *>(chunk->writeComponent(ecs::ComponentId::SleepState)) :
+                                    nullptr;
 
             for (core::u32 i = 0; i < count; ++i)
             {

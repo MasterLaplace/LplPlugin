@@ -1,13 +1,16 @@
 #include "instance/Instance.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
 void Instance::Create(const std::string &applicationName)
 {
     if (enableValidationLayers && !CheckValidationLayerSupport())
-        { ::lpl::core::Log::fatal("validation layers requested, but not available!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("validation layers requested, but not available!");
+        std::abort();
+    }
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -41,7 +44,10 @@ void Instance::Create(const std::string &applicationName)
     }
 
     if (vkCreateInstance(&createInfo, _allocator, &_instance) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create instance!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create instance!");
+        std::abort();
+    }
 }
 
 void Instance::Destroy(std::unordered_map<core::u32, std::unique_ptr<Texture>> &textures)
@@ -62,7 +68,7 @@ void Instance::Destroy(std::unordered_map<core::u32, std::unique_ptr<Texture>> &
         vkDestroyFence(device, _inFlightFences[i], nullptr);
     }
 
-    for (auto& [id, res] : textures)
+    for (auto &[id, res] : textures)
     {
         if (res)
             const_cast<Texture &>(*res).Destroy(device);
@@ -154,9 +160,9 @@ void Instance::CreateGuiInstance(GLFWwindow *window)
     _command.SetGui(true);
 }
 
-void Instance::CreateGraphicsPipeline(
-    const ShaderModule::ShaderPaths &shaders, const std::unordered_map<core::u32, std::unique_ptr<Texture>> &textures,
-    const std::unordered_map<core::u32, std::unique_ptr<Model>> &models, bool isDepth)
+void Instance::CreateGraphicsPipeline(const ShaderModule::ShaderPaths &shaders,
+                                      const std::unordered_map<core::u32, std::unique_ptr<Texture>> &textures,
+                                      const std::unordered_map<core::u32, std::unique_ptr<Model>> &models, bool isDepth)
 {
     const auto &device = _logicalDevice.Get();
     const auto &physicalDevice = _physicalDevice.Get();
@@ -225,7 +231,10 @@ void Instance::CreateSyncObjects()
         if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
             vkCreateSemaphore(device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
             vkCreateFence(device, &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS)
-            { ::lpl::core::Log::fatal("failed to create semaphores!"); std::abort(); }
+        {
+            ::lpl::core::Log::fatal("failed to create semaphores!");
+            std::abort();
+        }
     }
 }
 
@@ -245,7 +254,8 @@ void Instance::RecreateSwapChain(const uint32_t width, const uint32_t height)
     framebufferInfo.swapChainImageViews = _imageView.GetImageViews();
 
     const auto msaaSamples = _physicalDevice.GetMaxUsableSampleCount();
-    _buffers.CreateColorResources(device, _physicalDevice.Get(), _swapChain.GetExtent(), _swapChain.GetSurfaceFormat().format, msaaSamples);
+    _buffers.CreateColorResources(device, _physicalDevice.Get(), _swapChain.GetExtent(),
+                                  _swapChain.GetSurfaceFormat().format, msaaSamples);
     _buffers.CreateDepthResources(device, _physicalDevice.Get(), _swapChain.GetExtent(), msaaSamples);
 
     framebufferInfo.depthImageView = _buffers.GetDepthBuffer().GetView();
@@ -275,7 +285,10 @@ Result Instance::DrawNextImage()
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
         return Result::NeedResize;
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-        { ::lpl::core::Log::fatal("failed to acquire swap chain image!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to acquire swap chain image!");
+        std::abort();
+    }
 
     _buffers.UpdateUniformBuffer(device, _swapChain.GetExtent(), _currentFrame);
 
@@ -317,7 +330,10 @@ Result Instance::DrawNextImage()
     submitInfo.pSignalSemaphores = signalSemaphores.data();
 
     if (vkQueueSubmit(_logicalDevice.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to submit draw command buffer!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to submit draw command buffer!");
+        std::abort();
+    }
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -343,7 +359,10 @@ Result Instance::DrawNextImage()
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized)
         return Result::NeedResize;
     else if (result != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to present swap chain image!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to present swap chain image!");
+        std::abort();
+    }
 
     return Result::Success;
 }

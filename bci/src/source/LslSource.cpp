@@ -8,31 +8,25 @@
 
 namespace lpl::bci::source {
 
-LslSource::LslSource(LslSourceConfig config)
-    : _config(std::move(config))
-{
-}
+LslSource::LslSource(LslSourceConfig config) : _config(std::move(config)) {}
 
-LslSource::~LslSource()
-{
-    stop();
-}
+LslSource::~LslSource() { stop(); }
 
 ExpectedVoid LslSource::start()
 {
-    if (_running) {
-        return std::unexpected(
-            Error::make(ErrorCode::kAlreadyRunning, "LslSource already running"));
+    if (_running)
+    {
+        return std::unexpected(Error::make(ErrorCode::kAlreadyRunning, "LslSource already running"));
     }
 
-    try {
-        auto results = lsl::resolve_stream(
-            "name", _config.streamName, 1, _config.resolveTimeoutSec);
+    try
+    {
+        auto results = lsl::resolve_stream("name", _config.streamName, 1, _config.resolveTimeoutSec);
 
-        if (results.empty()) {
+        if (results.empty())
+        {
             return std::unexpected(
-                Error::make(ErrorCode::kLslStreamNotFound,
-                    "No LSL stream named '" + _config.streamName + "' found"));
+                Error::make(ErrorCode::kLslStreamNotFound, "No LSL stream named '" + _config.streamName + "' found"));
         }
 
         _inlet = std::make_unique<lsl::stream_inlet>(results[0]);
@@ -41,27 +35,29 @@ ExpectedVoid LslSource::start()
         _running = true;
 
         return {};
-    } catch (const std::exception &e) {
-        return std::unexpected(
-            Error::make(ErrorCode::kLslConnectionFailed, e.what()));
+    }
+    catch (const std::exception &e)
+    {
+        return std::unexpected(Error::make(ErrorCode::kLslConnectionFailed, e.what()));
     }
 }
 
 Expected<std::size_t> LslSource::read(std::span<Sample> buffer)
 {
-    if (!_running || !_inlet) {
-        return std::unexpected(
-            Error::make(ErrorCode::kNotInitialized, "LslSource not started"));
+    if (!_running || !_inlet)
+    {
+        return std::unexpected(Error::make(ErrorCode::kNotInitialized, "LslSource not started"));
     }
 
     std::vector<float> raw(_channelCount);
     std::size_t count = 0;
 
-    for (auto &sample : buffer) {
-        double timestamp = _inlet->pull_sample(
-            raw.data(), static_cast<int>(_channelCount), 0.0);
+    for (auto &sample : buffer)
+    {
+        double timestamp = _inlet->pull_sample(raw.data(), static_cast<int>(_channelCount), 0.0);
 
-        if (timestamp == 0.0) {
+        if (timestamp == 0.0)
+        {
             break;
         }
 
@@ -81,11 +77,9 @@ void LslSource::stop() noexcept
 
 SourceInfo LslSource::info() const noexcept
 {
-    return SourceInfo{
-        .name = "LSL (" + _config.streamName + ")",
-        .channelCount = _channelCount,
-        .sampleRate = static_cast<float>(_sampleRate)
-    };
+    return SourceInfo{.name = "LSL (" + _config.streamName + ")",
+                      .channelCount = _channelCount,
+                      .sampleRate = static_cast<float>(_sampleRate)};
 }
 
 } // namespace lpl::bci::source

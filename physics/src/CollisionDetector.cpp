@@ -8,15 +8,14 @@
  * @copyright MIT License
  */
 
-#include <lpl/physics/CollisionDetector.hpp>
-#include <lpl/core/Assert.hpp>
 #include <algorithm>
+#include <lpl/core/Assert.hpp>
+#include <lpl/physics/CollisionDetector.hpp>
 
 namespace lpl::physics {
 
-CollisionResult CollisionDetector::testAABBvsAABB(
-    const math::AABB<math::Fixed32>& a,
-    const math::AABB<math::Fixed32>& b) noexcept
+CollisionResult CollisionDetector::testAABBvsAABB(const math::AABB<math::Fixed32> &a,
+                                                  const math::AABB<math::Fixed32> &b) noexcept
 {
     CollisionResult result{};
 
@@ -34,39 +33,33 @@ CollisionResult CollisionDetector::testAABBvsAABB(
     if (overlapX <= overlapY && overlapX <= overlapZ)
     {
         result.contact.normal = math::Vec3<math::Fixed32>{
-            (a.center().x < b.center().x) ? math::Fixed32{-1} : math::Fixed32{1},
-            math::Fixed32{0}, math::Fixed32{0}};
+            (a.center().x < b.center().x) ? math::Fixed32{-1} : math::Fixed32{1}, math::Fixed32{0}, math::Fixed32{0}};
         result.contact.penetrationDepth = overlapX;
     }
     else if (overlapY <= overlapZ)
     {
         result.contact.normal = math::Vec3<math::Fixed32>{
-            math::Fixed32{0},
-            (a.center().y < b.center().y) ? math::Fixed32{-1} : math::Fixed32{1},
-            math::Fixed32{0}};
+            math::Fixed32{0}, (a.center().y < b.center().y) ? math::Fixed32{-1} : math::Fixed32{1}, math::Fixed32{0}};
         result.contact.penetrationDepth = overlapY;
     }
     else
     {
         result.contact.normal = math::Vec3<math::Fixed32>{
-            math::Fixed32{0}, math::Fixed32{0},
-            (a.center().z < b.center().z) ? math::Fixed32{-1} : math::Fixed32{1}};
+            math::Fixed32{0}, math::Fixed32{0}, (a.center().z < b.center().z) ? math::Fixed32{-1} : math::Fixed32{1}};
         result.contact.penetrationDepth = overlapZ;
     }
 
     const auto ca = a.center();
     const auto cb = b.center();
     result.contact.position = math::Vec3<math::Fixed32>{
-        (ca.x + cb.x) / math::Fixed32{2},
-        (ca.y + cb.y) / math::Fixed32{2},
-        (ca.z + cb.z) / math::Fixed32{2}};
+        (ca.x + cb.x) / math::Fixed32{2}, (ca.y + cb.y) / math::Fixed32{2}, (ca.z + cb.z) / math::Fixed32{2}};
 
     return result;
 }
 
-CollisionResult CollisionDetector::testSphereVsSphere(
-    const math::Vec3<math::Fixed32>& centerA, math::Fixed32 radiusA,
-    const math::Vec3<math::Fixed32>& centerB, math::Fixed32 radiusB) noexcept
+CollisionResult CollisionDetector::testSphereVsSphere(const math::Vec3<math::Fixed32> &centerA, math::Fixed32 radiusA,
+                                                      const math::Vec3<math::Fixed32> &centerB,
+                                                      math::Fixed32 radiusB) noexcept
 {
     CollisionResult result{};
 
@@ -88,9 +81,7 @@ CollisionResult CollisionDetector::testSphereVsSphere(
     return result;
 }
 
-CollisionResult CollisionDetector::testGJK(
-    const void* /*shapeA*/,
-    const void* /*shapeB*/) noexcept
+CollisionResult CollisionDetector::testGJK(const void * /*shapeA*/, const void * /*shapeB*/) noexcept
 {
     /// @todo Implement GJK (Gilbert-Johnson-Keerthi) convex hull collision
     ///       detection. Required for non-AABB/sphere convex shapes.
@@ -98,9 +89,7 @@ CollisionResult CollisionDetector::testGJK(
     return {};
 }
 
-CollisionResult CollisionDetector::testSAT(
-    const void* /*obbA*/,
-    const void* /*obbB*/) noexcept
+CollisionResult CollisionDetector::testSAT(const void * /*obbA*/, const void * /*obbB*/) noexcept
 {
     /// @todo Implement SAT (Separating Axis Theorem) for OBB vs OBB.
     ///       Needed for oriented bounding box collisions in physics.

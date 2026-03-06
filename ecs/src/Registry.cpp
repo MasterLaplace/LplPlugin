@@ -11,9 +11,9 @@
  * @copyright MIT License
  */
 
-#include <lpl/ecs/Registry.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Constants.hpp>
+#include <lpl/ecs/Registry.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -26,27 +26,25 @@ namespace lpl::ecs {
 //  Impl — Atomic free-list (Treiber stack with separate arrays)              //
 // ========================================================================== //
 
-struct Registry::Impl
-{
+struct Registry::Impl {
     /** @brief Sentinel value meaning "no next slot". */
-    static constexpr core::u32 kNoNext  = ~core::u32{0};
+    static constexpr core::u32 kNoNext = ~core::u32{0};
     static constexpr core::u32 kInitCap = 1024;
 
     /** @brief Non-atomic slot metadata (not stored in vector of atomics). */
-    struct SlotInfo
-    {
-        core::u32  generation{0};
-        core::u32  partitionIndex{0};
-        EntityRef  ref{};
-        bool       alive{false};
+    struct SlotInfo {
+        core::u32 generation{0};
+        core::u32 partitionIndex{0};
+        EntityRef ref{};
+        bool alive{false};
     };
 
-    std::vector<SlotInfo>                   slots;
-    std::vector<core::u32>                  freeNext; ///< Per-slot intrusive free-list link
-    std::atomic<core::u32>                  freeHead{kNoNext}; ///< Head of Treiber stack
+    std::vector<SlotInfo> slots;
+    std::vector<core::u32> freeNext;          ///< Per-slot intrusive free-list link
+    std::atomic<core::u32> freeHead{kNoNext}; ///< Head of Treiber stack
     std::vector<std::unique_ptr<Partition>> partitions;
-    std::atomic<core::u32>                  liveCount{0};
-    std::atomic<core::u32>                  highWater{0};
+    std::atomic<core::u32> liveCount{0};
+    std::atomic<core::u32> highWater{0};
 
     Impl()
     {
@@ -66,9 +64,7 @@ struct Registry::Impl
         while (head != kNoNext)
         {
             const core::u32 nextVal = freeNext[head];
-            if (freeHead.compare_exchange_weak(head, nextVal,
-                                                std::memory_order_release,
-                                                std::memory_order_acquire))
+            if (freeHead.compare_exchange_weak(head, nextVal, std::memory_order_release, std::memory_order_acquire))
             {
                 return head;
             }
@@ -94,15 +90,12 @@ struct Registry::Impl
         do
         {
             freeNext[slot] = head;
-        }
-        while (!freeHead.compare_exchange_weak(head, slot,
-                                                std::memory_order_release,
-                                                std::memory_order_relaxed));
+        } while (!freeHead.compare_exchange_weak(head, slot, std::memory_order_release, std::memory_order_relaxed));
     }
 
-    Partition* findPartition(const Archetype& arch)
+    Partition *findPartition(const Archetype &arch)
     {
-        for (auto& p : partitions)
+        for (auto &p : partitions)
         {
             if (p->archetype() == arch)
             {
@@ -117,13 +110,11 @@ struct Registry::Impl
 //  Registry                                                                  //
 // ========================================================================== //
 
-Registry::Registry()
-    : _impl{std::make_unique<Impl>()}
-{}
+Registry::Registry() : _impl{std::make_unique<Impl>()} {}
 
 Registry::~Registry() = default;
 
-core::Expected<EntityId> Registry::createEntity(const Archetype& archetype)
+core::Expected<EntityId> Registry::createEntity(const Archetype &archetype)
 {
     const core::u32 slot = _impl->allocateSlot();
 
@@ -132,12 +123,12 @@ core::Expected<EntityId> Registry::createEntity(const Archetype& archetype)
         return core::makeError(core::ErrorCode::OutOfMemory, "Entity slot pool exhausted");
     }
 
-    auto& info = _impl->slots[slot];
+    auto &info = _impl->slots[slot];
     info.alive = true;
 
     const EntityId id{info.generation, slot};
 
-    Partition& partition = getOrCreatePartition(archetype);
+    Partition &partition = getOrCreatePartition(archetype);
     auto refResult = partition.insert(id);
     if (!refResult.has_value())
     {
@@ -169,10 +160,10 @@ core::Expected<void> Registry::destroyEntity(EntityId id)
         return core::makeError(core::ErrorCode::InvalidArgument, "Entity is not alive");
     }
 
-    auto& info = _impl->slots[id.slot()];
+    auto &info = _impl->slots[id.slot()];
     info.alive = false;
 
-    auto& partition = *_impl->partitions[info.partitionIndex];
+    auto &partition = *_impl->partitions[info.partitionIndex];
     auto eraseResult = partition.erase(info.ref);
     if (!eraseResult.has_value())
     {
@@ -200,7 +191,7 @@ bool Registry::isAlive(EntityId id) const noexcept
     {
         return false;
     }
-    const auto& info = _impl->slots[id.slot()];
+    const auto &info = _impl->slots[id.slot()];
     return info.alive && info.generation == id.generation();
 }
 
@@ -213,14 +204,11 @@ core::Expected<EntityRef> Registry::resolve(EntityId id) const
     return _impl->slots[id.slot()].ref;
 }
 
-core::u32 Registry::liveCount() const noexcept
-{
-    return _impl->liveCount.load(std::memory_order_relaxed);
-}
+core::u32 Registry::liveCount() const noexcept { return _impl->liveCount.load(std::memory_order_relaxed); }
 
-Partition& Registry::getOrCreatePartition(const Archetype& archetype)
+Partition &Registry::getOrCreatePartition(const Archetype &archetype)
 {
-    if (auto* existing = _impl->findPartition(archetype))
+    if (auto *existing = _impl->findPartition(archetype))
     {
         return *existing;
     }
@@ -235,20 +223,16 @@ Partition& Registry::getOrCreatePartition(const Archetype& archetype)
         }
     }
 
-    _impl->partitions.push_back(
-        std::make_unique<Partition>(archetype, std::move(layouts)));
+    _impl->partitions.push_back(std::make_unique<Partition>(archetype, std::move(layouts)));
 
     return *_impl->partitions.back();
 }
 
-std::span<const std::unique_ptr<Partition>> Registry::partitions() const noexcept
-{
-    return _impl->partitions;
-}
+std::span<const std::unique_ptr<Partition>> Registry::partitions() const noexcept { return _impl->partitions; }
 
 void Registry::swapAllBuffers() noexcept
 {
-    for (auto& partition : _impl->partitions)
+    for (auto &partition : _impl->partitions)
     {
         partition->swapAllBuffers();
     }

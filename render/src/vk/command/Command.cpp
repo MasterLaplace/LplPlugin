@@ -1,6 +1,6 @@
 #include "command/Command.hpp"
-#include <lpl/core/Log.hpp>
 #include <cstdlib>
+#include <lpl/core/Log.hpp>
 
 namespace lpl::render::vk {
 
@@ -14,7 +14,10 @@ void Command::Create(const VkDevice &device, const VkPhysicalDevice &physicalDev
     poolInfo.queueFamilyIndex = _queueFamilies.GetIndices().graphicsFamily.value();
 
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &_commandPool) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to create command pool!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to create command pool!");
+        std::abort();
+    }
 }
 
 void Command::CreateCommandBuffers(const VkDevice &device,
@@ -29,7 +32,10 @@ void Command::CreateCommandBuffers(const VkDevice &device,
     allocInfo.commandBufferCount = static_cast<uint32_t>(_commandBuffers.size());
 
     if (vkAllocateCommandBuffers(device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to allocate command buffers!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to allocate command buffers!");
+        std::abort();
+    }
 }
 
 void Command::Destroy(const VkDevice &device)
@@ -48,7 +54,10 @@ void Command::RecordBuffer(const RecordInfo &info)
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to begin recording command buffer!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to begin recording command buffer!");
+        std::abort();
+    }
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -103,7 +112,10 @@ void Command::RecordBuffer(const RecordInfo &info)
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-        { ::lpl::core::Log::fatal("failed to record command buffer!"); std::abort(); }
+    {
+        ::lpl::core::Log::fatal("failed to record command buffer!");
+        std::abort();
+    }
 }
 
 } // namespace lpl::render::vk

@@ -8,9 +8,9 @@
  * @copyright MIT License
  */
 
-#include <lpl/serial/StateSnapshot.hpp>
-#include <lpl/net/protocol/Bitstream.hpp>
 #include <lpl/core/Assert.hpp>
+#include <lpl/net/protocol/Bitstream.hpp>
+#include <lpl/serial/StateSnapshot.hpp>
 
 namespace lpl::serial {
 
@@ -22,9 +22,7 @@ void StateSnapshot::setTick(core::u64 tick) noexcept { _tick = tick; }
 
 core::u64 StateSnapshot::hash() const noexcept { return _hash; }
 
-void StateSnapshot::addEntityBlob(core::u32 entityId,
-                                  const core::byte* data,
-                                  core::usize size)
+void StateSnapshot::addEntityBlob(core::u32 entityId, const core::byte *data, core::usize size)
 {
     LPL_ASSERT(data != nullptr || size == 0);
 
@@ -34,12 +32,9 @@ void StateSnapshot::addEntityBlob(core::u32 entityId,
     _blobs.push_back(std::move(blob));
 }
 
-core::usize StateSnapshot::entityCount() const noexcept
-{
-    return _blobs.size();
-}
+core::usize StateSnapshot::entityCount() const noexcept { return _blobs.size(); }
 
-const EntityBlob& StateSnapshot::blob(core::usize index) const
+const EntityBlob &StateSnapshot::blob(core::usize index) const
 {
     LPL_ASSERT(index < _blobs.size());
     return _blobs[index];
@@ -56,20 +51,18 @@ void StateSnapshot::rehash()
 {
     math::StateHash hasher;
     hasher.combine(_tick);
-    for (const auto& b : _blobs)
+    for (const auto &b : _blobs)
     {
         hasher.combine(b.entityId);
         if (!b.data.empty())
         {
-            hasher.hashBytes({reinterpret_cast<const core::byte*>(b.data.data()),
-                              b.data.size()});
+            hasher.hashBytes({reinterpret_cast<const core::byte *>(b.data.data()), b.data.size()});
         }
     }
     _hash = hasher.digest();
 }
 
-core::Expected<void> StateSnapshot::serialize(
-    net::protocol::Bitstream& stream) const
+core::Expected<void> StateSnapshot::serialize(net::protocol::Bitstream &stream) const
 {
     // Write 64-bit _tick
     stream.writeU32(static_cast<core::u32>(_tick >> 32));
@@ -81,7 +74,7 @@ core::Expected<void> StateSnapshot::serialize(
 
     stream.writeU32(static_cast<core::u32>(_blobs.size()));
 
-    for (const auto& blob : _blobs)
+    for (const auto &blob : _blobs)
     {
         stream.writeU32(blob.entityId);
         stream.writeU32(static_cast<core::u32>(blob.data.size()));
@@ -94,25 +87,29 @@ core::Expected<void> StateSnapshot::serialize(
     return {};
 }
 
-core::Expected<void> StateSnapshot::deserialize(
-    net::protocol::Bitstream& stream)
+core::Expected<void> StateSnapshot::deserialize(net::protocol::Bitstream &stream)
 {
     clear();
 
     auto tickHi = stream.readU32();
-    if (!tickHi) return core::makeError(core::ErrorCode::IoError, "EOF reading tick");
+    if (!tickHi)
+        return core::makeError(core::ErrorCode::IoError, "EOF reading tick");
     auto tickLo = stream.readU32();
-    if (!tickLo) return core::makeError(core::ErrorCode::IoError, "EOF reading tick");
+    if (!tickLo)
+        return core::makeError(core::ErrorCode::IoError, "EOF reading tick");
     _tick = (static_cast<core::u64>(*tickHi) << 32) | *tickLo;
 
     auto hashHi = stream.readU32();
-    if (!hashHi) return core::makeError(core::ErrorCode::IoError, "EOF reading hash");
+    if (!hashHi)
+        return core::makeError(core::ErrorCode::IoError, "EOF reading hash");
     auto hashLo = stream.readU32();
-    if (!hashLo) return core::makeError(core::ErrorCode::IoError, "EOF reading hash");
+    if (!hashLo)
+        return core::makeError(core::ErrorCode::IoError, "EOF reading hash");
     _hash = (static_cast<core::u64>(*hashHi) << 32) | *hashLo;
 
     auto count = stream.readU32();
-    if (!count) return core::makeError(core::ErrorCode::IoError, "EOF reading count");
+    if (!count)
+        return core::makeError(core::ErrorCode::IoError, "EOF reading count");
 
     _blobs.reserve(*count);
 
@@ -121,16 +118,19 @@ core::Expected<void> StateSnapshot::deserialize(
         EntityBlob blob;
 
         auto id = stream.readU32();
-        if (!id) return core::makeError(core::ErrorCode::IoError, "EOF reading id");
+        if (!id)
+            return core::makeError(core::ErrorCode::IoError, "EOF reading id");
         blob.entityId = *id;
 
         auto size = stream.readU32();
-        if (!size) return core::makeError(core::ErrorCode::IoError, "EOF reading size");
+        if (!size)
+            return core::makeError(core::ErrorCode::IoError, "EOF reading size");
 
         if (*size > 0)
         {
             auto dataBytes = stream.readBytes(*size);
-            if (!dataBytes) return core::makeError(core::ErrorCode::IoError, "EOF reading data");
+            if (!dataBytes)
+                return core::makeError(core::ErrorCode::IoError, "EOF reading data");
             blob.data = std::move(*dataBytes);
         }
 

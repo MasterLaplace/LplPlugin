@@ -8,38 +8,32 @@
  * @copyright MIT License
  */
 
-#include <lpl/net/transport/KernelTransport.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/net/transport/KernelTransport.hpp>
 
 #include "../../../kernel/lpl_protocol.h"
 
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/ioctl.h>
-#include <cstring>
 #include <cerrno>
+#include <cstring>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace lpl::net::transport {
 
-struct KernelTransport::Impl
-{
-    const char*      devicePath;
-    int              fd{-1};
-    LplSharedMemory* shm{nullptr};
+struct KernelTransport::Impl {
+    const char *devicePath;
+    int fd{-1};
+    LplSharedMemory *shm{nullptr};
 
-    explicit Impl(const char* path) : devicePath{path} {}
+    explicit Impl(const char *path) : devicePath{path} {}
 };
 
-KernelTransport::KernelTransport(const char* devicePath)
-    : _impl{std::make_unique<Impl>(devicePath)}
-{}
+KernelTransport::KernelTransport(const char *devicePath) : _impl{std::make_unique<Impl>(devicePath)} {}
 
-KernelTransport::~KernelTransport()
-{
-    close();
-}
+KernelTransport::~KernelTransport() { close(); }
 
 core::Expected<void> KernelTransport::open()
 {
@@ -52,18 +46,15 @@ core::Expected<void> KernelTransport::open()
     if (_impl->fd < 0)
     {
         int err = errno;
-        std::string msg = std::string("KernelTransport: open('")
-                          + _impl->devicePath + "') failed: "
-                          + std::strerror(err);
+        std::string msg =
+            std::string("KernelTransport: open('") + _impl->devicePath + "') failed: " + std::strerror(err);
         core::Log::error(msg);
-        return core::makeError(core::ErrorCode::IoError,
-                               "Failed to open kernel device");
+        return core::makeError(core::ErrorCode::IoError, "Failed to open kernel device");
     }
 
     size_t page = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     size_t len = ((sizeof(LplSharedMemory) + page - 1) / page) * page;
-    void* mapped = ::mmap(nullptr, len,
-                          PROT_READ | PROT_WRITE, MAP_SHARED, _impl->fd, 0);
+    void *mapped = ::mmap(nullptr, len, PROT_READ | PROT_WRITE, MAP_SHARED, _impl->fd, 0);
 
     if (mapped == MAP_FAILED)
     {
@@ -71,11 +62,10 @@ core::Expected<void> KernelTransport::open()
         ::close(_impl->fd);
         _impl->fd = -1;
         core::Log::error("KernelTransport: mmap failed: %s", std::strerror(err));
-        return core::makeError(core::ErrorCode::IoError,
-                               "Failed to mmap kernel device");
+        return core::makeError(core::ErrorCode::IoError, "Failed to mmap kernel device");
     }
 
-    _impl->shm = static_cast<LplSharedMemory*>(mapped);
+    _impl->shm = static_cast<LplSharedMemory *>(mapped);
 
     core::Log::info("KernelTransport: opened device and mmap'd shared memory");
     return {};
@@ -96,9 +86,7 @@ void KernelTransport::close()
     }
 }
 
-core::Expected<core::u32> KernelTransport::send(
-    std::span<const core::byte> data,
-    const void* /*address*/)
+core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data, const void * /*address*/)
 {
     if (!_impl->shm)
     {
@@ -119,12 +107,12 @@ core::Expected<core::u32> KernelTransport::send(
         return core::makeError(core::ErrorCode::IoError, "TX ring buffer full");
     }
 
-    LplTxPacket* slot = &_impl->shm->tx.packets[head & LPL_RING_MASK];
+    LplTxPacket *slot = &_impl->shm->tx.packets[head & LPL_RING_MASK];
 
     // Address handling would go here, mapping ITransport socket address to dst_ip/port
-    slot->dst_ip   = 0;
+    slot->dst_ip = 0;
     slot->dst_port = 0;
-    slot->length   = static_cast<uint16_t>(data.size());
+    slot->length = static_cast<uint16_t>(data.size());
     std::memcpy(slot->data, data.data(), data.size());
 
     smp_store_release(&_impl->shm->tx.idx.head, next);
@@ -135,9 +123,7 @@ core::Expected<core::u32> KernelTransport::send(
     return static_cast<core::u32>(data.size());
 }
 
-core::Expected<core::u32> KernelTransport::receive(
-    std::span<core::byte> buffer,
-    void* /*fromAddress*/)
+core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, void * /*fromAddress*/)
 {
     if (!_impl->shm)
     {
@@ -152,7 +138,7 @@ core::Expected<core::u32> KernelTransport::receive(
         return core::u32{0}; // Empty
     }
 
-    LplRxPacket* slot = &_impl->shm->rx.packets[tail & LPL_RING_MASK];
+    LplRxPacket *slot = &_impl->shm->rx.packets[tail & LPL_RING_MASK];
 
     if (slot->length > buffer.size())
     {
@@ -168,9 +154,6 @@ core::Expected<core::u32> KernelTransport::receive(
     return static_cast<core::u32>(slot->length);
 }
 
-const char* KernelTransport::name() const noexcept
-{
-    return "KernelTransport";
-}
+const char *KernelTransport::name() const noexcept { return "KernelTransport"; }
 
 } // namespace lpl::net::transport
