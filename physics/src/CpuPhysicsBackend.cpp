@@ -71,7 +71,9 @@ struct CpuPhysicsBackend::Impl {
 
     explicit Impl(ecs::Registry &r) : registry{r} {}
 
-    /** @brief Ensures sleeping vectors are large enough for a given entity slot. */
+    /**
+     * @brief Ensures sleeping vectors are large enough for a given entity slot.
+     */
     void ensureSleepCapacity(core::u32 entitySlot)
     {
         if (entitySlot >= static_cast<core::u32>(sleeping.size()))
@@ -81,13 +83,17 @@ struct CpuPhysicsBackend::Impl {
         }
     }
 
-    /** @brief Check if a given entity slot is sleeping. */
+    /**
+     * @brief Check if a given entity slot is sleeping.
+     */
     [[nodiscard]] bool isSleeping(core::u32 slot) const noexcept
     {
         return slot < static_cast<core::u32>(sleeping.size()) && sleeping[slot];
     }
 
-    /** @brief Wake an entity by its slot. */
+    /**
+     * @brief Wake an entity by its slot.
+     */
     void wake(core::u32 slot) noexcept
     {
         if (slot < static_cast<core::u32>(sleeping.size()))

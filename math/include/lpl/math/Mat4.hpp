@@ -24,7 +24,7 @@
 namespace lpl::math {
 
 template <core::Arithmetic T> struct Mat4 final {
-    std::array<T, 16> m{};
+    std::array<T, 16u> m{};
 
     constexpr Mat4() = default;
 

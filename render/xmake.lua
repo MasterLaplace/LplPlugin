@@ -1,6 +1,6 @@
 -- /////////////////////////////////////////////////////////////////////////////
--- /// @file xmake.lua
--- /// @brief Build configuration for the lpl::render module.
+-- @file xmake.lua
+-- @brief Build configuration for the lpl::render module.
 -- /////////////////////////////////////////////////////////////////////////////
 
 if has_config("renderer") then
@@ -45,7 +45,7 @@ if has_config("renderer") then
         add_files("src/*.cpp")
         add_files("src/vk/**/*.cpp")
 
-        add_packages("vulkan-hpp", "vulkan-loader", "stb", "tinyobjloader", "glm", "imgui")
+        add_packages("imgui", "vulkan-hpp", "vulkan-loader", "stb", "tinyobjloader", "glm")
 
         add_deps("lpl-core", "lpl-math", "lpl-memory")
 

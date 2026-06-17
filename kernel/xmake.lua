@@ -1,16 +1,16 @@
 -- /////////////////////////////////////////////////////////////////////////////
--- /// @file xmake.lua
--- /// @brief Kernel module build & management targets.
--- ///
--- /// These are phony targets that wrap the kernel build system and
--- /// insmod/rmmod commands for the LPL kernel module.
--- ///
--- /// Usage:
--- ///   xmake kmod-build      — Build lpl_kmod.ko
--- ///   xmake kmod-install    — Load module + set /dev/lpl0 permissions
--- ///   xmake kmod-uninstall  — Unload module
--- ///   xmake kmod-logs       — Show recent kernel logs
--- ///   xmake kmod-clean      — Clean kernel build artifacts
+-- @file xmake.lua
+-- @brief Kernel module build & management targets.
+--
+-- These are phony targets that wrap the kernel build system and
+-- insmod/rmmod commands for the LPL kernel module.
+--
+-- Usage:
+--   xmake kmod-build      — Build lpl_kmod.ko
+--   xmake kmod-install    — Load module + set /dev/lpl0 permissions
+--   xmake kmod-uninstall  — Unload module
+--   xmake kmod-logs       — Show recent kernel logs
+--   xmake kmod-clean      — Clean kernel build artifacts
 -- /////////////////////////////////////////////////////////////////////////////
 
 local kernel_dir = path.absolute(os.scriptdir())

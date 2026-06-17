@@ -1,6 +1,6 @@
 -- /////////////////////////////////////////////////////////////////////////////
--- /// @file xmake.lua
--- /// @brief Build configuration for the lpl::physics module.
+-- @file xmake.lua
+-- @brief Build configuration for the lpl::physics module.
 -- /////////////////////////////////////////////////////////////////////////////
 
 target("lpl-physics")
@@ -10,3 +10,4 @@ target("lpl-physics")
     add_headerfiles("include/(lpl/physics/*.hpp)")
     add_includedirs("include", {public = true})
     add_files("src/*.cpp")
+target_end()

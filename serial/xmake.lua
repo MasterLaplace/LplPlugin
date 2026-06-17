@@ -1,6 +1,9 @@
 -- /////////////////////////////////////////////////////////////////////////////
+-- @file xmake.lua
+-- @brief Build configuration for the lpl::serial module.
 -- serial/ build configuration — Serialization, snapshots, replay
 -- /////////////////////////////////////////////////////////////////////////////
+
 target("lpl-serial")
     set_kind("static")
     set_group("modules")
