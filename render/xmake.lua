@@ -4,9 +4,39 @@
 -- /////////////////////////////////////////////////////////////////////////////
 
 if has_config("renderer") then
+    -- ─────────────────────────────────────────────────────────────────────────
+    -- Shader compilation (phony target — GLSL → SPIR-V)
+    -- ─────────────────────────────────────────────────────────────────────────
+    target("lpl-shaders")
+        set_kind("phony")
+        set_group("shaders")
+        on_build(function (target)
+            import("core.project.config")
+
+            local shaderSrcDir = path.join(os.scriptdir(), "src", "shaders")
+            local shaderOutDir = path.join(os.projectdir(), "shaders")
+            os.mkdir(shaderOutDir)
+
+            local shaderFiles = {}
+            for _, pat in ipairs({"*.vert", "*.frag"}) do
+                table.join2(shaderFiles, os.files(path.join(shaderSrcDir, pat)))
+            end
+
+            for _, shaderFile in ipairs(shaderFiles) do
+                local ext = path.extension(shaderFile):sub(2)  -- "vert" | "frag"
+                local outputFile = path.join(shaderOutDir, ext .. ".spv")
+                os.execv("glslangValidator", {"-V", shaderFile, "-o", outputFile})
+            end
+        end)
+    target_end()
+
+    -- ─────────────────────────────────────────────────────────────────────────
+    -- Render module
+    -- ─────────────────────────────────────────────────────────────────────────
     target("lpl-render")
         set_kind("static")
         set_group("modules")
+        add_deps("lpl-shaders")  -- compile shaders before linking any consumer
         add_includedirs("include", {public = true})
 
         -- Expose the internal headers of the Vulkan implementation specifically to the render module itself
@@ -15,7 +45,7 @@ if has_config("renderer") then
         add_files("src/*.cpp")
         add_files("src/vk/**/*.cpp")
 
-        add_packages("vulkan-hpp", "stb", "tinyobjloader", "imgui")
+        add_packages("vulkan-hpp", "vulkan-loader", "stb", "tinyobjloader", "glm", "imgui")
 
         add_deps("lpl-core", "lpl-math", "lpl-memory")
 

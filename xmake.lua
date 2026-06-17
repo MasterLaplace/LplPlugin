@@ -59,6 +59,8 @@ option_end()
 
 if has_config("renderer") then
     add_requires("vulkan-headers", "vulkan-loader", "vulkan-hpp")
+    add_requires("glfw 3.4", {system = false})
+    add_requires("glm")
     add_requires("imgui", {system = false, configs = {glfw = true, vulkan = true}})
     add_defines("LPL_HAS_RENDERER")
     add_defines("VULKAN_HPP_NO_EXCEPTIONS")

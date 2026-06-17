@@ -23,6 +23,7 @@ target("lpl-engine")
 
     if has_config("renderer") then
         add_deps("lpl-render")
+        add_packages("glfw", {public = false})
     end
 
     add_includedirs("include", { public = true })
