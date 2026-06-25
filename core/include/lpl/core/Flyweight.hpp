@@ -13,9 +13,10 @@
 #ifndef LPL_CORE_FLYWEIGHT_HPP
 #    define LPL_CORE_FLYWEIGHT_HPP
 
+#    include <lpl/std/mutex.hpp>
+#    include <lpl/std/unordered_map.hpp>
+
 #    include <memory>
-#    include <mutex>
-#    include <unordered_map>
 
 namespace lpl::core {
 
@@ -41,7 +42,7 @@ public:
      */
     template <typename CreatorCallable> std::shared_ptr<const T> getOrCreate(const Key &key, CreatorCallable &&creator)
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
 
         auto it = _cache.find(key);
         if (it != _cache.end())
@@ -66,7 +67,7 @@ public:
     /** @brief Triggers a cleanup of any expired weak pointers. */
     void prune()
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         for (auto it = _cache.begin(); it != _cache.end();)
         {
             if (it->second.expired())
@@ -83,13 +84,13 @@ public:
     /** @brief Current number of cached weak keys. */
     [[nodiscard]] usize size() const
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         return _cache.size();
     }
 
 private:
-    mutable std::mutex _mutex;
-    std::unordered_map<Key, std::weak_ptr<const T>> _cache;
+    mutable lpl::pmr::mutex _mutex;
+    lpl::pmr::unordered_map<Key, std::weak_ptr<const T>> _cache;
 };
 
 } // namespace lpl::core

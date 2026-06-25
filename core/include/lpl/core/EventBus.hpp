@@ -16,12 +16,13 @@
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Types.hpp>
 
+#    include <lpl/std/functional.hpp>
+#    include <lpl/std/mutex.hpp>
+#    include <lpl/std/unordered_map.hpp>
+#    include <lpl/std/vector.hpp>
+
 #    include <atomic>
-#    include <functional>
 #    include <memory>
-#    include <mutex>
-#    include <unordered_map>
-#    include <vector>
 
 namespace lpl::core {
 
@@ -58,9 +59,9 @@ public:
      * @param callback Function to invoke when event occurs.
      * @return Subscription ID, used for unsubscription.
      */
-    template <typename T> u32 subscribe(std::function<void(const T &)> callback)
+    template <typename T> u32 subscribe(lpl::pmr::function<void(const T &)> callback)
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         const u32 id = ++_nextId;
         auto &handlers = _handlers[getEventId<T>()];
 
@@ -76,7 +77,7 @@ public:
      */
     template <typename T> void unsubscribe(u32 id)
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         const auto it = _handlers.find(getEventId<T>());
         if (it == _handlers.end())
             return;
@@ -102,10 +103,10 @@ public:
      */
     template <typename T> void publish(const T &event)
     {
-        std::vector<std::function<void(const void *)>> callbacksToInvoke;
+        lpl::pmr::vector<lpl::pmr::function<void(const void *)>> callbacksToInvoke;
 
         {
-            std::lock_guard lock{_mutex};
+            lpl::pmr::lock_guard lock{_mutex};
             const auto it = _handlers.find(getEventId<T>());
             if (it != _handlers.end())
             {
@@ -126,7 +127,7 @@ public:
     /** @brief Clears all subscriptions. */
     void clear()
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         _handlers.clear();
     }
 
@@ -136,12 +137,12 @@ private:
 
     struct Handler {
         u32 id;
-        std::function<void(const void *)> callback;
+        lpl::pmr::function<void(const void *)> callback;
     };
 
-    std::mutex _mutex;
+    lpl::pmr::mutex _mutex;
     u32 _nextId{0};
-    std::unordered_map<u32, std::vector<Handler>> _handlers;
+    lpl::pmr::unordered_map<u32, lpl::pmr::vector<Handler>> _handlers;
 };
 
 } // namespace lpl::core

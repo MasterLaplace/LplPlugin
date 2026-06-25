@@ -9,8 +9,9 @@
  */
 #include "lpl/math/Cordic.hpp"
 
+#include <lpl/std/cmath.hpp>
+
 #include <array>
-#include <cmath>
 
 namespace lpl::math {
 
@@ -21,7 +22,7 @@ constexpr core::u32 kIterations = 16;
 constexpr auto kAtanTable = [] {
     std::array<core::i32, kIterations> tbl{};
     for (core::u32 i = 0; i < kIterations; ++i)
-        tbl[i] = static_cast<core::i32>(std::atan(1.0 / (1 << i)) * Fixed32::kOne);
+        tbl[i] = static_cast<core::i32>(lpl::pmr::atan(1.0 / (1 << i)) * Fixed32::kOne);
     return tbl;
 }();
 

@@ -9,7 +9,7 @@
  */
 #include "lpl/math/Statistics.hpp"
 
-#include <cmath>
+#include <lpl/std/cmath.hpp>
 
 namespace lpl::math {
 
@@ -41,7 +41,7 @@ void Statistics::slidingWindowRms(std::span<const double> signal, core::u32 wind
         double sumSq = 0.0;
         for (core::u32 j = 0; j < windowSize; ++j)
             sumSq += signal[i + j] * signal[i + j];
-        rms[i] = std::sqrt(sumSq / windowSize);
+        rms[i] = lpl::pmr::sqrt(sumSq / windowSize);
     }
 }
 
@@ -65,7 +65,7 @@ void Statistics::computeBaseline(std::span<const double> samples, double &mean, 
         double d = s - mean;
         varSum += d * d;
     }
-    stddev = std::sqrt(varSum / static_cast<double>(samples.size()));
+    stddev = lpl::pmr::sqrt(varSum / static_cast<double>(samples.size()));
 }
 
 } // namespace lpl::math

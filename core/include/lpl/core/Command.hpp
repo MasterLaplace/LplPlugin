@@ -14,9 +14,11 @@
 #    define LPL_CORE_COMMAND_HPP
 
 #    include <lpl/core/Types.hpp>
+
+#    include <lpl/std/mutex.hpp>
+#    include <lpl/std/vector.hpp>
+
 #    include <memory>
-#    include <mutex>
-#    include <vector>
 
 namespace lpl::core {
 
@@ -47,7 +49,7 @@ public:
      */
     void push(std::unique_ptr<ICommand> command)
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         _commands.push_back(std::move(command));
     }
 
@@ -56,9 +58,9 @@ public:
      */
     void flush()
     {
-        std::vector<std::unique_ptr<ICommand>> pending;
+        lpl::pmr::vector<std::unique_ptr<ICommand>> pending;
         {
-            std::lock_guard lock{_mutex};
+            lpl::pmr::lock_guard lock{_mutex};
             pending.swap(_commands);
         }
 
@@ -74,13 +76,13 @@ public:
     /** @brief Returns true if the queue has no pending commands. */
     [[nodiscard]] bool empty() const
     {
-        std::lock_guard lock{_mutex};
+        lpl::pmr::lock_guard lock{_mutex};
         return _commands.empty();
     }
 
 private:
-    mutable std::mutex _mutex;
-    std::vector<std::unique_ptr<ICommand>> _commands;
+    mutable lpl::pmr::mutex _mutex;
+    lpl::pmr::vector<std::unique_ptr<ICommand>> _commands;
 };
 
 } // namespace lpl::core

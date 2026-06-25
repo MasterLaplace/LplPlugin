@@ -18,9 +18,10 @@
 
 #    include "Types.hpp"
 
+#    include <lpl/std/string.hpp>
+
 #    include <expected>
 #    include <source_location>
-#    include <string>
 
 namespace lpl::core {
 
@@ -102,18 +103,19 @@ public:
      * @param message Human-readable description.
      * @param loc     Source location (auto-filled by the compiler).
      */
-    explicit Error(ErrorCode code, std::string message, std::source_location loc = std::source_location::current())
+    explicit Error(ErrorCode code, lpl::pmr::string message,
+                   std::source_location loc = std::source_location::current())
         : _code(code), _message(std::move(message)), _location(loc)
     {
     }
 
     [[nodiscard]] ErrorCode code() const { return _code; }
-    [[nodiscard]] const std::string &message() const { return _message; }
+    [[nodiscard]] const lpl::pmr::string &message() const { return _message; }
     [[nodiscard]] std::source_location location() const { return _location; }
 
 private:
     ErrorCode _code;
-    std::string _message;
+    lpl::pmr::string _message;
     std::source_location _location;
 };
 
@@ -125,7 +127,7 @@ using Unexpected = std::unexpected<Error>;
 /// @param message Human-readable description.
 /// @param loc Source location (auto-filled).
 /// @return std::unexpected<Error>.
-[[nodiscard]] inline auto makeError(ErrorCode code, std::string message,
+[[nodiscard]] inline auto makeError(ErrorCode code, lpl::pmr::string message,
                                     std::source_location loc = std::source_location::current())
 {
     return std::unexpected<Error>(Error{code, std::move(message), loc});

@@ -55,6 +55,18 @@
 #        define LPL_COMPILER_UNKNOWN 1
 #    endif
 
+// ---- Target runtime ------------------------------------------------------
+//
+// LPL_TARGET_KERNEL distinguishes the freestanding kernel build (libengine.a,
+// linked into LplKernel) from the hosted Linux/dev build. The libengine build
+// passes -DLPL_TARGET_KERNEL=1; everything else defaults to the hosted target.
+// It selects, via the lpl/std umbrella, whether portable containers/utilities
+// resolve to kernel_std (kstd) or the hosted std.
+
+#    ifndef LPL_TARGET_KERNEL
+#        define LPL_TARGET_KERNEL 0
+#    endif
+
 // ---- Intrinsics ----------------------------------------------------------
 
 #    if defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG)
@@ -94,8 +106,12 @@ inline constexpr std::size_t kCacheLineSize = 64;
 // ---- CPU Pause Hint ------------------------------------------------------
 
 #    if defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)
-#        include <immintrin.h>
-#        define LPL_CPU_PAUSE() _mm_pause()
+// Use the compiler intrinsic rather than <immintrin.h>: that header drags in
+// mm_malloc.h, whose _mm_malloc/_mm_free reference malloc/free unconditionally
+// (only <errno.h> is __STDC_HOSTED__-guarded), which the freestanding kernel
+// libc does not provide. __builtin_ia32_pause() emits the same PAUSE with no
+// header dependency and works on both the hosted and kernel targets.
+#        define LPL_CPU_PAUSE() __builtin_ia32_pause()
 #    elif defined(LPL_ARCH_ARM64)
 #        define LPL_CPU_PAUSE() __asm__ volatile("yield")
 #    else
