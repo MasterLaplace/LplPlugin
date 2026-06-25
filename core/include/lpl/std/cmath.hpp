@@ -59,7 +59,7 @@ using ::std::floor;
 using ::std::pow;
 using ::std::sin;
 using ::std::sqrt;
-}
+} // namespace lpl::pmr
 #    endif
 
 #endif // LPL_STD_CMATH_HPP

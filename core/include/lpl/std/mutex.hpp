@@ -19,21 +19,17 @@
 namespace lpl::pmr {
 using mutex = ::kstd::mutex;
 using recursive_mutex = ::kstd::recursive_mutex;
-template <typename Mutex>
-using lock_guard = ::kstd::lock_guard<Mutex>;
-template <typename Mutex>
-using unique_lock = ::kstd::unique_lock<Mutex>;
-}
+template <typename Mutex> using lock_guard = ::kstd::lock_guard<Mutex>;
+template <typename Mutex> using unique_lock = ::kstd::unique_lock<Mutex>;
+} // namespace lpl::pmr
 #    else
 #        include <mutex>
 namespace lpl::pmr {
 using mutex = ::std::mutex;
 using recursive_mutex = ::std::recursive_mutex;
-template <typename Mutex>
-using lock_guard = ::std::lock_guard<Mutex>;
-template <typename Mutex>
-using unique_lock = ::std::unique_lock<Mutex>;
-}
+template <typename Mutex> using lock_guard = ::std::lock_guard<Mutex>;
+template <typename Mutex> using unique_lock = ::std::unique_lock<Mutex>;
+} // namespace lpl::pmr
 #    endif
 
 #endif // LPL_STD_MUTEX_HPP

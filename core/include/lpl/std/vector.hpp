@@ -16,14 +16,12 @@
 #    if LPL_TARGET_KERNEL
 #        include <kernel_std/vector.hpp>
 namespace lpl::pmr {
-template <typename T>
-using vector = ::kstd::vector<T>;
+template <typename T> using vector = ::kstd::vector<T>;
 }
 #    else
 #        include <vector>
 namespace lpl::pmr {
-template <typename T>
-using vector = ::std::vector<T>;
+template <typename T> using vector = ::std::vector<T>;
 }
 #    endif
 

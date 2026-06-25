@@ -21,14 +21,12 @@
 #    if LPL_TARGET_KERNEL
 #        include <kernel_std/inplace_function.hpp>
 namespace lpl::pmr {
-template <typename Signature>
-using function = ::kstd::inplace_function<Signature>;
+template <typename Signature> using function = ::kstd::inplace_function<Signature>;
 }
 #    else
 #        include <functional>
 namespace lpl::pmr {
-template <typename Signature>
-using function = ::std::function<Signature>;
+template <typename Signature> using function = ::std::function<Signature>;
 }
 #    endif
 

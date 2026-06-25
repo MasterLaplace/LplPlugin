@@ -103,8 +103,7 @@ public:
      * @param message Human-readable description.
      * @param loc     Source location (auto-filled by the compiler).
      */
-    explicit Error(ErrorCode code, lpl::pmr::string message,
-                   std::source_location loc = std::source_location::current())
+    explicit Error(ErrorCode code, lpl::pmr::string message, std::source_location loc = std::source_location::current())
         : _code(code), _message(std::move(message)), _location(loc)
     {
     }
