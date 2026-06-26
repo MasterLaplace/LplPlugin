@@ -56,10 +56,10 @@ public:
 private:
     void drawTriangle() noexcept;
 
-    platform::IDisplayBackend  &_display;
+    platform::IDisplayBackend &_display;
     platform::SurfaceDescriptor _surface{};
-    math::Fixed32               _angle{0};
-    bool                        _initialized{false};
+    math::Fixed32 _angle{0};
+    bool _initialized{false};
 };
 
 } // namespace lpl::render::kernel

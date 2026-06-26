@@ -33,10 +33,10 @@ static constexpr math::Fixed32 kDeltaAngle = math::Fixed32::pi() / math::Fixed32
 static const math::Fixed32 kBaseX[3] = {
     math::Fixed32{0},
     math::Fixed32::fromRaw(-25527),
-    math::Fixed32::fromRaw( 25527),
+    math::Fixed32::fromRaw(25527),
 };
 static const math::Fixed32 kBaseY[3] = {
-    math::Fixed32::fromRaw( 29491),
+    math::Fixed32::fromRaw(29491),
     math::Fixed32::fromRaw(-14746),
     math::Fixed32::fromRaw(-14746),
 };
@@ -48,9 +48,8 @@ static constexpr core::u32 kVertexColor[3] = {0x00FF4040u, 0x0040FF40u, 0x004040
 // Helpers
 // ---------------------------------------------------------------------------
 
-static inline core::i32 edgeFunction(core::i32 ax, core::i32 ay,
-                                     core::i32 bx, core::i32 by,
-                                     core::i32 px, core::i32 py) noexcept
+static inline core::i32 edgeFunction(core::i32 ax, core::i32 ay, core::i32 bx, core::i32 by, core::i32 px,
+                                     core::i32 py) noexcept
 {
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
@@ -59,9 +58,7 @@ static inline core::i32 edgeFunction(core::i32 ax, core::i32 ay,
 // KernelDisplayRenderer
 // ---------------------------------------------------------------------------
 
-KernelDisplayRenderer::KernelDisplayRenderer(platform::IDisplayBackend &display) noexcept
-    : _display{display}
-{}
+KernelDisplayRenderer::KernelDisplayRenderer(platform::IDisplayBackend &display) noexcept : _display{display} {}
 
 void KernelDisplayRenderer::tick() noexcept
 {
@@ -96,20 +93,11 @@ void KernelDisplayRenderer::endFrame()
     _display.present();
 }
 
-void KernelDisplayRenderer::resize(core::u32 /*width*/, core::u32 /*height*/)
-{
-    _display.querySurface(_surface);
-}
+void KernelDisplayRenderer::resize(core::u32 /*width*/, core::u32 /*height*/) { _display.querySurface(_surface); }
 
-void KernelDisplayRenderer::shutdown()
-{
-    _initialized = false;
-}
+void KernelDisplayRenderer::shutdown() { _initialized = false; }
 
-const char *KernelDisplayRenderer::name() const noexcept
-{
-    return "KernelDisplayRenderer";
-}
+const char *KernelDisplayRenderer::name() const noexcept { return "KernelDisplayRenderer"; }
 
 void KernelDisplayRenderer::drawTriangle() noexcept
 {
@@ -128,7 +116,7 @@ void KernelDisplayRenderer::drawTriangle() noexcept
     }
 
     // --- Project to screen coordinates (float rasterisation) ---------------
-    const float hw = static_cast<float>(_surface.width)  * 0.5f;
+    const float hw = static_cast<float>(_surface.width) * 0.5f;
     const float hh = static_cast<float>(_surface.height) * 0.5f;
 
     core::i32 sx[3], sy[3];
@@ -143,17 +131,25 @@ void KernelDisplayRenderer::drawTriangle() noexcept
     core::i32 minY = sy[0], maxY = sy[0];
     for (int i = 1; i < 3; ++i)
     {
-        if (sx[i] < minX) minX = sx[i];
-        if (sx[i] > maxX) maxX = sx[i];
-        if (sy[i] < minY) minY = sy[i];
-        if (sy[i] > maxY) maxY = sy[i];
+        if (sx[i] < minX)
+            minX = sx[i];
+        if (sx[i] > maxX)
+            maxX = sx[i];
+        if (sy[i] < minY)
+            minY = sy[i];
+        if (sy[i] > maxY)
+            maxY = sy[i];
     }
     const core::i32 W = static_cast<core::i32>(_surface.width);
     const core::i32 H = static_cast<core::i32>(_surface.height);
-    if (minX < 0) minX = 0;
-    if (minY < 0) minY = 0;
-    if (maxX >= W) maxX = W - 1;
-    if (maxY >= H) maxY = H - 1;
+    if (minX < 0)
+        minX = 0;
+    if (minY < 0)
+        minY = 0;
+    if (maxX >= W)
+        maxX = W - 1;
+    if (maxY >= H)
+        maxY = H - 1;
 
     // --- Rasterise (barycentric edge-function fill) -------------------------
     const core::u32 pitchPixels = _surface.pitch / 4u;
@@ -173,8 +169,10 @@ void KernelDisplayRenderer::drawTriangle() noexcept
             const core::i32 w2 = edgeFunction(sx[0], sy[0], sx[1], sy[1], px, py);
 
             // Accept CW and CCW: require all weights same sign as the area.
-            if (area > 0 && (w0 < 0 || w1 < 0 || w2 < 0)) continue;
-            if (area < 0 && (w0 > 0 || w1 > 0 || w2 > 0)) continue;
+            if (area > 0 && (w0 < 0 || w1 < 0 || w2 < 0))
+                continue;
+            if (area < 0 && (w0 > 0 || w1 > 0 || w2 > 0))
+                continue;
 
             // Barycentric blend of the three vertex colours.
             const float b0 = static_cast<float>(w0) * rcpArea;
@@ -182,23 +180,22 @@ void KernelDisplayRenderer::drawTriangle() noexcept
             const float b2 = static_cast<float>(w2) * rcpArea;
 
             const auto r0 = static_cast<float>((kVertexColor[0] >> 16) & 0xFF);
-            const auto g0 = static_cast<float>((kVertexColor[0] >>  8) & 0xFF);
-            const auto b_0= static_cast<float>( kVertexColor[0]        & 0xFF);
+            const auto g0 = static_cast<float>((kVertexColor[0] >> 8) & 0xFF);
+            const auto b_0 = static_cast<float>(kVertexColor[0] & 0xFF);
 
             const auto r1 = static_cast<float>((kVertexColor[1] >> 16) & 0xFF);
-            const auto g1 = static_cast<float>((kVertexColor[1] >>  8) & 0xFF);
-            const auto b_1= static_cast<float>( kVertexColor[1]        & 0xFF);
+            const auto g1 = static_cast<float>((kVertexColor[1] >> 8) & 0xFF);
+            const auto b_1 = static_cast<float>(kVertexColor[1] & 0xFF);
 
             const auto r2 = static_cast<float>((kVertexColor[2] >> 16) & 0xFF);
-            const auto g2 = static_cast<float>((kVertexColor[2] >>  8) & 0xFF);
-            const auto b_2= static_cast<float>( kVertexColor[2]        & 0xFF);
+            const auto g2 = static_cast<float>((kVertexColor[2] >> 8) & 0xFF);
+            const auto b_2 = static_cast<float>(kVertexColor[2] & 0xFF);
 
             const auto R = static_cast<core::u32>(b0 * r0 + b1 * r1 + b2 * r2);
             const auto G = static_cast<core::u32>(b0 * g0 + b1 * g1 + b2 * g2);
-            const auto B = static_cast<core::u32>(b0 * b_0+ b1 * b_1+ b2 * b_2);
+            const auto B = static_cast<core::u32>(b0 * b_0 + b1 * b_1 + b2 * b_2);
 
-            _surface.buffer[static_cast<core::u32>(py) * pitchPixels
-                          + static_cast<core::u32>(px)] =
+            _surface.buffer[static_cast<core::u32>(py) * pitchPixels + static_cast<core::u32>(px)] =
                 (R << 16) | (G << 8) | B;
         }
     }
