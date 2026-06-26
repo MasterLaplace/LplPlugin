@@ -18,7 +18,7 @@
 #    include <lpl/math/Vec3.hpp>
 #    include <lpl/physics/IPhysicsBackend.hpp>
 
-#    include <memory>
+#    include <lpl/std/memory.hpp>
 
 namespace lpl::ecs {
 class Registry;
@@ -63,7 +63,7 @@ private:
                              core::u32 count) const noexcept;
 
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    lpl::pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::physics

@@ -9,12 +9,20 @@
  */
 #include "lpl/core/Log.hpp"
 
-#include <cstdio>
+#include <lpl/core/Platform.hpp>
+
+#if !LPL_TARGET_KERNEL
+#    include <cstdio>
+#endif
 
 namespace lpl::core {
 
 namespace {
 
+#if !LPL_TARGET_KERNEL
+// Hosted default sink. The freestanding kernel build has no stderr/cstdio and
+// no console sink yet (the serial/console logger lands with the P2 HAL), so it
+// starts with no logger — log calls are no-ops until one is installed.
 class StderrLogger final : public ILogger {
 public:
     void write(LogLevel level, std::string_view tag, std::string_view message) override
@@ -28,16 +36,24 @@ public:
 
 StderrLogger gDefaultLogger;
 ILogger *gActiveLogger = &gDefaultLogger;
+#else
+ILogger *gActiveLogger = nullptr;
+#endif
+
 LogLevel gMinLevel = LogLevel::kInfo;
 
 } // anonymous namespace
 
+#if !LPL_TARGET_KERNEL
 void Log::setLogger(ILogger *logger) { gActiveLogger = logger ? logger : &gDefaultLogger; }
+#else
+void Log::setLogger(ILogger *logger) { gActiveLogger = logger; }
+#endif
 void Log::setMinLevel(LogLevel level) { gMinLevel = level; }
 
 static void dispatch(LogLevel level, std::string_view tag, std::string_view msg)
 {
-    if (level < gMinLevel)
+    if (level < gMinLevel || gActiveLogger == nullptr)
         return;
     gActiveLogger->write(level, tag, msg);
 }

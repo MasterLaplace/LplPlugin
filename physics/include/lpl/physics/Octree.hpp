@@ -16,7 +16,7 @@
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/physics/ISpatialIndex.hpp>
 
-#    include <memory>
+#    include <lpl/std/memory.hpp>
 
 namespace lpl::physics {
 
@@ -41,7 +41,7 @@ public:
 
     void remove(core::u32 objectId) override;
 
-    void query(const math::AABB<math::Fixed32> &region, const std::function<void(core::u32)> &callback) const override;
+    void query(const math::AABB<math::Fixed32> &region, const lpl::pmr::function<void(core::u32)> &callback) const override;
 
     void rebuild() override;
 
@@ -49,7 +49,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    lpl::pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::physics

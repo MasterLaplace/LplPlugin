@@ -19,10 +19,11 @@
 #include <lpl/math/Morton.hpp>
 #include <lpl/memory/PinnedAllocator.hpp>
 #include <lpl/physics/Octree.hpp>
+#include <lpl/std/memory.hpp>
+#include <lpl/std/unordered_map.hpp>
+#include <lpl/std/vector.hpp>
 
 #include <algorithm>
-#include <unordered_map>
-#include <vector>
 
 namespace lpl::physics {
 
@@ -53,10 +54,10 @@ struct Octree::Impl {
     using PinnedEntry = memory::PinnedAllocator<EntityEntry>;
 
     math::AABB<math::Fixed32> worldBounds;
-    std::vector<FlatNode, PinnedNode> nodes;
-    std::vector<EntityEntry, PinnedEntry> sortedEntries;
-    std::vector<EntityEntry, PinnedEntry> tempEntries;
-    std::unordered_map<core::u32, core::u32> idToIndex;
+    lpl::pmr::vector<FlatNode, PinnedNode> nodes;
+    lpl::pmr::vector<EntityEntry, PinnedEntry> sortedEntries;
+    lpl::pmr::vector<EntityEntry, PinnedEntry> tempEntries;
+    lpl::pmr::unordered_map<core::u32, core::u32> idToIndex;
     bool dirty{false};
 
     explicit Impl(const math::AABB<math::Fixed32> &wb) : worldBounds{wb} {}
@@ -238,7 +239,7 @@ struct Octree::Impl {
     // ────────────────────────────────────────────────────────────────────── //
 
     void queryRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region,
-                      const std::function<void(core::u32)> &callback) const
+                      const lpl::pmr::function<void(core::u32)> &callback) const
     {
         const auto &node = nodes[nodeIdx];
 
@@ -274,7 +275,7 @@ struct Octree::Impl {
 //  Public API                                                                //
 // ========================================================================== //
 
-Octree::Octree(const math::AABB<math::Fixed32> &worldBounds) : _impl{std::make_unique<Impl>(worldBounds)} {}
+Octree::Octree(const math::AABB<math::Fixed32> &worldBounds) : _impl{lpl::pmr::make_unique<Impl>(worldBounds)} {}
 
 Octree::~Octree() = default;
 
@@ -314,7 +315,7 @@ void Octree::remove(core::u32 objectId)
     _impl->dirty = true;
 }
 
-void Octree::query(const math::AABB<math::Fixed32> &region, const std::function<void(core::u32)> &callback) const
+void Octree::query(const math::AABB<math::Fixed32> &region, const lpl::pmr::function<void(core::u32)> &callback) const
 {
     if (_impl->nodes.empty())
     {

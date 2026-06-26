@@ -40,9 +40,8 @@
 #include <lpl/physics/CpuPhysicsBackend.hpp>
 #include <lpl/physics/Octree.hpp>
 #include <lpl/physics/SleepingPolicy.hpp>
-
-#include <cmath>
-#include <vector>
+#include <lpl/std/cmath.hpp>
+#include <lpl/std/vector.hpp>
 
 namespace lpl::physics {
 
@@ -66,8 +65,8 @@ struct CpuPhysicsBackend::Impl {
     ecs::Registry &registry;
 
     /** @brief Per-entity sleeping data (indexed by entity slot, not chunk-local). */
-    std::vector<bool> sleeping;
-    std::vector<core::u16> sleepCounter;
+    lpl::pmr::vector<bool> sleeping;
+    lpl::pmr::vector<core::u16> sleepCounter;
 
     explicit Impl(ecs::Registry &r) : registry{r} {}
 
@@ -108,7 +107,7 @@ struct CpuPhysicsBackend::Impl {
 //  Public API                                                                //
 // ========================================================================== //
 
-CpuPhysicsBackend::CpuPhysicsBackend(ecs::Registry &registry) : _impl{std::make_unique<Impl>(registry)} {}
+CpuPhysicsBackend::CpuPhysicsBackend(ecs::Registry &registry) : _impl{lpl::pmr::make_unique<Impl>(registry)} {}
 
 CpuPhysicsBackend::~CpuPhysicsBackend() = default;
 
@@ -356,9 +355,9 @@ void CpuPhysicsBackend::resolveCollisionsChunk(const ecs::EntityId *entities, ma
         math::Vec3<float> delta = positions[a] - positions[b];
 
         // Penetration on each axis
-        float overlapX = (halfA.x + halfB.x) - std::fabs(delta.x);
-        float overlapY = (halfA.y + halfB.y) - std::fabs(delta.y);
-        float overlapZ = (halfA.z + halfB.z) - std::fabs(delta.z);
+        float overlapX = (halfA.x + halfB.x) - lpl::pmr::fabs(delta.x);
+        float overlapY = (halfA.y + halfB.y) - lpl::pmr::fabs(delta.y);
+        float overlapZ = (halfA.z + halfB.z) - lpl::pmr::fabs(delta.z);
 
         if (overlapX <= 0.0f || overlapY <= 0.0f || overlapZ <= 0.0f)
         {

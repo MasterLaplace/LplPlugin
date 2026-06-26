@@ -17,7 +17,7 @@
 #    include <lpl/math/AABB.hpp>
 #    include <lpl/math/FixedPoint.hpp>
 
-#    include <functional>
+#    include <lpl/std/functional.hpp>
 
 namespace lpl::physics {
 
@@ -50,7 +50,7 @@ public:
      * @param callback Called for every overlapping object ID.
      */
     virtual void query(const math::AABB<math::Fixed32> &region,
-                       const std::function<void(core::u32)> &callback) const = 0;
+                       const lpl::pmr::function<void(core::u32)> &callback) const = 0;
 
     /** @brief Rebuilds the internal structure (e.g. re-sort Morton keys). */
     virtual void rebuild() = 0;

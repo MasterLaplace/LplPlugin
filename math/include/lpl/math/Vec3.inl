@@ -7,7 +7,7 @@
 #ifndef LPL_MATH_VEC3_INL
 #define LPL_MATH_VEC3_INL
 
-#include <cmath>
+#include <lpl/std/cmath.hpp>
 
 namespace lpl::math {
 
@@ -70,7 +70,7 @@ template <core::Arithmetic T> constexpr Vec3<T> Vec3<T>::normalize() const
     T lenSq = lengthSquared();
     if constexpr (std::is_floating_point_v<T>)
     {
-        T inv = T(1) / std::sqrt(lenSq);
+        T inv = T(1) / lpl::pmr::sqrt(lenSq);
         return *this * inv;
     }
     else
