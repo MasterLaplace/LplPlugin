@@ -31,6 +31,9 @@
 #include <lpl/net/transport/SocketTransport.hpp>
 #include <lpl/physics/CpuPhysicsBackend.hpp>
 
+#include <lpl/platform/IPlatform.hpp>
+#include <lpl/platform/linux/LinuxPlatform.hpp>
+
 #include <lpl/engine/EventQueue.hpp>
 #include <lpl/engine/systems/BroadcastSystem.hpp>
 #include <lpl/engine/systems/CameraSystem.hpp>
@@ -63,6 +66,7 @@ namespace lpl::engine {
 
 struct Engine::Impl {
     Config config;
+    std::unique_ptr<platform::IPlatform> platform;
     GameLoop loop;
 
     memory::ArenaAllocator arena;
@@ -94,14 +98,22 @@ struct Engine::Impl {
 
     std::unique_ptr<bci::BciAdapter> bciAdapter;
 
-    explicit Impl(Config cfg)
-        : config{std::move(cfg)}, loop{config}, arena{config.arenaSize()}, jobSystem{}, registry{},
-          scheduler{jobSystem}, inputManager{}
+    Impl(Config cfg, std::unique_ptr<platform::IPlatform> plat)
+        : config{std::move(cfg)}, platform{std::move(plat)}, loop{config}, arena{config.arenaSize()}, jobSystem{},
+          registry{}, scheduler{jobSystem}, inputManager{}
     {
     }
 };
 
-Engine::Engine(Config config) : _impl{std::make_unique<Impl>(std::move(config))} {}
+Engine::Engine(Config config)
+    : _impl{std::make_unique<Impl>(std::move(config), std::make_unique<platform::linux_host::LinuxPlatform>())}
+{
+}
+
+Engine::Engine(Config config, std::unique_ptr<platform::IPlatform> platform)
+    : _impl{std::make_unique<Impl>(std::move(config), std::move(platform))}
+{
+}
 
 Engine::~Engine()
 {
@@ -114,6 +126,17 @@ Engine::~Engine()
 core::Expected<void> Engine::init()
 {
     core::Log::info("Engine::init — wiring subsystems");
+
+    // Probe the injected platform seam (clock / display / input / GPU-memory),
+    // the hosted mirror of the kernel's p2_hal_smoke. The engine reaches every
+    // host or kernel facility exclusively through these backends.
+    {
+        platform::IPlatform &plat = *_impl->platform;
+        platform::SurfaceDescriptor surface;
+        const bool haveSurface = plat.display().querySurface(surface);
+        core::Log::info(haveSurface ? "Engine: platform seam up (surface available)"
+                                    : "Engine: platform seam up (headless, no surface)");
+    }
 
     auto inputResult = _impl->inputManager.init();
     if (!inputResult)

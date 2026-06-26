@@ -17,6 +17,10 @@
 #    include <lpl/engine/Config.hpp>
 #    include <memory>
 
+namespace lpl::platform {
+class IPlatform;
+} // namespace lpl::platform
+
 namespace lpl::engine {
 
 /**
@@ -24,11 +28,23 @@ namespace lpl::engine {
  *
  * Owns all subsystem instances, initialises them in dependency
  * order, runs the game loop, and shuts down cleanly.
+ *
+ * The engine reaches host/kernel facilities exclusively through an injected
+ * platform::IPlatform (clock / display / input / GPU-memory backends). The
+ * single-argument constructor defaults to the hosted LinuxPlatform; the
+ * two-argument form injects a platform explicitly (the kernel boot facade
+ * supplies a KernelPlatform).
  */
 class Engine {
 public:
-    /// @param config Immutable engine configuration.
+    /// @param config Immutable engine configuration (defaults to LinuxPlatform).
     explicit Engine(Config config);
+
+    /// @param config Immutable engine configuration.
+    /// @param platform Injected platform seam; must outlive the engine if a
+    ///        non-owning reference is desired — here ownership transfers.
+    Engine(Config config, std::unique_ptr<platform::IPlatform> platform);
+
     ~Engine();
 
     Engine(const Engine &) = delete;
