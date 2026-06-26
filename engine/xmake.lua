@@ -14,6 +14,7 @@ target("lpl-engine")
         "lpl-physics",
         "lpl-net",
         "lpl-gpu",
+        "lpl-platform",
         "lpl-input",
         "lpl-audio",
         "lpl-haptic",

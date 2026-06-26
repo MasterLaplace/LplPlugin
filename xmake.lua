@@ -80,6 +80,7 @@ includes(
     "physics",
     "net",
     "gpu",
+    "platform",
     "input",
     "render",
     "audio",
