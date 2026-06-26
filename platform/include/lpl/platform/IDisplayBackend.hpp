@@ -25,12 +25,12 @@ namespace lpl::platform {
  * uploader can attach the backing later; ownership stays with the backend.
  */
 struct SurfaceDescriptor {
-    core::u32 *buffer = nullptr;       ///< Virtual address of the framebuffer.
-    core::u32 physicalAddress = 0u;    ///< Physical address of the framebuffer.
-    core::u32 width = 0u;              ///< Visible width in pixels.
-    core::u32 height = 0u;             ///< Visible height in pixels.
-    core::u32 pitch = 0u;              ///< Bytes per scanline.
-    core::u8 bitsPerPixel = 0u;        ///< Bits per pixel.
+    core::u32 *buffer = nullptr;    ///< Virtual address of the framebuffer.
+    core::u32 physicalAddress = 0u; ///< Physical address of the framebuffer.
+    core::u32 width = 0u;           ///< Visible width in pixels.
+    core::u32 height = 0u;          ///< Visible height in pixels.
+    core::u32 pitch = 0u;           ///< Bytes per scanline.
+    core::u8 bitsPerPixel = 0u;     ///< Bits per pixel.
 };
 
 /**

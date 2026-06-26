@@ -134,8 +134,8 @@ core::Expected<void> Engine::init()
         platform::IPlatform &plat = *_impl->platform;
         platform::SurfaceDescriptor surface;
         const bool haveSurface = plat.display().querySurface(surface);
-        core::Log::info(haveSurface ? "Engine: platform seam up (surface available)"
-                                    : "Engine: platform seam up (headless, no surface)");
+        core::Log::info(haveSurface ? "Engine: platform seam up (surface available)" :
+                                      "Engine: platform seam up (headless, no surface)");
     }
 
     auto inputResult = _impl->inputManager.init();

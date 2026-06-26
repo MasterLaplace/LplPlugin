@@ -55,9 +55,9 @@ enum class GpuMemoryFlags : core::u32 {
  * list rather than assume one contiguous range.
  */
 struct GpuAllocation {
-    void *virtualAddress = nullptr;          ///< CPU-visible base pointer.
-    core::u32 physicalAddress = 0u;          ///< Physical base of the first page.
-    core::u32 sizeBytes = 0u;                ///< Allocation size in bytes.
+    void *virtualAddress = nullptr;               ///< CPU-visible base pointer.
+    core::u32 physicalAddress = 0u;               ///< Physical base of the first page.
+    core::u32 sizeBytes = 0u;                     ///< Allocation size in bytes.
     GpuMemoryFlags flags = GpuMemoryFlags::kNone; ///< Flags it was created with.
 };
 
