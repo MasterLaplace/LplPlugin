@@ -39,7 +39,7 @@ struct Registry::Impl {
     };
 
     lpl::pmr::vector<SlotInfo> slots;
-    lpl::pmr::vector<core::u32> freeNext;          ///< Per-slot intrusive free-list link
+    lpl::pmr::vector<core::u32> freeNext;     ///< Per-slot intrusive free-list link
     std::atomic<core::u32> freeHead{kNoNext}; ///< Head of Treiber stack
     lpl::pmr::vector<lpl::pmr::unique_ptr<Partition>> partitions;
     std::atomic<core::u32> liveCount{0};

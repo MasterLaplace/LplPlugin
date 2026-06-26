@@ -25,8 +25,7 @@ namespace lpl::pmr {
 using ::std::unique_ptr;
 
 #    if LPL_TARGET_KERNEL
-template <typename T, typename... Args>
-[[nodiscard]] unique_ptr<T> make_unique(Args &&...args)
+template <typename T, typename... Args> [[nodiscard]] unique_ptr<T> make_unique(Args &&...args)
 {
     return unique_ptr<T>(new T(static_cast<Args &&>(args)...));
 }

@@ -128,7 +128,8 @@ void SpatialGrid::remove(core::u32 objectId)
     _impl->objects.erase(it);
 }
 
-void SpatialGrid::query(const math::AABB<math::Fixed32> &region, const lpl::pmr::function<void(core::u32)> &callback) const
+void SpatialGrid::query(const math::AABB<math::Fixed32> &region,
+                        const lpl::pmr::function<void(core::u32)> &callback) const
 {
     // std::set keeps insertion order deterministic (sorted by entity ID).
     std::set<core::u32> visited;

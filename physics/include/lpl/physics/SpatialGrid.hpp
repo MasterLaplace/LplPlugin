@@ -40,7 +40,8 @@ public:
 
     void remove(core::u32 objectId) override;
 
-    void query(const math::AABB<math::Fixed32> &region, const lpl::pmr::function<void(core::u32)> &callback) const override;
+    void query(const math::AABB<math::Fixed32> &region,
+               const lpl::pmr::function<void(core::u32)> &callback) const override;
 
     void rebuild() override;
 

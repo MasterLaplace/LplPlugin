@@ -130,10 +130,10 @@ core::Expected<EntityId> Chunk::remove(core::u32 localIndex)
             auto *back = static_cast<core::byte *>(_impl->buffers[cid].second);
             const core::u32 sz = layout.size;
 
-            lpl::pmr::memcpy(front + static_cast<core::usize>(localIndex) * sz, front + static_cast<core::usize>(last) * sz,
-                        sz);
-            lpl::pmr::memcpy(back + static_cast<core::usize>(localIndex) * sz, back + static_cast<core::usize>(last) * sz,
-                        sz);
+            lpl::pmr::memcpy(front + static_cast<core::usize>(localIndex) * sz,
+                             front + static_cast<core::usize>(last) * sz, sz);
+            lpl::pmr::memcpy(back + static_cast<core::usize>(localIndex) * sz,
+                             back + static_cast<core::usize>(last) * sz, sz);
         }
     }
 

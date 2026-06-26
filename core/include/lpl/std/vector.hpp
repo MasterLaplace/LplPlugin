@@ -19,9 +19,8 @@
 namespace lpl::pmr {
 // Allocator-aware alias: a custom allocator (e.g. memory::PinnedAllocator) can
 // be supplied as the second argument; it defaults to the kernel heap allocator.
-template <typename T, typename Allocator = ::kstd::KernelAllocator<T>>
-using vector = ::kstd::vector<T, Allocator>;
-}
+template <typename T, typename Allocator = ::kstd::KernelAllocator<T>> using vector = ::kstd::vector<T, Allocator>;
+} // namespace lpl::pmr
 #    else
 #        include <memory>
 #        include <vector>
