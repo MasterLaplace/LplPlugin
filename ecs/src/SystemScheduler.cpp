@@ -12,11 +12,6 @@
 #include <lpl/ecs/SystemScheduler.hpp>
 
 #include <algorithm>
-#include <functional>
-#include <latch>
-#include <queue>
-#include <unordered_map>
-#include <unordered_set>
 
 namespace lpl::ecs {
 
@@ -25,26 +20,26 @@ namespace lpl::ecs {
 // ========================================================================== //
 
 struct SystemScheduler::Impl {
-    concurrency::ThreadPool &pool;
-    std::vector<std::unique_ptr<ISystem>> systems;
-    std::vector<std::vector<core::u32>> waves;
+    concurrency::IJobSystem &jobs;
+    lpl::pmr::vector<lpl::pmr::unique_ptr<ISystem>> systems;
+    lpl::pmr::vector<lpl::pmr::vector<core::u32>> waves;
     bool graphBuilt{false};
 
     // Phase boundary callbacks: indexed by SchedulePhase (fired after that phase)
-    std::function<void()> phaseCallbacks[static_cast<core::u8>(SchedulePhase::Count)] = {};
+    lpl::pmr::function<void()> phaseCallbacks[static_cast<core::u8>(SchedulePhase::Count)] = {};
 
-    explicit Impl(concurrency::ThreadPool &p) : pool{p} {}
+    explicit Impl(concurrency::IJobSystem &j) : jobs{j} {}
 };
 
 // ========================================================================== //
 //  Public API                                                                //
 // ========================================================================== //
 
-SystemScheduler::SystemScheduler(concurrency::ThreadPool &pool) : _impl{std::make_unique<Impl>(pool)} {}
+SystemScheduler::SystemScheduler(concurrency::IJobSystem &jobs) : _impl{lpl::pmr::make_unique<Impl>(jobs)} {}
 
 SystemScheduler::~SystemScheduler() = default;
 
-core::Expected<void> SystemScheduler::registerSystem(std::unique_ptr<ISystem> system)
+core::Expected<void> SystemScheduler::registerSystem(lpl::pmr::unique_ptr<ISystem> system)
 {
     if (!system)
     {
@@ -59,8 +54,11 @@ core::Expected<void> SystemScheduler::buildGraph()
 {
     const core::u32 n = static_cast<core::u32>(_impl->systems.size());
 
-    std::vector<std::unordered_set<core::u32>> adj(n);
-    std::vector<core::u32> inDegree(n, 0);
+    // Each ordered pair (i, j) is examined exactly once below and adds at most
+    // one directed edge, so the adjacency lists never contain duplicates — a
+    // plain vector suffices (no set needed) and keeps inDegree exact.
+    lpl::pmr::vector<lpl::pmr::vector<core::u32>> adj(n);
+    lpl::pmr::vector<core::u32> inDegree(n, 0);
 
     for (core::u32 i = 0; i < n; ++i)
     {
@@ -74,12 +72,12 @@ core::Expected<void> SystemScheduler::buildGraph()
             {
                 if (descA.phase < descB.phase)
                 {
-                    adj[i].insert(j);
+                    adj[i].push_back(j);
                     ++inDegree[j];
                 }
                 else
                 {
-                    adj[j].insert(i);
+                    adj[j].push_back(i);
                     ++inDegree[i];
                 }
                 continue;
@@ -102,33 +100,37 @@ core::Expected<void> SystemScheduler::buildGraph()
 
             if (conflict)
             {
-                adj[i].insert(j);
+                adj[i].push_back(j);
                 ++inDegree[j];
             }
         }
     }
 
-    std::queue<core::u32> ready;
+    // FIFO frontier for Kahn's algorithm, as a vector consumed via a head index
+    // (a std::queue would pull in <queue>, which is not in the freestanding
+    // subset). Append-only + head advance preserves the exact BFS wave order.
+    lpl::pmr::vector<core::u32> ready;
     for (core::u32 i = 0; i < n; ++i)
     {
         if (inDegree[i] == 0)
         {
-            ready.push(i);
+            ready.push_back(i);
         }
     }
 
     _impl->waves.clear();
     core::u32 processed = 0;
+    lpl::core::usize readyHead = 0;
 
-    while (!ready.empty())
+    while (readyHead < ready.size())
     {
-        std::vector<core::u32> wave;
-        const auto waveSize = static_cast<core::u32>(ready.size());
+        lpl::pmr::vector<core::u32> wave;
+        const auto waveSize = static_cast<core::u32>(ready.size() - readyHead);
 
         for (core::u32 w = 0; w < waveSize; ++w)
         {
-            wave.push_back(ready.front());
-            ready.pop();
+            wave.push_back(ready[readyHead]);
+            ++readyHead;
         }
 
         for (auto idx : wave)
@@ -137,7 +139,7 @@ core::Expected<void> SystemScheduler::buildGraph()
             {
                 if (--inDegree[dep] == 0)
                 {
-                    ready.push(dep);
+                    ready.push_back(dep);
                 }
             }
         }
@@ -187,17 +189,15 @@ void SystemScheduler::tick(core::f32 dt)
             continue;
         }
 
-        std::latch barrier{static_cast<std::ptrdiff_t>(wave.size())};
-
+        // Multi-system wave: hand every system to the job dispatcher, which
+        // runs them all and only returns once the wave is complete. The inline
+        // dispatcher executes them in order (deterministic); a parallel backend
+        // could fan them out — the systems in a wave are data-hazard-free.
+        lpl::pmr::vector<lpl::pmr::function<void()>> jobs;
         for (auto idx : wave)
-        {
-            _impl->pool.enqueueDetached([&, idx]() {
-                _impl->systems[idx]->execute(dt);
-                barrier.count_down();
-            });
-        }
+            jobs.push_back([this, idx, dt]() { _impl->systems[idx]->execute(dt); });
 
-        barrier.wait();
+        _impl->jobs.dispatch(std::span<lpl::pmr::function<void()>>{jobs.data(), jobs.size()});
     }
 
     // Fire callback for the last phase if any
@@ -211,7 +211,7 @@ void SystemScheduler::tick(core::f32 dt)
     }
 }
 
-void SystemScheduler::setPhaseCallback(SchedulePhase afterPhase, std::function<void()> callback)
+void SystemScheduler::setPhaseCallback(SchedulePhase afterPhase, lpl::pmr::function<void()> callback)
 {
     const auto idx = static_cast<core::u8>(afterPhase);
     _impl->phaseCallbacks[idx] = std::move(callback);

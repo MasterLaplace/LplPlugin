@@ -13,15 +13,14 @@
 #ifndef LPL_ECS_SYSTEMSCHEDULER_HPP
 #    define LPL_ECS_SYSTEMSCHEDULER_HPP
 
-#    include <lpl/concurrency/ThreadPool.hpp>
+#    include <lpl/concurrency/IJobSystem.hpp>
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecs/System.hpp>
-
-#    include <functional>
-#    include <memory>
-#    include <vector>
+#    include <lpl/std/functional.hpp>
+#    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::ecs {
 
@@ -42,10 +41,10 @@ namespace lpl::ecs {
 class SystemScheduler final : public core::NonCopyable<SystemScheduler> {
 public:
     /**
-     * @brief Constructs a scheduler backed by the given thread pool.
-     * @param pool Thread pool used for parallel dispatch.
+     * @brief Constructs a scheduler backed by the given job system.
+     * @param jobs Job dispatcher used to run each wave (inline or parallel).
      */
-    explicit SystemScheduler(concurrency::ThreadPool &pool);
+    explicit SystemScheduler(concurrency::IJobSystem &jobs);
 
     ~SystemScheduler();
 
@@ -58,7 +57,7 @@ public:
      * @param system Owning pointer to the system.
      * @return OK on success, error if the DAG would contain a cycle.
      */
-    [[nodiscard]] core::Expected<void> registerSystem(std::unique_ptr<ISystem> system);
+    [[nodiscard]] core::Expected<void> registerSystem(lpl::pmr::unique_ptr<ISystem> system);
 
     /**
      * @brief Rebuilds the DAG after all systems have been registered.
@@ -87,14 +86,14 @@ public:
      * @param afterPhase  The phase after which the callback fires.
      * @param callback    Invocable called with zero arguments.
      */
-    void setPhaseCallback(SchedulePhase afterPhase, std::function<void()> callback);
+    void setPhaseCallback(SchedulePhase afterPhase, lpl::pmr::function<void()> callback);
 
     /** @brief Returns the number of registered systems. */
     [[nodiscard]] core::u32 systemCount() const noexcept;
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    lpl::pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::ecs

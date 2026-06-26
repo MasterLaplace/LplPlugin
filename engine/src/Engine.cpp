@@ -14,7 +14,7 @@
 #include <lpl/engine/Engine.hpp>
 #include <lpl/engine/GameLoop.hpp>
 
-#include <lpl/concurrency/ThreadPool.hpp>
+#include <lpl/concurrency/IJobSystem.hpp>
 #include <lpl/ecs/Archetype.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
@@ -66,7 +66,7 @@ struct Engine::Impl {
     GameLoop loop;
 
     memory::ArenaAllocator arena;
-    concurrency::ThreadPool threadPool;
+    concurrency::InlineJobSystem jobSystem;
     ecs::Registry registry;
     ecs::SystemScheduler scheduler;
     input::InputManager inputManager;
@@ -95,8 +95,8 @@ struct Engine::Impl {
     std::unique_ptr<bci::BciAdapter> bciAdapter;
 
     explicit Impl(Config cfg)
-        : config{std::move(cfg)}, loop{config}, arena{config.arenaSize()}, threadPool{8}, registry{},
-          scheduler{threadPool}, inputManager{}
+        : config{std::move(cfg)}, loop{config}, arena{config.arenaSize()}, jobSystem{}, registry{},
+          scheduler{jobSystem}, inputManager{}
     {
     }
 };
