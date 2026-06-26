@@ -21,10 +21,11 @@
 #    include <lpl/ecs/Component.hpp>
 #    include <lpl/ecs/Entity.hpp>
 
+#    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
+
 #    include <cstddef>
-#    include <memory>
 #    include <span>
-#    include <vector>
 
 namespace lpl::ecs {
 
@@ -105,7 +106,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    lpl::pmr::unique_ptr<Impl> _impl;
 };
 
 /**
@@ -121,7 +122,7 @@ public:
      * @param archetype  Archetype of entities stored here.
      * @param layouts    Component layouts for the archetype.
      */
-    Partition(Archetype archetype, std::vector<ComponentLayout> layouts);
+    Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts);
 
     ~Partition();
 
@@ -143,7 +144,7 @@ public:
     [[nodiscard]] core::u32 entityCount() const noexcept;
 
     /** @brief Returns a read-only view of all chunks. */
-    [[nodiscard]] std::span<const std::unique_ptr<Chunk>> chunks() const noexcept;
+    [[nodiscard]] std::span<const lpl::pmr::unique_ptr<Chunk>> chunks() const noexcept;
 
     /** @brief Swaps front/back buffers on every chunk. */
     void swapAllBuffers() noexcept;
@@ -153,8 +154,8 @@ public:
 
 private:
     Archetype _archetype;
-    std::vector<ComponentLayout> _layouts;
-    std::vector<std::unique_ptr<Chunk>> _chunks;
+    lpl::pmr::vector<ComponentLayout> _layouts;
+    lpl::pmr::vector<lpl::pmr::unique_ptr<Chunk>> _chunks;
 };
 
 } // namespace lpl::ecs

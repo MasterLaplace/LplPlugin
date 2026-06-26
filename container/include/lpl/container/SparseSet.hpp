@@ -20,9 +20,9 @@
 
 #    include <lpl/core/Constants.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/std/vector.hpp>
 
 #    include <optional>
-#    include <vector>
 
 namespace lpl::container {
 
@@ -72,9 +72,9 @@ public:
 private:
     static constexpr core::u32 kInvalid = ~core::u32{0};
 
-    std::vector<core::u32> _sparse;
-    std::vector<T> _dense;
-    std::vector<core::u32> _denseToSparse;
+    lpl::pmr::vector<core::u32> _sparse;
+    lpl::pmr::vector<T> _dense;
+    lpl::pmr::vector<core::u32> _denseToSparse;
 };
 
 } // namespace lpl::container

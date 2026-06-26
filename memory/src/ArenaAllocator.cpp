@@ -9,17 +9,18 @@
  */
 #include "lpl/memory/ArenaAllocator.hpp"
 
+#include <lpl/std/cstdlib.hpp>
+
 #include <cstdint>
-#include <cstdlib>
 
 namespace lpl::memory {
 
 ArenaAllocator::ArenaAllocator(core::usize capacity) : _capacity(capacity)
 {
-    _memory = static_cast<char *>(std::aligned_alloc(alignof(std::max_align_t), capacity));
+    _memory = static_cast<char *>(lpl::pmr::aligned_alloc(alignof(std::max_align_t), capacity));
 }
 
-ArenaAllocator::~ArenaAllocator() { std::free(_memory); }
+ArenaAllocator::~ArenaAllocator() { lpl::pmr::free(_memory); }
 
 void *ArenaAllocator::allocate(core::usize size, core::usize alignment)
 {

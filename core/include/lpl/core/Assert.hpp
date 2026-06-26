@@ -19,9 +19,23 @@
 
 #    include "Platform.hpp"
 
-#    include <cstdio>
-#    include <cstdlib>
-#    include <source_location>
+#    if LPL_TARGET_KERNEL
+// Freestanding arm: no hosted C runtime (no stderr / fprintf / abort, and the
+// cstdio umbrella is gated out until the console HAL exists). A failed contract
+// is non-recoverable, so route the expression straight to the kernel_std halt
+// primitive. Source location is dropped (formatting it needs snprintf, which the
+// kernel target does not yet expose); the failing expression is enough to triage.
+#        include <kernel_std/support.hpp>
+
+namespace lpl::core::detail {
+
+[[noreturn]] inline void assertFail(const char *expr) { ::kstd::fatal(expr); }
+
+} // namespace lpl::core::detail
+#    else
+#        include <cstdio>
+#        include <cstdlib>
+#        include <source_location>
 
 namespace lpl::core::detail {
 
@@ -33,6 +47,7 @@ namespace lpl::core::detail {
 }
 
 } // namespace lpl::core::detail
+#    endif
 
 #    ifdef LPL_DEBUG
 #        define LPL_ASSERT(cond)                                                                                       \

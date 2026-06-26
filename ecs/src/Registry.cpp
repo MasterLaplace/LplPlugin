@@ -14,11 +14,10 @@
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Constants.hpp>
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/std/vector.hpp>
 
 #include <algorithm>
 #include <atomic>
-#include <unordered_map>
-#include <vector>
 
 namespace lpl::ecs {
 
@@ -39,10 +38,10 @@ struct Registry::Impl {
         bool alive{false};
     };
 
-    std::vector<SlotInfo> slots;
-    std::vector<core::u32> freeNext;          ///< Per-slot intrusive free-list link
+    lpl::pmr::vector<SlotInfo> slots;
+    lpl::pmr::vector<core::u32> freeNext;          ///< Per-slot intrusive free-list link
     std::atomic<core::u32> freeHead{kNoNext}; ///< Head of Treiber stack
-    std::vector<std::unique_ptr<Partition>> partitions;
+    lpl::pmr::vector<lpl::pmr::unique_ptr<Partition>> partitions;
     std::atomic<core::u32> liveCount{0};
     std::atomic<core::u32> highWater{0};
 
@@ -110,7 +109,7 @@ struct Registry::Impl {
 //  Registry                                                                  //
 // ========================================================================== //
 
-Registry::Registry() : _impl{std::make_unique<Impl>()} {}
+Registry::Registry() : _impl{lpl::pmr::make_unique<Impl>()} {}
 
 Registry::~Registry() = default;
 
@@ -213,7 +212,7 @@ Partition &Registry::getOrCreatePartition(const Archetype &archetype)
         return *existing;
     }
 
-    std::vector<ComponentLayout> layouts;
+    lpl::pmr::vector<ComponentLayout> layouts;
     for (core::u32 i = 0; i < static_cast<core::u32>(ComponentId::Count); ++i)
     {
         const auto cid = static_cast<ComponentId>(i);
@@ -223,12 +222,12 @@ Partition &Registry::getOrCreatePartition(const Archetype &archetype)
         }
     }
 
-    _impl->partitions.push_back(std::make_unique<Partition>(archetype, std::move(layouts)));
+    _impl->partitions.push_back(lpl::pmr::make_unique<Partition>(archetype, std::move(layouts)));
 
     return *_impl->partitions.back();
 }
 
-std::span<const std::unique_ptr<Partition>> Registry::partitions() const noexcept { return _impl->partitions; }
+std::span<const lpl::pmr::unique_ptr<Partition>> Registry::partitions() const noexcept { return _impl->partitions; }
 
 void Registry::swapAllBuffers() noexcept
 {

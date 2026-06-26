@@ -12,10 +12,10 @@
 #include <lpl/core/Assert.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/memory/PinnedAllocator.hpp>
+#include <lpl/std/cstring.hpp>
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <optional>
 
 namespace lpl::ecs {
@@ -28,9 +28,9 @@ struct Chunk::Impl {
     using Alloc = memory::PinnedAllocator<core::byte>;
 
     Archetype archetype;
-    std::vector<ComponentLayout> layouts;
+    lpl::pmr::vector<ComponentLayout> layouts;
     std::array<std::pair<void *, void *>, static_cast<core::usize>(ComponentId::Count)> buffers{};
-    std::vector<EntityId> entities;
+    lpl::pmr::vector<EntityId> entities;
     /// Sparse set for O(1) slot → localIndex lookup.
     /// Capacity = 2^kSlotBits (16 384) to cover all valid entity slots.
     container::SparseSet<core::u32> slotToLocal{1u << EntityId::kSlotBits};
@@ -52,8 +52,8 @@ struct Chunk::Impl {
             const core::usize bytes = static_cast<core::usize>(layout.size) * kChunkCapacity;
             auto *front = alloc.allocate(bytes);
             auto *back = alloc.allocate(bytes);
-            std::memset(front, 0, bytes);
-            std::memset(back, 0, bytes);
+            lpl::pmr::memset(front, 0, bytes);
+            lpl::pmr::memset(back, 0, bytes);
             buffers[static_cast<core::usize>(layout.id)] = {front, back};
         }
     }
@@ -75,7 +75,7 @@ struct Chunk::Impl {
 // ========================================================================== //
 
 Chunk::Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts)
-    : _impl{std::make_unique<Impl>(archetype, layouts)}
+    : _impl{lpl::pmr::make_unique<Impl>(archetype, layouts)}
 {
 }
 
@@ -130,9 +130,9 @@ core::Expected<EntityId> Chunk::remove(core::u32 localIndex)
             auto *back = static_cast<core::byte *>(_impl->buffers[cid].second);
             const core::u32 sz = layout.size;
 
-            std::memcpy(front + static_cast<core::usize>(localIndex) * sz, front + static_cast<core::usize>(last) * sz,
+            lpl::pmr::memcpy(front + static_cast<core::usize>(localIndex) * sz, front + static_cast<core::usize>(last) * sz,
                         sz);
-            std::memcpy(back + static_cast<core::usize>(localIndex) * sz, back + static_cast<core::usize>(last) * sz,
+            lpl::pmr::memcpy(back + static_cast<core::usize>(localIndex) * sz, back + static_cast<core::usize>(last) * sz,
                         sz);
         }
     }
@@ -185,7 +185,7 @@ void Chunk::swapBuffers() noexcept
 
         const core::usize cid = static_cast<core::usize>(layout.id);
         const core::usize bytes = static_cast<core::usize>(layout.size) * static_cast<core::usize>(_impl->count);
-        std::memcpy(_impl->buffers[cid].first, _impl->buffers[cid].second, bytes);
+        lpl::pmr::memcpy(_impl->buffers[cid].first, _impl->buffers[cid].second, bytes);
 
         std::swap(_impl->buffers[cid].first, _impl->buffers[cid].second);
     }
@@ -197,7 +197,7 @@ std::span<const EntityId> Chunk::entities() const noexcept { return {_impl->enti
 
 // ========================================================================== //
 
-Partition::Partition(Archetype archetype, std::vector<ComponentLayout> layouts)
+Partition::Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts)
     : _archetype{std::move(archetype)}, _layouts{std::move(layouts)}
 {
 }
@@ -219,7 +219,7 @@ core::Expected<EntityRef> Partition::insert(EntityId id)
         }
     }
 
-    _chunks.push_back(std::make_unique<Chunk>(_archetype, _layouts));
+    _chunks.push_back(lpl::pmr::make_unique<Chunk>(_archetype, _layouts));
     const core::u32 ci = static_cast<core::u32>(_chunks.size()) - 1;
 
     auto result = _chunks[ci]->add(id);
@@ -255,7 +255,7 @@ core::u32 Partition::entityCount() const noexcept
     return total;
 }
 
-std::span<const std::unique_ptr<Chunk>> Partition::chunks() const noexcept { return _chunks; }
+std::span<const lpl::pmr::unique_ptr<Chunk>> Partition::chunks() const noexcept { return _chunks; }
 
 void Partition::swapAllBuffers() noexcept
 {

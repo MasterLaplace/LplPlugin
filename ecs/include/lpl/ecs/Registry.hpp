@@ -20,8 +20,8 @@
 #    include <lpl/ecs/Entity.hpp>
 #    include <lpl/ecs/Partition.hpp>
 
-#    include <memory>
-#    include <vector>
+#    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::ecs {
 
@@ -81,14 +81,14 @@ public:
     [[nodiscard]] Partition &getOrCreatePartition(const Archetype &archetype);
 
     /** @brief Returns a read-only view of all partitions. */
-    [[nodiscard]] std::span<const std::unique_ptr<Partition>> partitions() const noexcept;
+    [[nodiscard]] std::span<const lpl::pmr::unique_ptr<Partition>> partitions() const noexcept;
 
     /** @brief Swaps front/back buffers on every partition (end-of-tick). */
     void swapAllBuffers() noexcept;
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    lpl::pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::ecs

@@ -25,7 +25,7 @@
 #        include <cuda_runtime.h>
 #    endif
 
-#    include <cstdlib>
+#    include <lpl/std/cstdlib.hpp>
 
 namespace lpl::memory {
 
@@ -46,7 +46,7 @@ template <typename T> struct PinnedAllocator {
 #    ifdef __CUDACC__
         cudaHostAlloc(&ptr, n * sizeof(T), cudaHostAllocMapped | cudaHostAllocPortable);
 #    else
-        ptr = static_cast<T *>(std::malloc(n * sizeof(T)));
+        ptr = static_cast<T *>(lpl::pmr::malloc(n * sizeof(T)));
 #    endif
         return ptr;
     }
@@ -56,7 +56,7 @@ template <typename T> struct PinnedAllocator {
 #    ifdef __CUDACC__
         cudaFreeHost(ptr);
 #    else
-        std::free(ptr);
+        lpl::pmr::free(ptr);
 #    endif
     }
 
