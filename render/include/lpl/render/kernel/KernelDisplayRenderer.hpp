@@ -26,6 +26,7 @@
 #        include <lpl/math/FixedPoint.hpp>
 #        include <lpl/platform/IDisplayBackend.hpp>
 #        include <lpl/render/IRenderer.hpp>
+#        include <lpl/render/Mesh.hpp>
 
 namespace lpl::render::kernel {
 
@@ -54,10 +55,11 @@ public:
     [[nodiscard]] const char *name() const noexcept override;
 
 private:
-    void drawTriangle() noexcept;
+    void drawMesh() noexcept;
 
     platform::IDisplayBackend &_display;
     platform::SurfaceDescriptor _surface{};
+    Mesh _mesh;
     math::Fixed32 _angle{0};
     bool _initialized{false};
 };
