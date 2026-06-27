@@ -19,7 +19,7 @@
 #    include "FixedPoint.hpp"
 
 #    include <array>
-#    include <cmath>
+#    include <lpl/std/cmath.hpp>
 
 namespace lpl::math {
 
@@ -51,7 +51,7 @@ private:
         for (core::u32 i = 0; i < Size; ++i)
         {
             double angle = (static_cast<double>(i) / Size) * 2.0 * 3.14159265358979323846;
-            tbl[i] = static_cast<core::i32>(std::sin(angle) * Fixed32::kOne);
+            tbl[i] = static_cast<core::i32>(lpl::pmr::sin(angle) * Fixed32::kOne);
         }
         return tbl;
     }();

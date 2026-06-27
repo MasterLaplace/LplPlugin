@@ -7,8 +7,8 @@
 #ifndef LPL_MATH_QUAT_INL
 #define LPL_MATH_QUAT_INL
 
-#include <cmath>
-#include <cstring>
+#include <lpl/std/cmath.hpp>
+#include <lpl/std/cstring.hpp>
 
 namespace lpl::math {
 
@@ -47,7 +47,7 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::normalize() const
 {
     if constexpr (std::is_floating_point_v<T>)
     {
-        T inv = T(1) / std::sqrt(lengthSquared());
+        T inv = T(1) / lpl::pmr::sqrt(lengthSquared());
         return {w * inv, x * inv, y * inv, z * inv};
     }
     else
@@ -63,8 +63,8 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::fromAxisAngle(Vec3<T> a
     if constexpr (std::is_floating_point_v<T>)
     {
         T halfAngle = angleRad * T(0.5);
-        T s = std::sin(halfAngle);
-        T c = std::cos(halfAngle);
+        T s = lpl::pmr::sin(halfAngle);
+        T c = lpl::pmr::cos(halfAngle);
         return {c, axis.x * s, axis.y * s, axis.z * s};
     }
     else
@@ -101,10 +101,10 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::slerp(Quat a, Quat b, T
             return result.normalize();
         }
 
-        T theta = std::acos(d);
-        T sinTheta = std::sin(theta);
-        T factorA = std::sin((T(1) - t) * theta) / sinTheta;
-        T factorB = std::sin(t * theta) / sinTheta;
+        T theta = lpl::pmr::acos(d);
+        T sinTheta = lpl::pmr::sin(theta);
+        T factorA = lpl::pmr::sin((T(1) - t) * theta) / sinTheta;
+        T factorB = lpl::pmr::sin(t * theta) / sinTheta;
 
         return {factorA * a.w + factorB * b.w, factorA * a.x + factorB * b.x, factorA * a.y + factorB * b.y,
                 factorA * a.z + factorB * b.z};

@@ -18,7 +18,7 @@
 #    include "Vec3.hpp"
 
 #    include <array>
-#    include <cmath>
+#    include <lpl/std/cmath.hpp>
 #    include <type_traits>
 
 namespace lpl::math {

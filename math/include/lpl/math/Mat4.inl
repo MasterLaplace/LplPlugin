@@ -103,7 +103,7 @@ template <core::Arithmetic T> Mat4<T> Mat4<T>::perspective(T fovRad, T aspect, T
 {
     if constexpr (std::is_floating_point_v<T>)
     {
-        const T tanHalf = std::tan(fovRad / T(2));
+        const T tanHalf = lpl::pmr::tan(fovRad / T(2));
         Mat4 r;
         r.m.fill(T{});
         r(0, 0) = T(1) / (aspect * tanHalf);

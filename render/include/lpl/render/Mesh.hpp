@@ -15,8 +15,7 @@
 
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/Vec3.hpp>
-
-#    include <vector>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::render {
 
@@ -41,19 +40,19 @@ public:
     ~Mesh() = default;
 
     /** @brief Sets vertex data. */
-    void setVertices(std::vector<Vertex> vertices) { _vertices = std::move(vertices); }
+    void setVertices(pmr::vector<Vertex> vertices) { _vertices = std::move(vertices); }
 
     /** @brief Sets index data (triangle list). */
-    void setIndices(std::vector<core::u32> indices) { _indices = std::move(indices); }
+    void setIndices(pmr::vector<core::u32> indices) { _indices = std::move(indices); }
 
-    [[nodiscard]] const std::vector<Vertex> &vertices() const noexcept { return _vertices; }
-    [[nodiscard]] const std::vector<core::u32> &indices() const noexcept { return _indices; }
+    [[nodiscard]] const pmr::vector<Vertex> &vertices() const noexcept { return _vertices; }
+    [[nodiscard]] const pmr::vector<core::u32> &indices() const noexcept { return _indices; }
     [[nodiscard]] core::u32 vertexCount() const noexcept { return static_cast<core::u32>(_vertices.size()); }
     [[nodiscard]] core::u32 indexCount() const noexcept { return static_cast<core::u32>(_indices.size()); }
 
 private:
-    std::vector<Vertex> _vertices;
-    std::vector<core::u32> _indices;
+    pmr::vector<Vertex> _vertices;
+    pmr::vector<core::u32> _indices;
 };
 
 } // namespace lpl::render

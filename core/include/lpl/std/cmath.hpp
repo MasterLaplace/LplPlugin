@@ -38,6 +38,12 @@ namespace lpl::pmr {
 [[nodiscard]] constexpr double cos(double x) noexcept { return __builtin_cos(x); }
 [[nodiscard]] constexpr float cos(float x) noexcept { return __builtin_cosf(x); }
 
+[[nodiscard]] constexpr double acos(double x) noexcept { return __builtin_acos(x); }
+[[nodiscard]] constexpr float acos(float x) noexcept { return __builtin_acosf(x); }
+
+[[nodiscard]] constexpr double tan(double x) noexcept { return __builtin_tan(x); }
+[[nodiscard]] constexpr float tan(float x) noexcept { return __builtin_tanf(x); }
+
 [[nodiscard]] constexpr double pow(double base, double exp) noexcept { return __builtin_pow(base, exp); }
 
 [[nodiscard]] constexpr double floor(double x) noexcept { return __builtin_floor(x); }
@@ -50,6 +56,7 @@ namespace lpl::pmr {
 #    else
 #        include <cmath>
 namespace lpl::pmr {
+using ::std::acos;
 using ::std::atan;
 using ::std::atan2;
 using ::std::ceil;
@@ -59,6 +66,7 @@ using ::std::floor;
 using ::std::pow;
 using ::std::sin;
 using ::std::sqrt;
+using ::std::tan;
 } // namespace lpl::pmr
 #    endif
 

@@ -19,7 +19,7 @@
 #    include <lpl/core/Concepts.hpp>
 #    include <lpl/core/Types.hpp>
 
-#    include <cstring>
+#    include <lpl/std/cstring.hpp>
 #    include <span>
 
 namespace lpl::math {
