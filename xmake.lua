@@ -82,6 +82,7 @@ includes(
     "gpu",
     "platform",
     "input",
+    "image",
     "render",
     "audio",
     "haptic",

@@ -31,3 +31,13 @@ target("test-physics-parity")
     add_deps("lpl-core", "lpl-math", "lpl-ecs")
     add_files("parity/test_physics_parity.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Image color/HSB/histogram/sampling determinism
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-image-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-image")
+    add_files("parity/test_image_parity.cpp")
+target_end()
