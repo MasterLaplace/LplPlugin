@@ -13,33 +13,39 @@
 #    define LPL_ENGINE_GAMELOOP_HPP
 
 #    include <atomic>
-#    include <functional>
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/engine/Config.hpp>
+#    include <lpl/std/functional.hpp>
+
+namespace lpl::platform {
+class IClockBackend;
+} // namespace lpl::platform
 
 namespace lpl::engine {
 
 /** @brief Callbacks the game loop invokes each frame. */
 struct LoopCallbacks {
     /** @brief Called once per fixed tick (dt = 1/tickRate). */
-    std::function<void(core::f64 dt)> fixedUpdate;
+    pmr::function<void(core::f64 dt)> fixedUpdate;
 
     /** @brief Called once per render frame with interpolation alpha [0,1]. */
-    std::function<void(core::f64 alpha)> render;
+    pmr::function<void(core::f64 alpha)> render;
 
     /** @brief Called once per frame before fixed updates (input poll, etc.). */
-    std::function<void()> preFrame;
+    pmr::function<void()> preFrame;
 
     /** @brief Called once per frame after render (swap, metrics, etc.). */
-    std::function<void()> postFrame;
+    pmr::function<void()> postFrame;
 };
 
 /** @brief Fixed time-step game loop. */
 class GameLoop {
 public:
     /// @param config Engine configuration (provides tickRate).
-    explicit GameLoop(const Config &config);
+    /// @param clock  Platform clock backend driving wall-clock frame pacing
+    ///               (non-authoritative; the fixed dt comes from tickRate).
+    GameLoop(const Config &config, platform::IClockBackend &clock);
     ~GameLoop();
 
     GameLoop(const GameLoop &) = delete;
@@ -61,6 +67,7 @@ public:
     [[nodiscard]] core::u64 tickCount() const noexcept;
 
 private:
+    platform::IClockBackend &_clock;
     core::f64 _fixedDt;
     std::atomic<bool> _running{false};
     core::u64 _tickCount{0};
