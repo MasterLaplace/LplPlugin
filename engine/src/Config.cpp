@@ -60,7 +60,7 @@ Config::Builder &Config::Builder::enableGpu(bool enabled) noexcept
     return *this;
 }
 
-Config::Builder &Config::Builder::serverAddress(std::string addr) noexcept
+Config::Builder &Config::Builder::serverAddress(pmr::string addr) noexcept
 {
     _serverAddress = std::move(addr);
     return *this;

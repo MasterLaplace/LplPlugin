@@ -14,8 +14,7 @@
 
 #    include <lpl/core/Constants.hpp>
 #    include <lpl/core/Types.hpp>
-
-#    include <string>
+#    include <lpl/std/string.hpp>
 
 namespace lpl::engine {
 
@@ -33,7 +32,7 @@ public:
         Builder &arenaSize(core::usize bytes) noexcept;
         Builder &enableBci(bool enabled) noexcept;
         Builder &enableGpu(bool enabled) noexcept;
-        Builder &serverAddress(std::string addr) noexcept;
+        Builder &serverAddress(pmr::string addr) noexcept;
         Builder &serverPort(core::u16 port) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
@@ -47,7 +46,7 @@ public:
         core::usize _arenaSize{64 * 1024 * 1024};
         bool _enableBci{false};
         bool _enableGpu{false};
-        std::string _serverAddress{"127.0.0.1"};
+        pmr::string _serverAddress{"127.0.0.1"};
         core::u16 _serverPort{4242};
     };
 
@@ -59,7 +58,7 @@ public:
     [[nodiscard]] core::usize arenaSize() const noexcept { return _arenaSize; }
     [[nodiscard]] bool enableBci() const noexcept { return _enableBci; }
     [[nodiscard]] bool enableGpu() const noexcept { return _enableGpu; }
-    [[nodiscard]] const std::string &serverAddress() const noexcept { return _serverAddress; }
+    [[nodiscard]] const pmr::string &serverAddress() const noexcept { return _serverAddress; }
     [[nodiscard]] core::u16 serverPort() const noexcept { return _serverPort; }
 
 private:
@@ -73,7 +72,7 @@ private:
     core::usize _arenaSize{64 * 1024 * 1024};
     bool _enableBci{false};
     bool _enableGpu{false};
-    std::string _serverAddress{"127.0.0.1"};
+    pmr::string _serverAddress{"127.0.0.1"};
     core::u16 _serverPort{4242};
 };
 
