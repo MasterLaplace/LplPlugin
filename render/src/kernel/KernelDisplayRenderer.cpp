@@ -161,18 +161,18 @@ void KernelDisplayRenderer::drawMesh() noexcept
 
         // --- Bounding box (clamped to surface) ------------------------------
         core::i32 minX = sx[0], maxX = sx[0];
-    core::i32 minY = sy[0], maxY = sy[0];
-    for (int i = 1; i < 3; ++i)
-    {
-        if (sx[i] < minX)
-            minX = sx[i];
-        if (sx[i] > maxX)
-            maxX = sx[i];
-        if (sy[i] < minY)
-            minY = sy[i];
-        if (sy[i] > maxY)
-            maxY = sy[i];
-    }
+        core::i32 minY = sy[0], maxY = sy[0];
+        for (int i = 1; i < 3; ++i)
+        {
+            if (sx[i] < minX)
+                minX = sx[i];
+            if (sx[i] > maxX)
+                maxX = sx[i];
+            if (sy[i] < minY)
+                minY = sy[i];
+            if (sy[i] > maxY)
+                maxY = sy[i];
+        }
         if (minX < 0)
             minX = 0;
         if (minY < 0)
@@ -195,43 +195,43 @@ void KernelDisplayRenderer::drawMesh() noexcept
         const core::u32 c1 = kVertexColor[i1 % 3u];
         const core::u32 c2 = kVertexColor[i2 % 3u];
 
-    for (core::i32 py = minY; py <= maxY; ++py)
-    {
-        for (core::i32 px = minX; px <= maxX; ++px)
+        for (core::i32 py = minY; py <= maxY; ++py)
         {
-            const core::i32 w0 = edgeFunction(sx[1], sy[1], sx[2], sy[2], px, py);
-            const core::i32 w1 = edgeFunction(sx[2], sy[2], sx[0], sy[0], px, py);
-            const core::i32 w2 = edgeFunction(sx[0], sy[0], sx[1], sy[1], px, py);
+            for (core::i32 px = minX; px <= maxX; ++px)
+            {
+                const core::i32 w0 = edgeFunction(sx[1], sy[1], sx[2], sy[2], px, py);
+                const core::i32 w1 = edgeFunction(sx[2], sy[2], sx[0], sy[0], px, py);
+                const core::i32 w2 = edgeFunction(sx[0], sy[0], sx[1], sy[1], px, py);
 
-            // Accept CW and CCW: require all weights same sign as the area.
-            if (area > 0 && (w0 < 0 || w1 < 0 || w2 < 0))
-                continue;
-            if (area < 0 && (w0 > 0 || w1 > 0 || w2 > 0))
-                continue;
+                // Accept CW and CCW: require all weights same sign as the area.
+                if (area > 0 && (w0 < 0 || w1 < 0 || w2 < 0))
+                    continue;
+                if (area < 0 && (w0 > 0 || w1 > 0 || w2 > 0))
+                    continue;
 
-            // Barycentric blend of the three vertex colours.
-            const float b0 = static_cast<float>(w0) * rcpArea;
-            const float b1 = static_cast<float>(w1) * rcpArea;
-            const float b2 = static_cast<float>(w2) * rcpArea;
+                // Barycentric blend of the three vertex colours.
+                const float b0 = static_cast<float>(w0) * rcpArea;
+                const float b1 = static_cast<float>(w1) * rcpArea;
+                const float b2 = static_cast<float>(w2) * rcpArea;
 
-            const auto r0 = static_cast<float>((c0 >> 16) & 0xFF);
-            const auto g0 = static_cast<float>((c0 >> 8) & 0xFF);
-            const auto b_0 = static_cast<float>(c0 & 0xFF);
+                const auto r0 = static_cast<float>((c0 >> 16) & 0xFF);
+                const auto g0 = static_cast<float>((c0 >> 8) & 0xFF);
+                const auto b_0 = static_cast<float>(c0 & 0xFF);
 
-            const auto r1 = static_cast<float>((c1 >> 16) & 0xFF);
-            const auto g1 = static_cast<float>((c1 >> 8) & 0xFF);
-            const auto b_1 = static_cast<float>(c1 & 0xFF);
+                const auto r1 = static_cast<float>((c1 >> 16) & 0xFF);
+                const auto g1 = static_cast<float>((c1 >> 8) & 0xFF);
+                const auto b_1 = static_cast<float>(c1 & 0xFF);
 
-            const auto r2 = static_cast<float>((c2 >> 16) & 0xFF);
-            const auto g2 = static_cast<float>((c2 >> 8) & 0xFF);
-            const auto b_2 = static_cast<float>(c2 & 0xFF);
+                const auto r2 = static_cast<float>((c2 >> 16) & 0xFF);
+                const auto g2 = static_cast<float>((c2 >> 8) & 0xFF);
+                const auto b_2 = static_cast<float>(c2 & 0xFF);
 
-            const auto R = static_cast<core::u32>(b0 * r0 + b1 * r1 + b2 * r2);
-            const auto G = static_cast<core::u32>(b0 * g0 + b1 * g1 + b2 * g2);
-            const auto B = static_cast<core::u32>(b0 * b_0 + b1 * b_1 + b2 * b_2);
+                const auto R = static_cast<core::u32>(b0 * r0 + b1 * r1 + b2 * r2);
+                const auto G = static_cast<core::u32>(b0 * g0 + b1 * g1 + b2 * g2);
+                const auto B = static_cast<core::u32>(b0 * b_0 + b1 * b_1 + b2 * b_2);
 
-            _surface.buffer[static_cast<core::u32>(py) * pitchPixels + static_cast<core::u32>(px)] =
-                (R << 16) | (G << 8) | B;
+                _surface.buffer[static_cast<core::u32>(py) * pitchPixels + static_cast<core::u32>(px)] =
+                    (R << 16) | (G << 8) | B;
             }
         }
     } // triangle list

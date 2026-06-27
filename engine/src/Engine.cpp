@@ -100,8 +100,7 @@ struct Engine::Impl {
 
     Impl(Config cfg, std::unique_ptr<platform::IPlatform> plat)
         : config{std::move(cfg)}, platform{std::move(plat)}, loop{config, platform->clock()}, arena{config.arenaSize()},
-          jobSystem{},
-          registry{}, scheduler{jobSystem}, inputManager{}
+          jobSystem{}, registry{}, scheduler{jobSystem}, inputManager{}
     {
     }
 };
