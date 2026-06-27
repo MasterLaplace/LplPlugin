@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <lpl/image/Image.hpp>
+#include <lpl/image/Painter.hpp>
 
 using namespace lpl;
 
@@ -89,6 +90,66 @@ int main()
               "centre bilinear ~= corner average");
         // Top-left corner sample returns the top-left texel exactly.
         check(img.sampleNearest(0u, 0u) == image::packRgba(0, 0, 0), "nearest top-left exact");
+    }
+
+    std::printf("== painter primitives ==\n");
+    {
+        const image::Rgba red = image::packRgba(255, 0, 0);
+        const image::Rgba blue = image::packRgba(0, 0, 255);
+
+        image::Image img(16u, 16u);
+        image::Painter painter(img);
+
+        painter.fillRect(2, 2, 4, 4, red);
+        check(img.at(2, 2) == red && img.at(5, 5) == red && img.at(6, 6) != red,
+              "fillRect covers [2,6)x[2,6) only");
+
+        painter.drawLine(0, 0, 15, 15, blue);
+        check(img.at(0, 0) == blue && img.at(7, 7) == blue && img.at(15, 15) == blue,
+              "drawLine diagonal hits endpoints + midpoint");
+
+        image::Image disc(11u, 11u);
+        image::Painter discPainter(disc);
+        discPainter.fillCircle(5, 5, 4, red);
+        check(disc.at(5, 5) == red && disc.at(1, 5) == red && disc.at(9, 5) == red && disc.at(0, 0) != red,
+              "fillCircle fills centre + horizontal extent, not corners");
+
+        image::Image outline(11u, 11u);
+        image::Painter outlinePainter(outline);
+        outlinePainter.drawCircle(5, 5, 4, blue);
+        check(outline.at(5, 5) != blue && outline.at(9, 5) == blue && outline.at(1, 5) == blue,
+              "drawCircle is an outline (centre empty, rim set)");
+
+        // Blit a 3x3 opaque green patch; transparent source leaves dst intact.
+        image::Image patch(3u, 3u);
+        patch.fill(image::packRgba(0, 255, 0));
+        image::Image canvas(8u, 8u);
+        image::Painter canvasPainter(canvas);
+        canvasPainter.blit(patch, 2, 2);
+        check(canvas.at(2, 2) == image::packRgba(0, 255, 0) && canvas.at(4, 4) == image::packRgba(0, 255, 0) &&
+                  canvas.at(0, 0) == 0u,
+              "blit copies opaque patch, leaves rest untouched");
+
+        // Alpha blend: 50% red over opaque blue -> ~ (127,0,127).
+        image::Image blend(2u, 2u);
+        blend.fill(image::packRgba(0, 0, 255));
+        image::Painter blendPainter(blend);
+        blendPainter.blendPixel(0, 0, image::packRgba(255, 0, 0, 128));
+        const image::Rgba mixed = blend.at(0, 0);
+        const auto near = [](core::u8 v, core::u8 t) {
+            return static_cast<core::u32>(v > t ? v - t : t - v) <= 2u;
+        };
+        check(near(image::redOf(mixed), 128u) && image::greenOf(mixed) == 0u && near(image::blueOf(mixed), 127u),
+              "blendPixel 50% red over blue ~= (128,0,127)");
+    }
+
+    // Cross-target signature: this must equal the kernel P4 image smoke's
+    // paint_sig field (both fold the same paintParityScene via integer rasterisers).
+    {
+        image::Image scene(32u, 32u);
+        image::paintParityScene(scene);
+        std::printf("== painter parity signature == 0x%08X (compare with kernel paint_sig)\n",
+                    image::foldSignature(scene));
     }
 
     std::printf("%s (%d failure%s)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures, failures == 1 ? "" : "s");
