@@ -46,7 +46,10 @@ public:
     {
         _width = width;
         _height = height;
-        _pixels.assign(static_cast<core::usize>(width) * height, 0u);
+        // clear()+resize() (rather than assign()) keeps this portable to the
+        // freestanding kernel_std::vector, which has no assign().
+        _pixels.clear();
+        _pixels.resize(static_cast<core::usize>(width) * height, 0u);
     }
 
     [[nodiscard]] core::u32 width() const noexcept { return _width; }
