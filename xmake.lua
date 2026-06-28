@@ -83,6 +83,7 @@ includes(
     "platform",
     "input",
     "image",
+    "scene",
     "render",
     "audio",
     "haptic",

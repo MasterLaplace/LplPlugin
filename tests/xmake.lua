@@ -41,3 +41,13 @@ target("test-image-parity")
     add_deps("lpl-core", "lpl-image")
     add_files("parity/test_image_parity.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Scene graph: transforms / world composition / undo-redo / selection
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-scene-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-scene")
+    add_files("parity/test_scene_parity.cpp")
+target_end()
