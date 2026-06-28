@@ -51,3 +51,13 @@ target("test-scene-parity")
     add_deps("lpl-core", "lpl-math", "lpl-scene")
     add_files("parity/test_scene_parity.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3D camera/projection determinism (Fixed32 geometry → float projection)
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-render-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-render")
+    add_files("parity/test_render_parity.cpp")
+target_end()
