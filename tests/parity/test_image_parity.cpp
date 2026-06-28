@@ -13,6 +13,7 @@
  */
 
 #include <cstdio>
+#include <lpl/image/Codec.hpp>
 #include <lpl/image/Image.hpp>
 #include <lpl/image/Painter.hpp>
 
@@ -143,6 +144,33 @@ int main()
               "blendPixel 50% red over blue ~= (128,0,127)");
     }
 
+    std::printf("== ppm codec ==\n");
+    {
+        // Round-trip: paint a scene, encode to PPM, decode, compare (RGB only).
+        image::Image original(24u, 16u);
+        image::paintParityScene(original);
+        pmr::vector<core::u8> encoded;
+        check(image::writePpm(original, encoded), "writePpm succeeds");
+
+        image::Image decoded;
+        check(image::readPpm(encoded.data(), encoded.size(), decoded), "readPpm succeeds");
+        check(decoded.width() == 24u && decoded.height() == 16u, "decoded dimensions match");
+
+        bool same = true;
+        for (core::u32 y = 0u; y < 16u && same; ++y)
+            for (core::u32 x = 0u; x < 24u && same; ++x)
+                same = ((original.at(x, y) & 0x00FFFFFFu) == (decoded.at(x, y) & 0x00FFFFFFu));
+        check(same, "PPM round-trip preserves RGB pixels");
+
+        // Parse a hand-built 1x1 red PPM (with a comment line).
+        const core::u8 redPpm[] = {'P', '6', '\n', '#', 'c', '\n', '1', ' ', '1', '\n',
+                                   '2', '5', '5', '\n', 255u, 0u, 0u};
+        image::Image one;
+        check(image::readPpm(redPpm, sizeof(redPpm), one) &&
+                  ((one.at(0, 0) & 0x00FFFFFFu) == (image::packRgba(255, 0, 0) & 0x00FFFFFFu)),
+              "readPpm parses 1x1 red with comment");
+    }
+
     // Cross-target signature: this must equal the kernel P4 image smoke's
     // paint_sig field (both fold the same paintParityScene via integer rasterisers).
     {
@@ -150,6 +178,12 @@ int main()
         image::paintParityScene(scene);
         std::printf("== painter parity signature == 0x%08X (compare with kernel paint_sig)\n",
                     image::foldSignature(scene));
+
+        pmr::vector<core::u8> encoded;
+        image::Image decoded;
+        if (image::writePpm(scene, encoded) && image::readPpm(encoded.data(), encoded.size(), decoded))
+            std::printf("== ppm round-trip signature == 0x%08X (compare with kernel ppm_sig)\n",
+                        image::foldSignature(decoded));
     }
 
     std::printf("%s (%d failure%s)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures, failures == 1 ? "" : "s");
