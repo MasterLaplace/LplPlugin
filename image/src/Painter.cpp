@@ -39,8 +39,7 @@ namespace {
 
 void Painter::blendPixel(core::i32 x, core::i32 y, Rgba color) noexcept
 {
-    if (x < 0 || y < 0 || static_cast<core::u32>(x) >= _target.width() ||
-        static_cast<core::u32>(y) >= _target.height())
+    if (x < 0 || y < 0 || static_cast<core::u32>(x) >= _target.width() || static_cast<core::u32>(y) >= _target.height())
         return;
     _target.set(x, y, composite(_target.at(x, y), color));
 }
@@ -52,10 +51,10 @@ void Painter::fillRect(core::i32 x, core::i32 y, core::i32 w, core::i32 h, Rgba 
     // Clip to the surface up front so the inner loop is branch-light.
     const core::i32 x0 = (x < 0) ? 0 : x;
     const core::i32 y0 = (y < 0) ? 0 : y;
-    const core::i32 x1 = (x + w > static_cast<core::i32>(_target.width())) ? static_cast<core::i32>(_target.width())
-                                                                           : x + w;
-    const core::i32 y1 = (y + h > static_cast<core::i32>(_target.height())) ? static_cast<core::i32>(_target.height())
-                                                                            : y + h;
+    const core::i32 x1 =
+        (x + w > static_cast<core::i32>(_target.width())) ? static_cast<core::i32>(_target.width()) : x + w;
+    const core::i32 y1 =
+        (y + h > static_cast<core::i32>(_target.height())) ? static_cast<core::i32>(_target.height()) : y + h;
     for (core::i32 py = y0; py < y1; ++py)
         for (core::i32 px = x0; px < x1; ++px)
             blendPixel(px, py, color);
@@ -65,10 +64,10 @@ void Painter::drawRect(core::i32 x, core::i32 y, core::i32 w, core::i32 h, Rgba 
 {
     if (w <= 0 || h <= 0)
         return;
-    drawLine(x, y, x + w - 1, y, color);                     // top
-    drawLine(x, y + h - 1, x + w - 1, y + h - 1, color);     // bottom
-    drawLine(x, y, x, y + h - 1, color);                     // left
-    drawLine(x + w - 1, y, x + w - 1, y + h - 1, color);     // right
+    drawLine(x, y, x + w - 1, y, color);                 // top
+    drawLine(x, y + h - 1, x + w - 1, y + h - 1, color); // bottom
+    drawLine(x, y, x, y + h - 1, color);                 // left
+    drawLine(x + w - 1, y, x + w - 1, y + h - 1, color); // right
 }
 
 void Painter::drawLine(core::i32 x0, core::i32 y0, core::i32 x1, core::i32 y1, Rgba color) noexcept

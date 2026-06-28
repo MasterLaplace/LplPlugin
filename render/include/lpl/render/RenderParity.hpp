@@ -69,8 +69,14 @@ namespace detail {
     const F one = F::fromInt(1);
     const F neg = F::fromInt(-1);
     const F cubeFx[8][3] = {
-        {neg, neg, neg}, {one, neg, neg}, {one, one, neg}, {neg, one, neg},
-        {neg, neg, one}, {one, neg, one}, {one, one, one}, {neg, one, one},
+        {neg, neg, neg},
+        {one, neg, neg},
+        {one, one, neg},
+        {neg, one, neg},
+        {neg, neg, one},
+        {one, neg, one},
+        {one, one, one},
+        {neg, one, one},
     };
 
     // Model matrix: Fixed32 CORDIC rotation about Y, then translate -Z slightly.
@@ -79,8 +85,8 @@ namespace detail {
     math::Cordic::sincos(rotationAngle, s, c);
 
     // Camera: eye at (0,0,5) looking at origin, 60-degree vertical FOV.
-    const auto view = math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 0.0f, 5.0f), Vec3f(0.0f, 0.0f, 0.0f),
-                                                    Vec3f(0.0f, 1.0f, 0.0f));
+    const auto view =
+        math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 0.0f, 5.0f), Vec3f(0.0f, 0.0f, 0.0f), Vec3f(0.0f, 1.0f, 0.0f));
     const core::f32 aspect = static_cast<core::f32>(screenWidth) / static_cast<core::f32>(screenHeight);
     const auto proj = perspectiveFov(F::fromFloat(1.04719755f), aspect, 0.1f, 100.0f);
     const auto viewProj = proj * view;
@@ -103,14 +109,14 @@ namespace detail {
         const Vec3f world(rx, y0, rz);
 
         // Manual clip-space transform to recover w for the perspective divide.
-        const core::f32 cx = viewProj(0, 0) * world.x + viewProj(0, 1) * world.y + viewProj(0, 2) * world.z +
-                             viewProj(0, 3);
-        const core::f32 cy = viewProj(1, 0) * world.x + viewProj(1, 1) * world.y + viewProj(1, 2) * world.z +
-                             viewProj(1, 3);
-        const core::f32 cz = viewProj(2, 0) * world.x + viewProj(2, 1) * world.y + viewProj(2, 2) * world.z +
-                             viewProj(2, 3);
-        const core::f32 cw = viewProj(3, 0) * world.x + viewProj(3, 1) * world.y + viewProj(3, 2) * world.z +
-                             viewProj(3, 3);
+        const core::f32 cx =
+            viewProj(0, 0) * world.x + viewProj(0, 1) * world.y + viewProj(0, 2) * world.z + viewProj(0, 3);
+        const core::f32 cy =
+            viewProj(1, 0) * world.x + viewProj(1, 1) * world.y + viewProj(1, 2) * world.z + viewProj(1, 3);
+        const core::f32 cz =
+            viewProj(2, 0) * world.x + viewProj(2, 1) * world.y + viewProj(2, 2) * world.z + viewProj(2, 3);
+        const core::f32 cw =
+            viewProj(3, 0) * world.x + viewProj(3, 1) * world.y + viewProj(3, 2) * world.z + viewProj(3, 3);
 
         if (cw > 0.0f)
             ++out.in_front_count;
@@ -161,8 +167,8 @@ struct CullResult {
         for (core::i32 gx = -3; gx <= 3; ++gx)
             set.add(F::fromInt(gx * 5), F::fromInt(0), F::fromInt(gz * 5), F::fromInt(1));
 
-    const auto view = math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 8.0f, 18.0f), Vec3f(0.0f, 0.0f, 0.0f),
-                                                    Vec3f(0.0f, 1.0f, 0.0f));
+    const auto view =
+        math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 8.0f, 18.0f), Vec3f(0.0f, 0.0f, 0.0f), Vec3f(0.0f, 1.0f, 0.0f));
     const core::f32 aspect = static_cast<core::f32>(screenWidth) / static_cast<core::f32>(screenHeight);
     const auto proj = perspectiveFov(F::fromFloat(1.04719755f), aspect, 0.1f, 100.0f);
     const auto frustum = Frustum::fromViewProjection(proj * view);

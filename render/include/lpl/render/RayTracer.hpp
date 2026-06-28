@@ -42,16 +42,13 @@ struct RtSphere {
 struct RayTraceResult {
     core::u32 width{0u};
     core::u32 height{0u};
-    core::u32 hit_count{0u};   ///< Primary rays that hit any surface.
+    core::u32 hit_count{0u};       ///< Primary rays that hit any surface.
     core::u32 image_signature{0u}; ///< FNV-1a fold of the rendered RGB image.
 };
 
 namespace detail {
 
-[[nodiscard]] inline Vec3f reflectVec(const Vec3f &i, const Vec3f &n) noexcept
-{
-    return i - n * (2.0f * i.dot(n));
-}
+[[nodiscard]] inline Vec3f reflectVec(const Vec3f &i, const Vec3f &n) noexcept { return i - n * (2.0f * i.dot(n)); }
 
 /** @brief Closest sphere hit along ray O+tD for t in (tMin,tMax); -1 if none. */
 [[nodiscard]] inline core::f32 hitSphere(const RtSphere &s, const Vec3f &o, const Vec3f &d, core::f32 tMin,
@@ -95,7 +92,7 @@ namespace detail {
     spheres[0] = RtSphere{Vec3f(-1.2f, 0.0f, -4.0f), 1.0f, Vec3f(0.9f, 0.2f, 0.2f), 0.3f, 0.0f};
     spheres[1] = RtSphere{Vec3f(1.2f, 0.0f, -5.0f), 1.0f, Vec3f(0.2f, 0.4f, 0.9f), 0.8f, 0.0f};
     spheres[2] = RtSphere{Vec3f(0.0f, -0.4f, -3.0f), 0.5f, Vec3f(0.9f, 0.9f, 0.9f), 0.1f, 1.5f};
-    const core::f32 planeY = -1.0f;          // ground plane y = planeY
+    const core::f32 planeY = -1.0f; // ground plane y = planeY
     const Vec3f lightDir = Vec3f(-0.5f, -1.0f, -0.4f).normalize();
     const Vec3f eye(0.0f, 0.5f, 0.0f);
 
@@ -105,8 +102,8 @@ namespace detail {
     for (core::u32 py = 0; py < height; ++py)
         for (core::u32 px = 0; px < width; ++px)
         {
-            const core::f32 u = (2.0f * (static_cast<core::f32>(px) + 0.5f) / static_cast<core::f32>(width) - 1.0f) *
-                                aspect;
+            const core::f32 u =
+                (2.0f * (static_cast<core::f32>(px) + 0.5f) / static_cast<core::f32>(width) - 1.0f) * aspect;
             const core::f32 v = 1.0f - 2.0f * (static_cast<core::f32>(py) + 0.5f) / static_cast<core::f32>(height);
             Vec3f rayO = eye;
             Vec3f rayD = Vec3f(u, v, -1.0f).normalize();

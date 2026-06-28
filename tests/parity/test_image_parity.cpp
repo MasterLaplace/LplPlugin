@@ -84,9 +84,7 @@ int main()
         img.set(1, 1, image::packRgba(0, 0, 255));
         // Centre sample averages all four corners (per channel ~63/63/63).
         const image::Rgba mid = img.sampleBilinear(0x8000u, 0x8000u);
-        const auto near = [](core::u8 v, core::u8 t) {
-            return static_cast<core::u32>(v > t ? v - t : t - v) <= 2u;
-        };
+        const auto near = [](core::u8 v, core::u8 t) { return static_cast<core::u32>(v > t ? v - t : t - v) <= 2u; };
         check(near(image::redOf(mid), 63u) && near(image::greenOf(mid), 63u) && near(image::blueOf(mid), 63u),
               "centre bilinear ~= corner average");
         // Top-left corner sample returns the top-left texel exactly.
@@ -102,8 +100,7 @@ int main()
         image::Painter painter(img);
 
         painter.fillRect(2, 2, 4, 4, red);
-        check(img.at(2, 2) == red && img.at(5, 5) == red && img.at(6, 6) != red,
-              "fillRect covers [2,6)x[2,6) only");
+        check(img.at(2, 2) == red && img.at(5, 5) == red && img.at(6, 6) != red, "fillRect covers [2,6)x[2,6) only");
 
         painter.drawLine(0, 0, 15, 15, blue);
         check(img.at(0, 0) == blue && img.at(7, 7) == blue && img.at(15, 15) == blue,
@@ -137,9 +134,7 @@ int main()
         image::Painter blendPainter(blend);
         blendPainter.blendPixel(0, 0, image::packRgba(255, 0, 0, 128));
         const image::Rgba mixed = blend.at(0, 0);
-        const auto near = [](core::u8 v, core::u8 t) {
-            return static_cast<core::u32>(v > t ? v - t : t - v) <= 2u;
-        };
+        const auto near = [](core::u8 v, core::u8 t) { return static_cast<core::u32>(v > t ? v - t : t - v) <= 2u; };
         check(near(image::redOf(mixed), 128u) && image::greenOf(mixed) == 0u && near(image::blueOf(mixed), 127u),
               "blendPixel 50% red over blue ~= (128,0,127)");
     }
@@ -163,8 +158,8 @@ int main()
         check(same, "PPM round-trip preserves RGB pixels");
 
         // Parse a hand-built 1x1 red PPM (with a comment line).
-        const core::u8 redPpm[] = {'P', '6', '\n', '#', 'c', '\n', '1', ' ', '1', '\n',
-                                   '2', '5', '5', '\n', 255u, 0u, 0u};
+        const core::u8 redPpm[] = {'P',  '6', '\n', '#', 'c',  '\n', '1', ' ', '1',
+                                   '\n', '2', '5',  '5', '\n', 255u, 0u,  0u};
         image::Image one;
         check(image::readPpm(redPpm, sizeof(redPpm), one) &&
                   ((one.at(0, 0) & 0x00FFFFFFu) == (image::packRgba(255, 0, 0) & 0x00FFFFFFu)),

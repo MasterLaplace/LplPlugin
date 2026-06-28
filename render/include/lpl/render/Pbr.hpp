@@ -137,9 +137,9 @@ constexpr core::f32 kPi = 3.14159265358979323846f;
  * @param hdriAmbient Constant HDRI irradiance (the "environment" term).
  * @param op       Tone-mapping operator.
  */
-[[nodiscard]] inline core::u32 pbrShadeToRgb(const PbrMaterial &mat, const Light *lights, core::u32 count, const Vec3f &N,
-                                             const Vec3f &fragPos, const Vec3f &viewPos, const Vec3f &hdriAmbient,
-                                             ToneMap op) noexcept
+[[nodiscard]] inline core::u32 pbrShadeToRgb(const PbrMaterial &mat, const Light *lights, core::u32 count,
+                                             const Vec3f &N, const Vec3f &fragPos, const Vec3f &viewPos,
+                                             const Vec3f &hdriAmbient, ToneMap op) noexcept
 {
     const Vec3f V = (viewPos - fragPos).normalize();
     Vec3f Lo = Vec3f(mat.albedo.x * hdriAmbient.x, mat.albedo.y * hdriAmbient.y, mat.albedo.z * hdriAmbient.z) * mat.ao;

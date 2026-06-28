@@ -34,8 +34,7 @@ namespace {
     const core::u8 bot_b = lerp8(blueOf(c01), blueOf(c11), wx);
     const core::u8 bot_a = lerp8(alphaOf(c01), alphaOf(c11), wx);
 
-    return packRgba(lerp8(top_r, bot_r, wy), lerp8(top_g, bot_g, wy), lerp8(top_b, bot_b, wy),
-                    lerp8(top_a, bot_a, wy));
+    return packRgba(lerp8(top_r, bot_r, wy), lerp8(top_g, bot_g, wy), lerp8(top_b, bot_b, wy), lerp8(top_a, bot_a, wy));
 }
 
 } // namespace

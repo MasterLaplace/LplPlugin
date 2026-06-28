@@ -39,10 +39,10 @@ int main()
         // Catmull-Rom loop through a Fixed32 square + apex.
         const math::Fixed32 ctrl[5][3] = {
             {math::Fixed32::fromInt(-2), math::Fixed32::fromInt(0), math::Fixed32::fromInt(-2)},
-            {math::Fixed32::fromInt(2), math::Fixed32::fromInt(0), math::Fixed32::fromInt(-2)},
-            {math::Fixed32::fromInt(2), math::Fixed32::fromInt(0), math::Fixed32::fromInt(2)},
-            {math::Fixed32::fromInt(-2), math::Fixed32::fromInt(0), math::Fixed32::fromInt(2)},
-            {math::Fixed32::fromInt(0), math::Fixed32::fromInt(3), math::Fixed32::fromInt(0)},
+            {math::Fixed32::fromInt(2),  math::Fixed32::fromInt(0), math::Fixed32::fromInt(-2)},
+            {math::Fixed32::fromInt(2),  math::Fixed32::fromInt(0), math::Fixed32::fromInt(2) },
+            {math::Fixed32::fromInt(-2), math::Fixed32::fromInt(0), math::Fixed32::fromInt(2) },
+            {math::Fixed32::fromInt(0),  math::Fixed32::fromInt(3), math::Fixed32::fromInt(0) },
         };
         const auto loop = render::tessellateCatmullLoop(ctrl, 5u, 8u);
         check(loop.sample_count == 40u, "catmull loop emits 5*8 samples");

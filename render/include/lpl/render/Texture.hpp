@@ -56,7 +56,7 @@ public:
     /** @brief Bilinear sample at Q16.16 (u, v); Q16-weighted, wraps. */
     [[nodiscard]] core::u32 sampleBilinear(core::u32 uQ16, core::u32 vQ16) const noexcept
     {
-        const core::u64 fu = static_cast<core::u64>(uQ16) * _width;  // Q16 in texel space
+        const core::u64 fu = static_cast<core::u64>(uQ16) * _width; // Q16 in texel space
         const core::u64 fv = static_cast<core::u64>(vQ16) * _height;
         const core::u32 x0 = static_cast<core::u32>(fu >> 16) % _width;
         const core::u32 y0 = static_cast<core::u32>(fv >> 16) % _height;

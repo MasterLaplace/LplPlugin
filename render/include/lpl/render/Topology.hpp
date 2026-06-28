@@ -80,7 +80,7 @@ namespace detail {
 
 /** @brief Result of tessellating a curve/surface: folded sample stream. */
 struct TessellationResult {
-    core::u32 sample_count{0u};   ///< Number of evaluated samples.
+    core::u32 sample_count{0u};     ///< Number of evaluated samples.
     core::u32 sample_signature{0u}; ///< FNV-1a fold of Q16.16-quantized samples.
 };
 
@@ -152,8 +152,8 @@ struct TessellationResult {
 
 /** @brief Result of a Delaunay triangulation: triangle count + index fold. */
 struct DelaunayResult {
-    core::u32 point_count{0u};      ///< Number of input points.
-    core::u32 triangle_count{0u};   ///< Triangles in the final triangulation.
+    core::u32 point_count{0u};        ///< Number of input points.
+    core::u32 triangle_count{0u};     ///< Triangles in the final triangulation.
     core::u32 triangle_signature{0u}; ///< FNV-1a fold of all (i,j,k) indices.
 };
 
@@ -219,9 +219,12 @@ struct Tri2 {
     const core::f32 dmax = (dx > dy ? dx : dy) + 1.0f;
     const core::f32 midX = (minX + maxX) * 0.5f, midY = (minY + maxY) * 0.5f;
     const core::u32 s0 = count, s1 = count + 1u, s2 = count + 2u;
-    px[s0] = midX - 20.0f * dmax; py[s0] = midY - dmax;
-    px[s1] = midX;                py[s1] = midY + 20.0f * dmax;
-    px[s2] = midX + 20.0f * dmax; py[s2] = midY - dmax;
+    px[s0] = midX - 20.0f * dmax;
+    py[s0] = midY - dmax;
+    px[s1] = midX;
+    py[s1] = midY + 20.0f * dmax;
+    px[s2] = midX + 20.0f * dmax;
+    py[s2] = midY - dmax;
 
     pmr::vector<detail::Tri2> tris;
     tris.push_back(detail::Tri2{s0, s1, s2});
@@ -243,7 +246,11 @@ struct Tri2 {
         polyB.clear();
         for (core::u32 bi = 0; bi < static_cast<core::u32>(bad.size()); ++bi)
         {
-            const core::u32 e[3][2] = {{bad[bi].a, bad[bi].b}, {bad[bi].b, bad[bi].c}, {bad[bi].c, bad[bi].a}};
+            const core::u32 e[3][2] = {
+                {bad[bi].a, bad[bi].b},
+                {bad[bi].b, bad[bi].c},
+                {bad[bi].c, bad[bi].a}
+            };
             for (core::u32 k = 0; k < 3u; ++k)
             {
                 bool shared = false;
@@ -251,7 +258,11 @@ struct Tri2 {
                 {
                     if (bj == bi)
                         continue;
-                    const core::u32 f[3][2] = {{bad[bj].a, bad[bj].b}, {bad[bj].b, bad[bj].c}, {bad[bj].c, bad[bj].a}};
+                    const core::u32 f[3][2] = {
+                        {bad[bj].a, bad[bj].b},
+                        {bad[bj].b, bad[bj].c},
+                        {bad[bj].c, bad[bj].a}
+                    };
                     for (core::u32 m = 0; m < 3u; ++m)
                         if ((e[k][0] == f[m][0] && e[k][1] == f[m][1]) || (e[k][0] == f[m][1] && e[k][1] == f[m][0]))
                             shared = true;

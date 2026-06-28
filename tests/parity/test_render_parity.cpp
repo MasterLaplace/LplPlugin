@@ -84,7 +84,7 @@ int main()
     const auto tex = render::Texture::makeChecker(64u, 64u, 0x00FF0000u, 0x000000FFu, 8u);
     // Nearest at a cell corner; bilinear at a cell boundary blends the two.
     const core::u32 n0 = tex.sampleNearest(0u, 0u);
-    const core::u32 nMid = tex.sampleNearest(32768u, 0u);  // u=0.5 -> cell 4 (even) -> colorA
+    const core::u32 nMid = tex.sampleNearest(32768u, 0u);            // u=0.5 -> cell 4 (even) -> colorA
     const core::u32 nOdd = tex.sampleNearest(9u * 65536u / 64u, 0u); // x=9 -> cell 1 (odd) -> colorB
     check(n0 == 0x00FF0000u, "nearest (0,0) = colorA");
     check(nMid == 0x00FF0000u, "nearest (0.5,0) = colorA (cell 4, even)");

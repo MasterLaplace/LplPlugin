@@ -27,9 +27,9 @@ using Rgba = core::u32;
 
 /** @brief Hue/Saturation/Brightness triple (hue 0-359, sat/brightness 0-255). */
 struct Hsb {
-    core::u16 hue = 0u;        ///< Hue in degrees, 0..359.
-    core::u8 saturation = 0u;  ///< Saturation, 0..255.
-    core::u8 brightness = 0u;  ///< Brightness (value), 0..255.
+    core::u16 hue = 0u;       ///< Hue in degrees, 0..359.
+    core::u8 saturation = 0u; ///< Saturation, 0..255.
+    core::u8 brightness = 0u; ///< Brightness (value), 0..255.
 };
 
 /** @brief Pack 8-bit channels into 0xAARRGGBB. */
@@ -109,8 +109,8 @@ namespace detail {
         return packRgba(v, v, v);
 
     const core::u32 h = hsb.hue % 360u;
-    const core::u32 region = h / 60u;       // 0..5
-    const core::u32 frac = h % 60u;         // 0..59 within the region
+    const core::u32 region = h / 60u; // 0..5
+    const core::u32 frac = h % 60u;   // 0..59 within the region
     const core::u32 s = hsb.saturation;
 
     const core::u8 p = static_cast<core::u8>((v * (255u - s)) / 255u);
@@ -119,12 +119,12 @@ namespace detail {
 
     switch (region)
     {
-        case 0u:  return packRgba(v, t, p);
-        case 1u:  return packRgba(q, v, p);
-        case 2u:  return packRgba(p, v, t);
-        case 3u:  return packRgba(p, q, v);
-        case 4u:  return packRgba(t, p, v);
-        default:  return packRgba(v, p, q);
+    case 0u: return packRgba(v, t, p);
+    case 1u: return packRgba(q, v, p);
+    case 2u: return packRgba(p, v, t);
+    case 3u: return packRgba(p, q, v);
+    case 4u: return packRgba(t, p, v);
+    default: return packRgba(v, p, q);
     }
 }
 

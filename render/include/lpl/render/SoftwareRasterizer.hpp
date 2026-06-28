@@ -31,8 +31,8 @@ namespace lpl::render {
 
 /** @brief Caller-owned render target: packed 0x00RRGGBB color + float depth. */
 struct RenderTarget {
-    core::u32 *color{nullptr};   ///< width*height packed pixels (row-major, no padding).
-    core::f32 *depth{nullptr};   ///< width*height depth, smaller = nearer.
+    core::u32 *color{nullptr}; ///< width*height packed pixels (row-major, no padding).
+    core::f32 *depth{nullptr}; ///< width*height depth, smaller = nearer.
     core::u32 width{0u};
     core::u32 height{0u};
 };
@@ -77,8 +77,8 @@ struct ScreenVertex {
 }
 
 /** @brief Depth-tested barycentric fill of one front-facing triangle. */
-inline void fillTriangle(const RenderTarget &rt, const ScreenVertex &v0, const ScreenVertex &v1,
-                         const ScreenVertex &v2, core::u32 color) noexcept
+inline void fillTriangle(const RenderTarget &rt, const ScreenVertex &v0, const ScreenVertex &v1, const ScreenVertex &v2,
+                         core::u32 color) noexcept
 {
     if (!v0.valid || !v1.valid || !v2.valid)
         return;
@@ -212,8 +212,14 @@ inline void renderCube(const RenderTarget &rt, math::Fixed32 rotationAngle) noex
     clearTarget(rt, 0x00102030u);
 
     static const core::f32 corners[8][3] = {
-        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
-        {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, 1.0f},  {1.0f, 1.0f, 1.0f},  {-1.0f, 1.0f, 1.0f},
+        {-1.0f, -1.0f, -1.0f},
+        {1.0f,  -1.0f, -1.0f},
+        {1.0f,  1.0f,  -1.0f},
+        {-1.0f, 1.0f,  -1.0f},
+        {-1.0f, -1.0f, 1.0f },
+        {1.0f,  -1.0f, 1.0f },
+        {1.0f,  1.0f,  1.0f },
+        {-1.0f, 1.0f,  1.0f },
     };
     // 12 triangles (CCW front faces), 6 faces x 2.
     static const core::u32 indices[36] = {
@@ -234,8 +240,8 @@ inline void renderCube(const RenderTarget &rt, math::Fixed32 rotationAngle) noex
     const core::f32 cf = c.toFloat();
     const core::f32 sf = s.toFloat();
 
-    const auto view = math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 0.0f, 5.0f), Vec3f(0.0f, 0.0f, 0.0f),
-                                                    Vec3f(0.0f, 1.0f, 0.0f));
+    const auto view =
+        math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 0.0f, 5.0f), Vec3f(0.0f, 0.0f, 0.0f), Vec3f(0.0f, 1.0f, 0.0f));
     const core::f32 aspect = static_cast<core::f32>(rt.width) / static_cast<core::f32>(rt.height);
     const auto proj = perspectiveFov(F::fromFloat(1.04719755f), aspect, 0.1f, 100.0f);
     const auto mvp = proj * view;
@@ -265,16 +271,27 @@ inline void renderTexturedCube(const RenderTarget &rt, math::Fixed32 rotationAng
     clearTarget(rt, 0x00102030u);
 
     static const core::f32 corners[8][3] = {
-        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
-        {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, 1.0f},  {1.0f, 1.0f, 1.0f},  {-1.0f, 1.0f, 1.0f},
+        {-1.0f, -1.0f, -1.0f},
+        {1.0f,  -1.0f, -1.0f},
+        {1.0f,  1.0f,  -1.0f},
+        {-1.0f, 1.0f,  -1.0f},
+        {-1.0f, -1.0f, 1.0f },
+        {1.0f,  -1.0f, 1.0f },
+        {1.0f,  1.0f,  1.0f },
+        {-1.0f, 1.0f,  1.0f },
     };
     static const core::u32 indices[36] = {
-        0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7,
-        1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
+        0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7, 1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
     };
     // Per-triangle UVs: each face's two triangles tile the unit square.
-    static const core::f32 faceUV[6][2] = {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 0.0f}, {1.0f, 1.0f},
-                                           {0.0f, 1.0f}};
+    static const core::f32 faceUV[6][2] = {
+        {0.0f, 0.0f},
+        {1.0f, 0.0f},
+        {1.0f, 1.0f},
+        {0.0f, 0.0f},
+        {1.0f, 1.0f},
+        {0.0f, 1.0f}
+    };
 
     F s{F::fromInt(0)};
     F c{F::fromInt(0)};
@@ -282,8 +299,8 @@ inline void renderTexturedCube(const RenderTarget &rt, math::Fixed32 rotationAng
     const core::f32 cf = c.toFloat();
     const core::f32 sf = s.toFloat();
 
-    const auto view = math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 0.0f, 5.0f), Vec3f(0.0f, 0.0f, 0.0f),
-                                                    Vec3f(0.0f, 1.0f, 0.0f));
+    const auto view =
+        math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 0.0f, 5.0f), Vec3f(0.0f, 0.0f, 0.0f), Vec3f(0.0f, 1.0f, 0.0f));
     const core::f32 aspect = static_cast<core::f32>(rt.width) / static_cast<core::f32>(rt.height);
     const auto proj = perspectiveFov(F::fromFloat(1.04719755f), aspect, 0.1f, 100.0f);
     const auto mvp = proj * view;
@@ -298,8 +315,7 @@ inline void renderTexturedCube(const RenderTarget &rt, math::Fixed32 rotationAng
 
     for (core::u32 t = 0; t < 12u; ++t)
         detail::fillTriangleTextured(rt, sv[indices[t * 3 + 0]], sv[indices[t * 3 + 1]], sv[indices[t * 3 + 2]],
-                                     faceUV[(t & 1u) ? 3 : 0], faceUV[(t & 1u) ? 4 : 1], faceUV[(t & 1u) ? 5 : 2],
-                                     tex);
+                                     faceUV[(t & 1u) ? 3 : 0], faceUV[(t & 1u) ? 4 : 1], faceUV[(t & 1u) ? 5 : 2], tex);
 }
 
 /**
@@ -313,16 +329,25 @@ inline void renderLitCube(const RenderTarget &rt, math::Fixed32 rotationAngle, S
     clearTarget(rt, 0x00102030u);
 
     static const core::f32 corners[8][3] = {
-        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
-        {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, 1.0f},  {1.0f, 1.0f, 1.0f},  {-1.0f, 1.0f, 1.0f},
+        {-1.0f, -1.0f, -1.0f},
+        {1.0f,  -1.0f, -1.0f},
+        {1.0f,  1.0f,  -1.0f},
+        {-1.0f, 1.0f,  -1.0f},
+        {-1.0f, -1.0f, 1.0f },
+        {1.0f,  -1.0f, 1.0f },
+        {1.0f,  1.0f,  1.0f },
+        {-1.0f, 1.0f,  1.0f },
     };
     static const core::u32 indices[36] = {
-        0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7,
-        1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
+        0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7, 1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
     };
     static const core::f32 faceNormals[6][3] = {
-        {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f},  {-1.0f, 0.0f, 0.0f},
-        {1.0f, 0.0f, 0.0f},  {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {0.0f,  0.0f,  -1.0f},
+        {0.0f,  0.0f,  1.0f },
+        {-1.0f, 0.0f,  0.0f },
+        {1.0f,  0.0f,  0.0f },
+        {0.0f,  -1.0f, 0.0f },
+        {0.0f,  1.0f,  0.0f },
     };
 
     F sn{F::fromInt(0)};

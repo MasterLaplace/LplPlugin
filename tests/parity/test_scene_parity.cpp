@@ -59,10 +59,8 @@ int main()
     check(eqRaw(s.localTransform(child).tx, Fixed32::fromInt(7).raw()), "edit set child tx = 7");
     check(s.undoDepth() == 3u && s.redoDepth() == 0u, "undo depth 3 after 3 edits");
 
-    check(s.undo() && eqRaw(s.localTransform(child).tx, Fixed32::fromInt(5).raw()),
-          "undo restores child tx = 5");
-    check(s.redo() && eqRaw(s.localTransform(child).tx, Fixed32::fromInt(7).raw()),
-          "redo reapplies child tx = 7");
+    check(s.undo() && eqRaw(s.localTransform(child).tx, Fixed32::fromInt(5).raw()), "undo restores child tx = 5");
+    check(s.redo() && eqRaw(s.localTransform(child).tx, Fixed32::fromInt(7).raw()), "redo reapplies child tx = 7");
 
     // A fresh edit clears the redo history.
     s.undo();
@@ -82,9 +80,8 @@ int main()
     std::printf("== rotation determinism ==\n");
     // 90-degree rotation (pi/2) of point (1,0) -> ~ (0,1); check tx/ty exact raw.
     const Fixed32 halfPi = Fixed32::fromFloat(1.57079632679f);
-    const scene::Transform2D rot =
-        scene::Transform2D::fromTRS(Fixed32::fromInt(0), Fixed32::fromInt(0), halfPi, Fixed32::fromInt(1),
-                                    Fixed32::fromInt(1));
+    const scene::Transform2D rot = scene::Transform2D::fromTRS(Fixed32::fromInt(0), Fixed32::fromInt(0), halfPi,
+                                                               Fixed32::fromInt(1), Fixed32::fromInt(1));
     Fixed32 rx{Fixed32::fromInt(0)};
     Fixed32 ry{Fixed32::fromInt(0)};
     rot.apply(Fixed32::fromInt(1), Fixed32::fromInt(0), rx, ry);

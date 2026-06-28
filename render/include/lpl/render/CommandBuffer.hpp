@@ -95,7 +95,7 @@ private:
 
 /** @brief Result of submitting a command buffer against a pose buffer. */
 struct SubmitResult {
-    core::u32 draws{0u};            ///< Draws emitted.
+    core::u32 draws{0u};             ///< Draws emitted.
     core::u32 latched_signature{0u}; ///< Fold of (packet, late-latched Fixed32 pose).
 };
 
