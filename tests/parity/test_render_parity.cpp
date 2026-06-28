@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <lpl/render/RenderParity.hpp>
 #include <lpl/render/SoftwareRasterizer.hpp>
+#include <lpl/render/Texture.hpp>
 
 using namespace lpl;
 
@@ -78,6 +79,35 @@ int main()
     check(cull.total == 49u, "instance grid has 49 entries (7x7)");
     check(cull.visible > 0u && cull.visible < cull.total, "frustum culls some but not all instances");
     std::printf("  total=%u visible=%u visible_sig=0x%08X\n", cull.total, cull.visible, cull.visible_signature);
+
+    std::printf("== texture sampling (integer-deterministic) ==\n");
+    const auto tex = render::Texture::makeChecker(64u, 64u, 0x00FF0000u, 0x000000FFu, 8u);
+    // Nearest at a cell corner; bilinear at a cell boundary blends the two.
+    const core::u32 n0 = tex.sampleNearest(0u, 0u);
+    const core::u32 nMid = tex.sampleNearest(32768u, 0u);  // u=0.5 -> cell 4 (even) -> colorA
+    const core::u32 nOdd = tex.sampleNearest(9u * 65536u / 64u, 0u); // x=9 -> cell 1 (odd) -> colorB
+    check(n0 == 0x00FF0000u, "nearest (0,0) = colorA");
+    check(nMid == 0x00FF0000u, "nearest (0.5,0) = colorA (cell 4, even)");
+    check(nOdd == 0x000000FFu, "nearest (cell 1) = colorB (odd)");
+    // Fold a row of bilinear samples across the texture.
+    core::u32 texSig = 0x811C9DC5u;
+    for (core::u32 i = 0; i < 64u; ++i)
+    {
+        const core::u32 uq = (i * 65536u) / 64u;
+        texSig = render::detail::fnv1aStep(texSig, tex.sampleBilinear(uq, uq));
+    }
+    check(texSig != 0x811C9DC5u, "bilinear sample fold non-trivial");
+
+    constexpr core::u32 tW = 96u;
+    constexpr core::u32 tH = 64u;
+    static core::u32 texColor[tW * tH];
+    static core::f32 texDepth[tW * tH];
+    render::RenderTarget trt{texColor, texDepth, tW, tH};
+    render::renderTexturedCube(trt, math::Fixed32::fromInt(0), tex);
+    const core::u32 texturedCubeSig = render::foldTarget(trt);
+    check(texturedCubeSig != cubeSig0, "textured cube differs from flat-shaded cube");
+    std::printf("  tex_sample_sig = 0x%08X\n", texSig);
+    std::printf("  textured_cube_sig = 0x%08X\n", texturedCubeSig);
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
