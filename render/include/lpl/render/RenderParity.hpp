@@ -23,6 +23,7 @@
 #    include <lpl/math/Cordic.hpp>
 #    include <lpl/math/Mat4.hpp>
 #    include <lpl/math/Vec3.hpp>
+#    include <lpl/render/Instancing.hpp>
 #    include <lpl/render/Projection.hpp>
 
 namespace lpl::render {
@@ -136,6 +137,46 @@ namespace detail {
 
     out.screen_signature = screenHash;
     out.depth_signature = depthHash;
+    return out;
+}
+
+/** @brief Result of frustum-culling the canonical parity instance grid. */
+struct CullResult {
+    core::u32 total{0u};             ///< Total instances in the grid.
+    core::u32 visible{0u};           ///< Instances surviving the frustum cull.
+    core::u32 visible_signature{0u}; ///< FNV-1a fold of the visible-index list.
+};
+
+/**
+ * @brief Builds a deterministic 7x7 instance grid (SoA) on the XZ plane and
+ *        culls it against a perspective camera looking at the origin.
+ */
+[[nodiscard]] inline CullResult cullParityInstanceGrid(core::u32 screenWidth, core::u32 screenHeight)
+{
+    using F = math::Fixed32;
+    using Vec3f = math::Vec3<core::f32>;
+
+    InstanceSet set;
+    for (core::i32 gz = -3; gz <= 3; ++gz)
+        for (core::i32 gx = -3; gx <= 3; ++gx)
+            set.add(F::fromInt(gx * 5), F::fromInt(0), F::fromInt(gz * 5), F::fromInt(1));
+
+    const auto view = math::Mat4<core::f32>::lookAt(Vec3f(0.0f, 8.0f, 18.0f), Vec3f(0.0f, 0.0f, 0.0f),
+                                                    Vec3f(0.0f, 1.0f, 0.0f));
+    const core::f32 aspect = static_cast<core::f32>(screenWidth) / static_cast<core::f32>(screenHeight);
+    const auto proj = perspectiveFov(F::fromFloat(1.04719755f), aspect, 0.1f, 100.0f);
+    const auto frustum = Frustum::fromViewProjection(proj * view);
+
+    pmr::vector<core::u32> visible;
+    frustumCull(set, frustum, 1.73205081f /* unit-cube circumradius */, visible);
+
+    CullResult out{};
+    out.total = set.count();
+    out.visible = static_cast<core::u32>(visible.size());
+    core::u32 hash = 0x811C9DC5u;
+    for (core::u32 i = 0; i < out.visible; ++i)
+        hash = detail::fnv1aStep(hash, visible[i]);
+    out.visible_signature = hash;
     return out;
 }
 

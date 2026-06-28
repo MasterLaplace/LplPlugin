@@ -73,6 +73,12 @@ int main()
     std::printf("  cube angle0 sig = 0x%08X\n", cubeSig0);
     std::printf("  cube pi/4   sig = 0x%08X\n", cubeSigQ);
 
+    std::printf("== instancing + frustum cull ==\n");
+    const auto cull = render::cullParityInstanceGrid(1280u, 800u);
+    check(cull.total == 49u, "instance grid has 49 entries (7x7)");
+    check(cull.visible > 0u && cull.visible < cull.total, "frustum culls some but not all instances");
+    std::printf("  total=%u visible=%u visible_sig=0x%08X\n", cull.total, cull.visible, cull.visible_signature);
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
 }
