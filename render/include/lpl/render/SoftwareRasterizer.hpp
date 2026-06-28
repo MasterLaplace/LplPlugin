@@ -382,6 +382,73 @@ inline void renderLitCube(const RenderTarget &rt, math::Fixed32 rotationAngle, S
     }
 }
 
+/** @brief Copies a render target's color buffer into a same-size Texture. */
+[[nodiscard]] inline Texture targetToTexture(const RenderTarget &rt)
+{
+    Texture tex(rt.width, rt.height);
+    for (core::u32 y = 0; y < rt.height; ++y)
+        for (core::u32 x = 0; x < rt.width; ++x)
+            tex.setTexel(x, y, rt.color[y * rt.width + x]);
+    return tex;
+}
+
+/**
+ * @brief Renders a 2x2 multi-viewport composite: four lit cubes at distinct
+ *        rotation angles, each into its own quadrant of the target.
+ */
+inline void renderMultiViewport(const RenderTarget &composite) noexcept
+{
+    clearTarget(composite, 0x00000000u);
+
+    const core::u32 halfW = composite.width / 2u;
+    const core::u32 halfH = composite.height / 2u;
+    if (halfW == 0u || halfH == 0u)
+        return;
+
+    const math::Fixed32 angles[4] = {
+        math::Fixed32::fromInt(0),
+        math::Fixed32::fromFloat(0.78539816f),
+        math::Fixed32::fromFloat(1.57079633f),
+        math::Fixed32::fromFloat(2.35619449f),
+    };
+    const ShadingModel models[4] = {ShadingModel::Lambert, ShadingModel::Phong, ShadingModel::BlinnPhong,
+                                    ShadingModel::BlinnPhong};
+
+    pmr::vector<core::u32> quadColor;
+    pmr::vector<core::f32> quadDepth;
+    quadColor.resize(static_cast<core::usize>(halfW) * halfH, 0u);
+    quadDepth.resize(static_cast<core::usize>(halfW) * halfH, 0.0f);
+    RenderTarget quad{quadColor.data(), quadDepth.data(), halfW, halfH};
+
+    for (core::u32 q = 0; q < 4u; ++q)
+    {
+        renderLitCube(quad, angles[q], models[q]);
+        const core::u32 ox = (q & 1u) ? halfW : 0u;
+        const core::u32 oy = (q & 2u) ? halfH : 0u;
+        for (core::u32 y = 0; y < halfH; ++y)
+            for (core::u32 x = 0; x < halfW; ++x)
+                composite.color[(oy + y) * composite.width + (ox + x)] = quadColor[y * halfW + x];
+    }
+}
+
+/**
+ * @brief Render-to-texture: renders a lit cube into an offscreen texture, then
+ *        maps that texture onto a second cube drawn into the target.
+ */
+inline void renderToTextureCube(const RenderTarget &rt, math::Fixed32 angle) noexcept
+{
+    constexpr core::u32 kTexDim = 64u;
+    pmr::vector<core::u32> texColor;
+    pmr::vector<core::f32> texDepth;
+    texColor.resize(static_cast<core::usize>(kTexDim) * kTexDim, 0u);
+    texDepth.resize(static_cast<core::usize>(kTexDim) * kTexDim, 0.0f);
+    RenderTarget offscreen{texColor.data(), texDepth.data(), kTexDim, kTexDim};
+
+    renderLitCube(offscreen, angle, ShadingModel::BlinnPhong);
+    const Texture rtt = targetToTexture(offscreen);
+    renderTexturedCube(rt, angle, rtt);
+}
+
 /** @brief FNV-1a fold of the whole color buffer (cross-target signature). */
 [[nodiscard]] inline core::u32 foldTarget(const RenderTarget &rt) noexcept
 {

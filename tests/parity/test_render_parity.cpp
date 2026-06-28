@@ -137,6 +137,26 @@ int main()
         std::printf("  lit_cube_sig = 0x%08X\n", litCubeSig);
     }
 
+    std::printf("== multi-viewport + render-to-texture ==\n");
+    {
+        constexpr core::u32 mW = 128u, mH = 96u;
+        static core::u32 mvColor[mW * mH];
+        static core::f32 mvDepth[mW * mH];
+        render::RenderTarget mrt{mvColor, mvDepth, mW, mH};
+        render::renderMultiViewport(mrt);
+        const core::u32 mvSig = render::foldTarget(mrt);
+        check(mvSig != clearSig, "multi-viewport composite writes pixels");
+
+        static core::u32 rttColor[96 * 64];
+        static core::f32 rttDepth[96 * 64];
+        render::RenderTarget rrt{rttColor, rttDepth, 96u, 64u};
+        render::renderToTextureCube(rrt, math::Fixed32::fromInt(0));
+        const core::u32 rttSig = render::foldTarget(rrt);
+        check(rttSig != texturedCubeSig, "render-to-texture cube differs from checker cube");
+        std::printf("  multiviewport_sig = 0x%08X\n", mvSig);
+        std::printf("  render_to_texture_sig = 0x%08X\n", rttSig);
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
 }
