@@ -109,6 +109,34 @@ int main()
     std::printf("  tex_sample_sig = 0x%08X\n", texSig);
     std::printf("  textured_cube_sig = 0x%08X\n", texturedCubeSig);
 
+    std::printf("== classical lighting ==\n");
+    {
+        render::Material mat;
+        mat.albedo = render::Vec3f(0.8f, 0.7f, 0.6f);
+        mat.shininess = 32u;
+        render::Light dir;
+        dir.type = render::LightType::Directional;
+        dir.direction = render::Vec3f(-0.4f, -0.7f, -0.6f);
+        const render::Vec3f N(0.0f, 0.0f, 1.0f);
+        const render::Vec3f frag(0.0f, 0.0f, 1.0f);
+        const render::Vec3f eye(0.0f, 0.0f, 5.0f);
+        const core::u32 lamb = render::shadeToRgb(render::ShadingModel::Lambert, mat, &dir, 1u, N, frag, eye);
+        const core::u32 phong = render::shadeToRgb(render::ShadingModel::Phong, mat, &dir, 1u, N, frag, eye);
+        const core::u32 blinn = render::shadeToRgb(render::ShadingModel::BlinnPhong, mat, &dir, 1u, N, frag, eye);
+        check(lamb != 0u, "Lambert shade non-black");
+        check(phong != lamb || blinn != lamb, "specular models differ from Lambert");
+        std::printf("  lambert=0x%06X phong=0x%06X blinn=0x%06X\n", lamb, phong, blinn);
+
+        constexpr core::u32 lW = 96u, lH = 64u;
+        static core::u32 litColor[lW * lH];
+        static core::f32 litDepth[lW * lH];
+        render::RenderTarget lrt{litColor, litDepth, lW, lH};
+        render::renderLitCube(lrt, math::Fixed32::fromInt(0), render::ShadingModel::BlinnPhong);
+        const core::u32 litCubeSig = render::foldTarget(lrt);
+        check(litCubeSig != cubeSig0, "lit cube differs from flat cube");
+        std::printf("  lit_cube_sig = 0x%08X\n", litCubeSig);
+    }
+
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
 }

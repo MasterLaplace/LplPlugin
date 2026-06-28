@@ -22,6 +22,7 @@
 
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/Cordic.hpp>
+#    include <lpl/render/Lighting.hpp>
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/RenderParity.hpp>
 #    include <lpl/render/Texture.hpp>
@@ -299,6 +300,86 @@ inline void renderTexturedCube(const RenderTarget &rt, math::Fixed32 rotationAng
         detail::fillTriangleTextured(rt, sv[indices[t * 3 + 0]], sv[indices[t * 3 + 1]], sv[indices[t * 3 + 2]],
                                      faceUV[(t & 1u) ? 3 : 0], faceUV[(t & 1u) ? 4 : 1], faceUV[(t & 1u) ? 5 : 2],
                                      tex);
+}
+
+/**
+ * @brief Renders the canonical cube with classical per-face flat lighting
+ *        (Lambert/Phong/Blinn-Phong) from one directional + one point light.
+ */
+inline void renderLitCube(const RenderTarget &rt, math::Fixed32 rotationAngle, ShadingModel model) noexcept
+{
+    using F = math::Fixed32;
+
+    clearTarget(rt, 0x00102030u);
+
+    static const core::f32 corners[8][3] = {
+        {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
+        {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, 1.0f},  {1.0f, 1.0f, 1.0f},  {-1.0f, 1.0f, 1.0f},
+    };
+    static const core::u32 indices[36] = {
+        0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7,
+        1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
+    };
+    static const core::f32 faceNormals[6][3] = {
+        {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f},  {-1.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},  {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+    };
+
+    F sn{F::fromInt(0)};
+    F cs{F::fromInt(0)};
+    math::Cordic::sincos(rotationAngle, sn, cs);
+    const core::f32 cf = cs.toFloat();
+    const core::f32 sf = sn.toFloat();
+
+    const Vec3f eye(0.0f, 0.0f, 5.0f);
+    const auto view = math::Mat4<core::f32>::lookAt(eye, Vec3f(0.0f, 0.0f, 0.0f), Vec3f(0.0f, 1.0f, 0.0f));
+    const core::f32 aspect = static_cast<core::f32>(rt.width) / static_cast<core::f32>(rt.height);
+    const auto proj = perspectiveFov(F::fromFloat(1.04719755f), aspect, 0.1f, 100.0f);
+    const auto mvp = proj * view;
+
+    Light lights[2];
+    lights[0].type = LightType::Directional;
+    lights[0].direction = Vec3f(-0.4f, -0.7f, -0.6f);
+    lights[0].color = Vec3f(1.0f, 0.95f, 0.85f);
+    lights[0].intensity = 1.0f;
+    lights[1].type = LightType::Point;
+    lights[1].position = Vec3f(2.5f, 2.0f, 3.0f);
+    lights[1].color = Vec3f(0.3f, 0.5f, 1.0f);
+    lights[1].intensity = 1.0f;
+    lights[1].range = 12.0f;
+
+    Material mat;
+    mat.albedo = Vec3f(0.8f, 0.7f, 0.6f);
+    mat.shininess = 32u;
+
+    detail::ScreenVertex sv[8];
+    core::f32 wpos[8][3];
+    for (core::u32 i = 0; i < 8u; ++i)
+    {
+        const core::f32 rx = cf * corners[i][0] + sf * corners[i][2];
+        const core::f32 rz = -sf * corners[i][0] + cf * corners[i][2];
+        wpos[i][0] = rx;
+        wpos[i][1] = corners[i][1];
+        wpos[i][2] = rz;
+        sv[i] = detail::projectVertex(mvp, rx, corners[i][1], rz, rt.width, rt.height);
+    }
+
+    for (core::u32 t = 0; t < 12u; ++t)
+    {
+        const core::u32 face = t / 2u;
+        const core::f32 nx = cf * faceNormals[face][0] + sf * faceNormals[face][2];
+        const core::f32 nz = -sf * faceNormals[face][0] + cf * faceNormals[face][2];
+        const Vec3f normal(nx, faceNormals[face][1], nz);
+
+        const core::u32 i0 = indices[t * 3 + 0];
+        const core::u32 i1 = indices[t * 3 + 1];
+        const core::u32 i2 = indices[t * 3 + 2];
+        const Vec3f center((wpos[i0][0] + wpos[i1][0] + wpos[i2][0]) / 3.0f,
+                           (wpos[i0][1] + wpos[i1][1] + wpos[i2][1]) / 3.0f,
+                           (wpos[i0][2] + wpos[i1][2] + wpos[i2][2]) / 3.0f);
+        const core::u32 color = shadeToRgb(model, mat, lights, 2u, normal, center, eye);
+        detail::fillTriangle(rt, sv[i0], sv[i1], sv[i2], color);
+    }
 }
 
 /** @brief FNV-1a fold of the whole color buffer (cross-target signature). */
