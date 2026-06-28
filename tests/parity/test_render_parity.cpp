@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <lpl/render/RenderParity.hpp>
+#include <lpl/render/SoftwareRasterizer.hpp>
 
 using namespace lpl;
 
@@ -50,6 +51,27 @@ int main()
     std::printf("  angle0 vertex0    = (%d, %d)\n", r0.vertex0_x, r0.vertex0_y);
     std::printf("  pi/4   screen_sig = 0x%08X\n", rq.screen_signature);
     std::printf("  pi/4   depth_sig  = 0x%08X\n", rq.depth_signature);
+
+    std::printf("== software 3D rasterizer (depth-buffered cube) ==\n");
+    constexpr core::u32 kW = 96u;
+    constexpr core::u32 kH = 64u;
+    static core::u32 colorBuf[kW * kH];
+    static core::f32 depthBuf[kW * kH];
+    render::RenderTarget rt{colorBuf, depthBuf, kW, kH};
+
+    render::renderCube(rt, math::Fixed32::fromInt(0));
+    const core::u32 cubeSig0 = render::foldTarget(rt);
+    // The cube must cover some pixels (signature differs from a cleared buffer).
+    render::clearTarget(rt, 0x00102030u);
+    const core::u32 clearSig = render::foldTarget(rt);
+    check(cubeSig0 != clearSig, "rasterized cube writes pixels (depth test)");
+
+    render::renderCube(rt, math::Fixed32::fromFloat(0.78539816f));
+    const core::u32 cubeSigQ = render::foldTarget(rt);
+    check(cubeSigQ != cubeSig0, "rotation changes rasterized cube");
+
+    std::printf("  cube angle0 sig = 0x%08X\n", cubeSig0);
+    std::printf("  cube pi/4   sig = 0x%08X\n", cubeSigQ);
 
     std::printf("%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
