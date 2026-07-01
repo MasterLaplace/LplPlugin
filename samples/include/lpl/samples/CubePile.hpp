@@ -39,9 +39,9 @@ using namespace lpl::render; // RenderTarget, clearTarget, foldTarget, detail::*
 /// One authoritative entity: Fixed32 position/velocity (deterministic) + a
 /// non-authoritative float scale and packed face-tint used only for drawing.
 struct CubeEntity {
-    math::Fixed32 x, y, z;   ///< World position (authoritative).
-    math::Fixed32 vx, vy, vz; ///< Linear velocity (authoritative).
-    core::f32 scale{0.4f};   ///< Cube half-extent (render only; == kHalf).
+    math::Fixed32 x, y, z;       ///< World position (authoritative).
+    math::Fixed32 vx, vy, vz;    ///< Linear velocity (authoritative).
+    core::f32 scale{0.4f};       ///< Cube half-extent (render only; == kHalf).
     core::u32 tint{0x00FFFFFFu}; ///< Multiplicative face tint (render only).
 };
 
@@ -50,9 +50,9 @@ struct CubeEntity {
 /// is uniform-size AABB resolved along the minimum-overlap axis (no sqrt) with a
 /// uniform spatial-hash grid broad-phase, so thousands of entities stay cheap.
 struct CubePile {
-    static constexpr core::u32 kNx = 16u; ///< Lattice columns (X).
-    static constexpr core::u32 kNy = 4u;  ///< Lattice layers (Y).
-    static constexpr core::u32 kNz = 16u; ///< Lattice rows (Z).
+    static constexpr core::u32 kNx = 16u;                ///< Lattice columns (X).
+    static constexpr core::u32 kNy = 4u;                 ///< Lattice layers (Y).
+    static constexpr core::u32 kNz = 16u;                ///< Lattice rows (Z).
     static constexpr core::u32 kCount = kNx * kNy * kNz; ///< 1024 entities.
 
     static constexpr core::f32 kHalfF = 0.18f;    ///< Cube half-extent.
@@ -71,8 +71,7 @@ struct CubePile {
         using F = math::Fixed32;
         const core::f32 ox = static_cast<core::f32>(kNx - 1u) * 0.5f;
         const core::f32 oz = static_cast<core::f32>(kNz - 1u) * 0.5f;
-        static const core::u32 hues[6] = {0x00FF6060u, 0x0060FF60u, 0x006060FFu,
-                                          0x00FFFF60u, 0x00FF60FFu, 0x0060FFFFu};
+        static const core::u32 hues[6] = {0x00FF6060u, 0x0060FF60u, 0x006060FFu, 0x00FFFF60u, 0x00FF60FFu, 0x0060FFFFu};
         core::u32 i = 0u;
         for (core::u32 iy = 0; iy < kNy; ++iy)
             for (core::u32 iz = 0; iz < kNz; ++iz)
@@ -98,11 +97,11 @@ struct CubePile {
         using F = math::Fixed32;
         const F gravity = F::fromFloat(-0.010f);
         const F floor = F::fromFloat(kFloorF);
-        const F bounce = F::fromFloat(-0.30f);     // damped floor restitution
-        const F damp = F::fromFloat(0.985f);       // horizontal friction
-        const F twoH = F::fromFloat(2.0f * kHalfF); // AABB full size (uniform)
+        const F bounce = F::fromFloat(-0.30f);                  // damped floor restitution
+        const F damp = F::fromFloat(0.985f);                    // horizontal friction
+        const F twoH = F::fromFloat(2.0f * kHalfF);             // AABB full size (uniform)
         const F invCell = F::fromFloat(1.0f / (2.0f * kHalfF)); // 1 / grid cell
-        const F restitution = F::fromFloat(0.20f); // pair collision energy kept
+        const F restitution = F::fromFloat(0.20f);              // pair collision energy kept
 
         // ── Integrate + floor ────────────────────────────────────────────────
         for (core::u32 i = 0; i < kCount; ++i)
@@ -285,8 +284,8 @@ struct CubePile {
 
         // ── Ground grid on the floor plane (drawn first, no depth) ───────────
         {
-            constexpr core::i32 kLines = 17;                 // lines per axis
-            constexpr core::f32 kStep = 0.6f;                // world units between lines
+            constexpr core::i32 kLines = 17;  // lines per axis
+            constexpr core::f32 kStep = 0.6f; // world units between lines
             const core::f32 half = static_cast<core::f32>(kLines - 1) * 0.5f * kStep;
             for (core::i32 g = 0; g < kLines; ++g)
             {
@@ -301,17 +300,26 @@ struct CubePile {
         }
 
         static const core::f32 corners[8][3] = {
-            {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
-            {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, 1.0f},  {1.0f, 1.0f, 1.0f},  {-1.0f, 1.0f, 1.0f},
+            {-1.0f, -1.0f, -1.0f},
+            {1.0f,  -1.0f, -1.0f},
+            {1.0f,  1.0f,  -1.0f},
+            {-1.0f, 1.0f,  -1.0f},
+            {-1.0f, -1.0f, 1.0f },
+            {1.0f,  -1.0f, 1.0f },
+            {1.0f,  1.0f,  1.0f },
+            {-1.0f, 1.0f,  1.0f },
         };
         static const core::u32 indices[36] = {
-            0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7,
-            1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
+            0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 0, 3, 4, 3, 7, 1, 5, 6, 1, 6, 2, 4, 5, 1, 4, 1, 0, 3, 2, 6, 3, 6, 7,
         };
         // Constant outward face normals (axis-aligned cubes), indexed by t/2.
         static const core::f32 faceN[6][3] = {
-            {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f},
-            {1.0f, 0.0f, 0.0f},  {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+            {0.0f,  0.0f,  -1.0f},
+            {0.0f,  0.0f,  1.0f },
+            {-1.0f, 0.0f,  0.0f },
+            {1.0f,  0.0f,  0.0f },
+            {0.0f,  -1.0f, 0.0f },
+            {0.0f,  1.0f,  0.0f },
         };
         // Normalised directional light + ambient term (Lambert diffuse).
         constexpr core::f32 kLx = 0.384f, kLy = 0.816f, kLz = 0.432f;

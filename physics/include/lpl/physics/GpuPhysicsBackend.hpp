@@ -66,9 +66,9 @@ public:
 private:
     /** @brief Planar SoA scratch + device pointers reused across chunks. */
     struct DeviceScratch {
-        lpl::pmr::vector<float> hostX, hostY, hostZ;     // positions (host staging)
-        lpl::pmr::vector<float> hostVX, hostVY, hostVZ;  // velocities
-        lpl::pmr::vector<float> hostMass;                // masses
+        lpl::pmr::vector<float> hostX, hostY, hostZ;    // positions (host staging)
+        lpl::pmr::vector<float> hostVX, hostVY, hostVZ; // velocities
+        lpl::pmr::vector<float> hostMass;               // masses
         void *dPosX = nullptr, *dPosY = nullptr, *dPosZ = nullptr;
         void *dVelX = nullptr, *dVelY = nullptr, *dVelZ = nullptr;
         void *dFrcX = nullptr, *dFrcY = nullptr, *dFrcZ = nullptr;

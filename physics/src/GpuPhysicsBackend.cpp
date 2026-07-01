@@ -138,10 +138,14 @@ core::Expected<void> GpuPhysicsBackend::step(core::f32 dt)
                 const float *src;
             };
             const Upload uploads[] = {
-                {_scratch.dPosX, _scratch.hostX.data()},  {_scratch.dPosY, _scratch.hostY.data()},
-                {_scratch.dPosZ, _scratch.hostZ.data()},  {_scratch.dVelX, _scratch.hostVX.data()},
-                {_scratch.dVelY, _scratch.hostVY.data()}, {_scratch.dVelZ, _scratch.hostVZ.data()},
-                {_scratch.dMass, _scratch.hostMass.data()}};
+                {_scratch.dPosX, _scratch.hostX.data()   },
+                {_scratch.dPosY, _scratch.hostY.data()   },
+                {_scratch.dPosZ, _scratch.hostZ.data()   },
+                {_scratch.dVelX, _scratch.hostVX.data()  },
+                {_scratch.dVelY, _scratch.hostVY.data()  },
+                {_scratch.dVelZ, _scratch.hostVZ.data()  },
+                {_scratch.dMass, _scratch.hostMass.data()}
+            };
             for (const auto &up : uploads)
             {
                 if (auto r = _compute.uploadSync(up.dst, up.src, bytes); !r)
@@ -179,9 +183,13 @@ core::Expected<void> GpuPhysicsBackend::step(core::f32 dt)
                 const void *src;
             };
             const Download downloads[] = {
-                {_scratch.hostX.data(), _scratch.dPosX},  {_scratch.hostY.data(), _scratch.dPosY},
-                {_scratch.hostZ.data(), _scratch.dPosZ},  {_scratch.hostVX.data(), _scratch.dVelX},
-                {_scratch.hostVY.data(), _scratch.dVelY}, {_scratch.hostVZ.data(), _scratch.dVelZ}};
+                {_scratch.hostX.data(),  _scratch.dPosX},
+                {_scratch.hostY.data(),  _scratch.dPosY},
+                {_scratch.hostZ.data(),  _scratch.dPosZ},
+                {_scratch.hostVX.data(), _scratch.dVelX},
+                {_scratch.hostVY.data(), _scratch.dVelY},
+                {_scratch.hostVZ.data(), _scratch.dVelZ}
+            };
             for (const auto &dn : downloads)
             {
                 if (auto r = _compute.downloadSync(dn.dst, dn.src, bytes); !r)
