@@ -30,6 +30,11 @@
 #include <lpl/net/transport/KernelTransport.hpp>
 #include <lpl/net/transport/SocketTransport.hpp>
 #include <lpl/physics/CpuPhysicsBackend.hpp>
+#include <lpl/physics/IPhysicsBackend.hpp>
+#ifdef LPL_HAS_CUDA
+#    include <lpl/gpu/CudaBackend.hpp>
+#    include <lpl/physics/GpuPhysicsBackend.hpp>
+#endif
 
 #include <lpl/platform/IPlatform.hpp>
 #include <lpl/platform/linux/LinuxPlatform.hpp>
@@ -82,7 +87,10 @@ struct Engine::Impl {
     std::shared_ptr<net::transport::ITransport> transport;
 
     EventQueues eventQueues;
-    std::unique_ptr<physics::CpuPhysicsBackend> physicsBackend;
+    std::unique_ptr<physics::IPhysicsBackend> physicsBackend;
+#ifdef LPL_HAS_CUDA
+    std::unique_ptr<gpu::IComputeBackend> computeBackend; // owns the GPU dispatch backend
+#endif
 
     // Client-side state (set by WelcomeSystem)
     core::u32 myEntityId{0};
@@ -256,8 +264,24 @@ core::Expected<void> Engine::init()
         auto netRecv = std::make_unique<systems::NetworkReceiveSystem>(_impl->transport, _impl->eventQueues);
         [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(netRecv));
 
-        // Create physics backend (CPU reference — GPU backend plugs in here later)
-        _impl->physicsBackend = std::make_unique<physics::CpuPhysicsBackend>(_impl->registry);
+        // Select the physics backend. The CPU backend is the deterministic
+        // reference (and the only one compiled into the freestanding kernel).
+        // When the GPU module is enabled (Config::enableGpu) and a CUDA build is
+        // available, the GpuPhysicsBackend bridge drives the physics_tick compute
+        // kernel instead; collision/sleeping stay on the CPU. The selection is
+        // behind LPL_HAS_CUDA so non-CUDA hosts never reference the bridge.
+#ifdef LPL_HAS_CUDA
+        if (_impl->config.enableGpu())
+        {
+            _impl->computeBackend = std::make_unique<gpu::CudaBackend>();
+            _impl->physicsBackend =
+                std::make_unique<physics::GpuPhysicsBackend>(_impl->registry, *_impl->computeBackend);
+        }
+        else
+#endif
+        {
+            _impl->physicsBackend = std::make_unique<physics::CpuPhysicsBackend>(_impl->registry);
+        }
         [[maybe_unused]] auto initRes = _impl->physicsBackend->init();
 
         auto physics = std::make_unique<systems::PhysicsSystem>(*_impl->world, *_impl->physicsBackend, _impl->registry);

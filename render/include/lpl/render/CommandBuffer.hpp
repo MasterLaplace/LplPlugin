@@ -72,7 +72,7 @@ public:
     /** @brief FNV-1a fold of the immutable packet stream (recording identity). */
     [[nodiscard]] core::u32 recordingSignature() const noexcept
     {
-        core::u32 hash = 0x811C9DC5u;
+        core::u32 hash = detail::kFnv1aOffsetBasis;
         for (core::u32 i = 0; i < count(); ++i)
         {
             const DrawCommand &c = _commands[i];
@@ -113,7 +113,7 @@ struct SubmitResult {
 [[nodiscard]] inline SubmitResult submitLateLatched(const CommandBuffer &cb, const Pose *poses, core::u32 poseCount)
 {
     SubmitResult out{};
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
     for (core::u32 i = 0; i < cb.count(); ++i)
     {
         const DrawCommand &c = cb.at(i);

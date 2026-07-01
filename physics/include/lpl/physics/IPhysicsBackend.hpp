@@ -23,8 +23,12 @@ namespace lpl::physics {
  * @brief Strategy interface for physics step implementations.
  *
  * Concrete backends:
- *   - @c CpuPhysicsBackend  — single-threaded CPU reference.
- *   - GPU backends via the @c gpu module (CUDA / Vulkan Compute).
+ *   - @c CpuPhysicsBackend          — single-threaded CPU reference (also the
+ *     only backend compiled into the freestanding kernel @c libengine).
+ *   - @c GpuPhysicsBackend          — host-side bridge driving a
+ *     @c gpu::IComputeBackend (CUDA) via @c dispatch("physics_tick"). Compiled
+ *     only under the @c cuda config so the freestanding kernel build never pulls
+ *     the CUDA-host @c gpu module. See @c GpuPhysicsBackend.hpp.
  */
 class IPhysicsBackend {
 public:

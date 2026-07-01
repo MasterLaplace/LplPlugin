@@ -97,7 +97,7 @@ namespace detail {
     const Vec3f eye(0.0f, 0.5f, 0.0f);
 
     const core::f32 aspect = static_cast<core::f32>(width) / static_cast<core::f32>(height);
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
 
     for (core::u32 py = 0; py < height; ++py)
         for (core::u32 px = 0; px < width; ++px)

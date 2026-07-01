@@ -111,7 +111,7 @@ namespace detail {
                 }
         }
 
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
     for (core::u32 i = 0; i < width * height; ++i)
         hash = detail::fnv1aStep(hash, color[i]);
     out.image_signature = hash;

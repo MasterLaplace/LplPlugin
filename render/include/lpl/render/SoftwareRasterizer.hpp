@@ -175,8 +175,8 @@ inline void fillTriangleTextured(const RenderTarget &rt, const ScreenVertex &v0,
             core::f32 v = w0 * uv0[1] + w1 * uv1[1] + w2 * uv2[1];
             u = u < 0.0f ? 0.0f : (u > 0.999985f ? 0.999985f : u);
             v = v < 0.0f ? 0.0f : (v > 0.999985f ? 0.999985f : v);
-            const core::u32 uQ16 = static_cast<core::u32>(u * 65536.0f);
-            const core::u32 vQ16 = static_cast<core::u32>(v * 65536.0f);
+            const core::u32 uQ16 = static_cast<core::u32>(u * detail::kQ16FoldScale);
+            const core::u32 vQ16 = static_cast<core::u32>(v * detail::kQ16FoldScale);
 
             rt.depth[idx] = depth;
             rt.color[idx] = tex.sampleBilinear(uQ16, vQ16);
@@ -477,7 +477,7 @@ inline void renderToTextureCube(const RenderTarget &rt, math::Fixed32 angle) noe
 /** @brief FNV-1a fold of the whole color buffer (cross-target signature). */
 [[nodiscard]] inline core::u32 foldTarget(const RenderTarget &rt) noexcept
 {
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
     const core::u32 count = rt.width * rt.height;
     for (core::u32 i = 0; i < count; ++i)
         hash = detail::fnv1aStep(hash, rt.color[i]);

@@ -37,9 +37,9 @@ namespace detail {
 /** @brief Quantize a float position to Q16.16 and fold its three components. */
 [[nodiscard]] inline core::u32 foldVec3(core::u32 hash, const Vec3fTopo &p) noexcept
 {
-    hash = fnv1aStep(hash, static_cast<core::u32>(static_cast<core::i32>(p.x * 65536.0f)));
-    hash = fnv1aStep(hash, static_cast<core::u32>(static_cast<core::i32>(p.y * 65536.0f)));
-    hash = fnv1aStep(hash, static_cast<core::u32>(static_cast<core::i32>(p.z * 65536.0f)));
+    hash = fnv1aStep(hash, static_cast<core::u32>(static_cast<core::i32>(p.x * detail::kQ16FoldScale)));
+    hash = fnv1aStep(hash, static_cast<core::u32>(static_cast<core::i32>(p.y * detail::kQ16FoldScale)));
+    hash = fnv1aStep(hash, static_cast<core::u32>(static_cast<core::i32>(p.z * detail::kQ16FoldScale)));
     return hash;
 }
 
@@ -99,7 +99,7 @@ struct TessellationResult {
     if (count < 4u || segments == 0u)
         return out;
 
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
     const core::f32 inv = 1.0f / static_cast<core::f32>(segments);
     for (core::u32 i = 0; i < count; ++i)
     {
@@ -135,7 +135,7 @@ struct TessellationResult {
     if (res == 0u)
         return out;
 
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
     const core::f32 step = 2.0f / static_cast<core::f32>(res);
     for (core::u32 j = 0; j <= res; ++j)
         for (core::u32 i = 0; i <= res; ++i)
@@ -292,7 +292,7 @@ struct Tri2 {
     }
 
     // Emit triangles that don't touch the super-triangle, folding sorted indices.
-    core::u32 hash = 0x811C9DC5u;
+    core::u32 hash = detail::kFnv1aOffsetBasis;
     for (core::u32 ti = 0; ti < static_cast<core::u32>(tris.size()); ++ti)
     {
         const detail::Tri2 &t = tris[ti];
