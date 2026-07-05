@@ -52,8 +52,7 @@
 #    include <windows.h>
 #endif
 
-#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && \
-    (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG))
+#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG))
 #    include <cpuid.h>
 #elif (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && defined(LPL_COMPILER_MSVC)
 #    include <intrin.h>
@@ -89,7 +88,7 @@ template <typename Fn> core::f64 benchmarkMs(const char *label, Fn &&fn)
 /// exists without going OS-specific (kept out of scope here).
 static std::string cpuBrandString()
 {
-#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && \
+#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) &&                                                                \
     (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG) || defined(LPL_COMPILER_MSVC))
     core::u32 regs[12] = {};
 #    if defined(LPL_COMPILER_MSVC)
@@ -116,7 +115,7 @@ static std::string cpuBrandString()
 static std::string osDescription()
 {
 #if defined(LPL_OS_LINUX) || defined(LPL_OS_MACOS)
-    struct utsname uts{};
+    struct utsname uts {};
     if (uname(&uts) == 0)
         return std::string(uts.sysname) + " (" + uts.release + ") " + uts.machine;
     return "Unix (unknown release)";
@@ -132,8 +131,8 @@ static std::string osDescription()
         info.dwOSVersionInfoSize = sizeof(info);
         if (fn && fn(&info) == 0)
         {
-            desc += " " + std::to_string(info.dwMajorVersion) + "." + std::to_string(info.dwMinorVersion) +
-                    " (build " + std::to_string(info.dwBuildNumber) + ")";
+            desc += " " + std::to_string(info.dwMajorVersion) + "." + std::to_string(info.dwMinorVersion) + " (build " +
+                    std::to_string(info.dwBuildNumber) + ")";
         }
     }
     return desc;
@@ -233,7 +232,7 @@ static void printSystemInfo()
     std::printf("  Build config    : %s\n", buildConfig());
 #if defined(LPL_OS_LINUX)
     std::printf("  CPU governor    : %s%s\n", governor.c_str(),
-                 governor == "performance" ? "" : "  [warning: may add timing noise]");
+                governor == "performance" ? "" : "  [warning: may add timing noise]");
 #endif
     std::printf("\n");
 }
