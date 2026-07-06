@@ -29,6 +29,7 @@ This codebase has been thoroughly refactored from its legacy roots into a **flat
 ```
 LplPlugin/
 ├── core/           — Platform abstraction, types, assertions, logging
+├── bench/          — Micro-benchmark harness (statistics, DCE barriers, host info)
 ├── math/           — Vec3, Quat, Fixed32, CORDIC, Morton
 ├── memory/         — PinnedAllocator (CUDA zero-copy), pool/arena allocators
 ├── container/      — FlatAtomicHashMap, SparseSet, RingBuffer

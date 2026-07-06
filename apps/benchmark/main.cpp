@@ -1,6 +1,8 @@
 /**
  * @file main.cpp
- * @brief LplPlugin benchmark entry-point.
+ * @brief LplPlugin benchmark entry-point: defines the individual benchmark
+ *        cases and runs them. The measurement machinery (timing, statistics,
+ *        DCE barriers) and host introspection live in the lpl::bench module.
  *
  * @author MasterLaplace
  * @version 0.2.0
@@ -8,13 +10,13 @@
  * @copyright MIT License
  */
 
+#include <lpl/bench/Harness.hpp>
+#include <lpl/bench/SystemInfo.hpp>
+
 #include <lpl/concurrency/ThreadPool.hpp>
 #include <lpl/container/FlatAtomicHashMap.hpp>
-#include <lpl/container/RingBuffer.hpp>
 #include <lpl/container/SparseSet.hpp>
-#include <lpl/core/Constants.hpp>
 #include <lpl/core/Log.hpp>
-#include <lpl/core/Platform.hpp>
 #include <lpl/core/Types.hpp>
 #include <lpl/ecs/Archetype.hpp>
 #include <lpl/ecs/Registry.hpp>
@@ -25,236 +27,28 @@
 #include <lpl/math/Vec3.hpp>
 #include <lpl/memory/ArenaAllocator.hpp>
 #include <lpl/memory/PoolAllocator.hpp>
-#include <lpl/physics/CollisionDetector.hpp>
+#include <lpl/physics/CpuPhysicsBackend.hpp>
 
+#include <algorithm>
 #include <atomic>
-#include <chrono>
+#include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <ctime>
-#include <fstream>
+#include <cstdlib>
 #include <future>
-#include <string>
-#include <thread>
 #include <vector>
-
-#if defined(LPL_OS_LINUX)
-#    include <unistd.h>
-#elif defined(LPL_OS_MACOS)
-#    include <sys/sysctl.h>
-#    include <unistd.h>
-#endif
-
-#if defined(LPL_OS_LINUX) || defined(LPL_OS_MACOS)
-#    include <sys/utsname.h>
-#elif defined(LPL_OS_WINDOWS)
-#    define WIN32_LEAN_AND_MEAN
-#    include <windows.h>
-#endif
-
-#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG))
-#    include <cpuid.h>
-#elif (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && defined(LPL_COMPILER_MSVC)
-#    include <intrin.h>
-#endif
 
 using namespace lpl;
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Returns elapsed milliseconds for a single timed run of @p fn.
-template <typename Fn> core::f64 benchmarkMs(const char *label, Fn &&fn)
-{
-    const auto start = std::chrono::steady_clock::now();
-    fn();
-    const auto end = std::chrono::steady_clock::now();
-    const core::f64 ms = std::chrono::duration<core::f64, std::milli>(end - start).count();
-    std::printf("  %-42s %10.3f ms\n", label, ms);
-    return ms;
-}
-
-// ---------------------------------------------------------------------------
-// System info — the machine/compiler/build context a "serious" benchmark
-// number is meaningless without. Gathered once and printed before any
-// measurement runs.
-// ---------------------------------------------------------------------------
-
-/// Reads the x86 CPUID brand string (e.g. "Intel(R) Core(TM) Ultra 7 165H").
-/// Returns an empty string on non-x86 targets, where no portable equivalent
-/// exists without going OS-specific (kept out of scope here).
-static std::string cpuBrandString()
-{
-#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) &&                                                                \
-    (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG) || defined(LPL_COMPILER_MSVC))
-    core::u32 regs[12] = {};
-#    if defined(LPL_COMPILER_MSVC)
-    __cpuid(reinterpret_cast<int *>(regs + 0), static_cast<int>(0x80000002));
-    __cpuid(reinterpret_cast<int *>(regs + 4), static_cast<int>(0x80000003));
-    __cpuid(reinterpret_cast<int *>(regs + 8), static_cast<int>(0x80000004));
-#    else
-    __get_cpuid(0x80000002, regs + 0, regs + 1, regs + 2, regs + 3);
-    __get_cpuid(0x80000003, regs + 4, regs + 5, regs + 6, regs + 7);
-    __get_cpuid(0x80000004, regs + 8, regs + 9, regs + 10, regs + 11);
-#    endif
-    char brand[49] = {};
-    std::memcpy(brand, regs, sizeof(regs));
-    std::string s{brand};
-    const auto first = s.find_first_not_of(' ');
-    return first == std::string::npos ? std::string{} : s.substr(first);
-#else
-    return {};
-#endif
-}
-
-/// Returns "<OS> (<kernel/build release>) <arch>", e.g.
-/// "Linux (6.6.114.1-microsoft-standard-WSL2) x86_64".
-static std::string osDescription()
-{
-#if defined(LPL_OS_LINUX) || defined(LPL_OS_MACOS)
-    struct utsname uts {};
-    if (uname(&uts) == 0)
-        return std::string(uts.sysname) + " (" + uts.release + ") " + uts.machine;
-    return "Unix (unknown release)";
-#elif defined(LPL_OS_WINDOWS)
-    // RtlGetVersion (resolved dynamically) avoids both the deprecated
-    // GetVersionEx and the version lie it tells without an app manifest.
-    using RtlGetVersionFn = LONG(WINAPI *)(OSVERSIONINFOEXW *);
-    std::string desc = "Windows";
-    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll"))
-    {
-        auto fn = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion"));
-        OSVERSIONINFOEXW info{};
-        info.dwOSVersionInfoSize = sizeof(info);
-        if (fn && fn(&info) == 0)
-        {
-            desc += " " + std::to_string(info.dwMajorVersion) + "." + std::to_string(info.dwMinorVersion) + " (build " +
-                    std::to_string(info.dwBuildNumber) + ")";
-        }
-    }
-    return desc;
-#else
-    return "Unknown OS";
-#endif
-}
-
-/// Returns total physical RAM in bytes, or 0 if it could not be determined.
-static core::u64 totalPhysicalRamBytes()
-{
-#if defined(LPL_OS_LINUX)
-    const long pages = sysconf(_SC_PHYS_PAGES);
-    const long pageSize = sysconf(_SC_PAGESIZE);
-    return (pages > 0 && pageSize > 0) ? static_cast<core::u64>(pages) * static_cast<core::u64>(pageSize) : 0;
-#elif defined(LPL_OS_MACOS)
-    core::u64 memBytes = 0;
-    std::size_t size = sizeof(memBytes);
-    sysctlbyname("hw.memsize", &memBytes, &size, nullptr, 0);
-    return memBytes;
-#elif defined(LPL_OS_WINDOWS)
-    MEMORYSTATUSEX status{};
-    status.dwLength = sizeof(status);
-    return GlobalMemoryStatusEx(&status) ? static_cast<core::u64>(status.ullTotalPhys) : 0;
-#else
-    return 0;
-#endif
-}
-
-/// Best-effort read of the Linux CPU frequency-scaling governor. A governor
-/// other than "performance" means the OS may throttle or boost cores
-/// mid-run, which is a real source of timing noise in a "scientific"
-/// benchmark. Returns "unknown" elsewhere / if unreadable (e.g. inside a VM
-/// or WSL2, where cpufreq is not exposed to the guest).
-static std::string cpuGovernor()
-{
-#if defined(LPL_OS_LINUX)
-    std::ifstream f("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor");
-    std::string governor;
-    if (f >> governor)
-        return governor;
-#endif
-    return "unknown";
-}
-
-/// Returns "<Compiler name> <version>", e.g. "GCC 15.2.0".
-static std::string compilerDescription()
-{
-#if defined(LPL_COMPILER_CLANG)
-    return std::string("Clang ") + __clang_version__;
-#elif defined(LPL_COMPILER_GCC)
-    return std::string("GCC ") + __VERSION__;
-#elif defined(LPL_COMPILER_MSVC)
-    return "MSVC " + std::to_string(_MSC_FULL_VER);
-#else
-    return "Unknown compiler";
-#endif
-}
-
-/// Build configuration selected by the xmake mode (see root xmake.lua).
-static const char *buildConfig()
-{
-#if defined(LPL_RELEASE)
-    return "Release";
-#elif defined(LPL_PROFILE)
-    return "Profile";
-#elif defined(LPL_DEBUG)
-    return "Debug";
-#else
-    return "Unknown";
-#endif
-}
-
-/// Prints the host hardware/software context (CPU, RAM, OS, compiler, build
-/// config) that raw benchmark numbers must be read against. Call once before
-/// running any timed section so results stay attributable and comparable
-/// across machines/runs.
-static void printSystemInfo()
-{
-    const auto now = std::chrono::system_clock::now();
-    const std::time_t nowC = std::chrono::system_clock::to_time_t(now);
-    char timeBuf[32] = {};
-    std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", std::localtime(&nowC));
-
-    const std::string cpu = cpuBrandString();
-    const core::u64 ramBytes = totalPhysicalRamBytes();
-    const core::f64 ramGiB = static_cast<core::f64>(ramBytes) / (1024.0 * 1024.0 * 1024.0);
-    const std::string governor = cpuGovernor();
-
-    std::printf("=== System Info ===\n");
-    std::printf("  Date            : %s (local)\n", timeBuf);
-    std::printf("  OS              : %s\n", osDescription().c_str());
-    std::printf("  CPU             : %s\n", cpu.empty() ? "Unknown" : cpu.c_str());
-    std::printf("  Logical cores   : %u\n", std::thread::hardware_concurrency());
-    std::printf("  RAM             : %.2f GiB\n", ramGiB);
-    std::printf("  Compiler        : %s\n", compilerDescription().c_str());
-    std::printf("  Build config    : %s\n", buildConfig());
-#if defined(LPL_OS_LINUX)
-    std::printf("  CPU governor    : %s%s\n", governor.c_str(),
-                governor == "performance" ? "" : "  [warning: may add timing noise]");
-#endif
-    std::printf("\n");
-}
-
-/// Converts a per-frame elapsed time to a human-readable frame-rate verdict.
-static const char *frameRateVerdict(core::f64 msPerFrame)
-{
-    const core::f64 fps = 1000.0 / (msPerFrame > 0.0 ? msPerFrame : 1.0);
-    if (fps >= 60.0)
-        return "REAL-TIME  (>=60 fps)";
-    if (fps >= 30.0)
-        return "PLAYABLE   (>=30 fps)";
-    return "TOO SLOW   (<30 fps) ";
-}
-
 void benchmarkArena()
 {
     memory::ArenaAllocator arena{4 * 1024 * 1024};
-    benchmarkMs("ArenaAllocator 10k allocs", [&]() {
+    bench::run("ArenaAllocator 10k allocs", [&]() {
         for (int i = 0; i < 10000; ++i)
         {
-            [[maybe_unused]] auto *p = arena.allocate(128, 16);
+            void *p = arena.allocate(128, 16);
+            bench::doNotOptimize(p);
         }
         arena.reset();
     });
@@ -262,7 +56,7 @@ void benchmarkArena()
 
 void benchmarkFixedMath()
 {
-    benchmarkMs("Fixed32 mul 1M ops", []() {
+    bench::run("Fixed32 mul 1M ops", []() {
         math::Fixed32 a = math::Fixed32::fromFloat(3.14159f);
         math::Fixed32 b = math::Fixed32::fromFloat(2.71828f);
         math::Fixed32 r{0};
@@ -272,154 +66,275 @@ void benchmarkFixedMath()
             a = r;
             b = b + math::Fixed32{1};
         }
+        bench::doNotOptimize(r);
     });
 }
 
 void benchmarkMorton()
 {
-    benchmarkMs("Morton encode3D 1M", []() {
+    bench::run("Morton encode3D 1M", []() {
         for (core::u32 i = 0; i < 1000000; ++i)
         {
-            [[maybe_unused]] auto code = math::morton::encode3D(
-                static_cast<core::i32>(i), static_cast<core::i32>(i + 1), static_cast<core::i32>(i + 2));
+            auto code = math::morton::encode3D(static_cast<core::i32>(i), static_cast<core::i32>(i + 1),
+                                               static_cast<core::i32>(i + 2));
+            bench::doNotOptimize(code);
         }
     });
 }
 
-void benchmarkCordic()
+// ---------------------------------------------------------------------------
+// Trigonometry: CORDIC (fixed-point, shift-add only) vs std::sin (double,
+// libm). Reports throughput for both AND the numerical accuracy of the CORDIC
+// approximation — a speed number for an approximate function is meaningless
+// without its error, so we measure max-absolute and RMS error over [-π, π].
+// ---------------------------------------------------------------------------
+void benchmarkTrigonometry()
 {
-    benchmarkMs("CORDIC sin 1M", []() {
-        for (int i = 0; i < 1000000; ++i)
+    constexpr int kN = 1'000'000;
+    constexpr core::f64 kPi = 3.141592653589793;
+    // This CORDIC has no argument range reduction, so it only converges within
+    // the rotation range (≈ ±1.74 rad). We benchmark over the reduced domain
+    // [-π/2, π/2] — the range a real caller would fold angles into — for a fair
+    // speed/accuracy comparison against libm.
+    const auto angleAt = [](core::f64 t) { return (t - 0.5) * kPi; }; // t∈[0,1] → [-π/2, π/2]
+
+    std::printf("\n  --- Trigonometry: CORDIC (Fixed32) vs std::sin (double), domain [-π/2, π/2] ---\n");
+
+    bench::run("CORDIC sin 1M", [&]() {
+        math::Fixed32 acc{0};
+        for (int i = 0; i < kN; ++i)
         {
-            [[maybe_unused]] auto s = math::Cordic::sin(math::Fixed32{static_cast<core::i32>(i % 65536)});
+            const float ang = static_cast<float>(angleAt(static_cast<core::f64>(i) / kN));
+            acc = acc + math::Cordic::sin(math::Fixed32::fromFloat(ang));
         }
+        bench::doNotOptimize(acc);
     });
+
+    bench::run("std::sin 1M (double, libm)", [&]() {
+        core::f64 acc = 0.0;
+        for (int i = 0; i < kN; ++i)
+        {
+            acc += std::sin(angleAt(static_cast<core::f64>(i) / kN));
+        }
+        bench::doNotOptimize(acc);
+    });
+
+    // Accuracy sweep — compare CORDIC against libm as ground truth.
+    constexpr int kSamples = 200000;
+    core::f64 maxErr = 0.0;
+    core::f64 sumSq = 0.0;
+    for (int i = 0; i < kSamples; ++i)
+    {
+        const core::f64 ang = angleAt(static_cast<core::f64>(i) / kSamples);
+        const core::f64 ref = std::sin(ang);
+        const core::f64 got = math::Cordic::sin(math::Fixed32::fromFloat(static_cast<float>(ang))).toDouble();
+        const core::f64 e = std::fabs(got - ref);
+        maxErr = std::max(maxErr, e);
+        sumSq += e * e;
+    }
+    const core::f64 rms = std::sqrt(sumSq / kSamples);
+    std::printf("    -> CORDIC accuracy vs libm: max abs err %.3e, RMS %.3e (over %d samples in [-π/2, π/2])\n", maxErr,
+                rms, kSamples);
 }
 
 void benchmarkRegistry()
 {
-    ecs::Registry reg;
     ecs::Archetype arch;
     arch.add(ecs::ComponentId::Position);
 
-    benchmarkMs("Registry create/destroy 10k entities", [&]() {
+    // create/destroy is net-zero per iteration, so the shared registry stays
+    // balanced across repetitions.
+    ecs::Registry reg;
+    bench::run("Registry create/destroy 10k entities", [&]() {
         for (int i = 0; i < 10000; ++i)
         {
             auto e = reg.createEntity(arch);
             if (e)
             {
-                [[maybe_unused]] auto r = reg.destroyEntity(e.value());
+                auto r = reg.destroyEntity(e.value());
+                bench::doNotOptimize(r);
             }
         }
     });
 
-    benchmarkMs("Registry create batch 100k entities", [&]() {
+    // Batch creation accumulates entities, so each repetition builds (and
+    // discards) its own registry — the construction cost is dwarfed by 100k
+    // creations and this keeps the measurement repeatable.
+    bench::run("Registry create 100k entities", [&]() {
+        ecs::Registry local;
         for (int i = 0; i < 100000; ++i)
         {
-            [[maybe_unused]] auto e = reg.createEntity(arch);
+            auto e = local.createEntity(arch);
+            bench::doNotOptimize(e);
         }
     });
 }
 
-void benchmarkPhysics()
+// Builds a physics archetype (Position, Velocity, Mass, AABB) and populates a
+// registry with @p count entities, then returns an initialised CPU physics
+// backend ready to step. The backend runs the real integrate → collide → sleep
+// pipeline over the ECS chunks — unlike WorldPartition::step(), whose CPU path
+// is only a GPU-dispatch gateway and does no integration work.
+static ecs::Archetype makePhysicsArchetype()
 {
-    ecs::Registry reg;
-    ecs::WorldPartition world(math::Fixed32{10});
-
-    ecs::Archetype arch;
-    arch.add(ecs::ComponentId::Position);
-    arch.add(ecs::ComponentId::AABB);
-
-    for (int i = 0; i < 10000; ++i)
-    {
-        [[maybe_unused]] auto e = reg.createEntity(arch);
-    }
-
-    benchmarkMs("Physics tick (10k entities, broadphase)", [&]() { world.step(0.0166f); });
-}
-
-void benchmarkPhysicsScalability()
-{
-    constexpr core::u32 kCounts[] = {1000, 5000, 10000, 50000, 100000};
-
-    std::printf("\n  --- Physics Scalability Sweep ---\n");
-
-    for (core::u32 count : kCounts)
-    {
-        ecs::Registry reg;
-        ecs::WorldPartition world(math::Fixed32{100});
-
-        ecs::Archetype arch;
-        arch.add(ecs::ComponentId::Position);
-        arch.add(ecs::ComponentId::Velocity);
-        arch.add(ecs::ComponentId::Mass);
-        arch.add(ecs::ComponentId::AABB);
-
-        for (core::u32 i = 0; i < count; ++i)
-        {
-            [[maybe_unused]] auto e = reg.createEntity(arch);
-        }
-
-        char label[64];
-        std::snprintf(label, sizeof(label), "Physics step (%uk entities)", count / 1000);
-
-        const core::f64 ms = benchmarkMs(label, [&]() { world.step(0.0166f); });
-
-        const core::f64 entPerSec = static_cast<core::f64>(count) / (ms / 1000.0);
-        std::printf("    -> Throughput: %.0f ent/sec  [%s]\n", entPerSec, frameRateVerdict(ms));
-    }
-}
-
-void benchmarkWorldPartition()
-{
-    ecs::Registry reg;
-    ecs::WorldPartition world(math::Fixed32{10});
-
     ecs::Archetype arch;
     arch.add(ecs::ComponentId::Position);
     arch.add(ecs::ComponentId::Velocity);
     arch.add(ecs::ComponentId::Mass);
     arch.add(ecs::ComponentId::AABB);
-    arch.add(ecs::ComponentId::Health);
+    return arch;
+}
 
-    // Deterministic LCG for reproducible placement
-    core::u32 seed = 12345;
+// Writes spread-out positions, unit masses, small AABB half-extents and a
+// small initial velocity into the freshly-created entities, so the physics
+// step exercises a realistic distribution rather than a pathological pile of
+// coincident bodies at the origin.
+static void seedPhysicsComponents(ecs::Registry &reg, core::u32 count)
+{
+    core::u32 seed = 2166136261u;
     auto nextRand = [&seed]() -> float {
-        seed = seed * 1103515245u + 12345u;
-        return static_cast<float>((seed >> 16) & 0x7FFF) / 32767.0f;
+        seed = seed * 1664525u + 1013904223u;
+        return static_cast<float>((seed >> 8) & 0xFFFF) / 65535.0f;
+    };
+    // Cube side scaled so density stays ~constant as count grows.
+    const float extent = std::cbrt(static_cast<float>(count)) * 4.0f;
+
+    for (const auto &partition : reg.partitions())
+    {
+        for (const auto &chunk : partition->chunks())
+        {
+            const core::u32 n = chunk->count();
+            auto *pos = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Position));
+            auto *vel = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+            auto *mass = static_cast<float *>(chunk->writeComponent(ecs::ComponentId::Mass));
+            auto *aabb = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::AABB));
+            for (core::u32 i = 0; i < n; ++i)
+            {
+                if (pos)
+                    pos[i] = {(nextRand() - 0.5f) * extent, (nextRand() - 0.5f) * extent,
+                              (nextRand() - 0.5f) * extent};
+                if (vel)
+                    vel[i] = {(nextRand() - 0.5f), (nextRand() - 0.5f), (nextRand() - 0.5f)};
+                if (mass)
+                    mass[i] = 1.0f;
+                if (aabb)
+                    aabb[i] = {0.5f, 0.5f, 0.5f};
+            }
+        }
+    }
+    (void) count;
+}
+
+void benchmarkPhysics()
+{
+    ecs::Registry reg;
+    const ecs::Archetype arch = makePhysicsArchetype();
+    for (int i = 0; i < 10000; ++i)
+    {
+        [[maybe_unused]] auto e = reg.createEntity(arch);
+    }
+    seedPhysicsComponents(reg, 10000);
+
+    physics::CpuPhysicsBackend backend{reg};
+    [[maybe_unused]] auto ok = backend.init();
+
+    // Warm up the pipeline (sleep buffers, caches) before timing.
+    for (int i = 0; i < 5; ++i)
+        [[maybe_unused]] auto r = backend.step(0.0166f);
+
+    bench::run("Physics step (10k, integrate+collide+sleep)", [&]() {
+        [[maybe_unused]] auto r = backend.step(0.0166f);
+    });
+}
+
+void benchmarkPhysicsScalability()
+{
+    // The CPU collision pass is O(n²) per chunk, so this sweep is deliberately
+    // capped: it exists to *show* the quadratic wall that motivates the octree
+    // / GPU broadphase, not to claim a headline number at 100k coincident
+    // bodies. Fewer repetitions for the heavier counts keep total runtime sane.
+    constexpr core::u32 kCounts[] = {1000, 2000, 5000, 10000, 20000};
+
+    std::printf("\n  --- Physics Scalability Sweep (CPU backend: integrate + O(n²) collide + sleep) ---\n");
+
+    for (core::u32 count : kCounts)
+    {
+        ecs::Registry reg;
+        const ecs::Archetype arch = makePhysicsArchetype();
+        for (core::u32 i = 0; i < count; ++i)
+        {
+            [[maybe_unused]] auto e = reg.createEntity(arch);
+        }
+        seedPhysicsComponents(reg, count);
+
+        physics::CpuPhysicsBackend backend{reg};
+        [[maybe_unused]] auto ok = backend.init();
+        for (int i = 0; i < 3; ++i)
+            [[maybe_unused]] auto r = backend.step(0.0166f);
+
+        char label[64];
+        std::snprintf(label, sizeof(label), "Physics step (%uk entities)", count / 1000);
+
+        bench::Config cfg;
+        cfg.minReps = 5;
+        cfg.maxReps = 200;
+        cfg.targetTotalMs = 400.0;
+        const bench::Result r = bench::run(label, [&]() { [[maybe_unused]] auto s = backend.step(0.0166f); }, cfg);
+
+        const core::f64 ms = r.medianNs / 1e6;
+        const core::f64 entPerSec = static_cast<core::f64>(count) / (r.medianNs / 1e9);
+        std::printf("    -> Throughput: %.2e ent/sec  [%s]\n", entPerSec, bench::frameRateVerdict(ms));
+    }
+}
+
+void benchmarkWorldPartition()
+{
+    static constexpr int kEntityCount = 10000;
+
+    auto makeArchetype = []() {
+        ecs::Archetype arch;
+        arch.add(ecs::ComponentId::Position);
+        arch.add(ecs::ComponentId::Velocity);
+        arch.add(ecs::ComponentId::Mass);
+        arch.add(ecs::ComponentId::AABB);
+        arch.add(ecs::ComponentId::Health);
+        return arch;
     };
 
-    static constexpr int kEntityCount = 10000;
-    std::vector<ecs::EntityId> entityIds;
-    entityIds.reserve(kEntityCount);
-
-    benchmarkMs("WorldPartition create 10k entities", [&]() {
+    // Deterministic LCG for reproducible placement.
+    auto placeAll = [](ecs::Registry &reg, ecs::WorldPartition &world, const ecs::Archetype &arch) {
+        core::u32 seed = 12345;
+        auto nextRand = [&seed]() -> float {
+            seed = seed * 1103515245u + 12345u;
+            return static_cast<float>((seed >> 16) & 0x7FFF) / 32767.0f;
+        };
         for (int i = 0; i < kEntityCount; ++i)
         {
             auto entityResult = reg.createEntity(arch);
             if (!entityResult.has_value())
                 continue;
-
-            auto entityId = entityResult.value();
-            entityIds.push_back(entityId);
-
-            float px = (nextRand() - 0.5f) * 10000.0f;
-            float py = nextRand() * 100.0f;
-            float pz = (nextRand() - 0.5f) * 10000.0f;
-
-            auto fixedPos = math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(px), math::Fixed32::fromFloat(py),
-                                                      math::Fixed32::fromFloat(pz)};
+            const auto entityId = entityResult.value();
+            const float px = (nextRand() - 0.5f) * 10000.0f;
+            const float py = nextRand() * 100.0f;
+            const float pz = (nextRand() - 0.5f) * 10000.0f;
+            const math::Vec3<math::Fixed32> fixedPos{math::Fixed32::fromFloat(px), math::Fixed32::fromFloat(py),
+                                                     math::Fixed32::fromFloat(pz)};
             [[maybe_unused]] auto r = world.insertOrUpdate(entityId, fixedPos);
         }
-    });
+    };
 
-    // Warm up
-    for (int i = 0; i < 5; ++i)
-        world.step(0.016f);
+    const ecs::Archetype arch = makeArchetype();
 
-    benchmarkMs("WorldPartition step 100 frames (10k ents)", [&]() {
-        for (int i = 0; i < 100; ++i)
-            world.step(0.016f);
+    // Build + populate is self-contained per repetition (state accumulates).
+    // This measures the spatial-index insertion path (Morton keying + cell
+    // assignment); the actual physics integration is benchmarked separately
+    // via CpuPhysicsBackend, since WorldPartition::step()'s CPU path is only a
+    // GPU-dispatch gateway and does no integration work.
+    bench::run("WorldPartition build+insert 10k entities", [&]() {
+        ecs::Registry reg;
+        ecs::WorldPartition world(math::Fixed32{10});
+        placeAll(reg, world, arch);
+        bench::doNotOptimize(world);
     });
 }
 
@@ -427,27 +342,27 @@ void benchmarkFlatAtomicHashMap()
 {
     static constexpr core::u32 kPoolCap = 16384;
 
-    benchmarkMs("FlatAtomicHashMap insert 16k", []() {
+    bench::run("FlatAtomicHashMap insert 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
-            map.insert(static_cast<core::u64>(i + 1));
+            auto *v = map.insert(static_cast<core::u64>(i + 1));
+            bench::doNotOptimize(v);
         }
     });
 
-    benchmarkMs("FlatAtomicHashMap get 16k", []() {
+    bench::run("FlatAtomicHashMap get 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
-        {
             map.insert(static_cast<core::u64>(i + 1));
-        }
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
-            [[maybe_unused]] auto *v = map.get(static_cast<core::u64>(i + 1));
+            auto *v = map.get(static_cast<core::u64>(i + 1));
+            bench::doNotOptimize(v);
         }
     });
 
-    benchmarkMs("FlatAtomicHashMap forEach 16k", []() {
+    bench::run("FlatAtomicHashMap forEach 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
@@ -457,9 +372,10 @@ void benchmarkFlatAtomicHashMap()
         }
         core::u64 sum = 0;
         map.forEach([&sum](int &val) { sum += static_cast<core::u64>(val); });
+        bench::doNotOptimize(sum);
     });
 
-    benchmarkMs("FlatAtomicHashMap forEachParallel 16k", []() {
+    bench::run("FlatAtomicHashMap forEachParallel 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         for (core::u32 i = 0; i < kPoolCap; ++i)
         {
@@ -471,9 +387,10 @@ void benchmarkFlatAtomicHashMap()
         std::atomic<core::u64> sum{0};
         map.forEachParallel(
             pool, [&sum](int &val) { sum.fetch_add(static_cast<core::u64>(val), std::memory_order_relaxed); });
+        bench::doNotOptimize(sum);
     });
 
-    benchmarkMs("FlatAtomicHashMap insert/remove churn 16k", []() {
+    bench::run("FlatAtomicHashMap insert/remove churn 16k", []() {
         container::FlatAtomicHashMap<int> map(kPoolCap);
         // Insert all
         for (core::u32 i = 0; i < kPoolCap; ++i)
@@ -491,7 +408,7 @@ void benchmarkThreadPool()
 {
     concurrency::ThreadPool pool{4};
 
-    benchmarkMs("ThreadPool dispatch 10k tasks", [&]() {
+    bench::run("ThreadPool dispatch 10k tasks", [&]() {
         std::atomic<core::u64> counter{0};
         std::vector<std::future<void>> futures;
         futures.reserve(10000);
@@ -501,6 +418,56 @@ void benchmarkThreadPool()
         }
         for (auto &f : futures)
             f.get();
+        bench::doNotOptimize(counter);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Allocator throughput: the engine's custom allocators vs the system malloc.
+// Same workload (N fixed-size blocks) through three strategies:
+//   * Arena  — bump-pointer allocate, then a single O(1) mass reset;
+//   * Pool   — intrusive free-list, per-block acquire then per-block release;
+//   * malloc — the libc baseline, per-block malloc then free.
+// This is the quantitative justification for shipping custom allocators.
+// ---------------------------------------------------------------------------
+void benchmarkAllocators()
+{
+    constexpr int kN = 100000;
+    struct alignas(16) Block64 {
+        core::u64 data[8];
+    };
+
+    std::printf("\n  --- Allocator throughput (%dk x 64-byte blocks) ---\n", kN / 1000);
+
+    std::vector<void *> ptrs(static_cast<core::usize>(kN), nullptr);
+
+    bench::run("Arena  bump-alloc + reset", [&]() {
+        memory::ArenaAllocator arena{static_cast<core::usize>(kN) * sizeof(Block64) + 4096};
+        for (int i = 0; i < kN; ++i)
+        {
+            void *p = arena.allocate(sizeof(Block64), 16);
+            bench::doNotOptimize(p);
+        }
+        arena.reset();
+    });
+
+    bench::run("Pool   acquire + release", [&]() {
+        memory::PoolAllocator<Block64> pool{static_cast<core::usize>(kN)};
+        for (int i = 0; i < kN; ++i)
+            ptrs[static_cast<core::usize>(i)] = pool.acquire();
+        for (int i = 0; i < kN; ++i)
+            pool.release(static_cast<Block64 *>(ptrs[static_cast<core::usize>(i)]));
+        bench::doNotOptimize(ptrs.data());
+    });
+
+    bench::run("malloc + free (libc baseline)", [&]() {
+        for (int i = 0; i < kN; ++i)
+        {
+            ptrs[static_cast<core::usize>(i)] = std::malloc(sizeof(Block64));
+            bench::doNotOptimize(ptrs[static_cast<core::usize>(i)]);
+        }
+        for (int i = 0; i < kN; ++i)
+            std::free(ptrs[static_cast<core::usize>(i)]);
     });
 }
 
@@ -531,25 +498,19 @@ void benchmarkSoA_vs_AoS()
         zs[i] = 2.0f;
     }
 
-    double sumAoS = 0.0;
-    benchmarkMs("Sum-x AoS (Vec3[]) 1M", [&]() {
+    bench::run("Sum-x AoS (Vec3[]) 1M", [&]() {
         double acc = 0.0;
         for (int i = 0; i < kN; ++i)
             acc += static_cast<double>(aos[i].x);
-        sumAoS = acc;
+        bench::doNotOptimize(acc);
     });
 
-    double sumSoA = 0.0;
-    benchmarkMs("Sum-x SoA (float[]) 1M", [&]() {
+    bench::run("Sum-x SoA (float[]) 1M", [&]() {
         double acc = 0.0;
         for (int i = 0; i < kN; ++i)
             acc += static_cast<double>(xs[i]);
-        sumSoA = acc;
+        bench::doNotOptimize(acc);
     });
-
-    // Prevent dead-code elimination
-    if (sumAoS != sumSoA)
-        std::printf("    [sanity] sums differ — unexpected\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -577,7 +538,7 @@ void benchmarkEntityLookup()
     // Look up the LAST 1000 slots to stress worst-case for linear
     constexpr int kLookups = 1000;
 
-    benchmarkMs("SparseSet lookup 1k slots", [&]() {
+    bench::run("SparseSet lookup 1k slots", [&]() {
         core::u32 sink = 0;
         for (int i = 0; i < kLookups; ++i)
         {
@@ -585,11 +546,10 @@ void benchmarkEntityLookup()
             if (const core::u32 *p = sparseSet.find(slot))
                 sink = *p;
         }
-        if (sink == ~0u)
-            std::printf("[debug] sink=%u\n", sink);
+        bench::doNotOptimize(sink);
     });
 
-    benchmarkMs("Linear scan lookup 1k slots in 10k vec", [&]() {
+    bench::run("Linear scan lookup 1k slots in 10k vec", [&]() {
         core::u32 sink = 0;
         for (int i = 0; i < kLookups; ++i)
         {
@@ -603,8 +563,7 @@ void benchmarkEntityLookup()
                 }
             }
         }
-        if (sink == ~0u)
-            std::printf("[debug] sink=%u\n", sink);
+        bench::doNotOptimize(sink);
     });
 }
 
@@ -639,7 +598,7 @@ void benchmarkCollisionBroadphase()
         boxes[i] = {cx - 0.5f, cx + 0.5f, cy - 0.5f, cy + 0.5f, cz - 0.5f, cz + 0.5f};
     }
 
-    benchmarkMs("N\u00b2 AABB collision check (2k)", [&]() {
+    bench::run("N\u00b2 AABB collision check (2k)", [&]() {
         int pairs = 0;
         for (int a = 0; a < kN; ++a)
             for (int b = a + 1; b < kN; ++b)
@@ -647,9 +606,7 @@ void benchmarkCollisionBroadphase()
                     boxes[a].ymax >= boxes[b].ymin && boxes[b].ymax >= boxes[a].ymin &&
                     boxes[a].zmax >= boxes[b].zmin && boxes[b].zmax >= boxes[a].zmin)
                     ++pairs;
-        // Prevent dead-code elimination
-        if (pairs < 0)
-            std::printf("  [debug] pairs=%d\n", pairs);
+        bench::doNotOptimize(pairs);
     });
 
     // Broad-phase via WorldPartition queryRadius
@@ -670,7 +627,7 @@ void benchmarkCollisionBroadphase()
         }
     }
 
-    benchmarkMs("Broad-phase queryRadius (2k, r=10)", [&]() {
+    bench::run("Broad-phase queryRadius (2k, r=10)", [&]() {
         core::u32 total = 0;
         for (int i = 0; i < kN; ++i)
         {
@@ -681,8 +638,7 @@ void benchmarkCollisionBroadphase()
             world.queryRadius(center, math::Fixed32{10}, hits);
             total += static_cast<core::u32>(hits.size());
         }
-        if (total == ~0u)
-            std::printf("[debug] total=%u\n", total);
+        bench::doNotOptimize(total);
     });
 }
 
@@ -693,12 +649,14 @@ int main(int /*argc*/, char * /*argv*/[])
     core::Log::info("=== LplPlugin Benchmark ===");
     std::printf("\n");
 
-    printSystemInfo();
+    bench::printSystemInfo();
+    bench::printLegend();
 
     benchmarkArena();
     benchmarkFixedMath();
     benchmarkMorton();
-    benchmarkCordic();
+    benchmarkAllocators();
+    benchmarkTrigonometry();
     benchmarkRegistry();
     benchmarkPhysics();
     benchmarkPhysicsScalability();

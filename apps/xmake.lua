@@ -29,6 +29,7 @@ target("lpl-benchmark")
     set_kind("binary")
     set_group("apps")
     add_deps(
+        "lpl-bench",
         "lpl-core",
         "lpl-math",
         "lpl-memory",

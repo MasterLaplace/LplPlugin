@@ -72,6 +72,7 @@ end
 
 includes(
     "core",
+    "bench",
     "math",
     "memory",
     "container",
