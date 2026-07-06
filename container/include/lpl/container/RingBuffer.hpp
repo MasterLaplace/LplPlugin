@@ -6,7 +6,13 @@
  * a single bitwise AND.  The buffer is suitable for inter-thread
  * communication between the network and simulation threads.
  *
- * @tparam T        Element type (must be trivially copyable).
+ * A trivially-copyable @p T (POD, e.g. packets on the network↔simulation
+ * path) gets the fast path: push/pop are wait-free and never allocate. A
+ * non-trivial @p T (e.g. a sample owning a std::vector) is also supported via
+ * move semantics — use @ref push(T&&) so element transfer moves rather than
+ * copies; such element assignment is lock-free but may allocate/free.
+ *
+ * @tparam T        Element type (default-constructible; copy- or move-assignable).
  * @tparam Capacity Number of slots (compile-time, power of two).
  *
  * @author MasterLaplace
@@ -23,8 +29,10 @@
 
 #    include <array>
 #    include <atomic>
+#    include <bit>
 #    include <span>
 #    include <type_traits>
+#    include <utility>
 
 namespace lpl::container {
 
@@ -36,15 +44,27 @@ namespace lpl::container {
  * full sequential consistency overhead.
  */
 template <typename T, core::usize Capacity>
-requires(std::has_single_bit(Capacity) && std::is_trivially_copyable_v<T>)
+requires(std::has_single_bit(Capacity))
 class RingBuffer final {
 public:
     /**
-     * @brief Push one element into the buffer.
+     * @brief Push one element into the buffer by copy.
      * @param item Element to enqueue.
      * @return True on success, false if buffer is full.
      */
     bool push(const T &item);
+
+    /**
+     * @brief Push one element into the buffer by move.
+     *
+     * Preferred for elements that own heap storage (e.g. a std::vector): the
+     * element is moved into the slot instead of copied. For a trivially-copyable
+     * @p T this is identical to the copy overload.
+     *
+     * @param item Element to enqueue (left in a moved-from state on success).
+     * @return True on success, false if buffer is full.
+     */
+    bool push(T &&item);
 
     /**
      * @brief Pop one element from the buffer.

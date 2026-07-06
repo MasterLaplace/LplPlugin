@@ -15,8 +15,9 @@
 
 #include "ISource.hpp"
 #include "lpl/bci/core/Constants.hpp"
-#include "lpl/bci/dsp/RingBuffer.hpp"
 #include "serial/SerialPort.hpp"
+
+#include <lpl/container/RingBuffer.hpp>
 
 #include <stop_token>
 #include <thread>
@@ -57,7 +58,7 @@ private:
 
     OpenBciConfig _config;
     SerialPort _serial;
-    dsp::RingBuffer<Sample, kCytonRingSlots> _ring;
+    lpl::container::RingBuffer<Sample, kCytonRingSlots> _ring;
     std::jthread _worker;
     bool _started = false;
 };

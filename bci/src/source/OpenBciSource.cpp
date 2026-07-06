@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstring>
+#include <utility>
 
 namespace lpl::bci::source {
 
@@ -126,7 +127,7 @@ void OpenBciSource::workerLoop(std::stop_token stopToken)
             sample.channels[ch] = parseChannel(&buffer[2 + ch * 3]);
         }
 
-        _ring.push(sample);
+        _ring.push(std::move(sample));
     }
 }
 

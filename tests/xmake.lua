@@ -13,6 +13,16 @@ target("test-fixed32-parity")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- SPSC RingBuffer semantics (FIFO, boundaries, wraparound, move path)
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-ringbuffer-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-container")
+    add_files("parity/test_ringbuffer_parity.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Morton encoding/decoding roundtrip
 -- ─────────────────────────────────────────────────────────────────────────────
 target("test-morton-parity")
