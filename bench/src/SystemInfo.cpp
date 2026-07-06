@@ -48,7 +48,7 @@ namespace {
 /// OS-specific.
 std::string cpuBrandString()
 {
-#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) &&                                                                 \
+#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) &&                                                                \
     (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG) || defined(LPL_COMPILER_MSVC))
     core::u32 regs[12] = {};
 #    if defined(LPL_COMPILER_MSVC)
@@ -90,8 +90,8 @@ std::string osDescription()
         info.dwOSVersionInfoSize = sizeof(info);
         if (fn && fn(&info) == 0)
         {
-            desc += " " + std::to_string(info.dwMajorVersion) + "." + std::to_string(info.dwMinorVersion) +
-                    " (build " + std::to_string(info.dwBuildNumber) + ")";
+            desc += " " + std::to_string(info.dwMajorVersion) + "." + std::to_string(info.dwMinorVersion) + " (build " +
+                    std::to_string(info.dwBuildNumber) + ")";
         }
     }
     return desc;
@@ -204,9 +204,6 @@ void printSystemInfo(const SystemInfo &info)
     std::printf("\n");
 }
 
-void printSystemInfo()
-{
-    printSystemInfo(collectSystemInfo());
-}
+void printSystemInfo() { printSystemInfo(collectSystemInfo()); }
 
 } // namespace lpl::bench

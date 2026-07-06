@@ -28,13 +28,13 @@ namespace lpl::bench {
  * @brief Snapshot of the host context a benchmark result must be read against.
  */
 struct SystemInfo {
-    std::string os;           ///< OS name, kernel/build release, and architecture.
-    std::string cpu;          ///< CPU brand string, or "Unknown" off x86.
+    std::string os;             ///< OS name, kernel/build release, and architecture.
+    std::string cpu;            ///< CPU brand string, or "Unknown" off x86.
     core::u32 logicalCores = 0; ///< std::thread::hardware_concurrency().
-    core::u64 ramBytes = 0;   ///< Total physical RAM, or 0 if undetermined.
-    std::string compiler;     ///< Compiler name and version.
-    std::string buildConfig;  ///< "Debug" / "Release" / "Profile" / "Unknown".
-    std::string cpuGovernor;  ///< Linux frequency governor, else "unknown".
+    core::u64 ramBytes = 0;     ///< Total physical RAM, or 0 if undetermined.
+    std::string compiler;       ///< Compiler name and version.
+    std::string buildConfig;    ///< "Debug" / "Release" / "Profile" / "Unknown".
+    std::string cpuGovernor;    ///< Linux frequency governor, else "unknown".
 };
 
 /**

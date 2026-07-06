@@ -76,10 +76,10 @@ struct Result {
  *        repetitions to collect.
  */
 struct Config {
-    core::u32 warmup = 3;                ///< Untimed priming runs.
-    core::u32 minReps = 8;               ///< Floor on samples, even for slow kernels.
-    core::u32 maxReps = 4000;            ///< Ceiling on samples for fast kernels.
-    core::f64 targetTotalMs = 150.0;     ///< Stop once measured time reaches this.
+    core::u32 warmup = 3;            ///< Untimed priming runs.
+    core::u32 minReps = 8;           ///< Floor on samples, even for slow kernels.
+    core::u32 maxReps = 4000;        ///< Ceiling on samples for fast kernels.
+    core::f64 targetTotalMs = 150.0; ///< Stop once measured time reaches this.
 };
 
 /**

@@ -211,8 +211,7 @@ static void seedPhysicsComponents(ecs::Registry &reg, core::u32 count)
             for (core::u32 i = 0; i < n; ++i)
             {
                 if (pos)
-                    pos[i] = {(nextRand() - 0.5f) * extent, (nextRand() - 0.5f) * extent,
-                              (nextRand() - 0.5f) * extent};
+                    pos[i] = {(nextRand() - 0.5f) * extent, (nextRand() - 0.5f) * extent, (nextRand() - 0.5f) * extent};
                 if (vel)
                     vel[i] = {(nextRand() - 0.5f), (nextRand() - 0.5f), (nextRand() - 0.5f)};
                 if (mass)
@@ -239,12 +238,11 @@ void benchmarkPhysics()
     [[maybe_unused]] auto ok = backend.init();
 
     // Warm up the pipeline (sleep buffers, caches) before timing.
-    for (int i = 0; i < 5; ++i)
-        [[maybe_unused]] auto r = backend.step(0.0166f);
+    for (int i = 0; i < 5; ++i) [[maybe_unused]]
+        auto r = backend.step(0.0166f);
 
-    bench::run("Physics step (10k, integrate+collide+sleep)", [&]() {
-        [[maybe_unused]] auto r = backend.step(0.0166f);
-    });
+    bench::run("Physics step (10k, integrate+collide+sleep)",
+               [&]() { [[maybe_unused]] auto r = backend.step(0.0166f); });
 }
 
 void benchmarkPhysicsScalability()
@@ -269,8 +267,8 @@ void benchmarkPhysicsScalability()
 
         physics::CpuPhysicsBackend backend{reg};
         [[maybe_unused]] auto ok = backend.init();
-        for (int i = 0; i < 3; ++i)
-            [[maybe_unused]] auto r = backend.step(0.0166f);
+        for (int i = 0; i < 3; ++i) [[maybe_unused]]
+            auto r = backend.step(0.0166f);
 
         char label[64];
         std::snprintf(label, sizeof(label), "Physics step (%uk entities)", count / 1000);

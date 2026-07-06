@@ -56,15 +56,9 @@ const char *frameRateVerdict(core::f64 msPerFrame)
     return "TOO SLOW   (<30 fps) ";
 }
 
-void printLegend()
-{
-    std::printf("Legend: median  ±CV%%  [min … p99]  n=samples  (lower is better)\n\n");
-}
+void printLegend() { std::printf("Legend: median  ±CV%%  [min … p99]  n=samples  (lower is better)\n\n"); }
 
-void section(const char *title)
-{
-    std::printf("\n  --- %s ---\n", title);
-}
+void section(const char *title) { std::printf("\n  --- %s ---\n", title); }
 
 Result report(const char *label, std::vector<core::f64> &samplesNs)
 {
