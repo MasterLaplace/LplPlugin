@@ -14,8 +14,6 @@
 -- it, so these dependencies never reach the kernel target.
 -- /////////////////////////////////////////////////////////////////////////////
 
-add_repositories("laplace-xmake-repo https://github.com/MasterLaplace/xmake-repo.git feat/brainflow-liblsl")
-
 add_requires("eigen")
 add_requires("liblsl")
 add_requires("brainflow", { optional = true })
