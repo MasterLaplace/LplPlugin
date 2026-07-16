@@ -1,6 +1,7 @@
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/engine/systems/RenderSystem.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
 
 namespace lpl::engine::systems {
@@ -39,8 +40,11 @@ void RenderSystem::execute(core::f32 /*dt*/)
                 continue;
             auto &chunk = *chunkPtr;
 
-            auto *positions = static_cast<const math::Vec3<float> *>(chunk.readComponent(ecs::ComponentId::Position));
-            auto *sizes = static_cast<const math::Vec3<float> *>(chunk.readComponent(ecs::ComponentId::AABB));
+            // Authoritative transform is Fixed32; a real renderer converts to
+            // float (toFloat) at submit — rendering is a non-authoritative path.
+            auto *positions =
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::Position));
+            auto *sizes = static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::AABB));
 
             if (!positions)
                 continue; // Not renderable if no position

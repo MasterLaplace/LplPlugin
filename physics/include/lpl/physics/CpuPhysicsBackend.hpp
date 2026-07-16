@@ -15,6 +15,7 @@
 
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/ecs/Entity.hpp>
+#    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/math/Vec3.hpp>
 #    include <lpl/physics/IPhysicsBackend.hpp>
 
@@ -50,16 +51,17 @@ public:
 
 private:
     /** @brief Semi-implicit Euler integration + gravity + damping + ground. */
-    void integrateChunk(const ecs::EntityId *entities, math::Vec3<float> *positions, math::Vec3<float> *velocities,
-                        const float *masses, core::u32 count, core::f32 dt) const noexcept;
+    void integrateChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *positions,
+                        math::Vec3<math::Fixed32> *velocities, const math::Fixed32 *masses, core::u32 count,
+                        math::Fixed32 dt) const noexcept;
 
     /** @brief AABB collision detection + impulse resolution (4 iterations). */
-    void resolveCollisionsChunk(const ecs::EntityId *entities, math::Vec3<float> *positions,
-                                math::Vec3<float> *velocities, const float *masses, const math::Vec3<float> *sizes,
-                                core::u32 count) const noexcept;
+    void resolveCollisionsChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *positions,
+                                math::Vec3<math::Fixed32> *velocities, const math::Fixed32 *masses,
+                                const math::Vec3<math::Fixed32> *sizes, core::u32 count) const noexcept;
 
     /** @brief Sleeping detection: sleep after 30 frames below threshold. */
-    void updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<float> *velocities,
+    void updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *velocities,
                              core::u32 count) const noexcept;
 
     struct Impl;

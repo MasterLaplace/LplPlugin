@@ -27,6 +27,35 @@
 
 namespace lpl::math::simd {
 
+/**
+ * @brief 128-bit SIMD register wrapping 4 Q16.16 fixed-point values (raw i32).
+ *
+ * DETERMINISTIC: every operation is bit-identical to the scalar
+ * FixedPoint<i32,16> arithmetic (add/sub are raw integer add/sub; multiply is
+ * @c (a*b + 0x8000) >> 16 with the same round-half-up bias). A host SIMD fast
+ * path therefore folds the exact same signature as the kernel's scalar path —
+ * unlike float SIMD, whose FMA/rounding may diverge across targets. This is why
+ * integer SIMD is *safe* for authoritative state where float SIMD is not.
+ *
+ * The SSE path needs SSE4.1 (@c pmuldq). When unavailable, the scalar fallback
+ * below is used — still deterministic, just not vectorised.
+ */
+struct SimdFixed4 {
+#    if defined(LPL_ARCH_X64)
+    __m128i reg; ///< 4 raw Q16.16 lanes. SSE2 baseline — always active, like SimdFloat4.
+#    else
+    core::i32 data[4]; ///< Scalar fallback (ARM64 / generic).
+#    endif
+
+    static SimdFixed4 load(const core::i32 *raw);
+    static SimdFixed4 splat(core::i32 raw);
+    void store(core::i32 *raw) const;
+
+    SimdFixed4 operator+(SimdFixed4 rhs) const;
+    SimdFixed4 operator-(SimdFixed4 rhs) const;
+    SimdFixed4 operator*(SimdFixed4 rhs) const;
+};
+
 #    if defined(LPL_ARCH_X64)
 
 /**

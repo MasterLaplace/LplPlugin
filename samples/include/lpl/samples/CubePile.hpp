@@ -4,18 +4,20 @@
  *        and collide into a settling pile. One reference @c samples sim that the
  *        generic application runtime can drive on any host (kernel HAL or Linux).
  *
- * A swappable simulation, independent of the kernel: N entities carry Fixed32
- * position/velocity (authoritative, deterministic) advanced by gravity + floor
- * bounce + uniform-AABB inter-entity collision (uniform spatial-hash grid
- * broad-phase, no sqrt), and each is rasterized as a cube through the shared
- * software rasterizer. Authoritative state is Fixed32 (bit-identical across host
- * and kernel); the float projection/raster is non-authoritative and its folded
- * image signature is bit-identical too. Both folds are the cross-target
- * signature checked by tests/parity against the in-kernel run.
+ * Reworked to run entirely on the engine modules instead of a hand-rolled
+ * loop: entities live in a real @c ecs::Registry with authoritative Fixed32
+ * @c Position / @c Velocity / @c AABB / @c Mass components, and the simulation
+ * is advanced by @c physics::CpuPhysicsBackend (semi-implicit Euler + damping +
+ * ground bounce + AABB collision with octree broad-phase and sleeping). The
+ * authoritative state is Fixed32, so both the state fold and the float
+ * projection's image fold are bit-identical across the Linux oracle and the
+ * i686 kernel — the cross-target signature checked by tests/parity. This is the
+ * reconciliation of the two worlds: the reference sim is now expressed as ECS
+ * entities stepped by engine systems, exactly like a loaded scene.
  *
  * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-29
+ * @version 0.2.0
+ * @date 2026-07-16
  * @copyright MIT License
  */
 
@@ -25,9 +27,14 @@
 #    define LPL_SAMPLES_CUBEPILE_HPP
 
 #    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Archetype.hpp>
+#    include <lpl/ecs/Component.hpp>
+#    include <lpl/ecs/Partition.hpp>
+#    include <lpl/ecs/Registry.hpp>
 #    include <lpl/math/Cordic.hpp>
 #    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/math/Vec3.hpp>
+#    include <lpl/physics/CpuPhysicsBackend.hpp>
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/RenderParity.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
@@ -36,205 +43,114 @@ namespace lpl::samples {
 
 using namespace lpl::render; // RenderTarget, clearTarget, foldTarget, detail::*, perspectiveFov
 
-/// One authoritative entity: Fixed32 position/velocity (deterministic) + a
-/// non-authoritative float scale and packed face-tint used only for drawing.
-struct CubeEntity {
-    math::Fixed32 x, y, z;       ///< World position (authoritative).
-    math::Fixed32 vx, vy, vz;    ///< Linear velocity (authoritative).
-    core::f32 scale{0.4f};       ///< Cube half-extent (render only; == kHalf).
-    core::u32 tint{0x00FFFFFFu}; ///< Multiplicative face tint (render only).
-};
-
-/// A deterministic crowd of cubes that fall and collide into a settling pile.
-/// All authoritative state is Fixed32 (bit-identical kernel<->oracle). Collision
-/// is uniform-size AABB resolved along the minimum-overlap axis (no sqrt) with a
-/// uniform spatial-hash grid broad-phase, so thousands of entities stay cheap.
+/// A deterministic crowd of cubes that fall and collide into a settling pile,
+/// backed by the engine ECS + physics modules. All authoritative state is
+/// Fixed32 in the registry (bit-identical kernel<->oracle).
 struct CubePile {
+    using Fixed32 = math::Fixed32;
+    using FVec3 = math::Vec3<Fixed32>;
+
     static constexpr core::u32 kNx = 16u;                ///< Lattice columns (X).
     static constexpr core::u32 kNy = 4u;                 ///< Lattice layers (Y).
     static constexpr core::u32 kNz = 16u;                ///< Lattice rows (Z).
     static constexpr core::u32 kCount = kNx * kNy * kNz; ///< 1024 entities.
 
-    static constexpr core::f32 kHalfF = 0.18f;    ///< Cube half-extent.
+    static constexpr core::f32 kHalfF = 0.18f;    ///< Cube half-extent (render + AABB).
     static constexpr core::f32 kSpacingF = 0.46f; ///< Initial lattice spacing.
-    static constexpr core::f32 kFloorF = -1.6f;   ///< Ground plane (Y).
+    static constexpr core::f32 kSpawnYF = 3.0f;   ///< First layer height above ground.
+    /// The backend clamps to y >= 0.5 (kDefaultHalfHeight); draw the grid there.
+    static constexpr core::f32 kFloorF = 0.5f - kHalfF;
+    static constexpr core::f32 kDtF = 1.0f / 60.0f; ///< Fixed, deterministic timestep.
 
-    /// Spatial-hash grid: power-of-two bucket count (>= kCount) for cheap masking.
-    static constexpr core::u32 kBuckets = 2048u;
+    ecs::Registry registry;                 ///< Owns the entities + component chunks.
+    physics::CpuPhysicsBackend backend;     ///< Steps the authoritative Fixed32 state.
+    core::u32 tints[kCount]{};              ///< Per-entity face tint (render only).
 
-    CubeEntity entities[kCount];
+    CubePile() : backend(registry) {}
 
     /// Seed a kNx*kNy*kNz lattice above the floor (no RNG): each entity gets a
     /// tiny index-derived velocity jitter so the fall is not perfectly uniform.
     void init() noexcept
     {
-        using F = math::Fixed32;
+        using F = Fixed32;
+        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity,
+                                        ecs::ComponentId::AABB, ecs::ComponentId::Mass};
+        const ecs::Archetype archetype{ids};
+        for (core::u32 i = 0; i < kCount; ++i)
+            (void) registry.createEntity(archetype);
+        (void) backend.init();
+
+        static const core::u32 hues[6] = {0x00FF6060u, 0x0060FF60u, 0x006060FFu,
+                                          0x00FFFF60u, 0x00FF60FFu, 0x0060FFFFu};
         const core::f32 ox = static_cast<core::f32>(kNx - 1u) * 0.5f;
         const core::f32 oz = static_cast<core::f32>(kNz - 1u) * 0.5f;
-        static const core::u32 hues[6] = {0x00FF6060u, 0x0060FF60u, 0x006060FFu, 0x00FFFF60u, 0x00FF60FFu, 0x0060FFFFu};
-        core::u32 i = 0u;
-        for (core::u32 iy = 0; iy < kNy; ++iy)
-            for (core::u32 iz = 0; iz < kNz; ++iz)
-                for (core::u32 ix = 0; ix < kNx; ++ix, ++i)
-                {
-                    CubeEntity &e = entities[i];
-                    e.x = F::fromFloat((static_cast<core::f32>(ix) - ox) * kSpacingF);
-                    e.z = F::fromFloat((static_cast<core::f32>(iz) - oz) * kSpacingF);
-                    e.y = F::fromFloat(0.2f + static_cast<core::f32>(iy) * kSpacingF);
-                    // Deterministic per-index jitter (small, integer-derived).
-                    e.vx = F::fromFloat((static_cast<core::f32>((i * 13u) % 7u) - 3.0f) * 0.004f);
-                    e.vz = F::fromFloat((static_cast<core::f32>((i * 17u) % 7u) - 3.0f) * 0.004f);
-                    e.vy = F::zero();
-                    e.scale = kHalfF;
-                    e.tint = hues[i % 6u];
-                }
-    }
+        const F cubeSize = F::fromFloat(2.0f * kHalfF); // backend halves the AABB internally
+        const F one = F::one();
 
-    /// One deterministic tick: integrate under gravity, bounce on the floor,
-    /// then resolve inter-entity AABB collisions via a uniform spatial-hash grid.
-    void step() noexcept
-    {
-        using F = math::Fixed32;
-        const F gravity = F::fromFloat(-0.010f);
-        const F floor = F::fromFloat(kFloorF);
-        const F bounce = F::fromFloat(-0.30f);                  // damped floor restitution
-        const F damp = F::fromFloat(0.985f);                    // horizontal friction
-        const F twoH = F::fromFloat(2.0f * kHalfF);             // AABB full size (uniform)
-        const F invCell = F::fromFloat(1.0f / (2.0f * kHalfF)); // 1 / grid cell
-        const F restitution = F::fromFloat(0.20f);              // pair collision energy kept
-
-        // ── Integrate + floor ────────────────────────────────────────────────
-        for (core::u32 i = 0; i < kCount; ++i)
+        // Seed chunk buffers in creation order: Position/Velocity/AABB go into the
+        // write (back) buffer the integrator mutates; Mass into the read buffer.
+        core::u32 gi = 0;
+        for (const auto &partition : registry.partitions())
         {
-            CubeEntity &e = entities[i];
-            e.vy = e.vy + gravity;
-            e.x = e.x + e.vx;
-            e.y = e.y + e.vy;
-            e.z = e.z + e.vz;
-            if (e.y < floor)
+            for (const auto &chunk : partition->chunks())
             {
-                e.y = floor;
-                e.vy = e.vy * bounce;
-                e.vx = e.vx * damp;
-                e.vz = e.vz * damp;
+                const core::u32 count = chunk->count();
+                auto *pos = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
+                auto *vel = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+                auto *aabb = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::AABB));
+                auto *massW = static_cast<Fixed32 *>(chunk->writeComponent(ecs::ComponentId::Mass));
+                auto *massR = static_cast<Fixed32 *>(const_cast<void *>(chunk->readComponent(ecs::ComponentId::Mass)));
+                if (!pos || !vel)
+                    continue;
+                for (core::u32 li = 0; li < count; ++li, ++gi)
+                {
+                    const core::u32 ix = gi % kNx;
+                    const core::u32 iz = (gi / kNx) % kNz;
+                    const core::u32 iy = gi / (kNx * kNz);
+                    pos[li] = {F::fromFloat((static_cast<core::f32>(ix) - ox) * kSpacingF),
+                               F::fromFloat(kSpawnYF + static_cast<core::f32>(iy) * kSpacingF),
+                               F::fromFloat((static_cast<core::f32>(iz) - oz) * kSpacingF)};
+                    vel[li] = {F::fromFloat((static_cast<core::f32>((gi * 13u) % 7u) - 3.0f) * 0.02f), F::zero(),
+                               F::fromFloat((static_cast<core::f32>((gi * 17u) % 7u) - 3.0f) * 0.02f)};
+                    if (aabb)
+                        aabb[li] = {cubeSize, cubeSize, cubeSize};
+                    if (massW)
+                        massW[li] = one;
+                    if (massR)
+                        massR[li] = one;
+                    tints[gi] = hues[gi % 6u];
+                }
             }
         }
-
-        // ── Broad-phase: hash each entity into its grid cell (BSS scratch) ─────
-        static core::i32 head[kBuckets];
-        static core::i32 next[kCount];
-        static core::i32 cellX[kCount];
-        static core::i32 cellY[kCount];
-        static core::i32 cellZ[kCount];
-        for (core::u32 b = 0; b < kBuckets; ++b)
-            head[b] = -1;
-        for (core::u32 i = 0; i < kCount; ++i)
-        {
-            const CubeEntity &e = entities[i];
-            const core::i32 cx = (e.x * invCell).raw() >> 16; // floor() for Q16.16
-            const core::i32 cy = (e.y * invCell).raw() >> 16;
-            const core::i32 cz = (e.z * invCell).raw() >> 16;
-            cellX[i] = cx;
-            cellY[i] = cy;
-            cellZ[i] = cz;
-            const core::u32 h = cellHash(cx, cy, cz) & (kBuckets - 1u);
-            next[i] = head[h];
-            head[h] = static_cast<core::i32>(i);
-        }
-
-        // ── Narrow-phase: each entity vs neighbours in the 27 adjacent cells ──
-        for (core::u32 i = 0; i < kCount; ++i)
-        {
-            for (core::i32 dz = -1; dz <= 1; ++dz)
-                for (core::i32 dy = -1; dy <= 1; ++dy)
-                    for (core::i32 dx = -1; dx <= 1; ++dx)
-                    {
-                        const core::i32 ncx = cellX[i] + dx;
-                        const core::i32 ncy = cellY[i] + dy;
-                        const core::i32 ncz = cellZ[i] + dz;
-                        const core::u32 h = cellHash(ncx, ncy, ncz) & (kBuckets - 1u);
-                        for (core::i32 j = head[h]; j >= 0; j = next[j])
-                        {
-                            const core::u32 ju = static_cast<core::u32>(j);
-                            if (ju <= i) // each unordered pair once
-                                continue;
-                            if (cellX[ju] != ncx || cellY[ju] != ncy || cellZ[ju] != ncz)
-                                continue; // hash-collision from another cell
-                            resolvePair(entities[i], entities[ju], twoH, restitution);
-                        }
-                    }
-        }
     }
 
-    /// Deterministic integer spatial hash of a grid cell.
-    [[nodiscard]] static core::u32 cellHash(core::i32 cx, core::i32 cy, core::i32 cz) noexcept
-    {
-        return static_cast<core::u32>(cx) * 73856093u ^ static_cast<core::u32>(cy) * 19349663u ^
-               static_cast<core::u32>(cz) * 83492791u;
-    }
+    /// One deterministic tick through the engine physics backend.
+    void step() noexcept { (void) backend.step(kDtF); }
 
-    /// Resolve one AABB pair along its minimum-overlap axis (no sqrt): separate
-    /// the boxes and exchange the axis velocity with restitution. Fully Fixed32.
-    static void resolvePair(CubeEntity &a, CubeEntity &b, math::Fixed32 twoH, math::Fixed32 restitution) noexcept
-    {
-        using F = math::Fixed32;
-        const F dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-        const F ox = twoH - dx.abs();
-        if (ox <= F::zero())
-            return;
-        const F oy = twoH - dy.abs();
-        if (oy <= F::zero())
-            return;
-        const F oz = twoH - dz.abs();
-        if (oz <= F::zero())
-            return;
-
-        const F half = F::fromFloat(0.5f);
-        // Push apart along the axis of least penetration, then damp/exchange the
-        // relative velocity on that axis (sign follows the separation direction).
-        if (ox <= oy && ox <= oz)
-        {
-            const F push = (dx < F::zero() ? F::zero() - ox : ox) * half;
-            a.x = a.x + push;
-            b.x = b.x - push;
-            const F m = (a.vx + b.vx) * half;
-            a.vx = m + (a.vx - m) * restitution;
-            b.vx = m + (b.vx - m) * restitution;
-        }
-        else if (oy <= ox && oy <= oz)
-        {
-            const F push = (dy < F::zero() ? F::zero() - oy : oy) * half;
-            a.y = a.y + push;
-            b.y = b.y - push;
-            const F m = (a.vy + b.vy) * half;
-            a.vy = m + (a.vy - m) * restitution;
-            b.vy = m + (b.vy - m) * restitution;
-        }
-        else
-        {
-            const F push = (dz < F::zero() ? F::zero() - oz : oz) * half;
-            a.z = a.z + push;
-            b.z = b.z - push;
-            const F m = (a.vz + b.vz) * half;
-            a.vz = m + (a.vz - m) * restitution;
-            b.vz = m + (b.vz - m) * restitution;
-        }
-    }
-
-    /// FNV-1a fold of every entity's authoritative Fixed32 state — the
-    /// deterministic, render-independent cross-target signature.
+    /// FNV-1a fold of every entity's authoritative Fixed32 state (position +
+    /// velocity), read from the integrator's write buffer, in creation order.
     [[nodiscard]] core::u32 stateSignature() const noexcept
     {
         core::u32 hash = detail::kFnv1aOffsetBasis;
-        for (core::u32 i = 0; i < kCount; ++i)
+        for (const auto &partition : registry.partitions())
         {
-            const CubeEntity &e = entities[i];
-            hash = detail::fnv1aStep(hash, static_cast<core::u32>(e.x.raw()));
-            hash = detail::fnv1aStep(hash, static_cast<core::u32>(e.y.raw()));
-            hash = detail::fnv1aStep(hash, static_cast<core::u32>(e.z.raw()));
-            hash = detail::fnv1aStep(hash, static_cast<core::u32>(e.vx.raw()));
-            hash = detail::fnv1aStep(hash, static_cast<core::u32>(e.vy.raw()));
-            hash = detail::fnv1aStep(hash, static_cast<core::u32>(e.vz.raw()));
+            for (const auto &chunk : partition->chunks())
+            {
+                const core::u32 count = chunk->count();
+                const auto *pos = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
+                const auto *vel = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+                if (!pos || !vel)
+                    continue;
+                for (core::u32 li = 0; li < count; ++li)
+                {
+                    hash = detail::fnv1aStep(hash, static_cast<core::u32>(pos[li].x.raw()));
+                    hash = detail::fnv1aStep(hash, static_cast<core::u32>(pos[li].y.raw()));
+                    hash = detail::fnv1aStep(hash, static_cast<core::u32>(pos[li].z.raw()));
+                    hash = detail::fnv1aStep(hash, static_cast<core::u32>(vel[li].x.raw()));
+                    hash = detail::fnv1aStep(hash, static_cast<core::u32>(vel[li].y.raw()));
+                    hash = detail::fnv1aStep(hash, static_cast<core::u32>(vel[li].z.raw()));
+                }
+            }
         }
         return hash;
     }
@@ -253,25 +169,46 @@ struct CubePile {
     };
 
     /// Rasterize the scene: a ground grid, then every entity as a depth-buffered,
-    /// Lambert-lit cube, viewed through the orbit @p cam.
+    /// Lambert-lit cube, viewed through the orbit @p cam. Positions are read from
+    /// the authoritative Fixed32 components and projected in float (render only).
     void render(const RenderTarget &rt, const Camera &cam) const noexcept
     {
-        using F = math::Fixed32;
+        using F = Fixed32;
         using Vec3f = math::Vec3<core::f32>;
 
         clearTarget(rt, 0x00141828u);
+
+        // Gather authoritative positions (Fixed32 → float, render only) in order.
+        static core::f32 px[kCount], py[kCount], pz[kCount];
+        core::u32 gi = 0;
+        for (const auto &partition : registry.partitions())
+        {
+            for (const auto &chunk : partition->chunks())
+            {
+                const core::u32 count = chunk->count();
+                const auto *pos = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
+                if (!pos)
+                    continue;
+                for (core::u32 li = 0; li < count && gi < kCount; ++li, ++gi)
+                {
+                    px[gi] = pos[li].x.toFloat();
+                    py[gi] = pos[li].y.toFloat();
+                    pz[gi] = pos[li].z.toFloat();
+                }
+            }
+        }
+        const core::u32 total = gi;
 
         // ── Camera basis via CORDIC (no libm; deterministic) ─────────────────
         F sy{F::zero()}, cy{F::zero()}, sp{F::zero()}, cp{F::zero()};
         math::Cordic::sincos(F::fromFloat(cam.yaw), sy, cy);
         math::Cordic::sincos(F::fromFloat(cam.pitch), sp, cp);
         core::f32 tx = 0.0f, ty = kFloorF + 0.6f, tz = 0.0f;
-        if (cam.possess >= 0 && static_cast<core::u32>(cam.possess) < kCount)
+        if (cam.possess >= 0 && static_cast<core::u32>(cam.possess) < total)
         {
-            const CubeEntity &pe = entities[static_cast<core::u32>(cam.possess)];
-            tx = pe.x.toFloat();
-            ty = pe.y.toFloat();
-            tz = pe.z.toFloat();
+            tx = px[cam.possess];
+            ty = py[cam.possess];
+            tz = pz[cam.possess];
         }
         const core::f32 dirx = cp.toFloat() * sy.toFloat();
         const core::f32 diry = sp.toFloat();
@@ -325,24 +262,18 @@ struct CubePile {
         constexpr core::f32 kLx = 0.384f, kLy = 0.816f, kLz = 0.432f;
         constexpr core::f32 kAmbient = 0.30f, kDiffuse = 0.70f;
 
-        // Per-face shade for the possessed entity is overridden to a highlight.
-        for (core::u32 ei = 0; ei < kCount; ++ei)
+        for (core::u32 ei = 0; ei < total; ++ei)
         {
-            const CubeEntity &e = entities[ei];
             const bool possessed = (cam.possess >= 0 && static_cast<core::u32>(cam.possess) == ei);
-            const core::f32 px = e.x.toFloat();
-            const core::f32 py = e.y.toFloat();
-            const core::f32 pz = e.z.toFloat();
-
             detail::ScreenVertex sv[8];
             for (core::u32 i = 0; i < 8u; ++i)
             {
-                const core::f32 lx = corners[i][0] * e.scale;
-                const core::f32 ly = corners[i][1] * e.scale;
-                const core::f32 lz = corners[i][2] * e.scale;
-                sv[i] = detail::projectVertex(mvp, px + lx, py + ly, pz + lz, rt.width, rt.height);
+                const core::f32 lx = corners[i][0] * kHalfF;
+                const core::f32 ly = corners[i][1] * kHalfF;
+                const core::f32 lz = corners[i][2] * kHalfF;
+                sv[i] = detail::projectVertex(mvp, px[ei] + lx, py[ei] + ly, pz[ei] + lz, rt.width, rt.height);
             }
-            const core::u32 tint = possessed ? 0x0020FF40u : e.tint;
+            const core::u32 tint = possessed ? 0x0020FF40u : tints[ei];
             for (core::u32 t = 0; t < 12u; ++t)
             {
                 const core::u32 f = t / 2u;
@@ -358,6 +289,7 @@ struct CubePile {
                 detail::fillTriangle(rt, sv[indices[t * 3 + 0]], sv[indices[t * 3 + 1]], sv[indices[t * 3 + 2]], color);
             }
         }
+        static_cast<void>(kLz);
     }
 
 private:
@@ -408,13 +340,11 @@ struct SimFoldResult {
 /// seed, advance @p ticks deterministic steps, render into @p rt, fold both.
 [[nodiscard]] inline SimFoldResult runCubePileAndFold(const RenderTarget &rt, core::u32 ticks) noexcept
 {
-    // Static (BSS) — a 1024-entity CubePile is far too large for the kernel
-    // stack. Single-threaded deterministic use; re-init makes each call fresh.
-    static CubePile scene;
+    // A fresh registry per call keeps each run deterministic and independent.
+    CubePile scene;
     scene.init();
     for (core::u32 t = 0; t < ticks; ++t)
         scene.step();
-    // Fixed camera keeps the image fold deterministic across host and kernel.
     scene.render(rt, CubePile::Camera{});
     return SimFoldResult{scene.stateSignature(), foldTarget(rt)};
 }

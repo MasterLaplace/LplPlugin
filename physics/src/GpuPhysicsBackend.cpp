@@ -111,25 +111,30 @@ core::Expected<void> GpuPhysicsBackend::step(core::f32 dt)
             if (count == 0)
                 continue;
 
-            auto *positions = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Position));
-            auto *velocities = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
-            auto *masses = static_cast<const float *>(chunk->readComponent(ecs::ComponentId::Mass));
+            auto *positions =
+                static_cast<math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+            auto *velocities =
+                static_cast<math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+            auto *masses = static_cast<const math::Fixed32 *>(chunk->readComponent(ecs::ComponentId::Mass));
             if (!positions || !velocities || !masses)
                 continue;
 
             if (auto sized = ensureCapacity(count); !sized)
                 return sized;
 
-            // Deinterleave AoS Vec3 → planar SoA host staging.
+            // Deinterleave AoS Vec3 → planar SoA host staging. The GPU kernel is
+            // float; convert authoritative Fixed32 → float at this staging edge.
+            // NOTE: this backend is compiled only under --cuda and was not built
+            // in the migration sandbox — treat as compile-unverified.
             for (core::u32 i = 0; i < count; ++i)
             {
-                _scratch.hostX[i] = positions[i].x;
-                _scratch.hostY[i] = positions[i].y;
-                _scratch.hostZ[i] = positions[i].z;
-                _scratch.hostVX[i] = velocities[i].x;
-                _scratch.hostVY[i] = velocities[i].y;
-                _scratch.hostVZ[i] = velocities[i].z;
-                _scratch.hostMass[i] = masses[i];
+                _scratch.hostX[i] = positions[i].x.toFloat();
+                _scratch.hostY[i] = positions[i].y.toFloat();
+                _scratch.hostZ[i] = positions[i].z.toFloat();
+                _scratch.hostVX[i] = velocities[i].x.toFloat();
+                _scratch.hostVY[i] = velocities[i].y.toFloat();
+                _scratch.hostVZ[i] = velocities[i].z.toFloat();
+                _scratch.hostMass[i] = masses[i].toFloat();
             }
 
             const core::usize bytes = static_cast<core::usize>(count) * sizeof(float);
@@ -198,12 +203,12 @@ core::Expected<void> GpuPhysicsBackend::step(core::f32 dt)
 
             for (core::u32 i = 0; i < count; ++i)
             {
-                positions[i].x = _scratch.hostX[i];
-                positions[i].y = _scratch.hostY[i];
-                positions[i].z = _scratch.hostZ[i];
-                velocities[i].x = _scratch.hostVX[i];
-                velocities[i].y = _scratch.hostVY[i];
-                velocities[i].z = _scratch.hostVZ[i];
+                positions[i].x = math::Fixed32::fromFloat(_scratch.hostX[i]);
+                positions[i].y = math::Fixed32::fromFloat(_scratch.hostY[i]);
+                positions[i].z = math::Fixed32::fromFloat(_scratch.hostZ[i]);
+                velocities[i].x = math::Fixed32::fromFloat(_scratch.hostVX[i]);
+                velocities[i].y = math::Fixed32::fromFloat(_scratch.hostVY[i]);
+                velocities[i].z = math::Fixed32::fromFloat(_scratch.hostVZ[i]);
             }
         }
     }

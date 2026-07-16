@@ -75,8 +75,10 @@ void PhysicsSystem::execute(core::f32 dt)
             if (count == 0)
                 continue;
 
-            // Read from the write buffer (post-physics positions)
-            auto *positions = static_cast<const math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Position));
+            // Read from the write buffer (post-physics positions) — already
+            // authoritative Fixed32, no float conversion needed anymore.
+            auto *positions =
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
             if (!positions)
                 continue;
 
@@ -84,11 +86,7 @@ void PhysicsSystem::execute(core::f32 dt)
 
             for (core::u32 i = 0; i < count; ++i)
             {
-                // Convert float position to Fixed32 for WorldPartition
-                math::Vec3<math::Fixed32> fixedPos{math::Fixed32::fromFloat(positions[i].x),
-                                                   math::Fixed32::fromFloat(positions[i].y),
-                                                   math::Fixed32::fromFloat(positions[i].z)};
-                [[maybe_unused]] auto migRes = _impl->world.insertOrUpdate(entityIds[i], fixedPos);
+                [[maybe_unused]] auto migRes = _impl->world.insertOrUpdate(entityIds[i], positions[i]);
             }
         }
     }

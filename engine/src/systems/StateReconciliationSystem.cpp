@@ -15,6 +15,7 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/engine/systems/StateReconciliationSystem.hpp>
 
 namespace lpl::engine::systems {
@@ -120,15 +121,17 @@ void StateReconciliationSystem::execute(core::f32 /*dt*/)
                     {
                         found = true;
 
-                        // Write Position
-                        if (auto *wpos =
-                                static_cast<math::Vec3<float> *>(chunk.writeComponent(ecs::ComponentId::Position)))
-                            wpos[i] = {ent.pos.x, ent.pos.y, ent.pos.z};
+                        // Write Position (network floats → authoritative Fixed32)
+                        if (auto *wpos = static_cast<math::Vec3<math::Fixed32> *>(
+                                chunk.writeComponent(ecs::ComponentId::Position)))
+                            wpos[i] = {math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
+                                       math::Fixed32::fromFloat(ent.pos.z)};
 
                         // Write AABB
                         if (auto *wsize =
-                                static_cast<math::Vec3<float> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
-                            wsize[i] = {ent.size.x, ent.size.y, ent.size.z};
+                                static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
+                            wsize[i] = {math::Fixed32::fromFloat(ent.size.x), math::Fixed32::fromFloat(ent.size.y),
+                                        math::Fixed32::fromFloat(ent.size.z)};
 
                         // Write Health
                         if (auto *whp = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))

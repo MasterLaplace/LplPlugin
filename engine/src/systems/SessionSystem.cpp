@@ -11,6 +11,7 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/engine/systems/SessionSystem.hpp>
 #include <lpl/net/protocol/Protocol.hpp>
 
@@ -127,33 +128,35 @@ void SessionSystem::execute(core::f32 /*dt*/)
         {
             auto &chunk = *chunks[ref.chunkIndex];
 
-            // Position: spawn at {0, 10, 0} (legacy default)
-            math::Vec3<float> pos{0.0f, 10.0f, 0.0f};
-            if (auto *wpos = static_cast<math::Vec3<float> *>(chunk.writeComponent(ecs::ComponentId::Position)))
+            // Position: spawn at {0, 10, 0} (legacy default) — authoritative Fixed32
+            math::Vec3<math::Fixed32> pos{math::Fixed32::fromInt(0), math::Fixed32::fromInt(10),
+                                          math::Fixed32::fromInt(0)};
+            if (auto *wpos = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position)))
                 wpos[ref.localIndex] = pos;
-            if (auto *rpos = const_cast<math::Vec3<float> *>(
-                    static_cast<const math::Vec3<float> *>(chunk.readComponent(ecs::ComponentId::Position))))
+            if (auto *rpos = const_cast<math::Vec3<math::Fixed32> *>(
+                    static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::Position))))
                 rpos[ref.localIndex] = pos;
 
             // Velocity: zero
-            math::Vec3<float> vel{0.0f, 0.0f, 0.0f};
-            if (auto *wvel = static_cast<math::Vec3<float> *>(chunk.writeComponent(ecs::ComponentId::Velocity)))
+            math::Vec3<math::Fixed32> vel{math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::zero()};
+            if (auto *wvel = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Velocity)))
                 wvel[ref.localIndex] = vel;
 
             // Mass: 1.0
-            float mass = 1.0f;
-            if (auto *wmass = static_cast<float *>(chunk.writeComponent(ecs::ComponentId::Mass)))
+            math::Fixed32 mass = math::Fixed32::one();
+            if (auto *wmass = static_cast<math::Fixed32 *>(chunk.writeComponent(ecs::ComponentId::Mass)))
                 wmass[ref.localIndex] = mass;
-            if (auto *rmass =
-                    const_cast<float *>(static_cast<const float *>(chunk.readComponent(ecs::ComponentId::Mass))))
+            if (auto *rmass = const_cast<math::Fixed32 *>(
+                    static_cast<const math::Fixed32 *>(chunk.readComponent(ecs::ComponentId::Mass))))
                 rmass[ref.localIndex] = mass;
 
             // AABB (size): {1, 2, 1}
-            math::Vec3<float> size{1.0f, 2.0f, 1.0f};
-            if (auto *wsize = static_cast<math::Vec3<float> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
+            math::Vec3<math::Fixed32> size{math::Fixed32::fromInt(1), math::Fixed32::fromInt(2),
+                                           math::Fixed32::fromInt(1)};
+            if (auto *wsize = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
                 wsize[ref.localIndex] = size;
-            if (auto *rsize = const_cast<math::Vec3<float> *>(
-                    static_cast<const math::Vec3<float> *>(chunk.readComponent(ecs::ComponentId::AABB))))
+            if (auto *rsize = const_cast<math::Vec3<math::Fixed32> *>(
+                    static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::AABB))))
                 rsize[ref.localIndex] = size;
 
             // Health: 100

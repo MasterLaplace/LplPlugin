@@ -19,6 +19,7 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/engine/systems/BroadcastSystem.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
 #include <lpl/net/protocol/Protocol.hpp>
 
@@ -149,10 +150,10 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
                 continue;
 
             const auto *positions =
-                static_cast<const math::Vec3<float> *>(chunk->readComponent(ecs::ComponentId::Position));
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::Position));
             const auto *sizes =
                 archetype.has(ecs::ComponentId::AABB) ?
-                    static_cast<const math::Vec3<float> *>(chunk->readComponent(ecs::ComponentId::AABB)) :
+                    static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB)) :
                     nullptr;
             const auto *health = archetype.has(ecs::ComponentId::Health) ?
                                      static_cast<const core::i32 *>(chunk->readComponent(ecs::ComponentId::Health)) :
@@ -165,8 +166,11 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
 
             for (core::u32 i = 0; i < count; ++i)
             {
-                records.push_back({entityIds[i].raw(), positions[i].x, positions[i].y, positions[i].z,
-                                   sizes ? sizes[i].x : 1.0f, sizes ? sizes[i].y : 1.0f, sizes ? sizes[i].z : 1.0f,
+                // Wire snapshot stays float (non-authoritative client display);
+                // convert the authoritative Fixed32 transform at this boundary.
+                records.push_back({entityIds[i].raw(), positions[i].x.toFloat(), positions[i].y.toFloat(),
+                                   positions[i].z.toFloat(), sizes ? sizes[i].x.toFloat() : 1.0f,
+                                   sizes ? sizes[i].y.toFloat() : 1.0f, sizes ? sizes[i].z.toFloat() : 1.0f,
                                    health ? health[i] : 100});
             }
         }

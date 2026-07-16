@@ -77,9 +77,10 @@ struct ComponentLayout {
  * @brief Returns the default size and alignment for a known component type.
  *
  * This maps ComponentId to concrete data types:
- *   Position/Velocity/AngularVelocity/AABB → Vec3<float> (12, 4)
- *   Rotation         → Quat<float> (16, 4)
- *   Mass             → float (4, 4)
+ *   Position/Velocity/AABB → Vec3<Fixed32> (12, 4) — authoritative, deterministic
+ *   AngularVelocity  → Vec3<float> (12, 4) — migrates with Rotation
+ *   Rotation         → Quat<float> (16, 4) — Fixed32 quaternion is a later slice
+ *   Mass             → Fixed32 (4, 4) — authoritative
  *   Health           → i32 (4, 4)
  *   NetworkSync      → u32 (4, 4)
  *   InputSnapshot    → u32 (4, 4) — entity-level input index

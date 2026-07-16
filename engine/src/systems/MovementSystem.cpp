@@ -19,6 +19,7 @@
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/engine/systems/MovementSystem.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
 
 namespace lpl::engine::systems {
@@ -84,7 +85,8 @@ void MovementSystem::execute(core::f32 /*dt*/)
             if (count == 0)
                 continue;
 
-            auto *velocities = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+            auto *velocities =
+                static_cast<math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
             if (!velocities)
                 continue;
 
@@ -104,13 +106,17 @@ void MovementSystem::execute(core::f32 /*dt*/)
                 if (!_impl->inputManager.hasEntity(eid))
                     continue;
 
-                // Read current velocity from the front (read) buffer
-                auto currentVel = velocities[i]; // back buffer was synced from front in swapBuffers
+                // Input is the ingestion boundary: run the (float) movement math,
+                // then quantize the result back into the authoritative Fixed32
+                // velocity. computeMovementVelocity itself may migrate to Fixed32
+                // in a later boundary-hardening slice.
+                math::Vec3<float> currentVel{velocities[i].x.toFloat(), velocities[i].y.toFloat(),
+                                             velocities[i].z.toFloat()};
 
-                // Compute movement velocity from current input state (WASD + BCI)
-                auto vel = _impl->inputManager.computeMovementVelocity(eid, currentVel);
+                math::Vec3<float> vel = _impl->inputManager.computeMovementVelocity(eid, currentVel);
 
-                velocities[i] = vel;
+                velocities[i] = {math::Fixed32::fromFloat(vel.x), math::Fixed32::fromFloat(vel.y),
+                                 math::Fixed32::fromFloat(vel.z)};
 
                 // Wake entity if velocity is non-zero and it was sleeping
                 float speedSq = vel.x * vel.x + vel.y * vel.y + vel.z * vel.z;
