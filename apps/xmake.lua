@@ -23,6 +23,16 @@ target("lpl-client")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Editor (deterministic scene command REPL — human twin of the Caine AI bridge)
+-- ─────────────────────────────────────────────────────────────────────────────
+target("lpl-editor-cli")
+    set_kind("binary")
+    set_group("apps")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-editor", "lpl-procgen")
+    add_files("editor/main.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Benchmark
 -- ─────────────────────────────────────────────────────────────────────────────
 target("lpl-benchmark")

@@ -16,215 +16,17 @@
 #include <lpl/ecs/ComponentReflection.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/editor/Json.hpp>
 
 #include <bit>
-#include <cctype>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <utility>
 #include <vector>
 
 namespace lpl::editor {
 
-using ecs::FieldDesc;
-using ecs::FieldType;
 
 namespace {
-
-// --- Minimal, exception-free JSON value + parser --------------------------- //
-
-struct JVal {
-    enum class T {
-        Null,
-        Bool,
-        Num,
-        Str,
-        Arr,
-        Obj
-    };
-    T t{T::Null};
-    bool b{false};
-    double num{0.0};
-    std::string str;
-    std::vector<JVal> arr;
-    std::vector<std::pair<std::string, JVal>> obj;
-
-    [[nodiscard]] const JVal *find(std::string_view key) const
-    {
-        for (const auto &kv : obj)
-            if (kv.first == key)
-                return &kv.second;
-        return nullptr;
-    }
-};
-
-struct Parser {
-    std::string_view s;
-    std::size_t i{0};
-    bool ok{true};
-
-    void ws()
-    {
-        while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r'))
-            ++i;
-    }
-    bool eat(char c)
-    {
-        ws();
-        if (i < s.size() && s[i] == c)
-        {
-            ++i;
-            return true;
-        }
-        return false;
-    }
-
-    JVal value()
-    {
-        ws();
-        if (i >= s.size())
-        {
-            ok = false;
-            return {};
-        }
-        const char c = s[i];
-        if (c == '{')
-            return object();
-        if (c == '[')
-            return array();
-        if (c == '"')
-        {
-            JVal v;
-            v.t = JVal::T::Str;
-            v.str = string();
-            return v;
-        }
-        if (c == 't' || c == 'f')
-            return boolean();
-        if (c == 'n')
-        {
-            i += 4; // "null"
-            return {};
-        }
-        return number();
-    }
-
-    std::string string()
-    {
-        std::string out;
-        if (!eat('"'))
-        {
-            ok = false;
-            return out;
-        }
-        while (i < s.size() && s[i] != '"')
-        {
-            char c = s[i++];
-            if (c == '\\' && i < s.size())
-            {
-                const char e = s[i++];
-                switch (e)
-                {
-                case 'n': out += '\n'; break;
-                case 't': out += '\t'; break;
-                case '"': out += '"'; break;
-                case '\\': out += '\\'; break;
-                case '/': out += '/'; break;
-                default: out += e; break;
-                }
-            }
-            else
-            {
-                out += c;
-            }
-        }
-        if (i < s.size() && s[i] == '"')
-            ++i;
-        else
-            ok = false;
-        return out;
-    }
-
-    JVal number()
-    {
-        const std::size_t start = i;
-        while (i < s.size() && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i] == '-' || s[i] == '+' ||
-                                s[i] == '.' || s[i] == 'e' || s[i] == 'E'))
-            ++i;
-        JVal v;
-        v.t = JVal::T::Num;
-        const std::string tok{s.substr(start, i - start)};
-        v.num = std::strtod(tok.c_str(), nullptr);
-        return v;
-    }
-
-    JVal boolean()
-    {
-        JVal v;
-        v.t = JVal::T::Bool;
-        if (s.compare(i, 4, "true") == 0)
-        {
-            v.b = true;
-            i += 4;
-        }
-        else if (s.compare(i, 5, "false") == 0)
-        {
-            v.b = false;
-            i += 5;
-        }
-        else
-        {
-            ok = false;
-        }
-        return v;
-    }
-
-    JVal array()
-    {
-        JVal v;
-        v.t = JVal::T::Arr;
-        eat('[');
-        if (eat(']'))
-            return v;
-        while (ok)
-        {
-            v.arr.push_back(value());
-            if (eat(','))
-                continue;
-            if (eat(']'))
-                break;
-            ok = false;
-        }
-        return v;
-    }
-
-    JVal object()
-    {
-        JVal v;
-        v.t = JVal::T::Obj;
-        eat('{');
-        if (eat('}'))
-            return v;
-        while (ok)
-        {
-            ws();
-            std::string k = string();
-            if (!eat(':'))
-            {
-                ok = false;
-                break;
-            }
-            v.obj.emplace_back(std::move(k), value());
-            if (eat(','))
-                continue;
-            if (eat('}'))
-                break;
-            ok = false;
-        }
-        return v;
-    }
-};
 
 // --- Byte helpers ---------------------------------------------------------- //
 
@@ -243,17 +45,17 @@ float getF32(const core::byte *p)
 void putI32(core::byte *p, core::i32 v) { std::memcpy(p, &v, sizeof(v)); }
 void putF32(core::byte *p, float v) { std::memcpy(p, &v, sizeof(v)); }
 
-double laneOr(const JVal *o, const char *k, double d)
+double laneOr(const detail::JVal *o, const char *k, double d)
 {
     if (o == nullptr)
         return d;
-    const JVal *v = o->find(k);
+    const detail::JVal *v = o->find(k);
     return v != nullptr ? v->num : d;
 }
 
 // --- Reflection-driven field emit / read ----------------------------------- //
 
-void emitField(std::string &out, const FieldDesc &f, const core::byte *comp)
+void emitField(std::string &out, const ecs::FieldDesc &f, const core::byte *comp)
 {
     const core::byte *p = comp + f.offset;
     out += '"';
@@ -262,24 +64,24 @@ void emitField(std::string &out, const FieldDesc &f, const core::byte *comp)
     char buf[192];
     switch (f.type)
     {
-    case FieldType::F32: std::snprintf(buf, sizeof(buf), "%g", getF32(p)); break;
-    case FieldType::I32:
-    case FieldType::Fixed32: std::snprintf(buf, sizeof(buf), "%d", getI32(p)); break;
-    case FieldType::U32: std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(getI32(p))); break;
-    case FieldType::U16: {
+    case ecs::FieldType::F32: std::snprintf(buf, sizeof(buf), "%g", getF32(p)); break;
+    case ecs::FieldType::I32:
+    case ecs::FieldType::Fixed32: std::snprintf(buf, sizeof(buf), "%d", getI32(p)); break;
+    case ecs::FieldType::U32: std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(getI32(p))); break;
+    case ecs::FieldType::U16: {
         std::uint16_t v;
         std::memcpy(&v, p, sizeof(v));
         std::snprintf(buf, sizeof(buf), "%u", v);
         break;
     }
-    case FieldType::U8: std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(p[0])); break;
-    case FieldType::Vec3F:
+    case ecs::FieldType::U8: std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(p[0])); break;
+    case ecs::FieldType::Vec3F:
         std::snprintf(buf, sizeof(buf), "{\"x\":%g,\"y\":%g,\"z\":%g}", getF32(p), getF32(p + 4), getF32(p + 8));
         break;
-    case FieldType::Vec3Fixed:
+    case ecs::FieldType::Vec3Fixed:
         std::snprintf(buf, sizeof(buf), "{\"x\":%d,\"y\":%d,\"z\":%d}", getI32(p), getI32(p + 4), getI32(p + 8));
         break;
-    case FieldType::QuatF:
+    case ecs::FieldType::QuatF:
         std::snprintf(buf, sizeof(buf), "{\"x\":%g,\"y\":%g,\"z\":%g,\"w\":%g}", getF32(p), getF32(p + 4),
                       getF32(p + 8), getF32(p + 12));
         break;
@@ -287,49 +89,49 @@ void emitField(std::string &out, const FieldDesc &f, const core::byte *comp)
     out += buf;
 }
 
-void readField(const JVal &compObj, const FieldDesc &f, core::byte *comp)
+void readField(const detail::JVal &compObj, const ecs::FieldDesc &f, core::byte *comp)
 {
     core::byte *p = comp + f.offset;
-    const JVal *fv = compObj.find(f.name);
+    const detail::JVal *fv = compObj.find(f.name);
     const float defF = std::bit_cast<float>(static_cast<std::uint32_t>(static_cast<core::i32>(f.defaultRaw)));
     switch (f.type)
     {
-    case FieldType::F32: putF32(p, fv != nullptr ? static_cast<float>(fv->num) : defF); break;
-    case FieldType::I32:
-    case FieldType::Fixed32:
+    case ecs::FieldType::F32: putF32(p, fv != nullptr ? static_cast<float>(fv->num) : defF); break;
+    case ecs::FieldType::I32:
+    case ecs::FieldType::Fixed32:
         putI32(p, fv != nullptr ? static_cast<core::i32>(fv->num) : static_cast<core::i32>(f.defaultRaw));
         break;
-    case FieldType::U32: {
+    case ecs::FieldType::U32: {
         const std::uint32_t v =
             fv != nullptr ? static_cast<std::uint32_t>(fv->num) : static_cast<std::uint32_t>(f.defaultRaw);
         std::memcpy(p, &v, sizeof(v));
         break;
     }
-    case FieldType::U16: {
+    case ecs::FieldType::U16: {
         const std::uint16_t v =
             fv != nullptr ? static_cast<std::uint16_t>(fv->num) : static_cast<std::uint16_t>(f.defaultRaw);
         std::memcpy(p, &v, sizeof(v));
         break;
     }
-    case FieldType::U8:
+    case ecs::FieldType::U8:
         p[0] = static_cast<core::byte>(fv != nullptr ? static_cast<unsigned>(fv->num) :
                                                        static_cast<unsigned>(f.defaultRaw));
         break;
-    case FieldType::Vec3F: {
+    case ecs::FieldType::Vec3F: {
         const double d = static_cast<double>(defF);
         putF32(p, static_cast<float>(laneOr(fv, "x", d)));
         putF32(p + 4, static_cast<float>(laneOr(fv, "y", d)));
         putF32(p + 8, static_cast<float>(laneOr(fv, "z", d)));
         break;
     }
-    case FieldType::Vec3Fixed: {
+    case ecs::FieldType::Vec3Fixed: {
         const double d = static_cast<double>(static_cast<core::i32>(f.defaultRaw));
         putI32(p, static_cast<core::i32>(laneOr(fv, "x", d)));
         putI32(p + 4, static_cast<core::i32>(laneOr(fv, "y", d)));
         putI32(p + 8, static_cast<core::i32>(laneOr(fv, "z", d)));
         break;
     }
-    case FieldType::QuatF: {
+    case ecs::FieldType::QuatF: {
         const double d = static_cast<double>(defF);
         putF32(p, static_cast<float>(laneOr(fv, "x", d)));
         putF32(p + 4, static_cast<float>(laneOr(fv, "y", d)));
@@ -344,7 +146,7 @@ void emitComponent(std::string &out, const ecs::ComponentSchema &schema, const c
 {
     out += '{';
     bool first = true;
-    for (const FieldDesc &f : schema.fields)
+    for (const ecs::FieldDesc &f : schema.fields)
     {
         if (!first)
             out += ',';
@@ -352,6 +154,77 @@ void emitComponent(std::string &out, const ecs::ComponentSchema &schema, const c
         emitField(out, f, comp);
     }
     out += '}';
+}
+
+// --- Template (prefab) resolution ------------------------------------------ //
+
+// Overlays entity component @p src onto @p dst at the field level: fields present
+// in @p src replace those in @p dst, other fields keep the template's value.
+void overlayComponent(detail::JVal &dst, const detail::JVal &src)
+{
+    if (dst.t != detail::JVal::T::Obj || src.t != detail::JVal::T::Obj)
+    {
+        dst = src;
+        return;
+    }
+    for (const auto &field : src.obj)
+    {
+        detail::JVal *existing = nullptr;
+        for (auto &d : dst.obj)
+            if (d.first == field.first)
+            {
+                existing = &d.second;
+                break;
+            }
+        if (existing == nullptr)
+            dst.obj.push_back(field);
+        else
+            *existing = field.second;
+    }
+}
+
+// Produces the effective component map for @p entity: if it carries a "$use"
+// reference, the named template's components are laid down first (deep-merged),
+// then the entity's own components override them field-by-field. This is the
+// Flakkari prefab pattern — a template graph flattened at instantiation time.
+detail::JVal resolveEntity(const detail::JVal &entity, const detail::JVal *templates)
+{
+    detail::JVal eff;
+    eff.t = detail::JVal::T::Obj;
+
+    if (templates != nullptr)
+    {
+        const detail::JVal *use = entity.find("$use");
+        if (use != nullptr && use->t == detail::JVal::T::Str)
+        {
+            const detail::JVal *tmpl = templates->find(use->str);
+            if (tmpl != nullptr && tmpl->t == detail::JVal::T::Obj)
+                for (const auto &comp : tmpl->obj)
+                {
+                    if (comp.first == "$use")
+                        continue;
+                    eff.obj.push_back(comp);
+                }
+        }
+    }
+
+    for (const auto &comp : entity.obj)
+    {
+        if (comp.first == "$use")
+            continue;
+        detail::JVal *existing = nullptr;
+        for (auto &e : eff.obj)
+            if (e.first == comp.first)
+            {
+                existing = &e.second;
+                break;
+            }
+        if (existing == nullptr)
+            eff.obj.push_back(comp);
+        else
+            overlayComponent(*existing, comp.second);
+    }
+    return eff;
 }
 
 } // namespace
@@ -403,24 +276,32 @@ std::string toLplScene(const ecs::Registry &registry)
 
 core::Expected<core::u32> fromLplScene(std::string_view text, ecs::Registry &registry)
 {
-    Parser parser{text, 0, true};
-    const JVal root = parser.value();
-    if (!parser.ok || root.t != JVal::T::Obj)
+    detail::Parser parser{text, 0, true};
+    const detail::JVal root = parser.value();
+    if (!parser.ok || root.t != detail::JVal::T::Obj)
         return core::makeError(core::ErrorCode::kDeserializationFailed, lpl::pmr::string{"malformed .lplscene root"});
 
-    const JVal *format = root.find("format");
-    if (format == nullptr || format->t != JVal::T::Str || format->str != "lplscene/1")
+    const detail::JVal *format = root.find("format");
+    if (format == nullptr || format->t != detail::JVal::T::Str || format->str != "lplscene/1")
         return core::makeError(core::ErrorCode::kNotSupported, lpl::pmr::string{"unsupported .lplscene format"});
 
-    const JVal *entities = root.find("entities");
-    if (entities == nullptr || entities->t != JVal::T::Arr)
+    const detail::JVal *entities = root.find("entities");
+    if (entities == nullptr || entities->t != detail::JVal::T::Arr)
         return core::makeError(core::ErrorCode::kDeserializationFailed, lpl::pmr::string{"missing entities array"});
 
+    // Optional prefab graph: entities may reference these by "$use" and override.
+    const detail::JVal *templates = root.find("templates");
+    if (templates != nullptr && templates->t != detail::JVal::T::Obj)
+        templates = nullptr;
+
     core::u32 created = 0;
-    for (const JVal &ent : entities->arr)
+    for (const detail::JVal &rawEnt : entities->arr)
     {
-        if (ent.t != JVal::T::Obj)
+        if (rawEnt.t != detail::JVal::T::Obj)
             continue;
+
+        // Flatten any "$use" template reference into a concrete component map.
+        const detail::JVal ent = resolveEntity(rawEnt, templates);
 
         // Build the archetype from the component names present on this entity.
         std::vector<ecs::ComponentId> ids;
@@ -452,8 +333,8 @@ core::Expected<core::u32> fromLplScene(std::string_view text, ecs::Registry &reg
         for (const ecs::ComponentId id : ids)
         {
             const ecs::ComponentSchema &schema = ecs::schemaOf(id);
-            const JVal *compObj = ent.find(schema.name);
-            if (compObj == nullptr || compObj->t != JVal::T::Obj)
+            const detail::JVal *compObj = ent.find(schema.name);
+            if (compObj == nullptr || compObj->t != detail::JVal::T::Obj)
                 continue;
             const core::u32 size = ecs::computeLayout(schema).size;
             const std::size_t byteOffset = static_cast<std::size_t>(ref.localIndex) * size;
@@ -461,10 +342,10 @@ core::Expected<core::u32> fromLplScene(std::string_view text, ecs::Registry &reg
             // Write both buffers: the write (back) buffer the integrator uses and
             // the read (front) buffer some systems read (e.g. Mass).
             if (auto *wb = static_cast<core::byte *>(chunk.writeComponent(id)))
-                for (const FieldDesc &f : schema.fields)
+                for (const ecs::FieldDesc &f : schema.fields)
                     readField(*compObj, f, wb + byteOffset);
             if (auto *rb = static_cast<core::byte *>(const_cast<void *>(chunk.readComponent(id))))
-                for (const FieldDesc &f : schema.fields)
+                for (const ecs::FieldDesc &f : schema.fields)
                     readField(*compObj, f, rb + byteOffset);
         }
         ++created;

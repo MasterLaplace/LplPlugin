@@ -91,6 +91,7 @@ includes(
     "bci",
     "serial",
     "editor",
+    "procgen",
     "kernel",
     "engine",
     "samples",

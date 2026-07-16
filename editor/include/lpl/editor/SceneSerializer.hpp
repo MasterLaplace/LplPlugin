@@ -10,12 +10,19 @@
  * drives the on-disk format. Authoritative Fixed32 fields are emitted as raw
  * integers (deterministic, exact round-trip).
  *
- * Format (v1, entities-only; templates/procedural passes come later):
+ * Format (v1). An optional @c "templates" object declares named prefabs; an
+ * entity references one with @c "$use" and overrides fields on top of it (a
+ * flattened prefab graph, the Flakkari pattern). @c toLplScene always emits
+ * flattened, template-free entities.
  * @code
  * { "format": "lplscene/1",
+ *   "templates": {
+ *     "cube": { "AABB": {"halfExtents":{"x":26214,"y":26214,"z":26214}},
+ *               "Mass": {"value":65536} } },
  *   "entities": [
- *     { "Position": {"value":{"x":98304,"y":0,"z":0}}, "Health": {"points":100} },
- *     ...
+ *     { "$use": "cube", "Position": {"value":{"x":98304,"y":0,"z":0}} },
+ *     { "$use": "cube", "Position": {"value":{"x":0,"y":0,"z":0}},
+ *       "Mass": {"value":131072} }
  *   ] }
  * @endcode
  *
