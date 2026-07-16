@@ -114,6 +114,13 @@ target("test-editor-commands")
     add_files("parity/test_editor_commands.cpp")
 target_end()
 
+target("test-editor-session")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-editor", "lpl-procgen")
+    add_files("parity/test_editor_session.cpp")
+target_end()
+
 target("test-reflection")
     set_kind("binary")
     set_group("tests")
