@@ -35,7 +35,14 @@ namespace {
 // --- Minimal, exception-free JSON value + parser --------------------------- //
 
 struct JVal {
-    enum class T { Null, Bool, Num, Str, Arr, Obj };
+    enum class T {
+        Null,
+        Bool,
+        Num,
+        Str,
+        Arr,
+        Obj
+    };
     T t{T::Null};
     bool b{false};
     double num{0.0};
@@ -258,9 +265,7 @@ void emitField(std::string &out, const FieldDesc &f, const core::byte *comp)
     case FieldType::F32: std::snprintf(buf, sizeof(buf), "%g", getF32(p)); break;
     case FieldType::I32:
     case FieldType::Fixed32: std::snprintf(buf, sizeof(buf), "%d", getI32(p)); break;
-    case FieldType::U32:
-        std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(getI32(p)));
-        break;
+    case FieldType::U32: std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(getI32(p))); break;
     case FieldType::U16: {
         std::uint16_t v;
         std::memcpy(&v, p, sizeof(v));
@@ -307,8 +312,8 @@ void readField(const JVal &compObj, const FieldDesc &f, core::byte *comp)
         break;
     }
     case FieldType::U8:
-        p[0] = static_cast<core::byte>(fv != nullptr ? static_cast<unsigned>(fv->num)
-                                                     : static_cast<unsigned>(f.defaultRaw));
+        p[0] = static_cast<core::byte>(fv != nullptr ? static_cast<unsigned>(fv->num) :
+                                                       static_cast<unsigned>(f.defaultRaw));
         break;
     case FieldType::Vec3F: {
         const double d = static_cast<double>(defF);
