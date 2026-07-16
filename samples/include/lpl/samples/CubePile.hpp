@@ -39,6 +39,8 @@
 #    include <lpl/render/RenderParity.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
 
+#    include <new>
+
 namespace lpl::samples {
 
 using namespace lpl::render; // RenderTarget, clearTarget, foldTarget, detail::*, perspectiveFov
@@ -339,13 +341,19 @@ struct SimFoldResult {
 /// seed, advance @p ticks deterministic steps, render into @p rt, fold both.
 [[nodiscard]] inline SimFoldResult runCubePileAndFold(const RenderTarget &rt, core::u32 ticks) noexcept
 {
-    // A fresh registry per call keeps each run deterministic and independent.
-    CubePile scene;
-    scene.init();
+    // A CubePile owns 1024 entities' worth of state (registry + a 4 KiB tint
+    // table): far too large for a freestanding kernel's small stack. Keep it in
+    // BSS and (re)construct it in place each call, so every run is still fresh
+    // and deterministic without ever touching the stack.
+    alignas(CubePile) static unsigned char storage[sizeof(CubePile)];
+    CubePile *scene = ::new (static_cast<void *>(storage)) CubePile();
+    scene->init();
     for (core::u32 t = 0; t < ticks; ++t)
-        scene.step();
-    scene.render(rt, CubePile::Camera{});
-    return SimFoldResult{scene.stateSignature(), foldTarget(rt)};
+        scene->step();
+    scene->render(rt, CubePile::Camera{});
+    const SimFoldResult result{scene->stateSignature(), foldTarget(rt)};
+    scene->~CubePile();
+    return result;
 }
 
 } // namespace lpl::samples
