@@ -90,6 +90,7 @@ includes(
     "haptic",
     "bci",
     "serial",
+    "editor",
     "kernel",
     "engine",
     "samples",
