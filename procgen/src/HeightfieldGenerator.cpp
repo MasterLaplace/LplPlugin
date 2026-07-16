@@ -64,8 +64,8 @@ core::u32 generateHeightfield(ecs::Registry &registry, const HeightfieldParams &
                 const core::i32 cz = static_cast<core::i32>(gi / params.cols);
                 const math::Fixed32 x = math::Fixed32::fromInt(cx - halfCols) * spacing;
                 const math::Fixed32 z = math::Fixed32::fromInt(cz - halfRows) * spacing;
-                const math::Fixed32 h = ValueNoise2D::fbm(x * noiseScale, z * noiseScale, params.octaves, params.seed) *
-                                  amplitude;
+                const math::Fixed32 h =
+                    ValueNoise2D::fbm(x * noiseScale, z * noiseScale, params.octaves, params.seed) * amplitude;
                 const FVec3 p{x, h, z};
                 const FVec3 s{cubeSize, cubeSize, cubeSize};
                 pos[li] = p;

@@ -16,7 +16,6 @@
 
 namespace lpl::procgen {
 
-
 PlayabilityResult evaluateReachability(const PlayabilityParams &params)
 {
     PlayabilityResult result;

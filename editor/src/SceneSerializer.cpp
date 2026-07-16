@@ -25,7 +25,6 @@
 
 namespace lpl::editor {
 
-
 namespace {
 
 // --- Byte helpers ---------------------------------------------------------- //

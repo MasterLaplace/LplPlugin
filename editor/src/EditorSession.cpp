@@ -21,7 +21,6 @@
 
 namespace lpl::editor {
 
-
 namespace {
 
 // Locates the ecs::FieldDesc named @p field within component @p id, or nullptr.
@@ -112,7 +111,8 @@ void writeLane(core::byte *p, ecs::FieldType type, double value)
 // Lane byte stride within a composite (0 for scalars).
 core::u32 laneStride(ecs::FieldType type)
 {
-    return (type == ecs::FieldType::Vec3F || type == ecs::FieldType::Vec3Fixed || type == ecs::FieldType::QuatF) ? 4u : 0u;
+    return (type == ecs::FieldType::Vec3F || type == ecs::FieldType::Vec3Fixed || type == ecs::FieldType::QuatF) ? 4u :
+                                                                                                                   0u;
 }
 
 } // namespace

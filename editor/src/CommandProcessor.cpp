@@ -13,16 +13,15 @@
 #include <lpl/core/Error.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/editor/Json.hpp>
 #include <lpl/editor/SceneSerializer.hpp>
 #include <lpl/procgen/HeightfieldGenerator.hpp>
 #include <lpl/procgen/PlayabilityGate.hpp>
 #include <lpl/procgen/PoissonScatter.hpp>
-#include <lpl/editor/Json.hpp>
 
 #include <cstdio>
 
 namespace lpl::editor {
-
 
 namespace {
 

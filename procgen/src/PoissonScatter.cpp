@@ -27,10 +27,7 @@ using FVec3 = math::Vec3<math::Fixed32>;
 namespace {
 
 // Ceil of a non-negative math::Fixed32 to an integer number of cells.
-core::i32 ceilCells(math::Fixed32 v)
-{
-    return (v.raw() + 0xFFFF) >> 16;
-}
+core::i32 ceilCells(math::Fixed32 v) { return (v.raw() + 0xFFFF) >> 16; }
 
 } // namespace
 

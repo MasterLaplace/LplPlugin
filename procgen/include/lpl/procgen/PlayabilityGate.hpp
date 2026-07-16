@@ -31,16 +31,16 @@ namespace lpl::procgen {
  * @brief Grid + endpoints + wall threshold for the reachability check.
  */
 struct PlayabilityParams {
-    core::u32 seed{1337u};        ///< Field seed (matches the generator's).
-    core::u32 cols{32u};          ///< Grid columns.
-    core::u32 rows{32u};          ///< Grid rows.
-    core::f32 noiseScale{0.15f};  ///< fBm sampling frequency.
-    core::u32 octaves{4u};        ///< fBm octaves.
-    core::f32 wallThreshold{0.5f};///< fBm value (in [-1,1]) at/above which a cell is a wall.
-    core::u32 startCol{0u};       ///< Start cell column.
-    core::u32 startRow{0u};       ///< Start cell row.
-    core::u32 goalCol{31u};       ///< Goal cell column.
-    core::u32 goalRow{31u};       ///< Goal cell row.
+    core::u32 seed{1337u};         ///< Field seed (matches the generator's).
+    core::u32 cols{32u};           ///< Grid columns.
+    core::u32 rows{32u};           ///< Grid rows.
+    core::f32 noiseScale{0.15f};   ///< fBm sampling frequency.
+    core::u32 octaves{4u};         ///< fBm octaves.
+    core::f32 wallThreshold{0.5f}; ///< fBm value (in [-1,1]) at/above which a cell is a wall.
+    core::u32 startCol{0u};        ///< Start cell column.
+    core::u32 startRow{0u};        ///< Start cell row.
+    core::u32 goalCol{31u};        ///< Goal cell column.
+    core::u32 goalRow{31u};        ///< Goal cell row.
 };
 
 /**
@@ -48,8 +48,8 @@ struct PlayabilityParams {
  * @brief Verdict of a reachability check.
  */
 struct PlayabilityResult {
-    bool reachable{false};                    ///< Goal reachable from start?
-    core::u32 visited{0u};                    ///< Cells expanded (search size).
+    bool reachable{false};                         ///< Goal reachable from start?
+    core::u32 visited{0u};                         ///< Cells expanded (search size).
     math::Fixed32 pathCost{math::Fixed32::zero()}; ///< Least-cost start→goal (0 if unreachable).
 };
 
