@@ -11,9 +11,9 @@
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/engine/Config.hpp>
-#include <lpl/math/FixedPoint.hpp>
 #include <lpl/engine/Engine.hpp>
 #include <lpl/engine/GameLoop.hpp>
+#include <lpl/math/FixedPoint.hpp>
 
 #include <lpl/concurrency/IJobSystem.hpp>
 #include <lpl/ecs/Archetype.hpp>

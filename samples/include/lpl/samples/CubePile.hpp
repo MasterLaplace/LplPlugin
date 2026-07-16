@@ -62,9 +62,9 @@ struct CubePile {
     static constexpr core::f32 kFloorF = 0.5f - kHalfF;
     static constexpr core::f32 kDtF = 1.0f / 60.0f; ///< Fixed, deterministic timestep.
 
-    ecs::Registry registry;                 ///< Owns the entities + component chunks.
-    physics::CpuPhysicsBackend backend;     ///< Steps the authoritative Fixed32 state.
-    core::u32 tints[kCount]{};              ///< Per-entity face tint (render only).
+    ecs::Registry registry;             ///< Owns the entities + component chunks.
+    physics::CpuPhysicsBackend backend; ///< Steps the authoritative Fixed32 state.
+    core::u32 tints[kCount]{};          ///< Per-entity face tint (render only).
 
     CubePile() : backend(registry) {}
 
@@ -73,15 +73,14 @@ struct CubePile {
     void init() noexcept
     {
         using F = Fixed32;
-        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity,
-                                        ecs::ComponentId::AABB, ecs::ComponentId::Mass};
+        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity, ecs::ComponentId::AABB,
+                                        ecs::ComponentId::Mass};
         const ecs::Archetype archetype{ids};
         for (core::u32 i = 0; i < kCount; ++i)
             (void) registry.createEntity(archetype);
         (void) backend.init();
 
-        static const core::u32 hues[6] = {0x00FF6060u, 0x0060FF60u, 0x006060FFu,
-                                          0x00FFFF60u, 0x00FF60FFu, 0x0060FFFFu};
+        static const core::u32 hues[6] = {0x00FF6060u, 0x0060FF60u, 0x006060FFu, 0x00FFFF60u, 0x00FF60FFu, 0x0060FFFFu};
         const core::f32 ox = static_cast<core::f32>(kNx - 1u) * 0.5f;
         const core::f32 oz = static_cast<core::f32>(kNz - 1u) * 0.5f;
         const F cubeSize = F::fromFloat(2.0f * kHalfF); // backend halves the AABB internally

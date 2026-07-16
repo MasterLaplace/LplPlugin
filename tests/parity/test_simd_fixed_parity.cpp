@@ -31,14 +31,13 @@ using math::simd::SimdFixed4;
 static int failures = 0;
 
 // A spread of raw Q16.16 values: zero, ±small, ±1.0, ±large, near-limits.
-static const core::i32 kSamples[] = {
-    0,        1,        -1,       0x8000,   -0x8000,   0x10000,  -0x10000, 0x00018000, -0x00018000,
-    0x34000,  -0x34000, 98304,    -131072,  212992,    655,      -655,     123456,     -123456,
-    0x400000, -0x400000, 0x7FFFFF, -0x7FFFFF, 3, 7, 13, -3, -7, -13};
+static const core::i32 kSamples[] = {0,          1,           -1,      0x8000,   -0x8000,  0x10000,   -0x10000,
+                                     0x00018000, -0x00018000, 0x34000, -0x34000, 98304,    -131072,   212992,
+                                     655,        -655,        123456,  -123456,  0x400000, -0x400000, 0x7FFFFF,
+                                     -0x7FFFFF,  3,           7,       13,       -3,       -7,        -13};
 static constexpr int N = static_cast<int>(sizeof(kSamples) / sizeof(kSamples[0]));
 
-template <typename ScalarOp, typename SimdOp>
-static void checkOp(const char *label, ScalarOp scalar, SimdOp simd)
+template <typename ScalarOp, typename SimdOp> static void checkOp(const char *label, ScalarOp scalar, SimdOp simd)
 {
     int mismatches = 0;
     // Test all lane-aligned quads over the cartesian product of samples.

@@ -70,9 +70,7 @@ static std::string emitValue(const ecs::FieldDesc &f, const core::byte *data)
     {
     case FieldType::F32: std::snprintf(buf, sizeof(buf), "%g", readF32(f.offset)); break;
     case FieldType::I32: std::snprintf(buf, sizeof(buf), "%d", readI32(f.offset)); break;
-    case FieldType::U32:
-        std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(readI32(f.offset)));
-        break;
+    case FieldType::U32: std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(readI32(f.offset))); break;
     case FieldType::U16: {
         std::uint16_t v;
         std::memcpy(&v, data + f.offset, sizeof(v));
@@ -85,12 +83,12 @@ static std::string emitValue(const ecs::FieldDesc &f, const core::byte *data)
         std::snprintf(buf, sizeof(buf), "%d", readI32(f.offset));
         break;
     case FieldType::Vec3F:
-        std::snprintf(buf, sizeof(buf), "{\"x\":%g,\"y\":%g,\"z\":%g}", readF32(f.offset),
-                      readF32(f.offset + 4), readF32(f.offset + 8));
+        std::snprintf(buf, sizeof(buf), "{\"x\":%g,\"y\":%g,\"z\":%g}", readF32(f.offset), readF32(f.offset + 4),
+                      readF32(f.offset + 8));
         break;
     case FieldType::Vec3Fixed:
-        std::snprintf(buf, sizeof(buf), "{\"x\":%d,\"y\":%d,\"z\":%d}", readI32(f.offset),
-                      readI32(f.offset + 4), readI32(f.offset + 8));
+        std::snprintf(buf, sizeof(buf), "{\"x\":%d,\"y\":%d,\"z\":%d}", readI32(f.offset), readI32(f.offset + 4),
+                      readI32(f.offset + 8));
         break;
     case FieldType::QuatF:
         std::snprintf(buf, sizeof(buf), "{\"x\":%g,\"y\":%g,\"z\":%g,\"w\":%g}", readF32(f.offset),
@@ -155,8 +153,8 @@ static std::string emitJsonSchema(const ecs::ComponentSchema &s)
                 std::snprintf(b, sizeof(b), ",\"minimum\":%g,\"maximum\":%g", rawToFloat(f.minRaw),
                               rawToFloat(f.maxRaw));
             else
-                std::snprintf(b, sizeof(b), ",\"minimum\":%lld,\"maximum\":%lld",
-                              static_cast<long long>(f.minRaw), static_cast<long long>(f.maxRaw));
+                std::snprintf(b, sizeof(b), ",\"minimum\":%lld,\"maximum\":%lld", static_cast<long long>(f.minRaw),
+                              static_cast<long long>(f.maxRaw));
             out += b;
         }
         out += "}";
@@ -176,9 +174,8 @@ int main()
         const ecs::DerivedLayout d = ecs::computeLayout(s);
         const ecs::ComponentLayout h = ecs::defaultLayout(s.id);
         char msg[128];
-        std::snprintf(msg, sizeof(msg), "%-16.*s size %u==%u  align %u==%u",
-                      static_cast<int>(s.name.size()), s.name.data(), d.size, h.size, d.alignment,
-                      h.alignment);
+        std::snprintf(msg, sizeof(msg), "%-16.*s size %u==%u  align %u==%u", static_cast<int>(s.name.size()),
+                      s.name.data(), d.size, h.size, d.alignment, h.alignment);
         check(d.size == h.size && d.alignment == h.alignment, msg);
     }
 

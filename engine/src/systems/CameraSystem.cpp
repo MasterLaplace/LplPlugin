@@ -57,8 +57,8 @@ static bool getEntityPosition(ecs::Registry &registry, core::u32 id, math::Vec3<
         {
             if (entityIds[i].raw() == id)
             {
-                if (auto *rpos = static_cast<const math::Vec3<math::Fixed32> *>(
-                        chunk.readComponent(ecs::ComponentId::Position)))
+                if (auto *rpos =
+                        static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::Position)))
                 {
                     // Camera is non-authoritative: convert Fixed32 → float here.
                     outPos = {rpos[i].x.toFloat(), rpos[i].y.toFloat(), rpos[i].z.toFloat()};

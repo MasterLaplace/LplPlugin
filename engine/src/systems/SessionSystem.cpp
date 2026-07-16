@@ -11,8 +11,8 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
-#include <lpl/math/FixedPoint.hpp>
 #include <lpl/engine/systems/SessionSystem.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/net/protocol/Protocol.hpp>
 
 #include <cstring>

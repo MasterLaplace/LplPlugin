@@ -51,8 +51,8 @@ namespace {
 //   signed(a*b) = unsigned(a*b) - (a<0 ? b:0)·2^32 - (b<0 ? a:0)·2^32  (mod 2^64)
 inline __m128i signedMulEven(__m128i x, __m128i y)
 {
-    const __m128i up = _mm_mul_epu32(x, y);              // even lanes: unsigned 32x32->64
-    const __m128i sx = _mm_srai_epi32(x, 31);            // per-lane 0xFFFFFFFF if x<0
+    const __m128i up = _mm_mul_epu32(x, y);   // even lanes: unsigned 32x32->64
+    const __m128i sx = _mm_srai_epi32(x, 31); // per-lane 0xFFFFFFFF if x<0
     const __m128i sy = _mm_srai_epi32(y, 31);
     const __m128i cx = _mm_slli_epi64(_mm_and_si128(sx, y), 32); // (x<0 ? y:0) into high dword
     const __m128i cy = _mm_slli_epi64(_mm_and_si128(sy, x), 32); // (y<0 ? x:0) into high dword
@@ -60,10 +60,7 @@ inline __m128i signedMulEven(__m128i x, __m128i y)
 }
 } // namespace
 
-SimdFixed4 SimdFixed4::load(const core::i32 *raw)
-{
-    return {_mm_loadu_si128(reinterpret_cast<const __m128i *>(raw))};
-}
+SimdFixed4 SimdFixed4::load(const core::i32 *raw) { return {_mm_loadu_si128(reinterpret_cast<const __m128i *>(raw))}; }
 SimdFixed4 SimdFixed4::splat(core::i32 raw) { return {_mm_set1_epi32(raw)}; }
 void SimdFixed4::store(core::i32 *raw) const { _mm_storeu_si128(reinterpret_cast<__m128i *>(raw), reg); }
 
@@ -75,13 +72,13 @@ SimdFixed4 SimdFixed4::operator*(SimdFixed4 rhs) const
     const __m128i bias = _mm_set1_epi64x(1LL << 15); // round-half-up, matches scalar operator*
     // Products for even lanes (0,2) and odd lanes (1,3), then round + >>16.
     __m128i prodE = _mm_srli_epi64(_mm_add_epi64(signedMulEven(reg, rhs.reg), bias), 16);
-    __m128i prodO = _mm_srli_epi64(
-        _mm_add_epi64(signedMulEven(_mm_srli_si128(reg, 4), _mm_srli_si128(rhs.reg, 4)), bias), 16);
+    __m128i prodO =
+        _mm_srli_epi64(_mm_add_epi64(signedMulEven(_mm_srli_si128(reg, 4), _mm_srli_si128(rhs.reg, 4)), bias), 16);
     // Only the low dword of each qword is kept (result fits in i32; there
     // logical and arithmetic 64-bit shift agree). Reinterleave to lane order.
     __m128i e = _mm_shuffle_epi32(prodE, _MM_SHUFFLE(3, 1, 2, 0)); // [E0,E1,..]
     __m128i o = _mm_shuffle_epi32(prodO, _MM_SHUFFLE(3, 1, 2, 0)); // [O0,O1,..]
-    return {_mm_unpacklo_epi32(e, o)};                            // [E0,O0,E1,O1] = lanes 0..3
+    return {_mm_unpacklo_epi32(e, o)};                             // [E0,O0,E1,O1] = lanes 0..3
 }
 
 // ── SimdFloat8 (AVX/AVX2) ───────────────────────────────────────────────────

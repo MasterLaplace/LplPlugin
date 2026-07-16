@@ -109,11 +109,11 @@ enum class FieldType : core::u8 {
 struct FieldDesc {
     std::string_view name;
     FieldType type;
-    core::u32 offset;         ///< Byte offset within the component.
-    core::i64 defaultRaw{0};  ///< Default value, interpreted per @c type.
-    bool hasBounds{false};    ///< Whether @c minRaw / @c maxRaw constrain it.
-    core::i64 minRaw{0};      ///< Inclusive minimum (same encoding as defaultRaw).
-    core::i64 maxRaw{0};      ///< Inclusive maximum.
+    core::u32 offset;        ///< Byte offset within the component.
+    core::i64 defaultRaw{0}; ///< Default value, interpreted per @c type.
+    bool hasBounds{false};   ///< Whether @c minRaw / @c maxRaw constrain it.
+    core::i64 minRaw{0};     ///< Inclusive minimum (same encoding as defaultRaw).
+    core::i64 maxRaw{0};     ///< Inclusive maximum.
 };
 
 /**
@@ -205,25 +205,25 @@ inline constexpr FieldDesc kSleepStateFields[] = {
     {"asleep", FieldType::U8, 0, 0, true, 0, 1},
 };
 inline constexpr FieldDesc kBciInputFields[] = {
-    {"alpha", FieldType::F32, 0, floatBits(0.0f)},
-    {"beta", FieldType::F32, 4, floatBits(0.0f)},
+    {"alpha",         FieldType::F32, 0, floatBits(0.0f)},
+    {"beta",          FieldType::F32, 4, floatBits(0.0f)},
     {"concentration", FieldType::F32, 8, floatBits(0.0f)},
 };
 
 // Indexed by static_cast<usize>(ComponentId). Order MUST match the enum.
 inline constexpr ComponentSchema kSchemas[] = {
-    {ComponentId::Position, "Position", kPositionFields},
-    {ComponentId::Velocity, "Velocity", kVelocityFields},
-    {ComponentId::Rotation, "Rotation", kRotationFields},
+    {ComponentId::Position,        "Position",        kPositionFields       },
+    {ComponentId::Velocity,        "Velocity",        kVelocityFields       },
+    {ComponentId::Rotation,        "Rotation",        kRotationFields       },
     {ComponentId::AngularVelocity, "AngularVelocity", kAngularVelocityFields},
-    {ComponentId::Mass, "Mass", kMassFields},
-    {ComponentId::AABB, "AABB", kAabbFields},
-    {ComponentId::Health, "Health", kHealthFields},
-    {ComponentId::NetworkSync, "NetworkSync", kNetworkSyncFields},
-    {ComponentId::InputSnapshot, "InputSnapshot", kInputSnapshotFields},
-    {ComponentId::PlayerTag, "PlayerTag", kPlayerTagFields},
-    {ComponentId::SleepState, "SleepState", kSleepStateFields},
-    {ComponentId::BciInput, "BciInput", kBciInputFields},
+    {ComponentId::Mass,            "Mass",            kMassFields           },
+    {ComponentId::AABB,            "AABB",            kAabbFields           },
+    {ComponentId::Health,          "Health",          kHealthFields         },
+    {ComponentId::NetworkSync,     "NetworkSync",     kNetworkSyncFields    },
+    {ComponentId::InputSnapshot,   "InputSnapshot",   kInputSnapshotFields  },
+    {ComponentId::PlayerTag,       "PlayerTag",       kPlayerTagFields      },
+    {ComponentId::SleepState,      "SleepState",      kSleepStateFields     },
+    {ComponentId::BciInput,        "BciInput",        kBciInputFields       },
 };
 
 static_assert(sizeof(kSchemas) / sizeof(kSchemas[0]) == static_cast<core::usize>(ComponentId::Count),
