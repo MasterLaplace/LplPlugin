@@ -15,9 +15,9 @@
 #include <lpl/gpu/IComputeBackend.hpp>
 
 #include <algorithm>
-#include <cstring>
-#include <unordered_map>
-#include <vector>
+#include <lpl/std/cstring.hpp>
+#include <lpl/std/unordered_map.hpp>
+#include <lpl/std/vector.hpp>
 
 namespace lpl::ecs {
 
@@ -33,7 +33,7 @@ namespace lpl::ecs {
  */
 struct SpatialCell {
     core::u64 mortonKey{0};
-    std::vector<core::u32> entities;
+    pmr::vector<core::u32> entities;
 
     void insert(core::u32 raw) { entities.push_back(raw); }
 
@@ -54,23 +54,21 @@ struct SpatialCell {
 //  Impl                                                                      //
 // ========================================================================== //
 
-/// Legacy used WORLD_CAPACITY = 1 << 16 = 65536 cells.
-static constexpr core::u32 kWorldCapacity = 1u << 16u;
-
 struct WorldPartition::Impl {
     math::Fixed32 cellSize;
     container::FlatAtomicHashMap<SpatialCell> cells;
-    std::unordered_map<core::u32, core::u64> entityToMorton;
+    pmr::unordered_map<core::u32, core::u64> entityToMorton;
     gpu::IComputeBackend *gpuBackend{nullptr};
 
-    explicit Impl(math::Fixed32 cs) : cellSize{cs}, cells{kWorldCapacity} {}
+    Impl(math::Fixed32 cs, core::u32 cellCapacity) : cellSize{cs}, cells{cellCapacity} {}
 };
 
 // ========================================================================== //
 //  Public API                                                                //
 // ========================================================================== //
 
-WorldPartition::WorldPartition(math::Fixed32 cellSize) : _impl{std::make_unique<Impl>(cellSize)}
+WorldPartition::WorldPartition(math::Fixed32 cellSize, core::u32 cellCapacity)
+    : _impl{pmr::make_unique<Impl>(cellSize, cellCapacity)}
 {
     LPL_ASSERT(cellSize > math::Fixed32{0});
 }
@@ -134,7 +132,7 @@ core::Expected<void> WorldPartition::remove(EntityId id)
 }
 
 void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::Fixed32 radius,
-                                 std::vector<EntityId> &results) const
+                                 pmr::vector<EntityId> &results) const
 {
     // Compute the grid-space bounding box for the query sphere
     const auto toGrid = [&](math::Fixed32 v) -> core::i32 {
@@ -212,17 +210,17 @@ void WorldPartition::step(core::f32 dt)
         const core::usize payloadBytes =
             sizeof(core::f32) + sizeof(core::u32) + static_cast<core::usize>(entityCount) * sizeof(core::u32);
 
-        std::vector<core::byte> argBuf(payloadBytes);
+        pmr::vector<core::byte> argBuf(payloadBytes);
         core::byte *ptr = argBuf.data();
 
-        std::memcpy(ptr, &dt, sizeof(dt));
+        pmr::memcpy(ptr, &dt, sizeof(dt));
         ptr += sizeof(dt);
-        std::memcpy(ptr, &entityCount, sizeof(entityCount));
+        pmr::memcpy(ptr, &entityCount, sizeof(entityCount));
         ptr += sizeof(entityCount);
 
         for (const auto &[raw, _cellMorton] : _impl->entityToMorton)
         {
-            std::memcpy(ptr, &raw, sizeof(raw));
+            pmr::memcpy(ptr, &raw, sizeof(raw));
             ptr += sizeof(raw);
         }
 
@@ -250,13 +248,13 @@ cpu_fallback:
     (void) dt;
 }
 
-core::u32 WorldPartition::migrateEntities(const std::function<math::Vec3<math::Fixed32>(core::u32)> &positionOf)
+core::u32 WorldPartition::migrateEntities(const pmr::function<math::Vec3<math::Fixed32>(core::u32)> &positionOf)
 {
     core::u32 migrated = 0;
 
     // Iterate all tracked entity→morton mappings
     // Collect entities that need migration
-    std::vector<std::pair<core::u32, math::Vec3<math::Fixed32>>> toMigrate;
+    pmr::vector<std::pair<core::u32, math::Vec3<math::Fixed32>>> toMigrate;
 
     for (auto &[raw, oldMorton] : _impl->entityToMorton)
     {
@@ -285,7 +283,7 @@ core::u32 WorldPartition::gcEmptyCells()
     core::u32 removed = 0;
 
     // Collect empty cells and remove them from the FlatAtomicHashMap
-    std::vector<core::u64> emptyKeys;
+    pmr::vector<core::u64> emptyKeys;
     _impl->cells.forEach([&](SpatialCell &cell) {
         if (cell.empty())
         {

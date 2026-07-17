@@ -20,9 +20,11 @@ namespace lpl::core {
 namespace {
 
 #if !LPL_TARGET_KERNEL
-// Hosted default sink. The freestanding kernel build has no stderr/cstdio and
-// no console sink yet (the serial/console logger lands with the P2 HAL), so it
-// starts with no logger — log calls are no-ops until one is installed.
+// Hosted default sink. The freestanding kernel build has no stderr/cstdio, so it
+// starts with no logger and log calls are no-ops until one is installed. The
+// kernel entry point installs platform::kernel::KernelLogger (which writes the
+// same format to the console HAL) before anything else runs; without that the
+// engine is silent in-kernel.
 class StderrLogger final : public ILogger {
 public:
     void write(LogLevel level, std::string_view tag, std::string_view message) override

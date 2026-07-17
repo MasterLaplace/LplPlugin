@@ -3,7 +3,7 @@
  * @brief Blit an Image into a raw linear framebuffer (e.g. a display scanout).
  *
  * Kept platform-agnostic: the caller supplies a raw destination pointer plus its
- * geometry (from IDisplayBackend::querySurface / hal_display), so the image
+ * geometry (from IDisplayBackend::querySurface / hardware_abstraction_layer_display), so the image
  * module never depends on the platform layer. Pixels are copied opaquely — the
  * Image's packed 0xAARRGGBB matches a 0x00RRGGBB BGRX scanout (the alpha byte
  * lands in the ignored X slot).

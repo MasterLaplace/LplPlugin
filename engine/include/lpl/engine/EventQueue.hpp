@@ -22,8 +22,8 @@
 #    include <lpl/net/Endpoint.hpp>
 
 #    include <array>
-#    include <mutex>
-#    include <vector>
+#    include <lpl/std/mutex.hpp>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::engine {
 
@@ -51,7 +51,7 @@ struct StateEntity {
 
 /** @brief Full state update from the server. */
 struct StateUpdateEvent {
-    std::vector<StateEntity> entities;
+    pmr::vector<StateEntity> entities;
 };
 
 /** @brief A single key press/release. */
@@ -77,8 +77,8 @@ struct NeuralInput {
 /** @brief Input event from a remote client. */
 struct InputEvent {
     core::u32 entityId;
-    std::vector<KeyInput> keys;
-    std::vector<AxisInput> axes;
+    pmr::vector<KeyInput> keys;
+    pmr::vector<AxisInput> axes;
     bool hasNeural;
     NeuralInput neural;
 };
@@ -102,7 +102,7 @@ public:
     /** @brief Pushes a single event into the queue. */
     void push(T event)
     {
-        std::lock_guard<std::mutex> lock{mutex_};
+        pmr::lock_guard<pmr::mutex> lock{mutex_};
         queue_.push_back(std::move(event));
     }
 
@@ -110,10 +110,10 @@ public:
      * @brief Atomically drains all pending events.
      * @return Vector of events (empty if none pending).
      */
-    [[nodiscard]] std::vector<T> drain()
+    [[nodiscard]] pmr::vector<T> drain()
     {
-        std::lock_guard<std::mutex> lock{mutex_};
-        std::vector<T> result;
+        pmr::lock_guard<pmr::mutex> lock{mutex_};
+        pmr::vector<T> result;
         result.swap(queue_);
         return result;
     }
@@ -121,13 +121,13 @@ public:
     /** @brief Returns true if no events are pending. */
     [[nodiscard]] bool empty() const
     {
-        std::lock_guard<std::mutex> lock{mutex_};
+        pmr::lock_guard<pmr::mutex> lock{mutex_};
         return queue_.empty();
     }
 
 private:
-    mutable std::mutex mutex_;
-    std::vector<T> queue_;
+    mutable pmr::mutex mutex_;
+    pmr::vector<T> queue_;
 };
 
 // ========================================================================== //

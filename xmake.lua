@@ -66,6 +66,11 @@ if has_config("renderer") then
     add_defines("VULKAN_HPP_NO_EXCEPTIONS")
 end
 
+-- The hosted build always has a sockets stack and the BCI dependencies, so the
+-- networked session and the BCI adapter are always compiled in. The freestanding
+-- kernel build (libengine/Makefile) defines neither and drops both.
+add_defines("LPL_HAS_NET", "LPL_HAS_BCI")
+
 -- /////////////////////////////////////////////////////////////////////////////
 -- Sub-modules (ordered by dependency depth, leaves first)
 -- /////////////////////////////////////////////////////////////////////////////

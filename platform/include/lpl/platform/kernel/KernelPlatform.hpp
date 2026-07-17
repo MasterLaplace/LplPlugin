@@ -22,9 +22,22 @@
 
 #    if LPL_TARGET_KERNEL
 
+#        include <lpl/core/Log.hpp>
 #        include <lpl/platform/IPlatform.hpp>
 
 namespace lpl::platform::kernel {
+
+/**
+ * @brief Routes lpl::core::Log to the kernel console HAL.
+ *
+ * Without this the engine is mute in-kernel: core::Log's kernel arm has a null
+ * sink, so every log call is a no-op until a logger is installed. Install with
+ * core::Log::setLogger(&logger) before Engine::init so start-up is observable.
+ */
+class KernelLogger final : public core::ILogger {
+public:
+    void write(core::LogLevel level, std::string_view tag, std::string_view message) override;
+};
 
 /** @brief Tick / timestamp backend over the kernel clock + rdtsc HAL. */
 class KernelClockBackend final : public IClockBackend {

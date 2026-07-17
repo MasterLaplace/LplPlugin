@@ -21,18 +21,55 @@
 
 namespace lpl::platform::kernel {
 
+// ---- Logger --------------------------------------------------------------
+
+void KernelLogger::write(core::LogLevel level, std::string_view tag, std::string_view message)
+{
+    // string_view is not NUL-terminated and the kernel console takes C strings,
+    // so copy into a bounded stack buffer (no heap: the logger must work before
+    // and after the heap, and during failure paths).
+    constexpr core::usize kMaxLine = 256;
+    char line[kMaxLine];
+    core::usize pos = 0;
+
+    const auto append = [&line, &pos](std::string_view text) {
+        for (char character : text)
+        {
+            if (pos + 1 >= kMaxLine)
+                return;
+            line[pos++] = character;
+        }
+    };
+
+    static constexpr const char *kLevelNames[] = {"DEBUG", "INFO ", "WARN ", "ERROR", "FATAL"};
+
+    append("[");
+    append(kLevelNames[static_cast<unsigned>(level)]);
+    append("][");
+    append(tag);
+    append("] ");
+    append(message);
+    append("\n");
+
+    line[pos] = '\0';
+    hardware_abstraction_layer_console_write_string(line);
+}
+
 // ---- Clock ---------------------------------------------------------------
 
-core::u32 KernelClockBackend::tickCount() const noexcept { return hal_clock_tick_count(); }
-core::u32 KernelClockBackend::tickHertz() const noexcept { return hal_clock_tick_hertz(); }
-core::u64 KernelClockBackend::timestampCounter() const noexcept { return hal_clock_timestamp_counter(); }
+core::u32 KernelClockBackend::tickCount() const noexcept { return hardware_abstraction_layer_clock_tick_count(); }
+core::u32 KernelClockBackend::tickHertz() const noexcept { return hardware_abstraction_layer_clock_tick_hertz(); }
+core::u64 KernelClockBackend::timestampCounter() const noexcept
+{
+    return hardware_abstraction_layer_clock_timestamp_counter();
+}
 
 // ---- Display -------------------------------------------------------------
 
 bool KernelDisplayBackend::querySurface(SurfaceDescriptor &outDescriptor) const noexcept
 {
-    hal_surface_descriptor_t descriptor;
-    if (!hal_display_query_surface(&descriptor))
+    hardware_abstraction_layer_surface_descriptor_t descriptor;
+    if (!hardware_abstraction_layer_display_query_surface(&descriptor))
         return false;
 
     outDescriptor.buffer = descriptor.buffer;
@@ -44,26 +81,29 @@ bool KernelDisplayBackend::querySurface(SurfaceDescriptor &outDescriptor) const 
     return true;
 }
 
-void KernelDisplayBackend::clear(core::u32 colorRgb) { hal_display_clear(colorRgb); }
+void KernelDisplayBackend::clear(core::u32 colorRgb) { hardware_abstraction_layer_display_clear(colorRgb); }
 
 core::u32 KernelDisplayBackend::readPixel(core::u32 x, core::u32 y) const noexcept
 {
-    return hal_display_read_pixel(x, y);
+    return hardware_abstraction_layer_display_read_pixel(x, y);
 }
 
-void KernelDisplayBackend::present() { hal_display_present(); }
+void KernelDisplayBackend::present() { hardware_abstraction_layer_display_present(); }
 
 // ---- Input ---------------------------------------------------------------
 
-bool KernelInputBackend::tryPopCharacter(char &outCharacter) { return hal_input_try_pop_character(&outCharacter); }
+bool KernelInputBackend::tryPopCharacter(char &outCharacter)
+{
+    return hardware_abstraction_layer_input_try_pop_character(&outCharacter);
+}
 
-core::u32 KernelInputBackend::pendingCount() const noexcept { return hal_input_pending_count(); }
+core::u32 KernelInputBackend::pendingCount() const noexcept { return hardware_abstraction_layer_input_pending_count(); }
 
 // ---- Graphics memory -----------------------------------------------------
 
 core::Expected<GpuAllocation> KernelGpuMemoryBackend::allocate(core::u32 sizeBytes, GpuMemoryFlags flags)
 {
-    void *pointer = hal_graphics_memory_allocate(sizeBytes);
+    void *pointer = hardware_abstraction_layer_graphics_memory_allocate(sizeBytes);
     if (pointer == nullptr)
         return core::makeError(core::ErrorCode::kGpuOutOfMemory, "pinned graphics-memory allocation failed");
 
@@ -73,7 +113,7 @@ core::Expected<GpuAllocation> KernelGpuMemoryBackend::allocate(core::u32 sizeByt
     allocation.flags = flags;
 
     core::u32 physical = 0u;
-    if (hal_graphics_memory_physical_address(pointer, &physical))
+    if (hardware_abstraction_layer_graphics_memory_physical_address(pointer, &physical))
         allocation.physicalAddress = physical;
 
     return allocation;
@@ -81,7 +121,7 @@ core::Expected<GpuAllocation> KernelGpuMemoryBackend::allocate(core::u32 sizeByt
 
 void KernelGpuMemoryBackend::free(const GpuAllocation &allocation)
 {
-    hal_graphics_memory_free(allocation.virtualAddress, allocation.sizeBytes);
+    hardware_abstraction_layer_graphics_memory_free(allocation.virtualAddress, allocation.sizeBytes);
 }
 
 } // namespace lpl::platform::kernel

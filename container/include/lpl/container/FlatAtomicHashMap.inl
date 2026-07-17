@@ -9,8 +9,13 @@
 
 #include <algorithm>
 #include <bit>
-#include <future>
-#include <thread>
+
+// forEachParallel farms batches out to a host thread pool; the freestanding
+// kernel has neither <thread> nor <future>, and iterates with forEach instead.
+#if !LPL_TARGET_KERNEL
+#    include <future>
+#    include <thread>
+#endif
 
 namespace lpl::container {
 
@@ -39,11 +44,11 @@ FlatAtomicHashMap<V>::FlatAtomicHashMap(core::u32 capacity)
       _mapCapacity(static_cast<core::u32>(std::bit_ceil(static_cast<core::u64>(capacity) * 2u))),
       _mask(_mapCapacity - 1)
 {
-    _entries = std::make_unique<std::atomic<core::u64>[]>(_mapCapacity);
+    _entries = pmr::make_unique<std::atomic<core::u64>[]>(_mapCapacity);
     for (core::u32 i = 0; i < _mapCapacity; ++i)
         _entries[i].store(kEmpty, std::memory_order_relaxed);
 
-    _pool = std::make_unique<V[]>(_poolCapacity);
+    _pool = pmr::make_unique<V[]>(_poolCapacity);
 
     _freeIndices.reserve(_poolCapacity);
     for (core::u32 i = 0; i < _poolCapacity; ++i)
@@ -216,25 +221,28 @@ template <typename V> bool FlatAtomicHashMap<V>::linkKeyToSlot(core::u64 key, co
 
 template <typename V> template <typename Fn> void FlatAtomicHashMap<V>::forEach(Fn &&fn)
 {
-    std::vector<core::u32> snapshot;
+    pmr::vector<core::u32> snapshot;
     {
         concurrency::SpinLockGuard lock(_allocLock);
         snapshot.reserve(_activeSlots.size());
-        snapshot.insert(snapshot.end(), _activeSlots.begin(), _activeSlots.end());
+        for (core::u32 slot : _activeSlots)
+            snapshot.push_back(slot);
     }
     for (core::u32 poolIdx : snapshot)
         fn(_pool[poolIdx]);
 }
 
+#if !LPL_TARGET_KERNEL
 template <typename V>
 template <typename TP, typename Fn>
 void FlatAtomicHashMap<V>::forEachParallel(TP &pool, Fn &&fn, core::u32 minPerThread)
 {
-    std::vector<core::u32> snapshot;
+    pmr::vector<core::u32> snapshot;
     {
         concurrency::SpinLockGuard lock(_allocLock);
         snapshot.reserve(_activeSlots.size());
-        snapshot.insert(snapshot.end(), _activeSlots.begin(), _activeSlots.end());
+        for (core::u32 slot : _activeSlots)
+            snapshot.push_back(slot);
     }
 
     const auto totalItems = static_cast<core::u32>(snapshot.size());
@@ -291,17 +299,19 @@ void FlatAtomicHashMap<V>::forEachParallel(TP &pool, Fn &&fn, core::u32 minPerTh
     for (auto &f : futures)
         f.wait();
 }
+#endif // !LPL_TARGET_KERNEL
 
 // ========================================================================== //
 //  Utilities                                                                 //
 // ========================================================================== //
 
-template <typename V> void FlatAtomicHashMap<V>::snapshotActiveSlots(std::vector<core::u32> &out)
+template <typename V> void FlatAtomicHashMap<V>::snapshotActiveSlots(pmr::vector<core::u32> &out)
 {
     concurrency::SpinLockGuard lock(_allocLock);
     out.clear();
     out.reserve(_activeSlots.size());
-    out.insert(out.end(), _activeSlots.begin(), _activeSlots.end());
+    for (core::u32 slot : _activeSlots)
+        out.push_back(slot);
 }
 
 template <typename V> V &FlatAtomicHashMap<V>::getByPoolIndex(core::u32 poolIdx) noexcept { return _pool[poolIdx]; }

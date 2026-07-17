@@ -22,10 +22,10 @@
 #    include <lpl/concurrency/SpinLock.hpp>
 #    include <lpl/core/Assert.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
 
 #    include <atomic>
-#    include <memory>
-#    include <vector>
 
 namespace lpl::container {
 
@@ -93,8 +93,12 @@ public:
      */
     template <typename Fn> void forEach(Fn &&fn);
 
+#    if !LPL_TARGET_KERNEL
     /**
      * @brief Parallel iteration over active slots using a thread pool.
+     *
+     * Hosted only: needs <thread>/<future>. The kernel uses forEach.
+     *
      * @tparam TP Thread pool type (must have enqueue() returning future).
      * @tparam Fn Callable(V&) or Callable(V&, core::u32 batchIdx).
      * @param pool Thread pool reference.
@@ -102,11 +106,12 @@ public:
      * @param minPerThread Minimum items per batch to avoid overhead.
      */
     template <typename TP, typename Fn> void forEachParallel(TP &pool, Fn &&fn, core::u32 minPerThread = 64);
+#    endif
 
     /**
      * @brief Copy active pool indices snapshot (thread-safe).
      */
-    void snapshotActiveSlots(std::vector<core::u32> &out);
+    void snapshotActiveSlots(pmr::vector<core::u32> &out);
 
     /**
      * @brief Direct access to a pool element by index.
@@ -120,10 +125,10 @@ public:
 private:
     [[nodiscard]] bool linkKeyToSlot(core::u64 key, core::u32 slotIndex);
 
-    std::unique_ptr<std::atomic<core::u64>[]> _entries;
-    std::unique_ptr<V[]> _pool;
-    std::vector<core::u32> _freeIndices;
-    std::vector<core::u32> _activeSlots;
+    pmr::unique_ptr<std::atomic<core::u64>[]> _entries;
+    pmr::unique_ptr<V[]> _pool;
+    pmr::vector<core::u32> _freeIndices;
+    pmr::vector<core::u32> _activeSlots;
     mutable concurrency::SpinLock _allocLock;
     std::atomic<core::u32> _size{0};
     core::u32 _poolCapacity = 0;

@@ -15,8 +15,8 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/input/InputManager.hpp>
 
-#include <cmath>
-#include <unordered_map>
+#include <lpl/std/cmath.hpp>
+#include <lpl/std/unordered_map.hpp>
 
 namespace lpl::input {
 
@@ -25,21 +25,21 @@ namespace lpl::input {
 // ========================================================================== //
 
 struct InputManager::Impl {
-    std::vector<std::unique_ptr<IInputSource>> sources;
+    pmr::vector<pmr::unique_ptr<IInputSource>> sources;
     InputState state{};
     NeuralInputState neuralState{};
-    std::unordered_map<core::u32, PerEntityInput> entityStates;
+    pmr::unordered_map<core::u32, PerEntityInput> entityStates;
 };
 
 // ========================================================================== //
 //  Source management                                                         //
 // ========================================================================== //
 
-InputManager::InputManager() : _impl{std::make_unique<Impl>()} {}
+InputManager::InputManager() : _impl{pmr::make_unique<Impl>()} {}
 
 InputManager::~InputManager() = default;
 
-void InputManager::addSource(std::unique_ptr<IInputSource> source) { _impl->sources.push_back(std::move(source)); }
+void InputManager::addSource(pmr::unique_ptr<IInputSource> source) { _impl->sources.push_back(std::move(source)); }
 
 core::Expected<void> InputManager::init()
 {
@@ -142,7 +142,7 @@ void InputManager::updateGroundedState(core::u32 entityId, float currentVelY, fl
     {
         return;
     }
-    state->isGrounded = std::fabs(currentVelY) < threshold;
+    state->isGrounded = pmr::fabs(currentVelY) < threshold;
 }
 
 math::Vec3<float> InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<float> currentVel, float speed)

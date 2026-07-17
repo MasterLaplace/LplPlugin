@@ -53,7 +53,7 @@ struct MovementSystem::Impl {
 // ========================================================================== //
 
 MovementSystem::MovementSystem(input::InputManager &inputManager, ecs::Registry &registry)
-    : _impl{std::make_unique<Impl>(inputManager, registry)}
+    : _impl{pmr::make_unique<Impl>(inputManager, registry)}
 {
 }
 

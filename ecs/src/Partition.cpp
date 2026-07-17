@@ -52,6 +52,14 @@ struct Chunk::Impl {
             const core::usize bytes = static_cast<core::usize>(layout.size) * kChunkCapacity;
             auto *front = alloc.allocate(bytes);
             auto *back = alloc.allocate(bytes);
+            if (front == nullptr || back == nullptr)
+            {
+                if (front != nullptr)
+                    alloc.deallocate(static_cast<core::byte *>(front), 0);
+                if (back != nullptr)
+                    alloc.deallocate(static_cast<core::byte *>(back), 0);
+                continue;
+            }
             lpl::pmr::memset(front, 0, bytes);
             lpl::pmr::memset(back, 0, bytes);
             buffers[static_cast<core::usize>(layout.id)] = {front, back};

@@ -30,6 +30,12 @@ Config::Builder &Config::Builder::maxChunks(core::u32 n) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::worldCellCapacity(core::u32 n) noexcept
+{
+    _worldCellCapacity = n;
+    return *this;
+}
+
 Config::Builder &Config::Builder::serverMode(bool enabled) noexcept
 {
     _serverMode = enabled;
@@ -78,6 +84,7 @@ Config Config::Builder::build() const noexcept
     cfg._tickRate = _tickRate;
     cfg._maxEntities = _maxEntities;
     cfg._maxChunks = _maxChunks;
+    cfg._worldCellCapacity = _worldCellCapacity;
     cfg._serverMode = _serverMode;
     cfg._headless = _headless;
     cfg._arenaSize = _arenaSize;

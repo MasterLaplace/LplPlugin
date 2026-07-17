@@ -14,6 +14,7 @@
 
 #    include <lpl/core/Constants.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/WorldPartition.hpp>
 #    include <lpl/std/string.hpp>
 
 namespace lpl::engine {
@@ -27,6 +28,7 @@ public:
         Builder &tickRate(core::u32 hz) noexcept;
         Builder &maxEntities(core::u32 n) noexcept;
         Builder &maxChunks(core::u32 n) noexcept;
+        Builder &worldCellCapacity(core::u32 n) noexcept;
         Builder &serverMode(bool enabled) noexcept;
         Builder &headless(bool enabled) noexcept;
         Builder &arenaSize(core::usize bytes) noexcept;
@@ -41,6 +43,7 @@ public:
         core::u32 _tickRate{core::kTickRate};
         core::u32 _maxEntities{core::kMaxEntities};
         core::u32 _maxChunks{core::kMaxChunks};
+        core::u32 _worldCellCapacity{ecs::WorldPartition::kDefaultCellCapacity};
         bool _serverMode{false};
         bool _headless{false};
         core::usize _arenaSize{64 * 1024 * 1024};
@@ -53,6 +56,8 @@ public:
     [[nodiscard]] core::u32 tickRate() const noexcept { return _tickRate; }
     [[nodiscard]] core::u32 maxEntities() const noexcept { return _maxEntities; }
     [[nodiscard]] core::u32 maxChunks() const noexcept { return _maxChunks; }
+    /// Spatial cells budgeted by WorldPartition; see WorldPartition's constructor.
+    [[nodiscard]] core::u32 worldCellCapacity() const noexcept { return _worldCellCapacity; }
     [[nodiscard]] bool serverMode() const noexcept { return _serverMode; }
     [[nodiscard]] bool headless() const noexcept { return _headless; }
     [[nodiscard]] core::usize arenaSize() const noexcept { return _arenaSize; }
@@ -67,6 +72,7 @@ private:
     core::u32 _tickRate{core::kTickRate};
     core::u32 _maxEntities{core::kMaxEntities};
     core::u32 _maxChunks{core::kMaxChunks};
+    core::u32 _worldCellCapacity{ecs::WorldPartition::kDefaultCellCapacity};
     bool _serverMode{false};
     bool _headless{false};
     core::usize _arenaSize{64 * 1024 * 1024};

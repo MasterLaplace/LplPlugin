@@ -46,7 +46,7 @@ struct PhysicsSystem::Impl {
 // ========================================================================== //
 
 PhysicsSystem::PhysicsSystem(ecs::WorldPartition &world, physics::IPhysicsBackend &backend, ecs::Registry &registry)
-    : _impl{std::make_unique<Impl>(world, backend, registry)}
+    : _impl{pmr::make_unique<Impl>(world, backend, registry)}
 {
 }
 

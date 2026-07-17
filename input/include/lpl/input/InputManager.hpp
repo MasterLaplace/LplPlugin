@@ -27,8 +27,8 @@
 #    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/math/Vec3.hpp>
 
-#    include <memory>
-#    include <vector>
+#    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::input {
 
@@ -105,7 +105,7 @@ public:
     // --------------------------------------------------------------------- //
 
     /** @brief Registers a new input source. */
-    void addSource(std::unique_ptr<IInputSource> source);
+    void addSource(pmr::unique_ptr<IInputSource> source);
 
     /** @brief Initializes all registered sources. */
     [[nodiscard]] core::Expected<void> init();
@@ -186,7 +186,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::input

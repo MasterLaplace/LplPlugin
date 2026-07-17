@@ -21,10 +21,9 @@
 #    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/math/Morton.hpp>
 #    include <lpl/math/Vec3.hpp>
-
-#    include <functional>
-#    include <memory>
-#    include <vector>
+#    include <lpl/std/functional.hpp>
+#    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::gpu {
 class IComputeBackend;
@@ -42,11 +41,21 @@ namespace lpl::ecs {
  */
 class WorldPartition final : public core::NonCopyable<WorldPartition> {
 public:
+    /** @brief Default spatial-cell capacity (legacy WORLD_CAPACITY = 1 << 16). */
+    static constexpr core::u32 kDefaultCellCapacity = 1u << 16u;
+
     /**
      * @brief Constructs a world partition with the given cell size.
+     *
      * @param cellSize Side length of each cubic cell (in world units).
+     * @param cellCapacity Maximum number of spatial cells. This is budgeted up
+     *        front, not grown on demand: the backing map allocates one atomic
+     *        entry per slot plus a cell pool, so the default 65536 costs a few
+     *        MiB. Hosts can afford it; memory-tight targets (the freestanding
+     *        kernel runs on a 4 MiB heap) must pass a smaller figure sized to
+     *        the world they actually simulate.
      */
-    explicit WorldPartition(math::Fixed32 cellSize);
+    explicit WorldPartition(math::Fixed32 cellSize, core::u32 cellCapacity = kDefaultCellCapacity);
 
     ~WorldPartition();
 
@@ -72,7 +81,7 @@ public:
      * @param[out] results Populated with entity IDs in range.
      */
     void queryRadius(const math::Vec3<math::Fixed32> &center, math::Fixed32 radius,
-                     std::vector<EntityId> &results) const;
+                     pmr::vector<EntityId> &results) const;
 
     /**
      * @brief Runs one physics tick, auto-selecting CPU or GPU backend.
@@ -96,7 +105,7 @@ public:
      * @param positionOf Callback: (core::u32 rawId) → Vec3<Fixed32> position.
      * @return Number of entities that migrated to a different cell.
      */
-    core::u32 migrateEntities(const std::function<math::Vec3<math::Fixed32>(core::u32)> &positionOf);
+    core::u32 migrateEntities(const pmr::function<math::Vec3<math::Fixed32>(core::u32)> &positionOf);
 
     /**
      * @brief Garbage-collects empty Morton cells.
@@ -131,7 +140,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::ecs

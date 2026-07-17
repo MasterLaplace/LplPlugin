@@ -13,6 +13,7 @@
 #include <lpl/engine/Config.hpp>
 #include <lpl/engine/Engine.hpp>
 #include <lpl/engine/GameLoop.hpp>
+#include <lpl/engine/IApplication.hpp>
 #include <lpl/math/FixedPoint.hpp>
 
 #include <lpl/concurrency/IJobSystem.hpp>
@@ -24,12 +25,6 @@
 #include <lpl/memory/ArenaAllocator.hpp>
 
 #include <lpl/ecs/WorldPartition.hpp>
-#include <lpl/net/ServerMesh.hpp>
-#include <lpl/net/netcode/AuthoritativeStrategy.hpp>
-#include <lpl/net/netcode/RollbackStrategy.hpp>
-#include <lpl/net/session/SessionManager.hpp>
-#include <lpl/net/transport/KernelTransport.hpp>
-#include <lpl/net/transport/SocketTransport.hpp>
 #include <lpl/physics/CpuPhysicsBackend.hpp>
 #include <lpl/physics/IPhysicsBackend.hpp>
 #ifdef LPL_HAS_CUDA
@@ -38,39 +33,58 @@
 #endif
 
 #include <lpl/platform/IPlatform.hpp>
-#include <lpl/platform/linux/LinuxPlatform.hpp>
+#if !LPL_TARGET_KERNEL
+#    include <lpl/platform/linux/LinuxPlatform.hpp>
+#endif
 
 #include <lpl/engine/EventQueue.hpp>
-#include <lpl/engine/systems/BroadcastSystem.hpp>
-#include <lpl/engine/systems/CameraSystem.hpp>
-#include <lpl/engine/systems/InputProcessingSystem.hpp>
-#include <lpl/engine/systems/InputSendSystem.hpp>
-#include <lpl/engine/systems/LocalInputSystem.hpp>
 #include <lpl/engine/systems/MovementSystem.hpp>
-#include <lpl/engine/systems/NetworkReceiveSystem.hpp>
 #include <lpl/engine/systems/PhysicsSystem.hpp>
-#include <lpl/engine/systems/RenderSystem.hpp>
-#include <lpl/engine/systems/ServerMonitorSystem.hpp>
-#include <lpl/engine/systems/SessionSystem.hpp>
-#include <lpl/engine/systems/SpawnSystem.hpp>
-#include <lpl/engine/systems/StateReconciliationSystem.hpp>
-#include <lpl/engine/systems/WelcomeSystem.hpp>
-#include <lpl/net/protocol/PacketBuilder.hpp>
+
+// The networked session (transport, sessions, netcode, the systems that feed
+// them) is a host feature: it needs a sockets stack. LPL_HAS_NET keeps it out
+// of the freestanding kernel build, where net/ is not compiled at all.
+#ifdef LPL_HAS_NET
+#    include <lpl/engine/systems/BroadcastSystem.hpp>
+#    include <lpl/engine/systems/InputProcessingSystem.hpp>
+#    include <lpl/engine/systems/InputSendSystem.hpp>
+#    include <lpl/engine/systems/NetworkReceiveSystem.hpp>
+#    include <lpl/engine/systems/ServerMonitorSystem.hpp>
+#    include <lpl/engine/systems/SessionSystem.hpp>
+#    include <lpl/engine/systems/SpawnSystem.hpp>
+#    include <lpl/engine/systems/StateReconciliationSystem.hpp>
+#    include <lpl/engine/systems/WelcomeSystem.hpp>
+#    include <lpl/net/ServerMesh.hpp>
+#    include <lpl/net/netcode/AuthoritativeStrategy.hpp>
+#    include <lpl/net/netcode/RollbackStrategy.hpp>
+#    include <lpl/net/protocol/PacketBuilder.hpp>
+#    include <lpl/net/session/SessionManager.hpp>
+#    include <lpl/net/transport/KernelTransport.hpp>
+#    include <lpl/net/transport/SocketTransport.hpp>
+#endif
 
 #ifdef LPL_HAS_RENDERER
 #    include <GLFW/glfw3.h>
+#    include <lpl/engine/systems/CameraSystem.hpp>
+#    include <lpl/engine/systems/LocalInputSystem.hpp>
+#    include <lpl/engine/systems/RenderSystem.hpp>
 #    include <lpl/render/VulkanRenderer.hpp>
 #endif
 
-#include <lpl/bci/BciAdapter.hpp>
-#include <lpl/bci/SourceBciDriver.hpp>
-#include <lpl/bci/source/SyntheticSource.hpp>
+// The BCI stack pulls in eigen / liblsl / brainflow and re-enables exceptions;
+// none of that exists freestanding.
+#ifdef LPL_HAS_BCI
+#    include <lpl/bci/BciAdapter.hpp>
+#    include <lpl/bci/SourceBciDriver.hpp>
+#    include <lpl/bci/source/SyntheticSource.hpp>
+#endif
 
 namespace lpl::engine {
 
 struct Engine::Impl {
     Config config;
-    std::unique_ptr<platform::IPlatform> platform;
+    pmr::unique_ptr<platform::IPlatform> platform;
+    pmr::unique_ptr<IApplication> application;
     GameLoop loop;
 
     memory::ArenaAllocator arena;
@@ -80,45 +94,65 @@ struct Engine::Impl {
     input::InputManager inputManager;
     core::CommandQueue commandQueue;
 
-    std::unique_ptr<net::session::SessionManager> sessionManager;
-    std::unique_ptr<ecs::WorldPartition> world;
-    std::unique_ptr<net::netcode::INetcodeStrategy> netcode;
+    pmr::unique_ptr<ecs::WorldPartition> world;
+
+#ifdef LPL_HAS_NET
+    pmr::unique_ptr<net::session::SessionManager> sessionManager;
+    pmr::unique_ptr<net::netcode::INetcodeStrategy> netcode;
     std::shared_ptr<net::transport::ITransport> transport;
+#endif
 
     EventQueues eventQueues;
-    std::unique_ptr<physics::IPhysicsBackend> physicsBackend;
+    pmr::unique_ptr<physics::IPhysicsBackend> physicsBackend;
 #ifdef LPL_HAS_CUDA
-    std::unique_ptr<gpu::IComputeBackend> computeBackend; // owns the GPU dispatch backend
+    pmr::unique_ptr<gpu::IComputeBackend> computeBackend; // owns the GPU dispatch backend
 #endif
 
     // Client-side state (set by WelcomeSystem)
     core::u32 myEntityId{0};
     bool connected{false};
-    systems::CameraData cameraData{};
 
 #ifdef LPL_HAS_RENDERER
-    std::unique_ptr<render::IRenderer> renderer;
+    systems::CameraData cameraData{};
+    pmr::unique_ptr<render::IRenderer> renderer;
     GLFWwindow *window{nullptr};
 #endif
 
     bool initialised{false};
 
-    std::unique_ptr<bci::BciAdapter> bciAdapter;
+#ifdef LPL_HAS_BCI
+    pmr::unique_ptr<bci::BciAdapter> bciAdapter;
+#endif
 
-    Impl(Config cfg, std::unique_ptr<platform::IPlatform> plat)
-        : config{std::move(cfg)}, platform{std::move(plat)}, loop{config, platform->clock()}, arena{config.arenaSize()},
-          jobSystem{}, registry{}, scheduler{jobSystem}, inputManager{}
+    /// Services handed to the injected application; refers to members above, so
+    /// it is declared after them and lives exactly as long as the engine.
+    AppContext appContext;
+
+    Impl(Config cfg, pmr::unique_ptr<platform::IPlatform> plat, pmr::unique_ptr<IApplication> app, Engine &owner)
+        : config{std::move(cfg)}, platform{std::move(plat)}, application{std::move(app)}, loop{config,
+                                                                                               platform->clock()},
+          arena{config.arenaSize()}, jobSystem{}, registry{}, scheduler{jobSystem}, inputManager{},
+          appContext{*platform, registry, arena, config, owner}
     {
     }
 };
 
+#if !LPL_TARGET_KERNEL
 Engine::Engine(Config config)
-    : _impl{std::make_unique<Impl>(std::move(config), std::make_unique<platform::linux_host::LinuxPlatform>())}
+    : _impl{pmr::make_unique<Impl>(std::move(config), pmr::make_unique<platform::linux_host::LinuxPlatform>(), nullptr,
+                                  *this)}
+{
+}
+#endif
+
+Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform)
+    : _impl{pmr::make_unique<Impl>(std::move(config), std::move(platform), nullptr, *this)}
 {
 }
 
-Engine::Engine(Config config, std::unique_ptr<platform::IPlatform> platform)
-    : _impl{std::make_unique<Impl>(std::move(config), std::move(platform))}
+Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform,
+               pmr::unique_ptr<IApplication> application)
+    : _impl{pmr::make_unique<Impl>(std::move(config), std::move(platform), std::move(application), *this)}
 {
 }
 
@@ -151,8 +185,9 @@ core::Expected<void> Engine::init()
         return inputResult;
     }
 
-    _impl->world = std::make_unique<ecs::WorldPartition>(math::Fixed32{10});
+    _impl->world = pmr::make_unique<ecs::WorldPartition>(math::Fixed32{10}, _impl->config.worldCellCapacity());
 
+#ifdef LPL_HAS_NET
     if (_impl->config.serverMode())
     {
         core::Log::info("Engine: Booting Server");
@@ -176,8 +211,8 @@ core::Expected<void> Engine::init()
             _impl->transport = std::move(socketTransport);
         }
 
-        _impl->sessionManager = std::make_unique<net::session::SessionManager>();
-        _impl->netcode = std::make_unique<net::netcode::AuthoritativeStrategy>();
+        _impl->sessionManager = pmr::make_unique<net::session::SessionManager>();
+        _impl->netcode = pmr::make_unique<net::netcode::AuthoritativeStrategy>();
     }
     else
     {
@@ -218,9 +253,10 @@ core::Expected<void> Engine::init()
 
         _impl->transport = std::move(socketTransport);
 
-        _impl->sessionManager = std::make_unique<net::session::SessionManager>();
-        _impl->netcode = std::make_unique<net::netcode::RollbackStrategy>(8);
+        _impl->sessionManager = pmr::make_unique<net::session::SessionManager>();
+        _impl->netcode = pmr::make_unique<net::netcode::RollbackStrategy>(8);
     }
+#endif // LPL_HAS_NET
 
 #ifdef LPL_HAS_RENDERER
     if (_impl->config.enableGpu())
@@ -236,7 +272,7 @@ core::Expected<void> Engine::init()
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         _impl->window = glfwCreateWindow(800, 600, "LplPlugin Client", nullptr, nullptr);
 
-        _impl->renderer = std::make_unique<render::vk::VulkanRenderer>();
+        _impl->renderer = pmr::make_unique<render::vk::VulkanRenderer>();
         if (auto res = _impl->renderer->init(800, 600); !res)
         {
             core::Log::error("Failed to initialize VulkanRenderer");
@@ -262,8 +298,10 @@ core::Expected<void> Engine::init()
 
     // Shared systems (both server and client)
     {
-        auto netRecv = std::make_unique<systems::NetworkReceiveSystem>(_impl->transport, _impl->eventQueues);
+#ifdef LPL_HAS_NET
+        auto netRecv = pmr::make_unique<systems::NetworkReceiveSystem>(_impl->transport, _impl->eventQueues);
         [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(netRecv));
+#endif
 
         // Select the physics backend. The CPU backend is the deterministic
         // reference (and the only one compiled into the freestanding kernel).
@@ -274,98 +312,108 @@ core::Expected<void> Engine::init()
 #ifdef LPL_HAS_CUDA
         if (_impl->config.enableGpu())
         {
-            _impl->computeBackend = std::make_unique<gpu::CudaBackend>();
+            _impl->computeBackend = pmr::make_unique<gpu::CudaBackend>();
             _impl->physicsBackend =
-                std::make_unique<physics::GpuPhysicsBackend>(_impl->registry, *_impl->computeBackend);
+                pmr::make_unique<physics::GpuPhysicsBackend>(_impl->registry, *_impl->computeBackend);
         }
         else
 #endif
         {
-            _impl->physicsBackend = std::make_unique<physics::CpuPhysicsBackend>(_impl->registry);
+            _impl->physicsBackend = pmr::make_unique<physics::CpuPhysicsBackend>(_impl->registry);
         }
         [[maybe_unused]] auto initRes = _impl->physicsBackend->init();
 
-        auto physics = std::make_unique<systems::PhysicsSystem>(*_impl->world, *_impl->physicsBackend, _impl->registry);
+        auto physics = pmr::make_unique<systems::PhysicsSystem>(*_impl->world, *_impl->physicsBackend, _impl->registry);
         [[maybe_unused]] auto r2 = _impl->scheduler.registerSystem(std::move(physics));
     }
 
+#ifdef LPL_HAS_NET
     if (_impl->config.serverMode())
     {
         auto session =
-            std::make_unique<systems::SessionSystem>(*_impl->sessionManager, _impl->eventQueues, _impl->transport,
+            pmr::make_unique<systems::SessionSystem>(*_impl->sessionManager, _impl->eventQueues, _impl->transport,
                                                      _impl->inputManager, *_impl->world, _impl->registry);
         [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(session));
 
-        auto inputProc = std::make_unique<systems::InputProcessingSystem>(_impl->eventQueues, _impl->inputManager);
+        auto inputProc = pmr::make_unique<systems::InputProcessingSystem>(_impl->eventQueues, _impl->inputManager);
         [[maybe_unused]] auto r2 = _impl->scheduler.registerSystem(std::move(inputProc));
 
-        auto movement = std::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
+        auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
         [[maybe_unused]] auto r3 = _impl->scheduler.registerSystem(std::move(movement));
 
-        auto broadcast = std::make_unique<systems::BroadcastSystem>(*_impl->sessionManager, _impl->transport,
+        auto broadcast = pmr::make_unique<systems::BroadcastSystem>(*_impl->sessionManager, _impl->transport,
                                                                     *_impl->world, _impl->registry);
         [[maybe_unused]] auto r4 = _impl->scheduler.registerSystem(std::move(broadcast));
 
-        auto monitor = std::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world);
+        auto monitor = pmr::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world);
         [[maybe_unused]] auto r5 = _impl->scheduler.registerSystem(std::move(monitor));
     }
     else
     {
         auto welcome =
-            std::make_unique<systems::WelcomeSystem>(_impl->eventQueues, _impl->myEntityId, _impl->connected);
+            pmr::make_unique<systems::WelcomeSystem>(_impl->eventQueues, _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(welcome));
 
         auto reconcile =
-            std::make_unique<systems::StateReconciliationSystem>(_impl->eventQueues, *_impl->world, _impl->registry);
+            pmr::make_unique<systems::StateReconciliationSystem>(_impl->eventQueues, *_impl->world, _impl->registry);
         [[maybe_unused]] auto r2 = _impl->scheduler.registerSystem(std::move(reconcile));
 
-        auto spawn = std::make_unique<systems::SpawnSystem>(_impl->registry, _impl->myEntityId, _impl->connected);
+        auto spawn = pmr::make_unique<systems::SpawnSystem>(_impl->registry, _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r3 = _impl->scheduler.registerSystem(std::move(spawn));
 
 #ifdef LPL_HAS_RENDERER
-        auto localInput = std::make_unique<systems::LocalInputSystem>(_impl->inputManager, _impl->window,
+        auto localInput = pmr::make_unique<systems::LocalInputSystem>(_impl->inputManager, _impl->window,
                                                                       _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r4 = _impl->scheduler.registerSystem(std::move(localInput));
 #endif
 
-        auto movement = std::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
+        auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
         [[maybe_unused]] auto r5 = _impl->scheduler.registerSystem(std::move(movement));
 
-        auto inputSend = std::make_unique<systems::InputSendSystem>(_impl->inputManager, _impl->transport,
+        auto inputSend = pmr::make_unique<systems::InputSendSystem>(_impl->inputManager, _impl->transport,
                                                                     _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r6 = _impl->scheduler.registerSystem(std::move(inputSend));
 
 #ifdef LPL_HAS_RENDERER
-        auto camera = std::make_unique<systems::CameraSystem>(_impl->cameraData, _impl->registry, _impl->window,
+        auto camera = pmr::make_unique<systems::CameraSystem>(_impl->cameraData, _impl->registry, _impl->window,
                                                               _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r7 = _impl->scheduler.registerSystem(std::move(camera));
 
-        auto render = std::make_unique<systems::RenderSystem>(_impl->registry, _impl->renderer.get());
+        auto render = pmr::make_unique<systems::RenderSystem>(_impl->registry, _impl->renderer.get());
         [[maybe_unused]] auto r8 = _impl->scheduler.registerSystem(std::move(render));
 #endif
     }
+#endif // LPL_HAS_NET
 
     // ------------------------------------------------------------------ //
     //  BCI subsystem (client-only, when enableBci is set)               //
     // ------------------------------------------------------------------ //
 
+#ifdef LPL_HAS_BCI
     if (_impl->config.enableBci() && !_impl->config.serverMode())
     {
         core::Log::info("Engine: Initialising BCI adapter (SyntheticSource)");
-        auto source = std::make_unique<bci::source::SyntheticSource>(42, true);
-        auto driver = std::make_unique<bci::SourceBciDriver>(std::move(source));
-        _impl->bciAdapter = std::make_unique<bci::BciAdapter>(std::move(driver));
+        auto source = pmr::make_unique<bci::source::SyntheticSource>(42, true);
+        auto driver = pmr::make_unique<bci::SourceBciDriver>(std::move(source));
+        _impl->bciAdapter = pmr::make_unique<bci::BciAdapter>(std::move(driver));
         if (auto res = _impl->bciAdapter->start(); !res)
         {
             core::Log::warn("Engine", "BCI adapter failed to start, continuing without BCI");
             _impl->bciAdapter.reset();
         }
     }
+#else
+    if (_impl->config.enableBci())
+    {
+        core::Log::warn("Engine", "BCI requested but LPL_HAS_BCI is not enabled in this build");
+    }
+#endif // LPL_HAS_BCI
 
     // ------------------------------------------------------------------ //
     //  Spawn initial entities (server: 50 NPCs with deterministic seed)  //
     // ------------------------------------------------------------------ //
 
+#ifdef LPL_HAS_NET
     if (_impl->config.serverMode())
     {
         core::Log::info("Engine: Spawning initial NPC entities");
@@ -474,6 +522,21 @@ core::Expected<void> Engine::init()
             [[maybe_unused]] auto res = _impl->world->insertOrUpdate(entityId, fixedPos);
         }
     }
+#endif // LPL_HAS_NET
+
+    // ------------------------------------------------------------------ //
+    //  Injected application payload                                       //
+    // ------------------------------------------------------------------ //
+
+    if (_impl->application)
+    {
+        core::Log::info("Engine: Initialising application payload");
+        if (auto res = _impl->application->init(_impl->appContext); !res)
+        {
+            core::Log::error("Engine: Application payload failed to initialise");
+            return res;
+        }
+    }
 
     _impl->initialised = true;
     core::Log::info("Engine::init — done");
@@ -484,11 +547,9 @@ void Engine::run()
 {
     LPL_ASSERT(_impl->initialised);
 
-    if (auto res = _impl->scheduler.buildGraph(); !res)
-    {
-        core::Log::fatal("Failed to build ECS system graph");
-        std::abort();
-    }
+    // A malformed system graph is not recoverable, and std::abort does not exist
+    // freestanding; LPL_VERIFY routes to the kernel halt primitive there.
+    LPL_VERIFY(_impl->scheduler.buildGraph().has_value());
 
     // Insert buffer swap between Physics and Network phases so that
     // Broadcast/Render systems read the freshly-computed physics data
@@ -503,6 +564,7 @@ void Engine::run()
 
         [[maybe_unused]] auto r = _impl->inputManager.poll();
 
+#ifdef LPL_HAS_BCI
         // Poll BCI adapter and feed neural data into InputManager
         if (_impl->bciAdapter)
         {
@@ -517,19 +579,29 @@ void Engine::run()
                 );
             }
         }
+#endif // LPL_HAS_BCI
     };
 
     callbacks.fixedUpdate = [this](core::f64 dt) {
+#ifdef LPL_HAS_NET
         if (_impl->netcode)
         {
             _impl->netcode->tick(static_cast<core::f32>(dt));
         }
+#endif
 
         // Run all ECS systems (Input → PrePhysics → Physics → [swap] → Network)
         _impl->scheduler.tick(static_cast<core::f32>(dt));
+
+        // The application's authoritative step runs last, on the state the
+        // engine systems just produced.
+        if (_impl->application)
+        {
+            _impl->application->fixedStep(static_cast<core::f32>(dt));
+        }
     };
 
-    callbacks.render = [this](core::f64 /*alpha*/) {
+    callbacks.render = [this](core::f64 alpha) {
 #ifdef LPL_HAS_RENDERER
         if (_impl->renderer)
         {
@@ -542,6 +614,10 @@ void Engine::run()
             requestShutdown();
         }
 #endif
+        if (_impl->application)
+        {
+            _impl->application->render(alpha);
+        }
     };
 
     callbacks.postFrame = [this]() {
@@ -567,10 +643,17 @@ void Engine::shutdown()
 
     core::Log::info("Engine::shutdown");
 
+    if (_impl->application)
+    {
+        _impl->application->shutdown();
+    }
+
+#ifdef LPL_HAS_NET
     if (_impl->transport)
     {
         _impl->transport->close();
     }
+#endif
 
     if (_impl->physicsBackend)
     {
@@ -596,7 +679,7 @@ void Engine::shutdown()
     _impl->initialised = false;
 }
 
-void Engine::submitCommand(std::unique_ptr<core::ICommand> cmd) { _impl->commandQueue.push(std::move(cmd)); }
+void Engine::submitCommand(pmr::unique_ptr<core::ICommand> cmd) { _impl->commandQueue.push(std::move(cmd)); }
 
 const Config &Engine::config() const noexcept { return _impl->config; }
 

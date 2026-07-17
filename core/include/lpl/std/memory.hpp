@@ -6,8 +6,9 @@
  *        kernel/cxx/cxx_runtime.cpp). Use lpl::pmr::unique_ptr / make_unique at
  *        call sites instead of std:: so the same source compiles for both.
  *
- * Only the single-object form of make_unique is provided; the engine does not
- * use the array form (make_unique<T[]>), so it is intentionally omitted.
+ * Both the single-object and the unbounded-array forms are provided: the array
+ * form backs container::FlatAtomicHashMap, which the kernel build pulls in via
+ * ecs::WorldPartition.
  *
  * @copyright MIT License
  */
@@ -18,16 +19,28 @@
 
 #    include <lpl/core/Platform.hpp>
 
+#    include <cstddef>
 #    include <memory>
+#    include <type_traits>
 
 namespace lpl::pmr {
 
 using ::std::unique_ptr;
 
 #    if LPL_TARGET_KERNEL
-template <typename T, typename... Args> [[nodiscard]] unique_ptr<T> make_unique(Args &&...args)
+template <typename T, typename... Args>
+    requires(!::std::is_array_v<T>)
+[[nodiscard]] unique_ptr<T> make_unique(Args &&...args)
 {
     return unique_ptr<T>(new T(static_cast<Args &&>(args)...));
+}
+
+/// Array form: value-initialises the elements, matching std::make_unique<T[]>.
+template <typename T>
+    requires ::std::is_unbounded_array_v<T>
+[[nodiscard]] unique_ptr<T> make_unique(::std::size_t count)
+{
+    return unique_ptr<T>(new ::std::remove_extent_t<T>[count]());
 }
 #    else
 using ::std::make_unique;

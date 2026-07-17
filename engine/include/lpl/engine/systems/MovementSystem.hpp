@@ -24,7 +24,7 @@
 #    include <lpl/ecs/WorldPartition.hpp>
 #    include <lpl/input/InputManager.hpp>
 
-#    include <memory>
+#    include <lpl/std/memory.hpp>
 
 namespace lpl::engine::systems {
 
@@ -46,7 +46,7 @@ public:
 
 private:
     struct Impl;
-    std::unique_ptr<Impl> _impl;
+    pmr::unique_ptr<Impl> _impl;
 };
 
 } // namespace lpl::engine::systems
