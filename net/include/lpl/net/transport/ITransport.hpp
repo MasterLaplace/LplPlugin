@@ -51,8 +51,7 @@ public:
      *                destination (see SocketTransport::setDefaultDest).
      * @return Number of bytes sent, or error.
      */
-    [[nodiscard]] virtual core::Expected<core::u32> send(std::span<const core::byte> data,
-                                                         const Endpoint *address) = 0;
+    [[nodiscard]] virtual core::Expected<core::u32> send(std::span<const core::byte> data, const Endpoint *address) = 0;
 
     /**
      * @brief Non-blocking receive.

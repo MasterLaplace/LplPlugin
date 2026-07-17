@@ -29,7 +29,7 @@ using ::std::unique_ptr;
 
 #    if LPL_TARGET_KERNEL
 template <typename T, typename... Args>
-    requires(!::std::is_array_v<T>)
+requires(!::std::is_array_v<T>)
 [[nodiscard]] unique_ptr<T> make_unique(Args &&...args)
 {
     return unique_ptr<T>(new T(static_cast<Args &&>(args)...));
@@ -37,7 +37,7 @@ template <typename T, typename... Args>
 
 /// Array form: value-initialises the elements, matching std::make_unique<T[]>.
 template <typename T>
-    requires ::std::is_unbounded_array_v<T>
+requires ::std::is_unbounded_array_v<T>
 [[nodiscard]] unique_ptr<T> make_unique(::std::size_t count)
 {
     return unique_ptr<T>(new ::std::remove_extent_t<T>[count]());

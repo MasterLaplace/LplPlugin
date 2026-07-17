@@ -129,10 +129,9 @@ struct Engine::Impl {
     AppContext appContext;
 
     Impl(Config cfg, pmr::unique_ptr<platform::IPlatform> plat, pmr::unique_ptr<IApplication> app, Engine &owner)
-        : config{std::move(cfg)}, platform{std::move(plat)}, application{std::move(app)}, loop{config,
-                                                                                               platform->clock()},
-          arena{config.arenaSize()}, jobSystem{}, registry{}, scheduler{jobSystem}, inputManager{},
-          appContext{*platform, registry, arena, config, owner}
+        : config{std::move(cfg)}, platform{std::move(plat)}, application{std::move(app)},
+          loop{config, platform->clock()}, arena{config.arenaSize()}, jobSystem{}, registry{}, scheduler{jobSystem},
+          inputManager{}, appContext{*platform, registry, arena, config, owner}
     {
     }
 };
@@ -140,7 +139,7 @@ struct Engine::Impl {
 #if !LPL_TARGET_KERNEL
 Engine::Engine(Config config)
     : _impl{pmr::make_unique<Impl>(std::move(config), pmr::make_unique<platform::linux_host::LinuxPlatform>(), nullptr,
-                                  *this)}
+                                   *this)}
 {
 }
 #endif
@@ -150,8 +149,7 @@ Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform)
 {
 }
 
-Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform,
-               pmr::unique_ptr<IApplication> application)
+Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform, pmr::unique_ptr<IApplication> application)
     : _impl{pmr::make_unique<Impl>(std::move(config), std::move(platform), std::move(application), *this)}
 {
 }
@@ -361,11 +359,11 @@ core::Expected<void> Engine::init()
         auto spawn = pmr::make_unique<systems::SpawnSystem>(_impl->registry, _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r3 = _impl->scheduler.registerSystem(std::move(spawn));
 
-#ifdef LPL_HAS_RENDERER
+#    ifdef LPL_HAS_RENDERER
         auto localInput = pmr::make_unique<systems::LocalInputSystem>(_impl->inputManager, _impl->window,
                                                                       _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r4 = _impl->scheduler.registerSystem(std::move(localInput));
-#endif
+#    endif
 
         auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
         [[maybe_unused]] auto r5 = _impl->scheduler.registerSystem(std::move(movement));
@@ -374,14 +372,14 @@ core::Expected<void> Engine::init()
                                                                     _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r6 = _impl->scheduler.registerSystem(std::move(inputSend));
 
-#ifdef LPL_HAS_RENDERER
+#    ifdef LPL_HAS_RENDERER
         auto camera = pmr::make_unique<systems::CameraSystem>(_impl->cameraData, _impl->registry, _impl->window,
                                                               _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r7 = _impl->scheduler.registerSystem(std::move(camera));
 
         auto render = pmr::make_unique<systems::RenderSystem>(_impl->registry, _impl->renderer.get());
         [[maybe_unused]] auto r8 = _impl->scheduler.registerSystem(std::move(render));
-#endif
+#    endif
     }
 #endif // LPL_HAS_NET
 
