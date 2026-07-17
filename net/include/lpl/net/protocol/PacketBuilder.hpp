@@ -56,12 +56,12 @@ namespace lpl::net::protocol {
 /**
  * @brief Builds and sends a Handshake (connect) packet.
  * @param transport Transport to send through.
- * @param address   Server address (sockaddr_in*).
+ * @param address   Server address, or nullptr for the transport default.
  * @param localIp   Client's own IP (network byte order).
  * @param localPort Client's own port (network byte order).
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendConnect(transport::ITransport &transport, const void *address,
+[[nodiscard]] inline core::Expected<core::u32> sendConnect(transport::ITransport &transport, const Endpoint *address,
                                                            core::u32 localIp = 0, core::u16 localPort = 0)
 {
     core::byte payload[6]{};
@@ -79,7 +79,7 @@ namespace lpl::net::protocol {
  * @param entityId  Entity ID assigned to the client.
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendWelcome(transport::ITransport &transport, const void *address,
+[[nodiscard]] inline core::Expected<core::u32> sendWelcome(transport::ITransport &transport, const Endpoint *address,
                                                            core::u32 entityId)
 {
     core::byte payload[4]{};
@@ -97,7 +97,7 @@ namespace lpl::net::protocol {
  * @param seq       Sequence number.
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendInputs(transport::ITransport &transport, const void *address,
+[[nodiscard]] inline core::Expected<core::u32> sendInputs(transport::ITransport &transport, const Endpoint *address,
                                                           std::span<const core::byte> rawInputPayload,
                                                           core::u32 seq = 0)
 {
@@ -113,7 +113,7 @@ namespace lpl::net::protocol {
  * @param seq       Sequence number.
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendState(transport::ITransport &transport, const void *address,
+[[nodiscard]] inline core::Expected<core::u32> sendState(transport::ITransport &transport, const Endpoint *address,
                                                          std::span<const core::byte> stateData, core::u32 seq = 0)
 {
     auto pkt = buildPacket(PacketType::StateSnapshot, stateData, seq, static_cast<core::u8>(PacketFlag::Fragment));

@@ -103,22 +103,29 @@ struct Octree::Impl {
         EntityEntry *src = sortedEntries.data();
         EntityEntry *dst = tempEntries.data();
 
-        for (core::u8 pass = 0; pass < 4; ++pass)
+        // 8-bit radix / 8 passes over the 64-bit Morton key. An 8-bit digit keeps
+        // the histograms at 256 entries (2 KiB of stack total) instead of 65536
+        // (512 KiB) — the wide version blows a freestanding kernel stack, corrupting
+        // adjacent globals, while a hosted stack merely hid the bug. The sorted order
+        // is identical either way (LSD radix is digit-width agnostic), so parity
+        // signatures are unchanged. 8 passes is even, so the result lands back in the
+        // original sortedEntries buffer, as the caller relies on.
+        for (core::u8 pass = 0; pass < 8; ++pass)
         {
-            // Histogram: count occurrences per 16-bit bucket
-            core::u32 counts[65536] = {};
-            const core::u64 shift = pass * 16u;
+            // Histogram: count occurrences per 8-bit bucket
+            core::u32 counts[256] = {};
+            const core::u64 shift = static_cast<core::u64>(pass) * 8u;
 
             for (core::u32 i = 0; i < count; ++i)
             {
-                const core::u16 bucket = (src[i].morton >> shift) & 0xFFFF;
+                const core::u8 bucket = (src[i].morton >> shift) & 0xFFu;
                 ++counts[bucket];
             }
 
             // Prefix sum → offsets
-            core::u32 offsets[65536];
+            core::u32 offsets[256];
             offsets[0] = 0;
-            for (core::u32 i = 1; i < 65536u; ++i)
+            for (core::u32 i = 1; i < 256u; ++i)
             {
                 offsets[i] = offsets[i - 1] + counts[i - 1];
             }
@@ -126,7 +133,7 @@ struct Octree::Impl {
             // Scatter into destination
             for (core::u32 i = 0; i < count; ++i)
             {
-                const core::u16 bucket = (src[i].morton >> shift) & 0xFFFF;
+                const core::u8 bucket = (src[i].morton >> shift) & 0xFFu;
                 dst[offsets[bucket]++] = src[i];
             }
 
@@ -134,8 +141,8 @@ struct Octree::Impl {
             std::swap(src, dst);
         }
 
-        // After 4 passes (even), result is in the original sortedEntries buffer
-        // (src == sortedEntries.data() after 4 swaps)
+        // After 8 passes (even), result is in the original sortedEntries buffer
+        // (src == sortedEntries.data() after 8 swaps)
     }
 
     // ────────────────────────────────────────────────────────────────────── //

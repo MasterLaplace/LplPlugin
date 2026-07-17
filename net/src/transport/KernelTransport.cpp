@@ -86,7 +86,7 @@ void KernelTransport::close()
     }
 }
 
-core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data, const void * /*address*/)
+core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data, const Endpoint * /*address*/)
 {
     if (!_impl->shm)
     {
@@ -123,7 +123,7 @@ core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data
     return static_cast<core::u32>(data.size());
 }
 
-core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, void * /*fromAddress*/)
+core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, Endpoint * /*fromAddress*/)
 {
     if (!_impl->shm)
     {

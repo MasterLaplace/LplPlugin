@@ -19,6 +19,7 @@
 
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/Vec3.hpp>
+#    include <lpl/net/Endpoint.hpp>
 
 #    include <array>
 #    include <mutex>
@@ -30,15 +31,9 @@ namespace lpl::engine {
 //  Event types                                                               //
 // ========================================================================== //
 
-/** @brief Maximum size for a raw network address (covers sockaddr_storage). */
-static constexpr core::u32 kMaxAddrSize = 128;
-
 /** @brief A client requests to connect. */
 struct ConnectEvent {
-    core::u32 srcIp;
-    core::u16 srcPort;
-    std::array<core::byte, kMaxAddrSize> rawAddr{};
-    core::u32 rawAddrLen{0};
+    net::Endpoint source{}; ///< Address the handshake arrived from.
 };
 
 /** @brief Server acknowledges a connection with an entity ID. */

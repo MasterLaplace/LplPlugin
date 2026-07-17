@@ -91,9 +91,9 @@ void SessionSystem::execute(core::f32 /*dt*/)
 
         // Store the client's network address in the session for broadcast
         auto *session = sessionResult.value();
-        if (ev.rawAddrLen > 0)
+        if (ev.source.valid())
         {
-            session->setAddress(ev.rawAddr.data(), ev.rawAddrLen);
+            session->setAddress(ev.source);
         }
 
         [[maybe_unused]] auto &_ = _impl->inputManager.getOrCreate(newId);

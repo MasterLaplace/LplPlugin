@@ -39,9 +39,9 @@ public:
     [[nodiscard]] core::Expected<void> open() override;
     void close() override;
 
-    [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const void *address) override;
+    [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const Endpoint *address) override;
 
-    [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, void *fromAddress) override;
+    [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) override;
 
     [[nodiscard]] const char *name() const noexcept override;
 

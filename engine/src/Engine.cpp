@@ -57,8 +57,6 @@
 #include <lpl/engine/systems/WelcomeSystem.hpp>
 #include <lpl/net/protocol/PacketBuilder.hpp>
 
-#include <arpa/inet.h>
-
 #ifdef LPL_HAS_RENDERER
 #    include <GLFW/glfw3.h>
 #    include <lpl/render/VulkanRenderer.hpp>
@@ -198,10 +196,12 @@ core::Expected<void> Engine::init()
         // so that InputSendSystem can call sendInputs(transport, nullptr, ...)
         // without carrying the server address.
         {
-            sockaddr_in serverAddr{};
-            serverAddr.sin_family = AF_INET;
-            serverAddr.sin_port = htons(_impl->config.serverPort());
-            inet_pton(AF_INET, _impl->config.serverAddress().c_str(), &serverAddr.sin_addr);
+            net::Endpoint serverAddr{};
+            if (!net::Endpoint::parse(_impl->config.serverAddress().c_str(), _impl->config.serverPort(), serverAddr))
+            {
+                core::Log::error("Engine: Malformed server address in config");
+                return core::makeError(core::ErrorCode::InvalidArgument, "Malformed server address");
+            }
 
             if (auto res = net::protocol::sendConnect(*socketTransport, &serverAddr); !res)
             {
@@ -213,7 +213,7 @@ core::Expected<void> Engine::init()
             }
 
             // Pre-register server address as default destination for all future sends.
-            socketTransport->setDefaultDest(&serverAddr);
+            socketTransport->setDefaultDest(serverAddr);
         }
 
         _impl->transport = std::move(socketTransport);

@@ -21,10 +21,31 @@
 
 namespace lpl::net::transport {
 
+namespace {
+
+/// Endpoint (host byte order) → sockaddr_in (network byte order). This file is
+/// the single translation point between the engine's platform-neutral Endpoint
+/// and the BSD sockets representation.
+[[nodiscard]] sockaddr_in toSockaddr(const Endpoint &endpoint) noexcept
+{
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(endpoint.port());
+    addr.sin_addr.s_addr = htonl(endpoint.address());
+    return addr;
+}
+
+[[nodiscard]] Endpoint fromSockaddr(const sockaddr_in &addr) noexcept
+{
+    return Endpoint{ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port)};
+}
+
+} // namespace
+
 struct SocketTransport::Impl {
     core::u16 port;
     int fd{-1};
-    sockaddr_in defaultDest{}; ///< Used when send() is called with nullptr address.
+    Endpoint defaultDest{}; ///< Used when send() is called with nullptr address.
 
     explicit Impl(core::u16 p) : port{p} {}
 };
@@ -69,7 +90,7 @@ void SocketTransport::close()
     }
 }
 
-core::Expected<core::u32> SocketTransport::send(std::span<const core::byte> data, const void *address)
+core::Expected<core::u32> SocketTransport::send(std::span<const core::byte> data, const Endpoint *address)
 {
     if (_impl->fd < 0)
     {
@@ -78,13 +99,11 @@ core::Expected<core::u32> SocketTransport::send(std::span<const core::byte> data
 
     // Fall back to the pre-set default destination when no address is provided
     // (e.g. InputSendSystem calling sendInputs(..., nullptr, ...)).
-    const sockaddr_in *addr = static_cast<const sockaddr_in *>(address);
-    if (!addr || addr->sin_port == 0)
-    {
-        addr = &_impl->defaultDest;
-    }
+    const Endpoint &target = (address != nullptr && address->valid()) ? *address : _impl->defaultDest;
+    const sockaddr_in addr = toSockaddr(target);
+
     const auto sent =
-        ::sendto(_impl->fd, data.data(), data.size(), 0, reinterpret_cast<const sockaddr *>(addr), sizeof(sockaddr_in));
+        ::sendto(_impl->fd, data.data(), data.size(), 0, reinterpret_cast<const sockaddr *>(&addr), sizeof(addr));
 
     if (sent < 0)
     {
@@ -94,18 +113,18 @@ core::Expected<core::u32> SocketTransport::send(std::span<const core::byte> data
     return static_cast<core::u32>(sent);
 }
 
-core::Expected<core::u32> SocketTransport::receive(std::span<core::byte> buffer, void *fromAddress)
+core::Expected<core::u32> SocketTransport::receive(std::span<core::byte> buffer, Endpoint *fromAddress)
 {
     if (_impl->fd < 0)
     {
         return core::makeError(core::ErrorCode::InvalidState, "Socket not open");
     }
 
-    auto *addr = static_cast<sockaddr_in *>(fromAddress);
-    socklen_t addrLen = sizeof(sockaddr_in);
+    sockaddr_in addr{};
+    socklen_t addrLen = sizeof(addr);
 
     const auto received =
-        ::recvfrom(_impl->fd, buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr *>(addr), &addrLen);
+        ::recvfrom(_impl->fd, buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr *>(&addr), &addrLen);
 
     if (received < 0)
     {
@@ -116,17 +135,16 @@ core::Expected<core::u32> SocketTransport::receive(std::span<core::byte> buffer,
         return core::makeError(core::ErrorCode::IoError, "recvfrom() failed");
     }
 
+    if (fromAddress != nullptr)
+    {
+        *fromAddress = fromSockaddr(addr);
+    }
+
     return static_cast<core::u32>(received);
 }
 
 const char *SocketTransport::name() const noexcept { return "SocketTransport"; }
 
-void SocketTransport::setDefaultDest(const void *addr) noexcept
-{
-    if (addr)
-    {
-        _impl->defaultDest = *static_cast<const sockaddr_in *>(addr);
-    }
-}
+void SocketTransport::setDefaultDest(const Endpoint &endpoint) noexcept { _impl->defaultDest = endpoint; }
 
 } // namespace lpl::net::transport

@@ -57,7 +57,7 @@ void NetworkReceiveSystem::execute(core::f32 /*dt*/)
     // Buffer must fit a full UDP datagram: PacketHeader (16B) + max payload (1400B)
     std::array<core::byte, sizeof(net::protocol::PacketHeader) + net::session::SessionManager::kMaxPayloadSize>
         buffer{};
-    struct sockaddr_storage fromAddr {};
+    net::Endpoint fromAddr{};
 
     for (core::u32 i = 0; i < kMaxPacketsPerTick; ++i)
     {
@@ -93,16 +93,10 @@ void NetworkReceiveSystem::execute(core::f32 /*dt*/)
         switch (header.type)
         {
         case net::protocol::PacketType::Handshake: {
+            // The address the packet actually came from is authoritative; the
+            // handshake payload's self-reported address is not consulted.
             ConnectEvent ev{};
-            if (payloadSize >= 6)
-            {
-                std::memcpy(&ev.srcIp, payload, 4);
-                std::memcpy(&ev.srcPort, payload + 4, 2);
-            }
-            // Copy raw sender address for Session storage
-            const core::u32 addrLen = static_cast<core::u32>(sizeof(fromAddr));
-            ev.rawAddrLen = std::min(addrLen, kMaxAddrSize);
-            std::memcpy(ev.rawAddr.data(), &fromAddr, ev.rawAddrLen);
+            ev.source = fromAddr;
             _impl->queues.connects.push(ev);
             break;
         }

@@ -16,11 +16,9 @@
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecs/Entity.hpp>
+#    include <lpl/net/Endpoint.hpp>
 
 #    include <chrono>
-#    include <cstring>
-#    include <netinet/in.h>
-#    include <sys/socket.h>
 
 namespace lpl::net::session {
 
@@ -85,24 +83,11 @@ public:
     /** @brief Marks activity (heartbeat). */
     void touch() noexcept;
 
-    /** @brief Stores the client's network address (sockaddr_storage). */
-    void setAddress(const void *addr, core::u32 addrLen) noexcept
-    {
-        if (addr && addrLen <= sizeof(_address))
-        {
-            std::memcpy(&_address, addr, addrLen);
-            _addressLen = addrLen;
-        }
-    }
+    /** @brief Stores the client's network address. */
+    void setAddress(const Endpoint &endpoint) noexcept { _address = endpoint; }
 
     /** @brief Returns a pointer to the stored address (or nullptr if none). */
-    [[nodiscard]] const void *address() const noexcept
-    {
-        return _addressLen > 0 ? static_cast<const void *>(&_address) : nullptr;
-    }
-
-    /** @brief Returns the stored address length. */
-    [[nodiscard]] core::u32 addressLen() const noexcept { return _addressLen; }
+    [[nodiscard]] const Endpoint *address() const noexcept { return _address.valid() ? &_address : nullptr; }
 
 private:
     core::u32 _playerId;
@@ -111,8 +96,7 @@ private:
     core::f32 _smoothedRtt{0.0f};
     core::u32 _lastInputSeq{0};
     TimePoint _lastActivity;
-    sockaddr_storage _address{};
-    core::u32 _addressLen{0};
+    Endpoint _address{};
 };
 
 } // namespace lpl::net::session

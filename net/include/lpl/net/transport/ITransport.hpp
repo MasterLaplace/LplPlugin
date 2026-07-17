@@ -15,6 +15,7 @@
 
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/net/Endpoint.hpp>
 
 #    include <cstddef>
 #    include <functional>
@@ -46,10 +47,12 @@ public:
     /**
      * @brief Sends a packet to the given address.
      * @param data    Packet bytes.
-     * @param address Opaque address (cast to sockaddr_in, etc.).
+     * @param address Destination, or nullptr to use the transport's default
+     *                destination (see SocketTransport::setDefaultDest).
      * @return Number of bytes sent, or error.
      */
-    [[nodiscard]] virtual core::Expected<core::u32> send(std::span<const core::byte> data, const void *address) = 0;
+    [[nodiscard]] virtual core::Expected<core::u32> send(std::span<const core::byte> data,
+                                                         const Endpoint *address) = 0;
 
     /**
      * @brief Non-blocking receive.
@@ -57,7 +60,7 @@ public:
      * @param[out] fromAddress Filled with sender address.
      * @return Number of bytes received (0 if nothing available), or error.
      */
-    [[nodiscard]] virtual core::Expected<core::u32> receive(std::span<core::byte> buffer, void *fromAddress) = 0;
+    [[nodiscard]] virtual core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) = 0;
 
     /** @brief Returns a human-readable name for this transport. */
     [[nodiscard]] virtual const char *name() const noexcept = 0;

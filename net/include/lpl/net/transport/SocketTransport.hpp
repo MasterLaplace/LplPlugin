@@ -39,9 +39,9 @@ public:
     [[nodiscard]] core::Expected<void> open() override;
     void close() override;
 
-    [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const void *address) override;
+    [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const Endpoint *address) override;
 
-    [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, void *fromAddress) override;
+    [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) override;
 
     [[nodiscard]] const char *name() const noexcept override;
 
@@ -52,9 +52,9 @@ public:
      * Called once after the initial handshake so that InputSendSystem,
      * BroadcastSystem, etc. do not need to carry a copy of the server address.
      *
-     * @param addr Pointer to a @c sockaddr_in describing the target.
+     * @param endpoint The target.
      */
-    void setDefaultDest(const void *addr) noexcept;
+    void setDefaultDest(const Endpoint &endpoint) noexcept;
 
 private:
     struct Impl;
