@@ -47,7 +47,7 @@ public:
         _width = width;
         _height = height;
         // clear()+resize() (rather than assign()) keeps this portable to the
-        // freestanding kernel_std::vector, which has no assign().
+        // freestanding kstd::vector, which has no assign().
         _pixels.clear();
         _pixels.resize(static_cast<core::usize>(width) * height, 0u);
     }

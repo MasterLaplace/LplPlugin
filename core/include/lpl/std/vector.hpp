@@ -1,6 +1,6 @@
 /**
  * @file vector.hpp
- * @brief Portable vector alias: hosted std::vector, or kernel_std::vector on the
+ * @brief Portable vector alias: hosted std::vector, or kstd::vector on the
  *        freestanding kernel target. Use lpl::pmr::vector at call sites instead
  *        of std::vector so the same source compiles for both targets.
  *
@@ -14,8 +14,8 @@
 #    include <lpl/core/Platform.hpp>
 
 #    if LPL_TARGET_KERNEL
-#        include <kernel_std/allocator.hpp>
-#        include <kernel_std/vector.hpp>
+#        include <kstd/allocator.hpp>
+#        include <kstd/vector.hpp>
 namespace lpl::pmr {
 // Allocator-aware alias: a custom allocator (e.g. memory::PinnedAllocator) can
 // be supplied as the second argument; it defaults to the kernel heap allocator.

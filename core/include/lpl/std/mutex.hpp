@@ -1,7 +1,7 @@
 /**
  * @file mutex.hpp
  * @brief Portable mutex aliases. Hosted: std::mutex / lock_guard / unique_lock.
- *        Kernel: kernel_std single-threaded no-op locks (the kernel is
+ *        Kernel: kstd single-threaded no-op locks (the kernel is
  *        single-threaded first per the convergence plan). Use lpl::pmr::mutex,
  *        lpl::pmr::lock_guard, lpl::pmr::unique_lock at call sites.
  *
@@ -15,7 +15,7 @@
 #    include <lpl/core/Platform.hpp>
 
 #    if LPL_TARGET_KERNEL
-#        include <kernel_std/mutex.hpp>
+#        include <kstd/mutex.hpp>
 namespace lpl::pmr {
 using mutex = ::kstd::mutex;
 using recursive_mutex = ::kstd::recursive_mutex;

@@ -1,6 +1,6 @@
 /**
  * @file string.hpp
- * @brief Portable string alias: hosted std::string, or kernel_std::string on the
+ * @brief Portable string alias: hosted std::string, or kstd::string on the
  *        freestanding kernel target. Use lpl::pmr::string at call sites.
  *
  * @copyright MIT License
@@ -13,7 +13,7 @@
 #    include <lpl/core/Platform.hpp>
 
 #    if LPL_TARGET_KERNEL
-#        include <kernel_std/string.hpp>
+#        include <kstd/string.hpp>
 namespace lpl::pmr {
 using string = ::kstd::string;
 }

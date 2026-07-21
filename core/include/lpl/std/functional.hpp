@@ -2,7 +2,7 @@
  * @file functional.hpp
  * @brief Portable callable alias. On the hosted target lpl::pmr::function is
  *        std::function; on the freestanding kernel target it is the heap-free,
- *        deterministic kernel_std::inplace_function (fixed inline buffer). Use
+ *        deterministic kstd::inplace_function (fixed inline buffer). Use
  *        lpl::pmr::function at call sites (e.g. undo/redo commands, callbacks).
  *
  * Note: the kernel binding has a fixed capacity (kstd::inplace_function default).
@@ -19,7 +19,7 @@
 #    include <lpl/core/Platform.hpp>
 
 #    if LPL_TARGET_KERNEL
-#        include <kernel_std/inplace_function.hpp>
+#        include <kstd/inplace_function.hpp>
 namespace lpl::pmr {
 template <typename Signature> using function = ::kstd::inplace_function<Signature>;
 }

@@ -22,10 +22,10 @@
 #    if LPL_TARGET_KERNEL
 // Freestanding arm: no hosted C runtime (no stderr / fprintf / abort, and the
 // cstdio umbrella is gated out until the console HAL exists). A failed contract
-// is non-recoverable, so route the expression straight to the kernel_std halt
+// is non-recoverable, so route the expression straight to the kstd halt
 // primitive. Source location is dropped (formatting it needs snprintf, which the
 // kernel target does not yet expose); the failing expression is enough to triage.
-#        include <kernel_std/support.hpp>
+#        include <kstd/support.hpp>
 
 namespace lpl::core::detail {
 

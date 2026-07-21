@@ -61,7 +61,7 @@
 // linked into LplKernel) from the hosted Linux/dev build. The libengine build
 // passes -DLPL_TARGET_KERNEL=1; everything else defaults to the hosted target.
 // It selects, via the lpl/std umbrella, whether portable containers/utilities
-// resolve to kernel_std (kstd) or the hosted std.
+// resolve to kstd or the hosted std.
 
 #    ifndef LPL_TARGET_KERNEL
 #        define LPL_TARGET_KERNEL 0
