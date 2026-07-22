@@ -74,9 +74,6 @@ public:
     [[nodiscard]] core::u32 worldCellCapacity() const noexcept { return _worldCellCapacity; }
     [[nodiscard]] bool serverMode() const noexcept { return _serverMode; }
     [[nodiscard]] bool headless() const noexcept { return _headless; }
-    [[nodiscard]] core::u32 worldCellCapacity() const noexcept { return _worldCellCapacity; }
-    [[nodiscard]] bool serverMode() const noexcept { return _serverMode; }
-    [[nodiscard]] bool headless() const noexcept { return _headless; }
 
     /**
      * @brief Per-frame scratch arena; reset every frame.
