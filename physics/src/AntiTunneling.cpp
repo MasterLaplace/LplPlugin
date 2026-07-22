@@ -57,8 +57,8 @@ std::optional<RayHit> AntiTunneling::rayVsAABB(const math::Vec3<math::Fixed32> &
 
     if (tEnter == tMinX)
     {
-        hit.normal = {(direction.x > math::Fixed32{0}) ? -math::Fixed32::one() : math::Fixed32::one(),
-                      math::Fixed32{0}, math::Fixed32{0}};
+        hit.normal = {(direction.x > math::Fixed32{0}) ? -math::Fixed32::one() : math::Fixed32::one(), math::Fixed32{0},
+                      math::Fixed32{0}};
     }
     else if (tEnter == tMinY)
     {

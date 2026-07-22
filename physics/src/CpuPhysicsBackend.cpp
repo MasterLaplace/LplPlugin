@@ -247,8 +247,8 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             const ecs::EntityId *entities = chunk->entities().data();
             for (core::u32 i = 0; i < count; ++i)
             {
-                _impl->physicsEntities.push_back(Impl::PhysicsEntityRef{
-                    entities[i], &positions[i], &velocities[i], &masses[i], &aabbs[i]});
+                _impl->physicsEntities.push_back(
+                    Impl::PhysicsEntityRef{entities[i], &positions[i], &velocities[i], &masses[i], &aabbs[i]});
             }
         }
     }

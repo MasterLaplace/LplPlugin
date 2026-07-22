@@ -118,8 +118,8 @@ private:
             case 'p': _camera.possess = (_camera.possess < 0) ? 0 : -1; break;
             case 'n':
                 if (_camera.possess >= 0)
-                    _camera.possess = static_cast<core::i32>((static_cast<core::u32>(_camera.possess) + 1u) %
-                                                             CubePile::count());
+                    _camera.possess =
+                        static_cast<core::i32>((static_cast<core::u32>(_camera.possess) + 1u) % CubePile::count());
                 break;
             case 'x':
             case 27:
@@ -227,7 +227,7 @@ private:
     static inline core::u32 _color[kRenderWidth * kRenderHeight]{};
     static inline core::f32 _depth[kRenderWidth * kRenderHeight]{};
 
-    CubePile _cube;                       ///< The sim, on this World's registry.
+    CubePile _cube; ///< The sim, on this World's registry.
     platform::SurfaceDescriptor _surface{};
     bool _hasSurface{false};
     CubePile::Camera _camera{};

@@ -110,10 +110,7 @@ bool Server::removeWorld(WorldId id)
     return true;
 }
 
-World *Server::world(WorldId id) noexcept
-{
-    return (id < _impl->worlds.size()) ? _impl->worlds[id].get() : nullptr;
-}
+World *Server::world(WorldId id) noexcept { return (id < _impl->worlds.size()) ? _impl->worlds[id].get() : nullptr; }
 
 core::usize Server::worldCount() const noexcept
 {

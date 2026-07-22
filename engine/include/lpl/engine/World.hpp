@@ -166,9 +166,9 @@ public:
     [[nodiscard]] virtual const char *name() const noexcept { return "World"; }
 
 private:
-    concurrency::InlineJobSystem _jobSystem;        ///< Backs the scheduler (declared first).
-    ecs::Registry _registry;                        ///< Authoritative entity state.
-    ecs::SystemScheduler _scheduler;                ///< Steps the registry; takes _jobSystem.
+    concurrency::InlineJobSystem _jobSystem;            ///< Backs the scheduler (declared first).
+    ecs::Registry _registry;                            ///< Authoritative entity state.
+    ecs::SystemScheduler _scheduler;                    ///< Steps the registry; takes _jobSystem.
     lpl::pmr::unique_ptr<ecs::WorldPartition> _spatial; ///< Optional broad-phase (on demand).
 };
 

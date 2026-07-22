@@ -112,10 +112,7 @@ void KernelMemoryBackend::release(void *block, core::usize sizeBytes)
     hardware_abstraction_layer_memory_release(block, static_cast<core::u32>(sizeBytes));
 }
 
-void KernelMemoryBackend::beginRealTimeSection()
-{
-    hardware_abstraction_layer_memory_begin_real_time_section();
-}
+void KernelMemoryBackend::beginRealTimeSection() { hardware_abstraction_layer_memory_begin_real_time_section(); }
 
 void KernelMemoryBackend::endRealTimeSection() { hardware_abstraction_layer_memory_end_real_time_section(); }
 

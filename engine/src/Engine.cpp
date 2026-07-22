@@ -155,14 +155,13 @@ struct Engine::Impl {
     WorldContext worldContext;
 
     Impl(Config cfg, pmr::unique_ptr<platform::IPlatform> plat, pmr::unique_ptr<World> game, Engine &owner)
-        : config{std::move(cfg)}, platform{std::move(plat)},
-          world{game ? std::move(game) : pmr::make_unique<World>()}, loop{config, platform->clock()},
+        : config{std::move(cfg)}, platform{std::move(plat)}, world{game ? std::move(game) : pmr::make_unique<World>()},
+          loop{config, platform->clock()},
           arenaBlock{platform->memory().reserve(config.arenaSize(), alignof(std::max_align_t))},
           arena{arenaBlock, arenaBlock != nullptr ? config.arenaSize() : core::usize{0}},
           worldArenaBlock{platform->memory().reserve(config.worldArenaSize(), alignof(std::max_align_t))},
           worldArena{worldArenaBlock, worldArenaBlock != nullptr ? config.worldArenaSize() : core::usize{0}},
-          resources{}, inputManager{},
-          worldContext{*platform, resources, arena, config, &owner}
+          resources{}, inputManager{}, worldContext{*platform, resources, arena, config, &owner}
     {
     }
 
@@ -385,9 +384,9 @@ core::Expected<void> Engine::init()
 
     if (_impl->config.enableNetworking() && _impl->config.serverMode())
     {
-        auto session =
-            pmr::make_unique<systems::SessionSystem>(*_impl->sessionManager, _impl->eventQueues, _impl->transport,
-                                                     _impl->inputManager, *_impl->world->spatialPartition(), _impl->world->registry());
+        auto session = pmr::make_unique<systems::SessionSystem>(
+            *_impl->sessionManager, _impl->eventQueues, _impl->transport, _impl->inputManager,
+            *_impl->world->spatialPartition(), _impl->world->registry());
         [[maybe_unused]] auto r1 = _impl->world->scheduler().registerSystem(std::move(session));
 
         auto inputProc = pmr::make_unique<systems::InputProcessingSystem>(_impl->eventQueues, _impl->inputManager);
@@ -396,11 +395,12 @@ core::Expected<void> Engine::init()
         auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
         [[maybe_unused]] auto r3 = _impl->world->scheduler().registerSystem(std::move(movement));
 
-        auto broadcast = pmr::make_unique<systems::BroadcastSystem>(*_impl->sessionManager, _impl->transport,
-                                                                    *_impl->world->spatialPartition(), _impl->world->registry());
+        auto broadcast = pmr::make_unique<systems::BroadcastSystem>(
+            *_impl->sessionManager, _impl->transport, *_impl->world->spatialPartition(), _impl->world->registry());
         [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(broadcast));
 
-        auto monitor = pmr::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world->spatialPartition());
+        auto monitor =
+            pmr::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world->spatialPartition());
         [[maybe_unused]] auto r5 = _impl->world->scheduler().registerSystem(std::move(monitor));
     }
     else if (_impl->config.enableNetworking())
@@ -409,11 +409,12 @@ core::Expected<void> Engine::init()
             pmr::make_unique<systems::WelcomeSystem>(_impl->eventQueues, _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r1 = _impl->world->scheduler().registerSystem(std::move(welcome));
 
-        auto reconcile =
-            pmr::make_unique<systems::StateReconciliationSystem>(_impl->eventQueues, *_impl->world->spatialPartition(), _impl->world->registry());
+        auto reconcile = pmr::make_unique<systems::StateReconciliationSystem>(
+            _impl->eventQueues, *_impl->world->spatialPartition(), _impl->world->registry());
         [[maybe_unused]] auto r2 = _impl->world->scheduler().registerSystem(std::move(reconcile));
 
-        auto spawn = pmr::make_unique<systems::SpawnSystem>(_impl->world->registry(), _impl->myEntityId, _impl->connected);
+        auto spawn =
+            pmr::make_unique<systems::SpawnSystem>(_impl->world->registry(), _impl->myEntityId, _impl->connected);
         [[maybe_unused]] auto r3 = _impl->world->scheduler().registerSystem(std::move(spawn));
 
 #    ifdef LPL_HAS_RENDERER
@@ -507,7 +508,8 @@ void Engine::run()
     // Insert buffer swap between Physics and Network phases so that
     // Broadcast/Render systems read the freshly-computed physics data
     // (mirrors legacy PreSwap → swapBuffers → PostSwap pattern).
-    _impl->world->scheduler().setPhaseCallback(ecs::SchedulePhase::Physics, [this]() { _impl->world->registry().swapAllBuffers(); });
+    _impl->world->scheduler().setPhaseCallback(ecs::SchedulePhase::Physics,
+                                               [this]() { _impl->world->registry().swapAllBuffers(); });
 
     LoopCallbacks callbacks;
 

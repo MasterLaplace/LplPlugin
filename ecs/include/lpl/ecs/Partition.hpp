@@ -19,8 +19,8 @@
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecs/Archetype.hpp>
 #    include <lpl/ecs/Component.hpp>
-#    include <lpl/memory/IAllocator.hpp>
 #    include <lpl/ecs/Entity.hpp>
+#    include <lpl/memory/IAllocator.hpp>
 
 #    include <lpl/std/memory.hpp>
 #    include <lpl/std/vector.hpp>
@@ -130,8 +130,7 @@ public:
      * @param layouts    Component layouts for the archetype.
      * @param allocator  Optional arena for chunk storage. nullptr keeps the default heap allocator.
      */
-    Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts,
-              memory::IAllocator *allocator = nullptr);
+    Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts, memory::IAllocator *allocator = nullptr);
 
     ~Partition();
 

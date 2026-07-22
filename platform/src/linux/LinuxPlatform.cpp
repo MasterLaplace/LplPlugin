@@ -36,7 +36,6 @@ void *LinuxMemoryBackend::reserve(core::usize sizeBytes, core::usize alignment)
 
 void LinuxMemoryBackend::release(void *block, core::usize /*sizeBytes*/) { lpl::pmr::free(block); }
 
-
 namespace {
 
 /** @brief Pack a color_t-style 0x00RRGGBB value into the framebuffer word. */
