@@ -64,11 +64,14 @@ struct CubePile {
     static constexpr core::f32 kFloorF = 0.5f - kHalfF;
     static constexpr core::f32 kDtF = 1.0f / 60.0f; ///< Fixed, deterministic timestep.
 
-    ecs::Registry registry;             ///< Owns the entities + component chunks.
+    ecs::Registry &registry;            ///< The world's entity registry (borrowed).
     physics::CpuPhysicsBackend backend; ///< Steps the authoritative Fixed32 state.
     core::u32 tints[kCount]{};          ///< Per-entity face tint (render only).
 
-    CubePile() : backend(registry) {}
+    /// @param reg The registry the cubes live in — the hosting World's own
+    ///        registry on the live path, a throwaway local one in the parity
+    ///        fold. CubePile creates its entities in it and never owns it.
+    explicit CubePile(ecs::Registry &reg) : registry(reg), backend(reg) {}
 
     /// Seed a kNx*kNy*kNz lattice above the floor (no RNG): each entity gets a
     /// tiny index-derived velocity jitter so the fall is not perfectly uniform.
@@ -341,18 +344,22 @@ struct SimFoldResult {
 /// seed, advance @p ticks deterministic steps, render into @p rt, fold both.
 [[nodiscard]] inline SimFoldResult runCubePileAndFold(const RenderTarget &rt, core::u32 ticks) noexcept
 {
-    // A CubePile owns 1024 entities' worth of state (registry + a 4 KiB tint
-    // table): far too large for a freestanding kernel's small stack. Keep it in
-    // BSS and (re)construct it in place each call, so every run is still fresh
-    // and deterministic without ever touching the stack.
-    alignas(CubePile) static unsigned char storage[sizeof(CubePile)];
-    CubePile *scene = ::new (static_cast<void *>(storage)) CubePile();
+    // A fresh registry + CubePile each call, so every run is deterministic. Both
+    // live in BSS, not on the stack: a CubePile carries a 4 KiB tint table and
+    // the registry drives 1024 heap chunks — far too much for a freestanding
+    // kernel's small stack. The registry is a throwaway local one here; on the
+    // live engine path CubePile instead runs on the hosting World's registry.
+    alignas(ecs::Registry) static unsigned char registryStorage[sizeof(ecs::Registry)];
+    alignas(CubePile) static unsigned char sceneStorage[sizeof(CubePile)];
+    ecs::Registry *registry = ::new (static_cast<void *>(registryStorage)) ecs::Registry();
+    CubePile *scene = ::new (static_cast<void *>(sceneStorage)) CubePile(*registry);
     scene->init();
     for (core::u32 t = 0; t < ticks; ++t)
         scene->step();
     scene->render(rt, CubePile::Camera{});
     const SimFoldResult result{scene->stateSignature(), foldTarget(rt)};
     scene->~CubePile();
+    registry->~Registry();
     return result;
 }
 

@@ -23,7 +23,7 @@ std::optional<RayHit> AntiTunneling::rayVsAABB(const math::Vec3<math::Fixed32> &
         {
             return math::Fixed32::max();
         }
-        return math::Fixed32{1} / d;
+        return math::Fixed32::one() / d;
     };
 
     const auto invX = invDir(direction.x);
@@ -57,18 +57,18 @@ std::optional<RayHit> AntiTunneling::rayVsAABB(const math::Vec3<math::Fixed32> &
 
     if (tEnter == tMinX)
     {
-        hit.normal = {(direction.x > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1}, math::Fixed32{0},
-                      math::Fixed32{0}};
+        hit.normal = {(direction.x > math::Fixed32{0}) ? -math::Fixed32::one() : math::Fixed32::one(),
+                      math::Fixed32{0}, math::Fixed32{0}};
     }
     else if (tEnter == tMinY)
     {
-        hit.normal = {math::Fixed32{0}, (direction.y > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1},
+        hit.normal = {math::Fixed32{0}, (direction.y > math::Fixed32{0}) ? -math::Fixed32::one() : math::Fixed32::one(),
                       math::Fixed32{0}};
     }
     else
     {
         hit.normal = {math::Fixed32{0}, math::Fixed32{0},
-                      (direction.z > math::Fixed32{0}) ? math::Fixed32{-1} : math::Fixed32{1}};
+                      (direction.z > math::Fixed32{0}) ? -math::Fixed32::one() : math::Fixed32::one()};
     }
 
     return hit;
@@ -85,7 +85,7 @@ std::optional<math::Fixed32> AntiTunneling::sweptAABB(const math::AABB<math::Fix
          staticAABB.max.z + movingAABB.halfExtents().z}
     };
 
-    auto result = rayVsAABB(movingAABB.center(), displacement, expanded, math::Fixed32{1});
+    auto result = rayVsAABB(movingAABB.center(), displacement, expanded, math::Fixed32::one());
     if (!result.has_value())
     {
         return std::nullopt;

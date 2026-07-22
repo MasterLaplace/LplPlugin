@@ -50,17 +50,37 @@ public:
     [[nodiscard]] const char *name() const noexcept override;
 
 private:
-    /** @brief Semi-implicit Euler integration + gravity + damping + ground. */
+    /**
+     * @brief Semi-implicit Euler integration + gravity + damping + ground.
+     * @param entities List of entity IDs.
+     * @param positions List of positions.
+     * @param velocities List of velocities.
+     * @param masses List of masses.
+     * @param count Number of entities.
+     * @param dt Delta time.
+     */
     void integrateChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *positions,
                         math::Vec3<math::Fixed32> *velocities, const math::Fixed32 *masses, core::u32 count,
                         math::Fixed32 dt) const noexcept;
 
-    /** @brief AABB collision detection + impulse resolution (4 iterations). */
-    void resolveCollisionsChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *positions,
-                                math::Vec3<math::Fixed32> *velocities, const math::Fixed32 *masses,
-                                const math::Vec3<math::Fixed32> *sizes, core::u32 count) const noexcept;
+    /**
+     * @brief AABB collision detection + impulse resolution (4 iterations), over
+     *        every physics entity in the world (not scoped to one chunk).
+     *
+     * Chunks group entities by archetype and cap out at 256 (@ref
+     * ecs::Chunk::kChunkCapacity), not by spatial region — two entities that
+     * happen to sit in different chunks (different archetype, or the same
+     * archetype split across chunks once it exceeds 256) still occupy the same
+     * physical space and must be able to collide.
+     */
+    void resolveCollisionsWorld() const noexcept;
 
-    /** @brief Sleeping detection: sleep after 30 frames below threshold. */
+    /**
+     * @brief Sleeping detection: sleep after 30 frames below threshold.
+     * @param entities List of entity IDs.
+     * @param velocities List of velocities.
+     * @param count Number of entities.
+     */
     void updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *velocities,
                              core::u32 count) const noexcept;
 

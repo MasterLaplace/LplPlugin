@@ -39,7 +39,7 @@ void CollisionSolver::solve(std::span<BodyState> bodies, std::span<const Collisi
                 continue;
             }
 
-            const auto j = -(math::Fixed32{1} + e) * velAlongNormal / invMassSum;
+            const auto j = -(math::Fixed32::one() + e) * velAlongNormal / invMassSum;
 
             const auto impulse = n * j;
 

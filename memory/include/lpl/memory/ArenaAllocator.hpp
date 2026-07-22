@@ -34,6 +34,20 @@ public:
      * @param capacity Total bytes available.
      */
     explicit ArenaAllocator(core::usize capacity);
+
+    /**
+     * @brief Construct an arena over memory somebody else owns.
+     *
+     * Used when the backing block comes from the platform seam
+     * (platform::IMemoryBackend): malloc on a host, a kernel reservation in ring
+     * 0. The bump logic — and therefore the byte accounting the determinism gate
+     * folds — is identical either way; only the block's origin differs.
+     *
+     * @param memory Block base; must outlive the arena and stay untouched.
+     * @param capacity Block size in bytes.
+     */
+    ArenaAllocator(void *memory, core::usize capacity) noexcept;
+
     ~ArenaAllocator() override;
 
     [[nodiscard]] void *allocate(core::usize size, core::usize alignment = alignof(std::max_align_t)) override;
@@ -48,6 +62,7 @@ private:
     char *_memory = nullptr;
     core::usize _capacity = 0;
     core::usize _offset = 0;
+    bool _ownsMemory = true; ///< False when the block came from the platform.
 };
 
 } // namespace lpl::memory

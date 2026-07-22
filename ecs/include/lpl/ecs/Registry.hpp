@@ -19,6 +19,7 @@
 #    include <lpl/ecs/Archetype.hpp>
 #    include <lpl/ecs/Entity.hpp>
 #    include <lpl/ecs/Partition.hpp>
+#    include <lpl/memory/IAllocator.hpp>
 
 #    include <lpl/std/memory.hpp>
 #    include <lpl/std/vector.hpp>
@@ -35,9 +36,22 @@ namespace lpl::ecs {
  */
 class Registry final : public core::NonCopyable<Registry> {
 public:
-    /** @brief Default-constructs an empty registry. */
+    /**
+     * @brief Default-constructs an empty registry.
+     * @brief Default-constructs an empty registry.
+     */
     Registry();
     ~Registry();
+
+    /**
+     * @brief Route this registry's chunk storage through @p allocator.
+     *
+     * Must be called before any entity is created: chunks already built keep
+     * the allocator they were made with. A World sets this to its persistent
+     * arena so ECS storage is one bounded reservation instead of many heap
+     * allocations. nullptr restores the default heap allocator.
+     */
+    void setAllocator(memory::IAllocator *allocator) noexcept;
 
     // --------------------------------------------------------------------- //
     //  Entity lifecycle                                                      //

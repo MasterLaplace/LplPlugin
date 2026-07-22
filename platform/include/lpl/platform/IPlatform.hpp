@@ -17,6 +17,7 @@
 #    include "IDisplayBackend.hpp"
 #    include "IGpuMemoryBackend.hpp"
 #    include "IInputBackend.hpp"
+#    include "IMemoryBackend.hpp"
 
 namespace lpl::platform {
 
@@ -36,6 +37,15 @@ public:
     [[nodiscard]] virtual IDisplayBackend &display() noexcept = 0;
     [[nodiscard]] virtual IInputBackend &input() noexcept = 0;
     [[nodiscard]] virtual IGpuMemoryBackend &gpuMemory() noexcept = 0;
+
+    /**
+     * @brief Source of the large blocks the engine's arenas are built on.
+     *
+     * Deliberately separate from gpuMemory(): that one hands out pinned,
+     * GPU-attachable pages, this one hands out ordinary CPU memory the engine
+     * bump-allocates from.
+     */
+    [[nodiscard]] virtual IMemoryBackend &memory() noexcept = 0;
 
     /** @brief Returns a human-readable name. */
     [[nodiscard]] virtual const char *name() const noexcept = 0;

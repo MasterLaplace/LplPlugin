@@ -13,7 +13,8 @@
 #include <lpl/engine/Config.hpp>
 #include <lpl/engine/Engine.hpp>
 #include <lpl/engine/GameLoop.hpp>
-#include <lpl/engine/IApplication.hpp>
+#include <lpl/engine/ResourceManager.hpp>
+#include <lpl/engine/World.hpp>
 #include <lpl/math/FixedPoint.hpp>
 
 #include <lpl/concurrency/IJobSystem.hpp>
@@ -84,19 +85,36 @@ namespace lpl::engine {
 struct Engine::Impl {
     Config config;
     pmr::unique_ptr<platform::IPlatform> platform;
-    pmr::unique_ptr<IApplication> application;
+    // The one game World the engine hosts. Injected by the caller (its game), or
+    // a default empty World when none is given. The World owns the authoritative
+    // Registry, its scheduler and (on demand) its spatial index; the engine holds
+    // no game state of its own. A server build owns many Worlds above the engine;
+    // a client / solo / kernel build runs exactly this one.
+    pmr::unique_ptr<World> world;
     GameLoop loop;
 
+    // The per-frame arena's block is reserved ONCE through the platform seam
+    // (malloc on a host, a kernel reservation in ring 0) and then bump-allocated
+    // from — so no allocator call happens on a tick's path, which is what the
+    // freestanding REAL_TIME mode requires (kmalloc refuses to serve a hot loop).
+    void *arenaBlock;
     memory::ArenaAllocator arena;
-    concurrency::InlineJobSystem jobSystem;
-    ecs::Registry registry;
-    ecs::SystemScheduler scheduler;
+    // The World's ECS storage arena. Distinct from the frame arena above and
+    // NEVER reset while the World lives: chunks allocated from it must survive
+    // across frames. Bounding it here is what stops a World from eating the
+    // whole kernel heap the way the old un-budgeted spatial index did.
+    void *worldArenaBlock;
+    memory::ArenaAllocator worldArena;
+    ResourceManager resources; ///< Shared asset cache handed to the World's hooks.
     input::InputManager inputManager;
     core::CommandQueue commandQueue;
 
-    pmr::unique_ptr<ecs::WorldPartition> world;
-
 #ifdef LPL_HAS_NET
+    // The built-in physics backend steps the entities the networked server
+    // spawns. A client/kernel World is driven by its game instead, so it is not
+    // built there — otherwise it would step an empty registry every tick. (The
+    // spatial index is NOT here: it belongs to the World, enabled on demand by
+    // any game with a large map, networked or solo.)
     pmr::unique_ptr<net::session::SessionManager> sessionManager;
     pmr::unique_ptr<net::netcode::INetcodeStrategy> netcode;
     std::shared_ptr<net::transport::ITransport> transport;
@@ -120,19 +138,39 @@ struct Engine::Impl {
 
     bool initialised{false};
 
+    /// Real-time violation counter sampled once the World is up. The counter is
+    /// global and kernel smokes bump it before we start, so only the DELTA from
+    /// this baseline says anything about our own tick.
+    core::u32 realTimeViolationBaseline{0};
+    core::u32 realTimeBoundedBaseline{0};
+    core::u64 stepsTaken{0};
+    bool realTimeReported{false};
+
 #ifdef LPL_HAS_BCI
     pmr::unique_ptr<bci::BciAdapter> bciAdapter;
 #endif
 
-    /// Services handed to the injected application; refers to members above, so
-    /// it is declared after them and lives exactly as long as the engine.
-    AppContext appContext;
+    /// Services handed to the World's hooks; refers to members above, so it is
+    /// declared after them and lives exactly as long as the engine.
+    WorldContext worldContext;
 
-    Impl(Config cfg, pmr::unique_ptr<platform::IPlatform> plat, pmr::unique_ptr<IApplication> app, Engine &owner)
-        : config{std::move(cfg)}, platform{std::move(plat)}, application{std::move(app)},
-          loop{config, platform->clock()}, arena{config.arenaSize()}, jobSystem{}, registry{}, scheduler{jobSystem},
-          inputManager{}, appContext{*platform, registry, arena, config, owner}
+    Impl(Config cfg, pmr::unique_ptr<platform::IPlatform> plat, pmr::unique_ptr<World> game, Engine &owner)
+        : config{std::move(cfg)}, platform{std::move(plat)},
+          world{game ? std::move(game) : pmr::make_unique<World>()}, loop{config, platform->clock()},
+          arenaBlock{platform->memory().reserve(config.arenaSize(), alignof(std::max_align_t))},
+          arena{arenaBlock, arenaBlock != nullptr ? config.arenaSize() : core::usize{0}},
+          worldArenaBlock{platform->memory().reserve(config.worldArenaSize(), alignof(std::max_align_t))},
+          worldArena{worldArenaBlock, worldArenaBlock != nullptr ? config.worldArenaSize() : core::usize{0}},
+          resources{}, inputManager{},
+          worldContext{*platform, resources, arena, config, &owner}
     {
+    }
+
+    ~Impl()
+    {
+        // The arenas never owned these blocks; the platform did.
+        platform->memory().release(arenaBlock, config.arenaSize());
+        platform->memory().release(worldArenaBlock, config.worldArenaSize());
     }
 };
 
@@ -144,13 +182,21 @@ Engine::Engine(Config config)
 }
 #endif
 
+#if !LPL_TARGET_KERNEL
+Engine::Engine(Config config, pmr::unique_ptr<World> world)
+    : _impl{pmr::make_unique<Impl>(std::move(config), pmr::make_unique<platform::linux_host::LinuxPlatform>(),
+                                   std::move(world), *this)}
+{
+}
+#endif
+
 Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform)
     : _impl{pmr::make_unique<Impl>(std::move(config), std::move(platform), nullptr, *this)}
 {
 }
 
-Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform, pmr::unique_ptr<IApplication> application)
-    : _impl{pmr::make_unique<Impl>(std::move(config), std::move(platform), std::move(application), *this)}
+Engine::Engine(Config config, pmr::unique_ptr<platform::IPlatform> platform, pmr::unique_ptr<World> world)
+    : _impl{pmr::make_unique<Impl>(std::move(config), std::move(platform), std::move(world), *this)}
 {
 }
 
@@ -183,10 +229,8 @@ core::Expected<void> Engine::init()
         return inputResult;
     }
 
-    _impl->world = pmr::make_unique<ecs::WorldPartition>(math::Fixed32{10}, _impl->config.worldCellCapacity());
-
 #ifdef LPL_HAS_NET
-    if (_impl->config.serverMode())
+    if (_impl->config.enableNetworking() && _impl->config.serverMode())
     {
         core::Log::info("Engine: Booting Server");
 
@@ -212,7 +256,7 @@ core::Expected<void> Engine::init()
         _impl->sessionManager = pmr::make_unique<net::session::SessionManager>();
         _impl->netcode = pmr::make_unique<net::netcode::AuthoritativeStrategy>();
     }
-    else
+    else if (_impl->config.enableNetworking())
     {
         core::Log::info("Engine: Booting Client");
 
@@ -289,96 +333,115 @@ core::Expected<void> Engine::init()
 #endif
 
     // ------------------------------------------------------------------ //
-    //  Register ECS systems                                               //
+    //  Built-in system groups (selected by Config, see Config::Builder)    //
+    //                                                                      //
+    //  These are engine-provided and game-agnostic. Which groups a World    //
+    //  gets is declared in the Config; the game's OWN systems and content   //
+    //  are registered by World::onInit further down. Nothing here knows     //
+    //  about any particular game.                                           //
     // ------------------------------------------------------------------ //
 
-    core::Log::info("Engine: Registering ECS systems");
-
-    // Shared systems (both server and client)
+    // Physics: a spatial broad-phase index plus the integrator that steps the
+    // World's entities. NOT a networking feature — a solo large-map game wants
+    // it just as much as a server, so it is selected by Config::enablePhysics
+    // alone. A game that does its own broad-phase (samples::CubePile keeps an
+    // octree inside its backend) simply turns it off.
+    if (_impl->config.enablePhysics())
     {
-#ifdef LPL_HAS_NET
-        auto netRecv = pmr::make_unique<systems::NetworkReceiveSystem>(_impl->transport, _impl->eventQueues);
-        [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(netRecv));
-#endif
+        core::Log::info("Engine: Registering built-in physics systems");
+        _impl->world->enableSpatialPartition(math::Fixed32::fromFloat(10.0f), _impl->config.worldCellCapacity());
 
-        // Select the physics backend. The CPU backend is the deterministic
-        // reference (and the only one compiled into the freestanding kernel).
-        // When the GPU module is enabled (Config::enableGpu) and a CUDA build is
-        // available, the GpuPhysicsBackend bridge drives the physics_tick compute
-        // kernel instead; collision/sleeping stay on the CPU. The selection is
-        // behind LPL_HAS_CUDA so non-CUDA hosts never reference the bridge.
+        // The CPU backend is the deterministic reference. When the GPU module is
+        // enabled (Config::enableGpu) and a CUDA build is available, the
+        // GpuPhysicsBackend bridge drives the physics_tick compute kernel
+        // instead; collision/sleeping stay on the CPU. The selection is behind
+        // LPL_HAS_CUDA so non-CUDA hosts never reference the bridge.
 #ifdef LPL_HAS_CUDA
         if (_impl->config.enableGpu())
         {
             _impl->computeBackend = pmr::make_unique<gpu::CudaBackend>();
             _impl->physicsBackend =
-                pmr::make_unique<physics::GpuPhysicsBackend>(_impl->registry, *_impl->computeBackend);
+                pmr::make_unique<physics::GpuPhysicsBackend>(_impl->world->registry(), *_impl->computeBackend);
         }
         else
 #endif
         {
-            _impl->physicsBackend = pmr::make_unique<physics::CpuPhysicsBackend>(_impl->registry);
+            _impl->physicsBackend = pmr::make_unique<physics::CpuPhysicsBackend>(_impl->world->registry());
         }
         [[maybe_unused]] auto initRes = _impl->physicsBackend->init();
 
-        auto physics = pmr::make_unique<systems::PhysicsSystem>(*_impl->world, *_impl->physicsBackend, _impl->registry);
-        [[maybe_unused]] auto r2 = _impl->scheduler.registerSystem(std::move(physics));
+        auto physics = pmr::make_unique<systems::PhysicsSystem>(*_impl->world->spatialPartition(),
+                                                                *_impl->physicsBackend, _impl->world->registry());
+        [[maybe_unused]] auto r = _impl->world->scheduler().registerSystem(std::move(physics));
     }
 
 #ifdef LPL_HAS_NET
-    if (_impl->config.serverMode())
+    if (_impl->config.enableNetworking())
+    {
+        core::Log::info("Engine: Registering built-in networking systems");
+        auto netRecv = pmr::make_unique<systems::NetworkReceiveSystem>(_impl->transport, _impl->eventQueues);
+        [[maybe_unused]] auto r = _impl->world->scheduler().registerSystem(std::move(netRecv));
+    }
+
+    if (_impl->config.enableNetworking() && _impl->config.serverMode())
     {
         auto session =
             pmr::make_unique<systems::SessionSystem>(*_impl->sessionManager, _impl->eventQueues, _impl->transport,
-                                                     _impl->inputManager, *_impl->world, _impl->registry);
-        [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(session));
+                                                     _impl->inputManager, *_impl->world->spatialPartition(), _impl->world->registry());
+        [[maybe_unused]] auto r1 = _impl->world->scheduler().registerSystem(std::move(session));
 
         auto inputProc = pmr::make_unique<systems::InputProcessingSystem>(_impl->eventQueues, _impl->inputManager);
-        [[maybe_unused]] auto r2 = _impl->scheduler.registerSystem(std::move(inputProc));
+        [[maybe_unused]] auto r2 = _impl->world->scheduler().registerSystem(std::move(inputProc));
 
-        auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
-        [[maybe_unused]] auto r3 = _impl->scheduler.registerSystem(std::move(movement));
+        auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
+        [[maybe_unused]] auto r3 = _impl->world->scheduler().registerSystem(std::move(movement));
 
         auto broadcast = pmr::make_unique<systems::BroadcastSystem>(*_impl->sessionManager, _impl->transport,
-                                                                    *_impl->world, _impl->registry);
-        [[maybe_unused]] auto r4 = _impl->scheduler.registerSystem(std::move(broadcast));
+                                                                    *_impl->world->spatialPartition(), _impl->world->registry());
+        [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(broadcast));
 
-        auto monitor = pmr::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world);
-        [[maybe_unused]] auto r5 = _impl->scheduler.registerSystem(std::move(monitor));
+        auto monitor = pmr::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world->spatialPartition());
+        [[maybe_unused]] auto r5 = _impl->world->scheduler().registerSystem(std::move(monitor));
     }
-    else
+    else if (_impl->config.enableNetworking())
     {
         auto welcome =
             pmr::make_unique<systems::WelcomeSystem>(_impl->eventQueues, _impl->myEntityId, _impl->connected);
-        [[maybe_unused]] auto r1 = _impl->scheduler.registerSystem(std::move(welcome));
+        [[maybe_unused]] auto r1 = _impl->world->scheduler().registerSystem(std::move(welcome));
 
         auto reconcile =
-            pmr::make_unique<systems::StateReconciliationSystem>(_impl->eventQueues, *_impl->world, _impl->registry);
-        [[maybe_unused]] auto r2 = _impl->scheduler.registerSystem(std::move(reconcile));
+            pmr::make_unique<systems::StateReconciliationSystem>(_impl->eventQueues, *_impl->world->spatialPartition(), _impl->world->registry());
+        [[maybe_unused]] auto r2 = _impl->world->scheduler().registerSystem(std::move(reconcile));
 
-        auto spawn = pmr::make_unique<systems::SpawnSystem>(_impl->registry, _impl->myEntityId, _impl->connected);
-        [[maybe_unused]] auto r3 = _impl->scheduler.registerSystem(std::move(spawn));
+        auto spawn = pmr::make_unique<systems::SpawnSystem>(_impl->world->registry(), _impl->myEntityId, _impl->connected);
+        [[maybe_unused]] auto r3 = _impl->world->scheduler().registerSystem(std::move(spawn));
 
 #    ifdef LPL_HAS_RENDERER
-        auto localInput = pmr::make_unique<systems::LocalInputSystem>(_impl->inputManager, _impl->window,
-                                                                      _impl->myEntityId, _impl->connected);
-        [[maybe_unused]] auto r4 = _impl->scheduler.registerSystem(std::move(localInput));
+        if (_impl->config.enableRendering())
+        {
+            auto localInput = pmr::make_unique<systems::LocalInputSystem>(_impl->inputManager, _impl->window,
+                                                                          _impl->myEntityId, _impl->connected);
+            [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(localInput));
+        }
 #    endif
 
-        auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->registry);
-        [[maybe_unused]] auto r5 = _impl->scheduler.registerSystem(std::move(movement));
+        auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
+        [[maybe_unused]] auto r5 = _impl->world->scheduler().registerSystem(std::move(movement));
 
         auto inputSend = pmr::make_unique<systems::InputSendSystem>(_impl->inputManager, _impl->transport,
                                                                     _impl->myEntityId, _impl->connected);
-        [[maybe_unused]] auto r6 = _impl->scheduler.registerSystem(std::move(inputSend));
+        [[maybe_unused]] auto r6 = _impl->world->scheduler().registerSystem(std::move(inputSend));
 
 #    ifdef LPL_HAS_RENDERER
-        auto camera = pmr::make_unique<systems::CameraSystem>(_impl->cameraData, _impl->registry, _impl->window,
-                                                              _impl->myEntityId, _impl->connected);
-        [[maybe_unused]] auto r7 = _impl->scheduler.registerSystem(std::move(camera));
+        if (_impl->config.enableRendering())
+        {
+            auto camera = pmr::make_unique<systems::CameraSystem>(_impl->cameraData, _impl->world->registry(),
+                                                                  _impl->window, _impl->myEntityId, _impl->connected);
+            [[maybe_unused]] auto r7 = _impl->world->scheduler().registerSystem(std::move(camera));
 
-        auto render = pmr::make_unique<systems::RenderSystem>(_impl->registry, _impl->renderer.get());
-        [[maybe_unused]] auto r8 = _impl->scheduler.registerSystem(std::move(render));
+            auto render = pmr::make_unique<systems::RenderSystem>(_impl->world->registry(), _impl->renderer.get());
+            [[maybe_unused]] auto r8 = _impl->world->scheduler().registerSystem(std::move(render));
+        }
 #    endif
     }
 #endif // LPL_HAS_NET
@@ -408,134 +471,26 @@ core::Expected<void> Engine::init()
 #endif // LPL_HAS_BCI
 
     // ------------------------------------------------------------------ //
-    //  Spawn initial entities (server: 50 NPCs with deterministic seed)  //
+    //  Game World setup                                                    //
     // ------------------------------------------------------------------ //
 
-#ifdef LPL_HAS_NET
-    if (_impl->config.serverMode())
+    // Before the World creates a single entity: its chunk storage comes from the
+    // bounded persistent arena, not the heap. Chunks built after this point never
+    // call the allocator on a tick's path.
+    if (_impl->worldArenaBlock != nullptr)
+        _impl->world->registry().setAllocator(&_impl->worldArena);
+
+    core::Log::info("Engine: Initialising World");
+    if (auto res = _impl->world->onInit(_impl->worldContext); !res)
     {
-        core::Log::info("Engine: Spawning initial NPC entities");
-
-        // Build the NPC archetype: Position, Velocity, Mass, AABB, Health
-        ecs::Archetype npcArch;
-        npcArch.add(ecs::ComponentId::Position);
-        npcArch.add(ecs::ComponentId::Velocity);
-        npcArch.add(ecs::ComponentId::Mass);
-        npcArch.add(ecs::ComponentId::AABB);
-        npcArch.add(ecs::ComponentId::Health);
-
-        // Simple deterministic LCG (seed 42) for reproducible NPC placement.
-        // IDs 0–99 are reserved for NPCs; player entities start at 100.
-        core::u32 seed = 42;
-        auto nextRand = [&seed]() -> float {
-            seed = seed * 1103515245u + 12345u;
-            return static_cast<float>((seed >> 16) & 0x7FFF) / 32767.0f;
-        };
-
-        static constexpr core::u32 kNpcCount = 50;
-        for (core::u32 i = 0; i < kNpcCount; ++i)
-        {
-            // Create entity in Registry with proper SoA component storage
-            auto entityResult = _impl->registry.createEntity(npcArch);
-            if (!entityResult.has_value())
-                continue;
-
-            auto entityId = entityResult.value();
-            auto refResult = _impl->registry.resolve(entityId);
-            if (!refResult.has_value())
-                continue;
-
-            auto ref = refResult.value();
-            auto &partition = _impl->registry.getOrCreatePartition(npcArch);
-            const auto &chunks = partition.chunks();
-            if (ref.chunkIndex >= static_cast<core::u32>(chunks.size()))
-                continue;
-
-            auto &chunk = *chunks[ref.chunkIndex];
-
-            float px = (nextRand() - 0.5f) * 200.0f; // [-100, 100]
-            float py = nextRand() * 50.0f;           // [0, 50]
-            float pz = (nextRand() - 0.5f) * 200.0f; // [-100, 100]
-
-            // Write position to both front and back buffers (authoritative Fixed32)
-            math::Vec3<math::Fixed32> pos{math::Fixed32::fromFloat(px), math::Fixed32::fromFloat(py),
-                                          math::Fixed32::fromFloat(pz)};
-            if (auto *wpos = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position)))
-            {
-                wpos[ref.localIndex] = pos;
-            }
-            if (auto *rpos = const_cast<math::Vec3<math::Fixed32> *>(
-                    static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::Position))))
-            {
-                rpos[ref.localIndex] = pos;
-            }
-
-            // Write velocity (zero initially)
-            math::Vec3<math::Fixed32> vel{math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::zero()};
-            if (auto *wvel = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Velocity)))
-            {
-                wvel[ref.localIndex] = vel;
-            }
-
-            // Write mass
-            math::Fixed32 mass = math::Fixed32::one();
-            if (auto *wmass = static_cast<math::Fixed32 *>(chunk.writeComponent(ecs::ComponentId::Mass)))
-            {
-                wmass[ref.localIndex] = mass;
-            }
-            if (auto *rmass = const_cast<math::Fixed32 *>(
-                    static_cast<const math::Fixed32 *>(chunk.readComponent(ecs::ComponentId::Mass))))
-            {
-                rmass[ref.localIndex] = mass;
-            }
-
-            // Write AABB (size)
-            math::Vec3<math::Fixed32> size{math::Fixed32::fromInt(1), math::Fixed32::fromInt(2),
-                                           math::Fixed32::fromInt(1)};
-            if (auto *wsize = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
-            {
-                wsize[ref.localIndex] = size;
-            }
-            if (auto *rsize = const_cast<math::Vec3<math::Fixed32> *>(
-                    static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::AABB))))
-            {
-                rsize[ref.localIndex] = size;
-            }
-
-            // Write health
-            core::i32 hp = 100;
-            if (auto *whp = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))
-            {
-                whp[ref.localIndex] = hp;
-            }
-            if (auto *rhp = const_cast<core::i32 *>(
-                    static_cast<const core::i32 *>(chunk.readComponent(ecs::ComponentId::Health))))
-            {
-                rhp[ref.localIndex] = hp;
-            }
-
-            // Update spatial index
-            auto fixedPos = math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(px), math::Fixed32::fromFloat(py),
-                                                      math::Fixed32::fromFloat(pz)};
-            [[maybe_unused]] auto res = _impl->world->insertOrUpdate(entityId, fixedPos);
-        }
-    }
-#endif // LPL_HAS_NET
-
-    // ------------------------------------------------------------------ //
-    //  Injected application payload                                       //
-    // ------------------------------------------------------------------ //
-
-    if (_impl->application)
-    {
-        core::Log::info("Engine: Initialising application payload");
-        if (auto res = _impl->application->init(_impl->appContext); !res)
-        {
-            core::Log::error("Engine: Application payload failed to initialise");
-            return res;
-        }
+        core::Log::error("Engine: World failed to initialise");
+        return res;
     }
 
+    // Baselines, never absolutes: these counters are global and the kernel's own
+    // smoke battery moves them well before the engine ever runs a step.
+    _impl->realTimeViolationBaseline = _impl->platform->memory().realTimeViolationCount();
+    _impl->realTimeBoundedBaseline = _impl->platform->memory().realTimeBoundedCount();
     _impl->initialised = true;
     core::Log::info("Engine::init — done");
     return {};
@@ -547,12 +502,12 @@ void Engine::run()
 
     // A malformed system graph is not recoverable, and std::abort does not exist
     // freestanding; LPL_VERIFY routes to the kernel halt primitive there.
-    LPL_VERIFY(_impl->scheduler.buildGraph().has_value());
+    LPL_VERIFY(_impl->world->scheduler().buildGraph().has_value());
 
     // Insert buffer swap between Physics and Network phases so that
     // Broadcast/Render systems read the freshly-computed physics data
     // (mirrors legacy PreSwap → swapBuffers → PostSwap pattern).
-    _impl->scheduler.setPhaseCallback(ecs::SchedulePhase::Physics, [this]() { _impl->registry.swapAllBuffers(); });
+    _impl->world->scheduler().setPhaseCallback(ecs::SchedulePhase::Physics, [this]() { _impl->world->registry().swapAllBuffers(); });
 
     LoopCallbacks callbacks;
 
@@ -588,14 +543,35 @@ void Engine::run()
         }
 #endif
 
-        // Run all ECS systems (Input → PrePhysics → Physics → [swap] → Network)
-        _impl->scheduler.tick(static_cast<core::f32>(dt));
+        // Advance the World one authoritative step, inside a real-time section:
+        // on a backend that enforces it the heap refuses to allocate here, so an
+        // allocation-free tick is proven rather than assumed. Everything the step
+        // needs was reserved up front (the World's persistent arena).
+        const bool guarded = _impl->config.enableRealTimeGuard();
+        if (guarded)
+            _impl->platform->memory().beginRealTimeSection();
+        _impl->world->onFixedStep(static_cast<core::f32>(dt));
 
-        // The application's authoritative step runs last, on the state the
-        // engine systems just produced.
-        if (_impl->application)
+        if (guarded)
+            _impl->platform->memory().endRealTimeSection();
+
+        // Report once, after enough steps that any warm-up allocation would have
+        // shown up: did the authoritative tick ever ask the heap for memory?
+        constexpr core::u64 kRealTimeProbeSteps = 120;
+        if (!_impl->realTimeReported && ++_impl->stepsTaken >= kRealTimeProbeSteps)
         {
-            _impl->application->fixedStep(static_cast<core::f32>(dt));
+            _impl->realTimeReported = true;
+            const auto violations =
+                _impl->platform->memory().realTimeViolationCount() - _impl->realTimeViolationBaseline;
+            const auto bounded = _impl->platform->memory().realTimeBoundedCount() - _impl->realTimeBoundedBaseline;
+
+            // Three outcomes, not two: a tick can hold its deadline (no
+            // unbounded path taken) while still doing O(1) heap traffic that is
+            // worth removing for throughput.
+            core::Log::info(!guarded   ? "Engine: real-time guard off — allocation behaviour unmeasured" :
+                            violations ? "Engine: authoritative tick takes an UNBOUNDED allocation path" :
+                            bounded    ? "Engine: authoritative tick is deadline-safe but still touches the heap" :
+                                         "Engine: authoritative tick is allocation-free");
         }
     };
 
@@ -612,10 +588,7 @@ void Engine::run()
             requestShutdown();
         }
 #endif
-        if (_impl->application)
-        {
-            _impl->application->render(alpha);
-        }
+        _impl->world->onRender(_impl->worldContext, alpha);
     };
 
     callbacks.postFrame = [this]() {
@@ -641,10 +614,10 @@ void Engine::shutdown()
 
     core::Log::info("Engine::shutdown");
 
-    if (_impl->application)
-    {
-        _impl->application->shutdown();
-    }
+    if (_impl->platform->memory().realTimeViolationCount() != _impl->realTimeViolationBaseline)
+        core::Log::warn("Engine", "allocations were attempted inside the authoritative tick");
+
+    _impl->world->onShutdown();
 
 #ifdef LPL_HAS_NET
     if (_impl->transport)

@@ -20,7 +20,6 @@
 #include <lpl/memory/PinnedAllocator.hpp>
 #include <lpl/physics/Octree.hpp>
 #include <lpl/std/memory.hpp>
-#include <lpl/std/unordered_map.hpp>
 #include <lpl/std/vector.hpp>
 
 #include <algorithm>
@@ -57,10 +56,38 @@ struct Octree::Impl {
     lpl::pmr::vector<FlatNode, PinnedNode> nodes;
     lpl::pmr::vector<EntityEntry, PinnedEntry> sortedEntries;
     lpl::pmr::vector<EntityEntry, PinnedEntry> tempEntries;
-    lpl::pmr::unordered_map<core::u32, core::u32> idToIndex;
+    /**
+     * Object id → entry slot, as a dense array rather than a hash map.
+     *
+     * A node-based map allocates once per insert, and a broad-phase refills the
+     * index every step — that was 1024 allocations per tick on the cube-pile
+     * sample, inside the authoritative step. A flat array indexed by the object
+     * id costs one u32 per id and never touches the allocator once warm, which
+     * is what the real-time contract asks for.
+     *
+     * Trade-off, stated because it is one: the array is sized by the LARGEST
+     * object id, not by the object count, so an index keyed on a sparse id space
+     * spends 4 bytes per unused id. Every caller feeds it dense ids (a chunk's
+     * entity slots), which is the case this structure is built for.
+     */
+    lpl::pmr::vector<core::u32> idToIndex;
     bool dirty{false};
 
+    static constexpr core::u32 kNoIndex = 0xFFFFFFFFu;
+
     explicit Impl(const math::AABB<math::Fixed32> &wb) : worldBounds{wb} {}
+
+    void setIndex(core::u32 objectId, core::u32 slot)
+    {
+        if (objectId >= idToIndex.size())
+            idToIndex.resize(objectId + 1u, kNoIndex);
+        idToIndex[objectId] = slot;
+    }
+
+    [[nodiscard]] core::u32 indexOf(core::u32 objectId) const
+    {
+        return (objectId < idToIndex.size()) ? idToIndex[objectId] : kNoIndex;
+    }
 
     // ────────────────────────────────────────────────────────────────────── //
     //  Morton computation                                                    //
@@ -95,6 +122,7 @@ struct Octree::Impl {
             return;
         }
 
+        // Grown here, once, rather than left to grow during a later tick.
         if (tempEntries.size() < sortedEntries.size())
         {
             tempEntries.resize(sortedEntries.size());
@@ -290,15 +318,15 @@ void Octree::insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 {
     const core::u32 idx = static_cast<core::u32>(_impl->sortedEntries.size());
     _impl->sortedEntries.push_back({objectId, _impl->computeMorton(aabb), aabb});
-    _impl->idToIndex[objectId] = idx;
+    _impl->setIndex(objectId, idx);
     _impl->dirty = true;
 }
 
 void Octree::update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 {
-    auto it = _impl->idToIndex.find(objectId);
-    LPL_ASSERT(it != _impl->idToIndex.end());
-    auto &entry = _impl->sortedEntries[it->second];
+    const core::u32 slot = _impl->indexOf(objectId);
+    LPL_ASSERT(slot != Impl::kNoIndex);
+    auto &entry = _impl->sortedEntries[slot];
     entry.aabb = aabb;
     entry.morton = _impl->computeMorton(aabb);
     _impl->dirty = true;
@@ -306,19 +334,18 @@ void Octree::update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
 
 void Octree::remove(core::u32 objectId)
 {
-    auto it = _impl->idToIndex.find(objectId);
-    LPL_ASSERT(it != _impl->idToIndex.end());
+    const core::u32 idx = _impl->indexOf(objectId);
+    LPL_ASSERT(idx != Impl::kNoIndex);
 
-    const core::u32 idx = it->second;
     const core::u32 last = static_cast<core::u32>(_impl->sortedEntries.size()) - 1;
 
     if (idx != last)
     {
         _impl->sortedEntries[idx] = _impl->sortedEntries[last];
-        _impl->idToIndex[_impl->sortedEntries[idx].objectId] = idx;
+        _impl->setIndex(_impl->sortedEntries[idx].objectId, idx);
     }
     _impl->sortedEntries.pop_back();
-    _impl->idToIndex.erase(it);
+    _impl->idToIndex[objectId] = Impl::kNoIndex;
     _impl->dirty = true;
 }
 
@@ -353,12 +380,28 @@ void Octree::rebuild()
     // Step 2: Rebuild index map after sort
     for (core::u32 i = 0; i < static_cast<core::u32>(_impl->sortedEntries.size()); ++i)
     {
-        _impl->idToIndex[_impl->sortedEntries[i].objectId] = i;
+        _impl->setIndex(_impl->sortedEntries[i].objectId, i);
     }
 
-    // Step 3: Build flat node tree
+    // Step 3: Build flat node tree.
+    //
+    // clear() keeps the capacity, but the node count of an octree exceeds its
+    // entity count (interior nodes are subdivided 8 at a time), so reserving
+    // only entityCount left resize() growing — and growing means calling the
+    // allocator from inside an authoritative tick, which the freestanding
+    // REAL_TIME mode forbids. Reserve a bound that covers the subdivision so
+    // the growth happens once, here, and never on a later tick.
+    //
+    // Bound: a node either holds entities or splits into 8. With N entities the
+    // tree has at most N leaves, hence at most (N - 1) / 7 interior nodes, so
+    // (N * 9) / 7 + 8 is a safe ceiling; the +8 covers the root's own split.
     _impl->nodes.clear();
-    _impl->nodes.reserve(_impl->sortedEntries.size());
+    {
+        const auto entityCount = _impl->sortedEntries.size();
+        const auto nodeCeiling = (entityCount * 9u) / 7u + 8u;
+        if (_impl->nodes.capacity() < nodeCeiling)
+            _impl->nodes.reserve(nodeCeiling);
+    }
     _impl->nodes.emplace_back();
     _impl->nodes[0].bound = _impl->worldBounds;
     _impl->nodes[0].entityStart = 0;
@@ -369,6 +412,15 @@ void Octree::rebuild()
         _impl->recurseBuild(0, 0, static_cast<core::u32>(_impl->sortedEntries.size()), 0);
     }
 
+    _impl->dirty = false;
+}
+
+void Octree::clear() noexcept
+{
+    _impl->sortedEntries.clear();
+    _impl->nodes.clear();
+    for (auto &slot : _impl->idToIndex)
+        slot = Impl::kNoIndex;
     _impl->dirty = false;
 }
 

@@ -99,6 +99,36 @@ bool KernelInputBackend::tryPopCharacter(char &outCharacter)
 
 core::u32 KernelInputBackend::pendingCount() const noexcept { return hardware_abstraction_layer_input_pending_count(); }
 
+// ---- Memory --------------------------------------------------------------
+
+void *KernelMemoryBackend::reserve(core::usize sizeBytes, core::usize alignment)
+{
+    return hardware_abstraction_layer_memory_reserve(static_cast<core::u32>(sizeBytes),
+                                                     static_cast<core::u32>(alignment));
+}
+
+void KernelMemoryBackend::release(void *block, core::usize sizeBytes)
+{
+    hardware_abstraction_layer_memory_release(block, static_cast<core::u32>(sizeBytes));
+}
+
+void KernelMemoryBackend::beginRealTimeSection()
+{
+    hardware_abstraction_layer_memory_begin_real_time_section();
+}
+
+void KernelMemoryBackend::endRealTimeSection() { hardware_abstraction_layer_memory_end_real_time_section(); }
+
+core::u32 KernelMemoryBackend::realTimeViolationCount() const noexcept
+{
+    return hardware_abstraction_layer_memory_real_time_violation_count();
+}
+
+core::u32 KernelMemoryBackend::realTimeBoundedCount() const noexcept
+{
+    return hardware_abstraction_layer_memory_real_time_bounded_count();
+}
+
 // ---- Graphics memory -----------------------------------------------------
 
 core::Expected<GpuAllocation> KernelGpuMemoryBackend::allocate(core::u32 sizeBytes, GpuMemoryFlags flags)

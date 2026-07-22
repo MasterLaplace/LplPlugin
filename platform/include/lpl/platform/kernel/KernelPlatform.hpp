@@ -39,7 +39,9 @@ public:
     void write(core::LogLevel level, std::string_view tag, std::string_view message) override;
 };
 
-/** @brief Tick / timestamp backend over the kernel clock + rdtsc HAL. */
+/**
+ * @brief Tick / timestamp backend over the kernel clock + rdtsc HAL.
+ */
 class KernelClockBackend final : public IClockBackend {
 public:
     [[nodiscard]] core::u32 tickCount() const noexcept override;
@@ -48,7 +50,9 @@ public:
     [[nodiscard]] const char *name() const noexcept override { return "KernelClock"; }
 };
 
-/** @brief Software-LFB display backend over the framebuffer HAL. */
+/**
+ * @brief Software-LFB display backend over the framebuffer HAL.
+ */
 class KernelDisplayBackend final : public IDisplayBackend {
 public:
     [[nodiscard]] bool querySurface(SurfaceDescriptor &outDescriptor) const noexcept override;
@@ -58,7 +62,9 @@ public:
     [[nodiscard]] const char *name() const noexcept override { return "KernelDisplay(software-LFB)"; }
 };
 
-/** @brief Input backend over the PS/2 keyboard SPSC ring HAL. */
+/**
+ * @brief Input backend over the PS/2 keyboard SPSC ring HAL.
+ */
 class KernelInputBackend final : public IInputBackend {
 public:
     [[nodiscard]] bool tryPopCharacter(char &outCharacter) override;
@@ -66,7 +72,21 @@ public:
     [[nodiscard]] const char *name() const noexcept override { return "KernelInput(PS/2)"; }
 };
 
-/** @brief Pinned graphics-memory backend over the kernel HAL. */
+/**
+ * @brief Pinned graphics-memory backend over the kernel HAL.
+ */
+/** @brief Arena-backing memory backend over the kernel heap HAL. */
+class KernelMemoryBackend final : public IMemoryBackend {
+public:
+    [[nodiscard]] void *reserve(core::usize sizeBytes, core::usize alignment) override;
+    void release(void *block, core::usize sizeBytes) override;
+    void beginRealTimeSection() override;
+    void endRealTimeSection() override;
+    [[nodiscard]] core::u32 realTimeViolationCount() const noexcept override;
+    [[nodiscard]] core::u32 realTimeBoundedCount() const noexcept override;
+    [[nodiscard]] const char *name() const noexcept override { return "KernelMemory(kmalloc-backed)"; }
+};
+
 class KernelGpuMemoryBackend final : public IGpuMemoryBackend {
 public:
     [[nodiscard]] core::Expected<GpuAllocation> allocate(core::u32 sizeBytes, GpuMemoryFlags flags) override;
@@ -83,6 +103,7 @@ public:
     [[nodiscard]] IClockBackend &clock() noexcept override { return _clock; }
     [[nodiscard]] IDisplayBackend &display() noexcept override { return _display; }
     [[nodiscard]] IInputBackend &input() noexcept override { return _input; }
+    [[nodiscard]] IMemoryBackend &memory() noexcept override { return _memory; }
     [[nodiscard]] IGpuMemoryBackend &gpuMemory() noexcept override { return _gpuMemory; }
     [[nodiscard]] const char *name() const noexcept override { return "KernelPlatform"; }
 
@@ -90,6 +111,7 @@ private:
     KernelClockBackend _clock;
     KernelDisplayBackend _display;
     KernelInputBackend _input;
+    KernelMemoryBackend _memory;
     KernelGpuMemoryBackend _gpuMemory;
 };
 

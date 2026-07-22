@@ -12,6 +12,8 @@
 #include <lpl/core/Types.hpp>
 #include <lpl/engine/Config.hpp>
 #include <lpl/engine/Engine.hpp>
+#include <lpl/samples/NetworkDemoWorld.hpp>
+#include <lpl/std/memory.hpp>
 
 int main(int /*argc*/, char * /*argv*/[])
 {
@@ -27,7 +29,7 @@ int main(int /*argc*/, char * /*argv*/[])
                       .enableBci(false)
                       .build();
 
-    lpl::engine::Engine engine{config};
+    lpl::engine::Engine engine{config, lpl::pmr::make_unique<lpl::samples::NetworkDemoWorld>()};
 
     auto result = engine.init();
     if (!result)

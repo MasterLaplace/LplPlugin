@@ -19,8 +19,23 @@
 #    include <lpl/platform/linux/LinuxPlatform.hpp>
 
 #    include <chrono>
+#    include <lpl/std/cstdlib.hpp>
 
 namespace lpl::platform::linux_host {
+
+// ---- Memory --------------------------------------------------------------
+
+void *LinuxMemoryBackend::reserve(core::usize sizeBytes, core::usize alignment)
+{
+    if (sizeBytes == 0)
+        return nullptr;
+
+    const core::usize rounded = ((sizeBytes + alignment - 1) / alignment) * alignment;
+    return lpl::pmr::aligned_alloc(alignment, rounded);
+}
+
+void LinuxMemoryBackend::release(void *block, core::usize /*sizeBytes*/) { lpl::pmr::free(block); }
+
 
 namespace {
 

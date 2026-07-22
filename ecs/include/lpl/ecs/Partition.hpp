@@ -19,6 +19,7 @@
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecs/Archetype.hpp>
 #    include <lpl/ecs/Component.hpp>
+#    include <lpl/memory/IAllocator.hpp>
 #    include <lpl/ecs/Entity.hpp>
 
 #    include <lpl/std/memory.hpp>
@@ -46,8 +47,14 @@ public:
      * @brief Constructs a chunk for the given archetype and component layouts.
      * @param archetype The archetype this chunk stores.
      * @param layouts   Span of component layouts.
+     * @param allocator Where the component buffers come from. nullptr keeps the
+     *        default heap allocator; a World passes its persistent arena so ECS
+     *        storage is bump-allocated out of one bounded reservation instead of
+     *        hitting the heap (which the freestanding REAL_TIME mode forbids on
+     *        a tick's path).
      */
-    Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts);
+    Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts,
+          memory::IAllocator *allocator = nullptr);
 
     ~Chunk();
 
@@ -121,8 +128,10 @@ public:
      * @brief Constructs a partition for the given archetype.
      * @param archetype  Archetype of entities stored here.
      * @param layouts    Component layouts for the archetype.
+     * @param allocator  Optional arena for chunk storage. nullptr keeps the default heap allocator.
      */
-    Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts);
+    Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts,
+              memory::IAllocator *allocator = nullptr);
 
     ~Partition();
 
@@ -156,6 +165,7 @@ private:
     Archetype _archetype;
     lpl::pmr::vector<ComponentLayout> _layouts;
     lpl::pmr::vector<lpl::pmr::unique_ptr<Chunk>> _chunks;
+    memory::IAllocator *_allocator = nullptr; ///< Optional arena for chunk storage.
 };
 
 } // namespace lpl::ecs

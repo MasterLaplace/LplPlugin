@@ -26,6 +26,9 @@ namespace lpl::ecs {
 // ========================================================================== //
 
 struct Registry::Impl {
+    /// Optional arena backing chunk storage (see Registry::setAllocator).
+    memory::IAllocator *allocator = nullptr;
+
     /** @brief Sentinel value meaning "no next slot". */
     static constexpr core::u32 kNoNext = ~core::u32{0};
     static constexpr core::u32 kInitCap = 1024;
@@ -110,6 +113,8 @@ struct Registry::Impl {
 // ========================================================================== //
 
 Registry::Registry() : _impl{lpl::pmr::make_unique<Impl>()} {}
+
+void Registry::setAllocator(memory::IAllocator *allocator) noexcept { _impl->allocator = allocator; }
 
 Registry::~Registry() = default;
 
@@ -222,7 +227,7 @@ Partition &Registry::getOrCreatePartition(const Archetype &archetype)
         }
     }
 
-    _impl->partitions.push_back(lpl::pmr::make_unique<Partition>(archetype, std::move(layouts)));
+    _impl->partitions.push_back(lpl::pmr::make_unique<Partition>(archetype, std::move(layouts), _impl->allocator));
 
     return *_impl->partitions.back();
 }

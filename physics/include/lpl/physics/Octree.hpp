@@ -46,6 +46,21 @@ public:
 
     void rebuild() override;
 
+    /**
+     * @brief Drops every object but keeps all buffers and their capacity.
+     *
+     * For the common broad-phase pattern of refilling the index from scratch
+     * each step: clear + re-insert reuses the memory the previous step already
+     * grew, so a warm tick performs no allocation at all. Constructing a fresh
+     * Octree per step instead pays for the whole structure every time.
+     *
+     * clear() on all three keeps the capacity; the id table is blanked in place
+     * rather than shrunk, so a refill of the same id range reallocates nothing.
+     * tempEntries is radix-sort scratch, never read before being written: left
+     * at its current size so the sort does not have to re-grow it every step.
+     */
+    void clear() noexcept;
+
     [[nodiscard]] core::u32 count() const noexcept override;
 
 private:

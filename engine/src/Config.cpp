@@ -54,9 +54,39 @@ Config::Builder &Config::Builder::arenaSize(core::usize bytes) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::worldArenaSize(core::usize bytes) noexcept
+{
+    _worldArenaSize = bytes;
+    return *this;
+}
+
 Config::Builder &Config::Builder::enableBci(bool enabled) noexcept
 {
     _enableBci = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enablePhysics(bool enabled) noexcept
+{
+    _enablePhysics = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enableNetworking(bool enabled) noexcept
+{
+    _enableNetworking = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enableRendering(bool enabled) noexcept
+{
+    _enableRendering = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enableRealTimeGuard(bool enabled) noexcept
+{
+    _enableRealTimeGuard = enabled;
     return *this;
 }
 
@@ -88,7 +118,12 @@ Config Config::Builder::build() const noexcept
     cfg._serverMode = _serverMode;
     cfg._headless = _headless;
     cfg._arenaSize = _arenaSize;
+    cfg._worldArenaSize = _worldArenaSize;
     cfg._enableBci = _enableBci;
+    cfg._enablePhysics = _enablePhysics;
+    cfg._enableNetworking = _enableNetworking;
+    cfg._enableRendering = _enableRendering;
+    cfg._enableRealTimeGuard = _enableRealTimeGuard;
     cfg._enableGpu = _enableGpu;
     cfg._serverAddress = _serverAddress;
     cfg._serverPort = _serverPort;

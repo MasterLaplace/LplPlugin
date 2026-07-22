@@ -8,7 +8,7 @@
 target("lpl-server")
     set_kind("binary")
     set_group("apps")
-    add_deps("lpl-engine")
+    add_deps("lpl-engine", "lpl-samples")
     add_files("server/main.cpp")
 target_end()
 

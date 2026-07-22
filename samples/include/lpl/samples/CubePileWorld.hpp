@@ -1,16 +1,22 @@
 /**
- * @file CubePileApp.hpp
- * @brief The cube-pile sample packaged as an injectable engine application.
+ * @file CubePileWorld.hpp
+ * @brief The cube-pile sample as an injectable engine World.
  *
- * Wraps lpl::samples::CubePile in the engine::IApplication seam so the engine
- * can drive it on any host. Everything the kernel's C client_app.c used to do
- * by hand lives here instead, engine-side and cross-platform: the orbit camera,
- * entity possession, the scale-to-surface blit and the HUD. The kernel keeps no
- * game logic — it only injects this payload.
+ * A concrete engine::World: its 1024 cubes live in the World's own registry
+ * (the game state IS the World's state), and it carries everything the sample
+ * needs on top — the orbit camera, entity possession, the scale-to-surface blit
+ * and the HUD. The engine hosts it with no knowledge of the game; a server would
+ * host many Worlds like it.
  *
- * Authority split: CubePile::step is Fixed32 and authoritative (folded against
- * the Linux oracle); the camera, the blit and the HUD are float/pixel work and
- * are never folded, so nothing here can perturb the parity signature.
+ * Authority split: Position/Velocity/AABB/Mass are advanced by the engine's own
+ * built-in @c systems::PhysicsSystem (selected by @c Config::enablePhysics,
+ * which CubePileWorld's hosts turn on) — the same generic system legacy's
+ * client registered via @c core.registerSystem(Systems::PhysicsSystem()), and
+ * the one the server profile already used by default. CubePileWorld does not
+ * step its own copy: it only seeds the entities (@ref CubePile::init) and reads
+ * them back for rendering. onRender is float/pixel work and is never folded, so
+ * nothing here perturbs the parity signature (folded separately, off the
+ * engine, by @ref runCubePileAndFold for the oracle/kernel-smoke path).
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -20,31 +26,39 @@
 
 #pragma once
 
-#ifndef LPL_SAMPLES_CUBEPILEAPP_HPP
-#    define LPL_SAMPLES_CUBEPILEAPP_HPP
+#ifndef LPL_SAMPLES_CUBEPILEWORLD_HPP
+#    define LPL_SAMPLES_CUBEPILEWORLD_HPP
 
 #    include <lpl/core/Log.hpp>
 #    include <lpl/core/Types.hpp>
-#    include <lpl/engine/Engine.hpp>
-#    include <lpl/engine/IApplication.hpp>
+#    include <lpl/engine/World.hpp>
 #    include <lpl/image/Font8x16.hpp>
 #    include <lpl/platform/IPlatform.hpp>
 #    include <lpl/samples/CubePile.hpp>
 
-#    include <new>
-
 namespace lpl::samples {
 
 /**
- * @class CubePileApp
- * @brief IApplication payload driving the CubePile simulation.
+ * @class CubePileWorld
+ * @brief engine::World running the CubePile simulation.
  */
-class CubePileApp final : public engine::IApplication {
+class CubePileWorld final : public engine::World {
 public:
-    [[nodiscard]] core::Expected<void> init(engine::AppContext &context) override
+    /// The cubes run on the World's own registry — that is the whole point of
+    /// the World seam. registry() refers to the base subobject, constructed
+    /// before this member, so the reference is valid.
+    CubePileWorld() : _cube{registry()} {}
+
+    [[nodiscard]] core::Expected<void> onInit(engine::WorldContext &context) override
     {
-        _context = &context;
-        sim().init();
+        // Seeds the entities only. Config::enablePhysics (set by CubePileWorld's
+        // hosts) has already registered the engine's built-in PhysicsSystem on
+        // this same scheduler/registry before onInit runs — that is what
+        // advances Position/Velocity from here on. Registering a second,
+        // game-owned physics system here would step every entity twice per
+        // tick, on the same chunk buffers, silently doubling gravity/damping/
+        // collision impulses.
+        _cube.init();
 
         if (!context.platform.display().querySurface(_surface) || _surface.buffer == nullptr ||
             _surface.bitsPerPixel != 32u || _surface.width < 64u || _surface.height < 64u)
@@ -52,37 +66,34 @@ public:
             // Headless is legitimate (the server profile has no display): the
             // simulation still steps, only the render path is skipped.
             _hasSurface = false;
-            core::Log::info("CubePileApp: no usable 32bpp surface, running headless");
+            core::Log::info("CubePileWorld: no usable 32bpp surface, running headless");
             return {};
         }
 
         _hasSurface = true;
-        core::Log::info("CubePileApp: WASD=cam Q/E=zoom P=possess N=next X=exit");
+        core::Log::info("CubePileWorld: WASD=cam Q/E=zoom P=possess N=next X=exit");
         return {};
     }
 
-    /// Authoritative: fixed Fixed32 step. The engine calls this at a fixed rate.
-    void fixedStep(core::f32 /*dt*/) override { sim().step(); }
-
     /// Non-authoritative: input, camera, rasterize, scale, HUD, present.
-    void render(core::f64 /*alpha*/) override
+    void onRender(engine::WorldContext &context, core::f64 /*alpha*/) override
     {
-        drainInput();
+        drainInput(context);
         if (!_hasSurface)
             return;
 
         render::RenderTarget target{_color, _depth, kRenderWidth, kRenderHeight};
-        sim().render(target, _camera);
+        _cube.render(target, _camera);
 
         blitScaled();
         drawHud();
 
-        _context->platform.display().present();
+        context.platform.display().present();
         ++_framesInWindow;
-        updateFps();
+        updateFps(context);
     }
 
-    void shutdown() override { core::Log::info("CubePileApp: exited"); }
+    void onShutdown() override { core::Log::info("CubePileWorld: exited"); }
 
     [[nodiscard]] const char *name() const noexcept override { return "CubePile"; }
 
@@ -91,27 +102,10 @@ private:
     static constexpr core::u32 kRenderWidth = 480u;
     static constexpr core::u32 kRenderHeight = 300u;
 
-    /// The sim owns an ecs::Registry (heap-backed). Constructing it at static-init
-    /// time would touch the kernel heap before kernel_main brings it up, so the
-    /// storage sits in BSS and the object is placement-constructed on first use,
-    /// which only happens once the engine is running.
-    [[nodiscard]] static CubePile &sim() noexcept
-    {
-        static bool constructed = false;
-        alignas(CubePile) static unsigned char storage[sizeof(CubePile)];
-        static CubePile *instance = nullptr;
-        if (!constructed)
-        {
-            instance = new (static_cast<void *>(storage)) CubePile();
-            constructed = true;
-        }
-        return *instance;
-    }
-
-    void drainInput() noexcept
+    void drainInput(engine::WorldContext &context) noexcept
     {
         char key;
-        while (_context->platform.input().tryPopCharacter(key))
+        while (context.platform.input().tryPopCharacter(key))
         {
             switch (key)
             {
@@ -124,11 +118,14 @@ private:
             case 'p': _camera.possess = (_camera.possess < 0) ? 0 : -1; break;
             case 'n':
                 if (_camera.possess >= 0)
-                    _camera.possess =
-                        static_cast<core::i32>((static_cast<core::u32>(_camera.possess) + 1u) % CubePile::count());
+                    _camera.possess = static_cast<core::i32>((static_cast<core::u32>(_camera.possess) + 1u) %
+                                                             CubePile::count());
                 break;
             case 'x':
-            case 27: _context->engine.requestShutdown(); break;
+            case 27:
+                if (context.engine != nullptr)
+                    context.engine->requestShutdown();
+                break;
             default: break;
             }
         }
@@ -188,9 +185,9 @@ private:
     }
 
     /// FPS over a one-second wall-clock window, read from the platform clock.
-    void updateFps() noexcept
+    void updateFps(engine::WorldContext &context) noexcept
     {
-        platform::IClockBackend &clock = _context->platform.clock();
+        platform::IClockBackend &clock = context.platform.clock();
         const core::u32 tickHertz = clock.tickHertz();
         const core::u32 now = clock.tickCount();
         const core::u32 elapsed = now - _windowStart; // wrap-safe modular delta
@@ -224,13 +221,13 @@ private:
             buffer[pos++] = text[i];
     }
 
-    /// Colour/depth targets live in BSS, not in the object: at 480x300 they are
-    /// ~1.1 MiB together, far too much to put on a kernel heap allocation (or a
-    /// stack frame). Only one CubePileApp is ever live, so static storage is safe.
+    /// Colour/depth targets in BSS, not in the object: ~1.1 MiB at 480x300, far
+    /// past a kernel heap allocation or stack frame. Only one CubePileWorld is
+    /// ever live, so static storage is safe.
     static inline core::u32 _color[kRenderWidth * kRenderHeight]{};
     static inline core::f32 _depth[kRenderWidth * kRenderHeight]{};
 
-    engine::AppContext *_context{nullptr};
+    CubePile _cube;                       ///< The sim, on this World's registry.
     platform::SurfaceDescriptor _surface{};
     bool _hasSurface{false};
     CubePile::Camera _camera{};
@@ -242,4 +239,4 @@ private:
 
 } // namespace lpl::samples
 
-#endif // LPL_SAMPLES_CUBEPILEAPP_HPP
+#endif // LPL_SAMPLES_CUBEPILEWORLD_HPP

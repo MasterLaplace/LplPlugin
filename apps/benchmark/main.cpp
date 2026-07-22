@@ -330,7 +330,7 @@ void benchmarkWorldPartition()
     // GPU-dispatch gateway and does no integration work.
     bench::run("WorldPartition build+insert 10k entities", [&]() {
         ecs::Registry reg;
-        ecs::WorldPartition world(math::Fixed32{10});
+        ecs::WorldPartition world(math::Fixed32::fromFloat(10.0f));
         placeAll(reg, world, arch);
         bench::doNotOptimize(world);
     });
@@ -608,7 +608,7 @@ void benchmarkCollisionBroadphase()
     });
 
     // Broad-phase via WorldPartition queryRadius
-    ecs::WorldPartition world(math::Fixed32{10});
+    ecs::WorldPartition world(math::Fixed32::fromFloat(10.0f));
     ecs::Registry reg;
     ecs::Archetype arch;
     arch.add(ecs::ComponentId::Position);
@@ -633,7 +633,7 @@ void benchmarkCollisionBroadphase()
             const math::Vec3<math::Fixed32> center{math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
                                                    math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
                                                    math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
-            world.queryRadius(center, math::Fixed32{10}, hits);
+            world.queryRadius(center, math::Fixed32::fromFloat(10.0f), hits);
             total += static_cast<core::u32>(hits.size());
         }
         bench::doNotOptimize(total);

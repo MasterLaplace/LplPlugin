@@ -134,3 +134,15 @@ target("test-simd-fixed-parity")
     add_deps("lpl-core", "lpl-math")
     add_files("parity/test_simd_fixed_parity.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Authoritative tick allocation audit (diagnostic, NOT a parity gate)
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-tick-allocations")
+    set_kind("binary")
+    set_group("tests")
+    set_symbols("debug")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-physics", "lpl-engine", "lpl-samples", "lpl-image", "lpl-render")
+    add_ldflags("-rdynamic", {force = true})
+    add_files("parity/test_tick_allocations.cpp")
+target_end()

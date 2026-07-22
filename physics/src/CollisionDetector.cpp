@@ -33,26 +33,30 @@ CollisionResult CollisionDetector::testAABBvsAABB(const math::AABB<math::Fixed32
     if (overlapX <= overlapY && overlapX <= overlapZ)
     {
         result.contact.normal = math::Vec3<math::Fixed32>{
-            (a.center().x < b.center().x) ? math::Fixed32{-1} : math::Fixed32{1}, math::Fixed32{0}, math::Fixed32{0}};
+            (a.center().x < b.center().x) ? -math::Fixed32::one() : math::Fixed32::one(), math::Fixed32{0},
+            math::Fixed32{0}};
         result.contact.penetrationDepth = overlapX;
     }
     else if (overlapY <= overlapZ)
     {
         result.contact.normal = math::Vec3<math::Fixed32>{
-            math::Fixed32{0}, (a.center().y < b.center().y) ? math::Fixed32{-1} : math::Fixed32{1}, math::Fixed32{0}};
+            math::Fixed32{0}, (a.center().y < b.center().y) ? -math::Fixed32::one() : math::Fixed32::one(),
+            math::Fixed32{0}};
         result.contact.penetrationDepth = overlapY;
     }
     else
     {
         result.contact.normal = math::Vec3<math::Fixed32>{
-            math::Fixed32{0}, math::Fixed32{0}, (a.center().z < b.center().z) ? math::Fixed32{-1} : math::Fixed32{1}};
+            math::Fixed32{0}, math::Fixed32{0},
+            (a.center().z < b.center().z) ? -math::Fixed32::one() : math::Fixed32::one()};
         result.contact.penetrationDepth = overlapZ;
     }
 
     const auto ca = a.center();
     const auto cb = b.center();
-    result.contact.position = math::Vec3<math::Fixed32>{
-        (ca.x + cb.x) / math::Fixed32{2}, (ca.y + cb.y) / math::Fixed32{2}, (ca.z + cb.z) / math::Fixed32{2}};
+    result.contact.position = math::Vec3<math::Fixed32>{(ca.x + cb.x) * math::Fixed32::half(),
+                                                         (ca.y + cb.y) * math::Fixed32::half(),
+                                                         (ca.z + cb.z) * math::Fixed32::half()};
 
     return result;
 }

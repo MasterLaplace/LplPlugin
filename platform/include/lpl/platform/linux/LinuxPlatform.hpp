@@ -32,7 +32,9 @@
 
 namespace lpl::platform::linux_host {
 
-/** @brief Tick / timestamp backend over std::chrono::steady_clock + rdtsc. */
+/**
+ * @brief Tick / timestamp backend over std::chrono::steady_clock + rdtsc.
+ */
 class LinuxClockBackend final : public IClockBackend {
 public:
     LinuxClockBackend() noexcept;
@@ -46,7 +48,9 @@ private:
     core::u64 _epochNanoseconds;
 };
 
-/** @brief Software-LFB display backend over a host-memory framebuffer. */
+/**
+ * @brief Software-LFB display backend over a host-memory framebuffer.
+ */
 class LinuxDisplayBackend final : public IDisplayBackend {
 public:
     LinuxDisplayBackend(core::u32 width, core::u32 height);
@@ -63,14 +67,18 @@ private:
     lpl::pmr::vector<core::u32> _buffer;
 };
 
-/** @brief Input backend over an in-memory decoded-character ring. */
+/**
+ * @brief Input backend over an in-memory decoded-character ring.
+ */
 class LinuxInputBackend final : public IInputBackend {
 public:
     [[nodiscard]] bool tryPopCharacter(char &outCharacter) override;
     [[nodiscard]] core::u32 pendingCount() const noexcept override;
     [[nodiscard]] const char *name() const noexcept override { return "LinuxInput(software-ring)"; }
 
-    /** @brief Push a decoded character into the ring (GLFW callback / test feed). */
+    /**
+     * @brief Push a decoded character into the ring (GLFW callback / test feed).
+     */
     void pushCharacter(char character);
 
 private:
@@ -78,7 +86,29 @@ private:
     core::usize _head = 0u;
 };
 
-/** @brief Graphics-memory backend over aligned host allocation. */
+/**
+ * @brief Arena-backing memory backend over the C library allocator.
+ */
+class LinuxMemoryBackend final : public IMemoryBackend {
+public:
+    /**
+     * @brief Reserve a block of memory from the host heap, aligned to @p alignment.
+     *
+     * std::aligned_alloc is used, which requires @p alignment to be a power of two and
+     * @p sizeBytes to be a multiple of @p alignment.
+     *
+     * @param sizeBytes The size of the block to reserve.
+     * @param alignment The required alignment of the block.
+     * @return A pointer to the reserved block, or nullptr if the reservation failed.
+     */
+    [[nodiscard]] void *reserve(core::usize sizeBytes, core::usize alignment) override;
+    void release(void *block, core::usize sizeBytes) override;
+    [[nodiscard]] const char *name() const noexcept override { return "LinuxMemory(malloc-backed)"; }
+};
+
+/**
+ * @brief Graphics-memory backend over aligned host allocation.
+ */
 class LinuxGpuMemoryBackend final : public IGpuMemoryBackend {
 public:
     [[nodiscard]] core::Expected<GpuAllocation> allocate(core::u32 sizeBytes, GpuMemoryFlags flags) override;
@@ -97,6 +127,7 @@ public:
     [[nodiscard]] IClockBackend &clock() noexcept override { return _clock; }
     [[nodiscard]] IDisplayBackend &display() noexcept override { return _display; }
     [[nodiscard]] IInputBackend &input() noexcept override { return _input; }
+    [[nodiscard]] IMemoryBackend &memory() noexcept override { return _memory; }
     [[nodiscard]] IGpuMemoryBackend &gpuMemory() noexcept override { return _gpuMemory; }
     [[nodiscard]] const char *name() const noexcept override { return "LinuxPlatform"; }
 
@@ -107,6 +138,7 @@ private:
     LinuxClockBackend _clock;
     LinuxDisplayBackend _display;
     LinuxInputBackend _input;
+    LinuxMemoryBackend _memory;
     LinuxGpuMemoryBackend _gpuMemory;
 };
 

@@ -37,8 +37,8 @@ struct Chunk::Impl {
     core::u32 count{0};
     Alloc alloc{};
 
-    explicit Impl(const Archetype &arch, std::span<const ComponentLayout> lyts)
-        : archetype{arch}, layouts{lyts.begin(), lyts.end()}
+    Impl(const Archetype &arch, std::span<const ComponentLayout> lyts, memory::IAllocator *external)
+        : archetype{arch}, layouts{lyts.begin(), lyts.end()}, externalAllocator{external}
     {
         entities.resize(kChunkCapacity);
 
@@ -50,14 +50,12 @@ struct Chunk::Impl {
             }
 
             const core::usize bytes = static_cast<core::usize>(layout.size) * kChunkCapacity;
-            auto *front = alloc.allocate(bytes);
-            auto *back = alloc.allocate(bytes);
+            auto *front = allocateBytes(bytes);
+            auto *back = allocateBytes(bytes);
             if (front == nullptr || back == nullptr)
             {
-                if (front != nullptr)
-                    alloc.deallocate(static_cast<core::byte *>(front), 0);
-                if (back != nullptr)
-                    alloc.deallocate(static_cast<core::byte *>(back), 0);
+                releaseBytes(front);
+                releaseBytes(back);
                 continue;
             }
             lpl::pmr::memset(front, 0, bytes);
@@ -70,20 +68,36 @@ struct Chunk::Impl {
     {
         for (auto &pair : buffers)
         {
-            if (pair.first)
-                alloc.deallocate(static_cast<core::byte *>(pair.first), 0);
-            if (pair.second)
-                alloc.deallocate(static_cast<core::byte *>(pair.second), 0);
+            releaseBytes(pair.first);
+            releaseBytes(pair.second);
         }
     }
+
+    /// Chunk storage comes from the World's arena when one was injected, and
+    /// from the heap otherwise. Same bytes either way — only the source differs.
+    [[nodiscard]] void *allocateBytes(core::usize bytes)
+    {
+        return externalAllocator ? externalAllocator->allocate(bytes) : alloc.allocate(bytes);
+    }
+
+    void releaseBytes(void *pointer)
+    {
+        if (pointer == nullptr)
+            return;
+        // An arena reclaims in bulk on reset, never per block.
+        if (externalAllocator == nullptr)
+            alloc.deallocate(static_cast<core::byte *>(pointer), 0);
+    }
+
+    memory::IAllocator *externalAllocator = nullptr;
 };
 
 // ========================================================================== //
 //  Chunk                                                                     //
 // ========================================================================== //
 
-Chunk::Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts)
-    : _impl{lpl::pmr::make_unique<Impl>(archetype, layouts)}
+Chunk::Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts, memory::IAllocator *allocator)
+    : _impl{lpl::pmr::make_unique<Impl>(archetype, layouts, allocator)}
 {
 }
 
@@ -205,8 +219,8 @@ std::span<const EntityId> Chunk::entities() const noexcept { return {_impl->enti
 
 // ========================================================================== //
 
-Partition::Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts)
-    : _archetype{std::move(archetype)}, _layouts{std::move(layouts)}
+Partition::Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts, memory::IAllocator *allocator)
+    : _archetype{std::move(archetype)}, _layouts{std::move(layouts)}, _allocator{allocator}
 {
 }
 
@@ -227,7 +241,7 @@ core::Expected<EntityRef> Partition::insert(EntityId id)
         }
     }
 
-    _chunks.push_back(lpl::pmr::make_unique<Chunk>(_archetype, _layouts));
+    _chunks.push_back(lpl::pmr::make_unique<Chunk>(_archetype, _layouts, _allocator));
     const core::u32 ci = static_cast<core::u32>(_chunks.size()) - 1;
 
     auto result = _chunks[ci]->add(id);

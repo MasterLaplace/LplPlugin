@@ -20,7 +20,16 @@ ArenaAllocator::ArenaAllocator(core::usize capacity) : _capacity(capacity)
     _memory = static_cast<char *>(lpl::pmr::aligned_alloc(alignof(std::max_align_t), capacity));
 }
 
-ArenaAllocator::~ArenaAllocator() { lpl::pmr::free(_memory); }
+ArenaAllocator::ArenaAllocator(void *memory, core::usize capacity) noexcept
+    : _memory(static_cast<char *>(memory)), _capacity(capacity), _ownsMemory(false)
+{
+}
+
+ArenaAllocator::~ArenaAllocator()
+{
+    if (_ownsMemory)
+        lpl::pmr::free(_memory);
+}
 
 void *ArenaAllocator::allocate(core::usize size, core::usize alignment)
 {
