@@ -41,6 +41,22 @@ public:
 
     [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const Endpoint *address) override;
 
+    /**
+     * @brief Batched send: one @c sendmmsg syscall on Linux.
+     *
+     * On any other platform (Windows, macOS) this falls back to the base
+     * implementation's loop — there is no portable equivalent, and this
+     * transport is exactly the path those platforms rely on.
+     */
+    [[nodiscard]] core::Expected<core::u32> sendBatch(std::span<const Datagram> datagrams) override;
+
+    /**
+     * @brief Batched receive: one @c recvmmsg syscall on Linux.
+     *
+     * Falls back to the base loop on Windows/macOS, which have no recvmmsg.
+     */
+    [[nodiscard]] core::Expected<core::u32> receiveBatch(std::span<ReceiveSlot> slots) override;
+
     [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) override;
 
     [[nodiscard]] const char *name() const noexcept override;

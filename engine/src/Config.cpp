@@ -102,6 +102,24 @@ Config::Builder &Config::Builder::serverAddress(pmr::string addr) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::serverWorkerThreads(core::u32 n) noexcept
+{
+    _serverWorkerThreads = n;
+    return *this;
+}
+
+Config::Builder &Config::Builder::replaySnapshotInterval(core::u32 ticks) noexcept
+{
+    _replaySnapshotInterval = ticks;
+    return *this;
+}
+
+Config::Builder &Config::Builder::maxPacketsPerTick(core::u32 n) noexcept
+{
+    _maxPacketsPerTick = n;
+    return *this;
+}
+
 Config::Builder &Config::Builder::serverPort(core::u16 port) noexcept
 {
     _serverPort = port;
@@ -115,6 +133,9 @@ Config Config::Builder::build() const noexcept
     cfg._maxEntities = _maxEntities;
     cfg._maxChunks = _maxChunks;
     cfg._worldCellCapacity = _worldCellCapacity;
+    cfg._serverWorkerThreads = _serverWorkerThreads;
+    cfg._replaySnapshotInterval = _replaySnapshotInterval;
+    cfg._maxPacketsPerTick = _maxPacketsPerTick;
     cfg._serverMode = _serverMode;
     cfg._headless = _headless;
     cfg._arenaSize = _arenaSize;

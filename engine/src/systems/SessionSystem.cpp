@@ -76,12 +76,19 @@ void SessionSystem::execute(core::f32 /*dt*/)
 
     for (const auto &ev : events)
     {
-        const core::u32 newId = _impl->nextEntityId++;
-
-        if (_impl->sessionManager.isDuplicate(newId))
+        // Legacy parity (SessionManager::handleConnections): a client is known by
+        // its endpoint, so a handshake from an address that already has a session
+        // is a retransmission — common on UDP — and must NOT spawn a second
+        // player. The previous check asked isDuplicate() about a freshly minted
+        // id, which by construction never collides, so it could never fire.
+        if (ev.source.valid() && _impl->sessionManager.findByAddress(ev.source) != nullptr)
         {
             continue;
         }
+
+        // Only mint an id once the connection is accepted, so a rejected
+        // duplicate does not burn one.
+        const core::u32 newId = _impl->nextEntityId++;
 
         auto sessionResult = _impl->sessionManager.connect(newId);
         if (!sessionResult.has_value())

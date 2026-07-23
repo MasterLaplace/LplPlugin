@@ -38,6 +38,10 @@ enum class PacketType : core::u8 {
     InputPayload = 0x10,
     StateSnapshot = 0x11,
     StateDelta = 0x12,
+    /// Client -> server: "at tick T my authoritative state hashed to H".
+    /// The server compares it against its own digest for that tick to detect a
+    /// desync (see engine::Server::checkClientHash and the book's §6.4).
+    StateHashReport = 0x13,
     EntitySpawn = 0x20,
     EntityDestroy = 0x21,
     ComponentUpdate = 0x22,

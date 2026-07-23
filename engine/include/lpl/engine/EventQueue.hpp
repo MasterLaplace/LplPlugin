@@ -74,6 +74,19 @@ struct NeuralInput {
     bool blink;
 };
 
+/**
+ * @brief A client reporting the digest it computed for one of its past ticks.
+ *
+ * Desync detection (§6.4): the server looks the tick up in its own digest
+ * history and compares. Carries the sender so the server knows whose
+ * simulation diverged.
+ */
+struct StateHashReportEvent {
+    net::Endpoint source{}; ///< Who reported it.
+    core::u64 tick{0};      ///< The tick the client hashed.
+    core::u64 digest{0};    ///< What the client computed for it.
+};
+
 /** @brief Input event from a remote client. */
 struct InputEvent {
     core::u32 entityId;
@@ -147,6 +160,7 @@ struct EventQueues {
     TypedQueue<WelcomeEvent> welcomes;
     TypedQueue<StateUpdateEvent> states;
     TypedQueue<InputEvent> inputs;
+    TypedQueue<StateHashReportEvent> stateHashReports;
 };
 
 } // namespace lpl::engine

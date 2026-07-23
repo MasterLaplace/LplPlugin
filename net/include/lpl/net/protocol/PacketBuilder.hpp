@@ -16,6 +16,7 @@
 #    define LPL_NET_PROTOCOL_PACKETBUILDER_HPP
 
 #    include <lpl/core/Expected.hpp>
+#    include <lpl/net/protocol/Bitstream.hpp>
 #    include <lpl/net/protocol/Protocol.hpp>
 #    include <lpl/net/transport/ITransport.hpp>
 
@@ -33,25 +34,8 @@ namespace lpl::net::protocol {
  * @param flags   Packet flags.
  * @return The raw packet bytes (header + payload).
  */
-[[nodiscard]] inline std::vector<core::byte> buildPacket(PacketType type, std::span<const core::byte> payload,
-                                                         core::u32 seq = 0, core::u8 flags = 0)
-{
-    PacketHeader header{};
-    header.magic = kProtocolMagic;
-    header.version = kProtocolVersion;
-    header.type = type;
-    header.flags = flags;
-    header.padding = 0;
-    header.sequence = seq;
-    header.payloadSize = static_cast<core::u32>(payload.size());
-
-    std::vector<core::byte> packet(sizeof(header) + payload.size());
-    std::memcpy(packet.data(), &header, sizeof(header));
-    if (!payload.empty())
-        std::memcpy(packet.data() + sizeof(header), payload.data(), payload.size());
-
-    return packet;
-}
+[[nodiscard]] std::vector<core::byte> buildPacket(PacketType type, std::span<const core::byte> payload, core::u32 seq = 0,
+                                                  core::u8 flags = 0);
 
 /**
  * @brief Builds and sends a Handshake (connect) packet.
@@ -61,16 +45,8 @@ namespace lpl::net::protocol {
  * @param localPort Client's own port (network byte order).
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendConnect(transport::ITransport &transport, const Endpoint *address,
-                                                           core::u32 localIp = 0, core::u16 localPort = 0)
-{
-    core::byte payload[6]{};
-    std::memcpy(payload, &localIp, 4);
-    std::memcpy(payload + 4, &localPort, 2);
-
-    auto pkt = buildPacket(PacketType::Handshake, {payload, 6});
-    return transport.send(std::span<const core::byte>{pkt.data(), pkt.size()}, address);
-}
+[[nodiscard]] core::Expected<core::u32> sendConnect(transport::ITransport &transport, const Endpoint *address,
+                                                    core::u32 localIp = 0, core::u16 localPort = 0);
 
 /**
  * @brief Builds and sends a HandshakeAck (welcome) packet.
@@ -79,15 +55,8 @@ namespace lpl::net::protocol {
  * @param entityId  Entity ID assigned to the client.
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendWelcome(transport::ITransport &transport, const Endpoint *address,
-                                                           core::u32 entityId)
-{
-    core::byte payload[4]{};
-    std::memcpy(payload, &entityId, 4);
-
-    auto pkt = buildPacket(PacketType::HandshakeAck, {payload, 4});
-    return transport.send(std::span<const core::byte>{pkt.data(), pkt.size()}, address);
-}
+[[nodiscard]] core::Expected<core::u32> sendWelcome(transport::ITransport &transport, const Endpoint *address,
+                                                    core::u32 entityId);
 
 /**
  * @brief Builds and sends an InputPayload packet.
@@ -97,13 +66,8 @@ namespace lpl::net::protocol {
  * @param seq       Sequence number.
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendInputs(transport::ITransport &transport, const Endpoint *address,
-                                                          std::span<const core::byte> rawInputPayload,
-                                                          core::u32 seq = 0)
-{
-    auto pkt = buildPacket(PacketType::InputPayload, rawInputPayload, seq);
-    return transport.send(std::span<const core::byte>{pkt.data(), pkt.size()}, address);
-}
+[[nodiscard]] core::Expected<core::u32> sendInputs(transport::ITransport &transport, const Endpoint *address,
+                                                   std::span<const core::byte> rawInputPayload, core::u32 seq = 0);
 
 /**
  * @brief Builds and sends a StateSnapshot packet.
@@ -113,12 +77,25 @@ namespace lpl::net::protocol {
  * @param seq       Sequence number.
  * @return Ok or error.
  */
-[[nodiscard]] inline core::Expected<core::u32> sendState(transport::ITransport &transport, const Endpoint *address,
-                                                         std::span<const core::byte> stateData, core::u32 seq = 0)
-{
-    auto pkt = buildPacket(PacketType::StateSnapshot, stateData, seq, static_cast<core::u8>(PacketFlag::Fragment));
-    return transport.send(std::span<const core::byte>{pkt.data(), pkt.size()}, address);
-}
+[[nodiscard]] core::Expected<core::u32> sendState(transport::ITransport &transport, const Endpoint *address,
+                                                  std::span<const core::byte> stateData, core::u32 seq = 0);
+
+/**
+ * @brief Builds and sends a StateHashReport packet (client -> server).
+ *
+ * The client tells the server what its authoritative state hashed to at a tick
+ * it has already simulated; the server compares against its own digest for that
+ * tick and answers Match / Diverged / TickUnknown. See the book's §6.4.
+ *
+ * @param transport Transport to send through.
+ * @param address   Server address.
+ * @param tick      The tick the client hashed.
+ * @param digest    engine::World::stateHash() at that tick.
+ * @param seq       Sequence number.
+ * @return Ok or error.
+ */
+[[nodiscard]] core::Expected<core::u32> sendStateHashReport(transport::ITransport &transport, const Endpoint *address,
+                                                            core::u64 tick, core::u64 digest, core::u32 seq = 0);
 
 } // namespace lpl::net::protocol
 

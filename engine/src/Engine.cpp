@@ -53,6 +53,7 @@
 #    include <lpl/engine/systems/ServerMonitorSystem.hpp>
 #    include <lpl/engine/systems/SessionSystem.hpp>
 #    include <lpl/engine/systems/SpawnSystem.hpp>
+#    include <lpl/engine/systems/StateHashReportSystem.hpp>
 #    include <lpl/engine/systems/StateReconciliationSystem.hpp>
 #    include <lpl/engine/systems/WelcomeSystem.hpp>
 #    include <lpl/net/ServerMesh.hpp>
@@ -428,6 +429,13 @@ core::Expected<void> Engine::init()
 
         auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
         [[maybe_unused]] auto r5 = _impl->world->scheduler().registerSystem(std::move(movement));
+
+        // §6.4: tell the server what our authoritative state hashed to, so a
+        // divergence between its simulation and ours is detected rather than
+        // silently drifting.
+        auto hashReport = pmr::make_unique<systems::StateHashReportSystem>(*_impl->world, _impl->transport,
+                                                                          _impl->connected);
+        [[maybe_unused]] auto rHash = _impl->world->scheduler().registerSystem(std::move(hashReport));
 
         auto inputSend = pmr::make_unique<systems::InputSendSystem>(_impl->inputManager, _impl->transport,
                                                                     _impl->myEntityId, _impl->connected);

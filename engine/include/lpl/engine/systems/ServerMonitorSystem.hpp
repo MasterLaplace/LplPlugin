@@ -36,9 +36,13 @@ public:
      * @param sessionManager Session registry for client count.
      * @param world          World partition for entity/chunk counts.
      * @param logInterval    Frames between log outputs (default: 300).
+     * @param instanceId     Which hosted instance this monitor watches. A server
+     *                       runs one monitor per instance, and their heartbeats
+     *                       interleave on one log; without this they would be
+     *                       indistinguishable. Zero for a single-instance host.
      */
     ServerMonitorSystem(net::session::SessionManager &sessionManager, ecs::WorldPartition &world,
-                        core::u32 logInterval = 300);
+                        core::u32 logInterval = 300, core::u32 instanceId = 0);
     ~ServerMonitorSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;

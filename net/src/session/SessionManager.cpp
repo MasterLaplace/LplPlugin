@@ -19,6 +19,10 @@ namespace lpl::net::session {
 
 struct SessionManager::Impl {
     std::unordered_map<core::u32, std::unique_ptr<Session>> sessions;
+
+    /// Scratch for broadcastState, kept across ticks so a broadcast does not
+    /// allocate every frame (clear() retains the capacity).
+    std::vector<transport::Datagram> broadcastBatch;
 };
 
 SessionManager::SessionManager() : _impl{std::make_unique<Impl>()} {}
@@ -104,16 +108,22 @@ core::u32 SessionManager::activeCount() const noexcept { return static_cast<core
 
 void SessionManager::broadcastState(transport::ITransport &transport, std::span<const core::byte> data)
 {
-    // Fragmentation: split data into kMaxPayloadSize chunks
+    // Fragmentation: split data into kMaxPayloadSize chunks.
+    //
+    // Every fragment for every client is ready at this instant, so the whole
+    // burst is handed to the transport at once instead of one packet at a time:
+    // fragments × clients syscalls collapse into one sendmmsg (sockets) or one
+    // ring kick (kernel module). The datagrams borrow their bytes from `data`
+    // and their addresses from the sessions, both of which outlive the call.
     const core::u32 totalSize = static_cast<core::u32>(data.size());
-    core::u32 offset = 0;
 
-    while (offset < totalSize)
+    _impl->broadcastBatch.clear();
+
+    for (core::u32 offset = 0; offset < totalSize;)
     {
         const core::u32 chunkSize = std::min(kMaxPayloadSize, totalSize - offset);
         auto fragment = data.subspan(offset, chunkSize);
 
-        // Send to each active session
         for (auto &[id, session] : _impl->sessions)
         {
             if (session->state() != SessionState::Connected)
@@ -121,18 +131,35 @@ void SessionManager::broadcastState(transport::ITransport &transport, std::span<
                 continue;
             }
 
-            // Use the session's stored endpoint address
-            auto result = transport.send(fragment, session->address());
-            if (!result.has_value())
-            {
-                core::Log::warn("SessionManager: broadcast fragment failed");
-            }
+            _impl->broadcastBatch.push_back(transport::Datagram{fragment, session->address()});
         }
 
         offset += chunkSize;
     }
+
+    if (_impl->broadcastBatch.empty())
+    {
+        return;
+    }
+
+    auto result = transport.sendBatch(_impl->broadcastBatch);
+    if (!result.has_value() || result.value() < _impl->broadcastBatch.size())
+    {
+        core::Log::warn("SessionManager: broadcast did not send every fragment");
+    }
 }
 
 bool SessionManager::isDuplicate(core::u32 playerId) const noexcept { return _impl->sessions.contains(playerId); }
+
+Session *SessionManager::findByAddress(const Endpoint &address) noexcept
+{
+    for (auto &entry : _impl->sessions)
+    {
+        const auto *bound = entry.second->address();
+        if (bound != nullptr && *bound == address)
+            return entry.second.get();
+    }
+    return nullptr;
+}
 
 } // namespace lpl::net::session

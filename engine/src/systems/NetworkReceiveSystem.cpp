@@ -9,15 +9,13 @@
  */
 
 #include <lpl/core/Log.hpp>
+#include <lpl/engine/PacketDispatch.hpp>
 #include <lpl/engine/systems/NetworkReceiveSystem.hpp>
-#include <lpl/net/protocol/Bitstream.hpp>
 #include <lpl/net/protocol/Protocol.hpp>
 #include <lpl/net/session/SessionManager.hpp>
 
 #include <array>
 #include <cstring>
-#include <netinet/in.h>
-#include <sys/socket.h>
 
 namespace lpl::engine::systems {
 
@@ -53,169 +51,29 @@ const ecs::SystemDescriptor &NetworkReceiveSystem::descriptor() const noexcept {
 
 void NetworkReceiveSystem::execute(core::f32 /*dt*/)
 {
-    constexpr core::u32 kMaxPacketsPerTick = 256;
-    // Buffer must fit a full UDP datagram: PacketHeader (16B) + max payload (1400B)
+    // Buffer must fit a full UDP datagram: PacketHeader (16B) + max payload.
     std::array<core::byte, sizeof(net::protocol::PacketHeader) + net::session::SessionManager::kMaxPayloadSize>
         buffer{};
     net::Endpoint fromAddr{};
 
-    for (core::u32 i = 0; i < kMaxPacketsPerTick; ++i)
+    for (core::u32 i = 0; i < detail::kMaxPacketsPerTick; ++i)
     {
         auto result = _impl->transport->receive(std::span<core::byte>{buffer.data(), buffer.size()}, &fromAddr);
-
         if (!result.has_value())
-        {
             break;
-        }
 
         const core::u32 bytesRead = result.value();
         if (bytesRead == 0)
-        {
             break;
-        }
-
-        if (bytesRead < sizeof(net::protocol::PacketHeader))
-        {
-            continue;
-        }
 
         net::protocol::PacketHeader header{};
-        std::memcpy(&header, buffer.data(), sizeof(header));
-
-        if (header.magic != net::protocol::kProtocolMagic)
-        {
+        std::span<const core::byte> payload;
+        if (!detail::parsePacket(std::span<const core::byte>{buffer.data(), bytesRead}, header, payload))
             continue;
-        }
 
-        const core::byte *payload = buffer.data() + sizeof(header);
-        const core::u32 payloadSize = bytesRead - sizeof(header);
-
-        switch (header.type)
-        {
-        case net::protocol::PacketType::Handshake: {
-            // The address the packet actually came from is authoritative; the
-            // handshake payload's self-reported address is not consulted.
-            ConnectEvent ev{};
-            ev.source = fromAddr;
-            _impl->queues.connects.push(ev);
-            break;
-        }
-
-        case net::protocol::PacketType::HandshakeAck: {
-            WelcomeEvent ev{};
-            if (payloadSize >= 4)
-            {
-                std::memcpy(&ev.entityId, payload, 4);
-            }
-            _impl->queues.welcomes.push(ev);
-            break;
-        }
-
-        case net::protocol::PacketType::StateSnapshot: {
-            StateUpdateEvent ev{};
-            net::protocol::Bitstream stream{
-                std::span<const core::byte>{payload, payloadSize},
-                 payloadSize * 8
-            };
-
-            auto countResult = stream.readU16();
-            if (!countResult.has_value())
-                break;
-
-            const core::u16 count = countResult.value();
-            for (core::u16 e = 0; e < count; ++e)
-            {
-                auto rId = stream.readU32();
-                auto rPosX = stream.readFloat();
-                auto rPosY = stream.readFloat();
-                auto rPosZ = stream.readFloat();
-                auto rSzX = stream.readFloat();
-                auto rSzY = stream.readFloat();
-                auto rSzZ = stream.readFloat();
-                auto rHp = stream.readI32();
-
-                if (!rId.has_value() || !rHp.has_value())
-                    break;
-
-                StateEntity se{};
-                se.id = rId.value();
-                se.pos = {rPosX.value(), rPosY.value(), rPosZ.value()};
-                se.size = {rSzX.value(), rSzY.value(), rSzZ.value()};
-                se.hp = rHp.value();
-                ev.entities.push_back(se);
-            }
-            _impl->queues.states.push(std::move(ev));
-            break;
-        }
-
-        case net::protocol::PacketType::InputPayload: {
-            InputEvent ev{};
-            net::protocol::Bitstream stream{
-                std::span<const core::byte>{payload, payloadSize},
-                 payloadSize * 8
-            };
-
-            auto rEntityId = stream.readU32();
-            if (!rEntityId.has_value())
-                break;
-            ev.entityId = rEntityId.value();
-
-            auto rKeyCount = stream.readU16();
-            if (rKeyCount.has_value())
-            {
-                const core::u16 keyCount = rKeyCount.value();
-                for (core::u16 k = 0; k < keyCount; ++k)
-                {
-                    auto rKey = stream.readU16();
-                    auto rPressed = stream.readBool();
-                    if (!rKey.has_value() || !rPressed.has_value())
-                        break;
-
-                    KeyInput ki{};
-                    ki.key = rKey.value();
-                    ki.pressed = rPressed.value();
-                    ev.keys.push_back(ki);
-                }
-            }
-
-            auto rAxisCount = stream.readU8();
-            if (rAxisCount.has_value())
-            {
-                const core::u8 axisCount = rAxisCount.value();
-                for (core::u8 a = 0; a < axisCount; ++a)
-                {
-                    auto rAxisId = stream.readU8();
-                    auto rValue = stream.readFloat();
-                    if (!rAxisId.has_value() || !rValue.has_value())
-                        break;
-
-                    AxisInput ai{};
-                    ai.axisId = rAxisId.value();
-                    ai.value = rValue.value();
-                    ev.axes.push_back(ai);
-                }
-            }
-
-            // Neural data (3 floats + 1 bool)
-            auto rAlpha = stream.readFloat();
-            auto rBeta = stream.readFloat();
-            auto rConc = stream.readFloat();
-            auto rBlink = stream.readBool();
-            if (rAlpha.has_value() && rBeta.has_value() && rConc.has_value() && rBlink.has_value())
-            {
-                ev.hasNeural = true;
-                ev.neural.alpha = rAlpha.value();
-                ev.neural.beta = rBeta.value();
-                ev.neural.concentration = rConc.value();
-                ev.neural.blink = rBlink.value();
-            }
-
-            _impl->queues.inputs.push(std::move(ev));
-            break;
-        }
-
-        default: break;
-        }
+        // A single-world host decodes everything into its one set of queues; the
+        // multi-instance server picks the queues per sender instead.
+        detail::dispatchPacket(header, payload, fromAddr, _impl->queues);
     }
 }
 

@@ -21,6 +21,7 @@
 #    include <lpl/ecs/SystemScheduler.hpp>
 #    include <lpl/ecs/WorldPartition.hpp>
 #    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/math/StateHash.hpp>
 #    include <lpl/std/memory.hpp>
 
 namespace lpl::platform {
@@ -124,6 +125,28 @@ public:
      */
     void tick(core::f32 dt) { _scheduler.tick(dt); }
 
+    /**
+     * @brief FNV-1a digest of this instance's authoritative state.
+     *
+     * Two machines stepping the same world from the same inputs must produce
+     * the same digest; a mismatch is a desync (a determinism bug, a corruption,
+     * or a cheating client). Server and client exchange it periodically and
+     * compare — the book's §6.4 rule.
+     *
+     * Two deliberate properties:
+     *
+     * - Only AUTHORITATIVE state is folded, and only through its raw Fixed32
+     *   representation. Nothing float ever enters the digest: the render path
+     *   is allowed to diverge between machines, the simulation is not.
+     * - The fold is ORDER-INDEPENDENT (per-entity digests are summed). Chunk
+     *   layout is storage, not state: swap-and-pop migration and a different
+     *   join order legitimately give two machines different layouts for the
+     *   same world, and those must not read as a desync.
+     *
+     * @return The digest, and 0 for an empty world.
+     */
+    [[nodiscard]] core::u64 stateHash() const noexcept;
+
     // ---- Game lifecycle hooks (override in a subclass) -------------------- //
 
     /**
@@ -173,5 +196,10 @@ private:
 };
 
 } // namespace lpl::engine
+
+// Out-of-line definitions. World is consumed header-only (the freestanding
+// kernel included), so they live in a .inl rather than a .cpp that neither
+// kernel build path lists.
+#    include <lpl/engine/World.inl>
 
 #endif // LPL_ENGINE_WORLD_HPP

@@ -17,6 +17,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -86,7 +87,42 @@ void KernelTransport::close()
     }
 }
 
-core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data, const Endpoint * /*address*/)
+bool KernelTransport::pushSlot(std::span<const core::byte> data, const Endpoint *address) noexcept
+{
+    if (data.size() > LPL_MAX_PACKET_SIZE)
+        return false;
+
+    const uint32_t head = smp_load_acquire(&_impl->shm->tx.idx.head);
+    const uint32_t tail = smp_load_acquire(&_impl->shm->tx.idx.tail);
+    const uint32_t next = head + 1;
+
+    if ((next - tail) > LPL_RING_SLOTS)
+        return false; // ring full
+
+    LplTxPacket *slot = &_impl->shm->tx.packets[head & LPL_RING_MASK];
+
+    // The module expects network byte order, exactly as the legacy driver path
+    // wrote it (htonl/htons on a host-order address). Leaving these at 0, as
+    // this did before, addressed every packet to 0.0.0.0:0.
+    if (address != nullptr && address->valid())
+    {
+        slot->dst_ip = htonl(address->address());
+        slot->dst_port = htons(address->port());
+    }
+    else
+    {
+        slot->dst_ip = 0;
+        slot->dst_port = 0;
+    }
+
+    slot->length = static_cast<uint16_t>(data.size());
+    std::memcpy(slot->data, data.data(), data.size());
+
+    smp_store_release(&_impl->shm->tx.idx.head, next);
+    return true;
+}
+
+core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data, const Endpoint *address)
 {
     if (!_impl->shm)
     {
@@ -98,29 +134,48 @@ core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data
         return core::makeError(core::ErrorCode::InvalidArgument, "Packet too large");
     }
 
-    uint32_t head = smp_load_acquire(&_impl->shm->tx.idx.head);
-    uint32_t tail = smp_load_acquire(&_impl->shm->tx.idx.tail);
-    uint32_t next = head + 1;
-
-    if ((next - tail) > LPL_RING_SLOTS)
+    if (!pushSlot(data, address))
     {
         return core::makeError(core::ErrorCode::IoError, "TX ring buffer full");
     }
-
-    LplTxPacket *slot = &_impl->shm->tx.packets[head & LPL_RING_MASK];
-
-    // Address handling would go here, mapping ITransport socket address to dst_ip/port
-    slot->dst_ip = 0;
-    slot->dst_port = 0;
-    slot->length = static_cast<uint16_t>(data.size());
-    std::memcpy(slot->data, data.data(), data.size());
-
-    smp_store_release(&_impl->shm->tx.idx.head, next);
 
     // Kick the kthread to wake up and send UDP
     ::ioctl(_impl->fd, LPL_IOCTL_KICK_TX);
 
     return static_cast<core::u32>(data.size());
+}
+
+core::Expected<core::u32> KernelTransport::sendBatch(std::span<const Datagram> datagrams)
+{
+    if (!_impl->shm)
+    {
+        return core::makeError(core::ErrorCode::InvalidState, "Device not open");
+    }
+
+    if (datagrams.empty())
+    {
+        return core::u32{0};
+    }
+
+    // The whole point of the ring: fill every slot first, then wake the module's
+    // kthread ONCE. Its ioctl is a plain wake_up_interruptible and the thread
+    // drains the entire ring, so one kick flushes N packets — this is the "kick"
+    // the book describes. Kicking per packet, as this used to (and as the legacy
+    // driver path did too), pays a syscall per datagram and throws that away.
+    core::u32 accepted = 0;
+    for (const auto &datagram : datagrams)
+    {
+        if (!pushSlot(datagram.data, datagram.address))
+            break; // ring full or packet oversized: flush what we have
+        ++accepted;
+    }
+
+    if (accepted > 0)
+    {
+        ::ioctl(_impl->fd, LPL_IOCTL_KICK_TX);
+    }
+
+    return accepted;
 }
 
 core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, Endpoint * /*fromAddress*/)

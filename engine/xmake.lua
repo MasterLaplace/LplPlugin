@@ -29,5 +29,5 @@ target("lpl-engine")
 
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
-    add_headerfiles("include/(lpl/engine/**.hpp)")
+    add_headerfiles("include/(lpl/engine/**.hpp)", "include/(lpl/engine/**.inl)")
 target_end()

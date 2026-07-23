@@ -56,7 +56,10 @@ public:
      */
     [[nodiscard]] Session *find(core::u32 playerId) noexcept;
 
-    /** @brief Finds a session by player ID (const). */
+    /**
+     * @brief Finds a session by player ID (const).
+     * @return Pointer to the session or nullptr.
+     */
     [[nodiscard]] const Session *find(core::u32 playerId) const noexcept;
 
     /**
@@ -91,7 +94,22 @@ public:
      */
     [[nodiscard]] bool isDuplicate(core::u32 playerId) const noexcept;
 
-    /** @brief Returns the number of active sessions. */
+    /**
+     * @brief Finds the session bound to @p address, if any.
+     *
+     * A client is identified on the wire by its endpoint, not by a player id it
+     * does not choose — so this is what tells a retransmitted handshake apart
+     * from a genuine new player (legacy SessionManager::handleConnections
+     * rejected a duplicate by comparing ip+port for exactly this reason).
+     *
+     * @return The session, or nullptr if no client at @p address is connected.
+     */
+    [[nodiscard]] Session *findByAddress(const Endpoint &address) noexcept;
+
+    /**
+     * @brief Returns the number of active sessions.
+     * @return The count of active sessions.
+     */
     [[nodiscard]] core::u32 activeCount() const noexcept;
 
     /** @brief Maximum payload size per UDP packet (minus header). */

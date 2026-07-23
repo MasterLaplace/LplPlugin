@@ -41,6 +41,9 @@ public:
         Builder &enableGpu(bool enabled) noexcept;
         Builder &serverAddress(pmr::string addr) noexcept;
         Builder &serverPort(core::u16 port) noexcept;
+        Builder &serverWorkerThreads(core::u32 n) noexcept;
+        Builder &replaySnapshotInterval(core::u32 ticks) noexcept;
+        Builder &maxPacketsPerTick(core::u32 n) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
 
@@ -49,6 +52,9 @@ public:
         core::u32 _maxEntities{core::kMaxEntities};
         core::u32 _maxChunks{core::kMaxChunks};
         core::u32 _worldCellCapacity{ecs::WorldPartition::kDefaultCellCapacity};
+        core::u32 _serverWorkerThreads{0};
+        core::u32 _replaySnapshotInterval{0};
+        core::u32 _maxPacketsPerTick{256};
         bool _serverMode{false};
         bool _headless{false};
         core::usize _arenaSize{64 * 1024 * 1024};
@@ -73,6 +79,45 @@ public:
      */
     [[nodiscard]] core::u32 worldCellCapacity() const noexcept { return _worldCellCapacity; }
     [[nodiscard]] bool serverMode() const noexcept { return _serverMode; }
+
+    /**
+     * @brief Worker threads used to tick hosted instances in parallel.
+     *
+     * Zero (the default) ticks them one after another on the calling thread.
+     * Only engine::Server reads this; a client, a solo game and the kernel each
+     * run exactly one instance and never fan out. Instances share nothing
+     * mutable — queues, sessions, input state, registry, scheduler, spatial
+     * index and physics backend are all per-instance — so a worker per instance
+     * is sound; what they DO share (the asset cache, the socket, the log) is
+     * either thread-safe or written once before the fan-out.
+     *
+     * @return Number of workers, or 0 for a sequential tick.
+     */
+    [[nodiscard]] core::u32 serverWorkerThreads() const noexcept { return _serverWorkerThreads; }
+
+    /**
+     * @brief Ticks between state snapshots kept for post-mortem diagnosis.
+     *
+     * Zero (the default) records nothing. When set, engine::Server stores a
+     * snapshot every N ticks per instance, so a desync reported by a client can
+     * be compared against the state the server actually held (§6.4.2).
+     *
+     * @return The interval in ticks, or 0 when snapshotting is off.
+     */
+    [[nodiscard]] core::u32 replaySnapshotInterval() const noexcept { return _replaySnapshotInterval; }
+
+    /**
+     * @brief Packets the server drains from its socket per tick, per receive.
+     *
+     * A hard cap is what keeps a receive burst bounded, but a cap fixed in the
+     * source is an invisible ceiling: at N clients each sending an input a tick,
+     * anything past maxPacketsPerTick per tick silently backs up in the kernel's
+     * RX buffer. Raise it for a big server, and watch Server::backpressureEvents
+     * to know whether it is high enough. Default 256.
+     *
+     * @return The per-tick receive budget.
+     */
+    [[nodiscard]] core::u32 maxPacketsPerTick() const noexcept { return _maxPacketsPerTick; }
     [[nodiscard]] bool headless() const noexcept { return _headless; }
 
     /**
@@ -124,6 +169,9 @@ private:
     core::u32 _maxEntities{core::kMaxEntities};
     core::u32 _maxChunks{core::kMaxChunks};
     core::u32 _worldCellCapacity{ecs::WorldPartition::kDefaultCellCapacity};
+    core::u32 _serverWorkerThreads{0};
+    core::u32 _replaySnapshotInterval{0};
+    core::u32 _maxPacketsPerTick{256};
     bool _serverMode{false};
     bool _headless{false};
     core::usize _arenaSize{64 * 1024 * 1024};

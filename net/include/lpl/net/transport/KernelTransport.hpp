@@ -41,11 +41,25 @@ public:
 
     [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const Endpoint *address) override;
 
+    /**
+     * @brief Batched send: fill the TX ring, then ONE ioctl kick.
+     *
+     * The module's ioctl only wakes its sender thread, which drains the whole
+     * ring — so a burst costs one syscall instead of one per packet.
+     */
+    [[nodiscard]] core::Expected<core::u32> sendBatch(std::span<const Datagram> datagrams) override;
+
     [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) override;
 
     [[nodiscard]] const char *name() const noexcept override;
 
 private:
+    /**
+     * @brief Copy one packet into the next free TX slot, without kicking.
+     * @return false if the ring is full or the packet is oversized.
+     */
+    [[nodiscard]] bool pushSlot(std::span<const core::byte> data, const Endpoint *address) noexcept;
+
     struct Impl;
     std::unique_ptr<Impl> _impl;
 };
