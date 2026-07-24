@@ -209,6 +209,30 @@ public:
     [[nodiscard]] core::u64 staleReportCount() const noexcept;
 
     /**
+     * @brief A captured divergence, for post-mortem diagnosis (§6.4.2).
+     *
+     * When a client's digest disagrees with ours for a tick still in history, the
+     * server records the tick, both digests, and who reported it. Combined with
+     * the periodic snapshot the server kept for that tick (@ref replay), this is
+     * enough to reconstruct the divergent state and hunt the source — a rounding
+     * error, a race, a logic bug, or a cheat.
+     */
+    struct DesyncReport {
+        WorldId instance{0};      ///< Which instance the reporter was playing in.
+        core::u64 tick{0};        ///< The tick that diverged.
+        core::u64 serverDigest{0};///< The authoritative digest we held for it.
+        core::u64 clientDigest{0};///< What the client reported for it.
+        net::Endpoint source{};   ///< Who reported the divergence.
+    };
+
+    /**
+     * @brief The most recent divergence captured, if any.
+     * @param out Filled with the latest DesyncReport on success.
+     * @return false if no divergence has been recorded yet.
+     */
+    [[nodiscard]] bool lastDesyncReport(DesyncReport &out) const noexcept;
+
+    /**
      * @brief How many ticks failed to drain the socket within their budget.
      *
      * Non-zero means the server is receiving faster than it processes: the

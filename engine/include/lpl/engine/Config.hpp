@@ -46,6 +46,10 @@ public:
         Builder &replaySnapshotInterval(core::u32 ticks) noexcept;
         Builder &maxPacketsPerTick(core::u32 n) noexcept;
         Builder &interestRadius(math::Fixed32 radius) noexcept;
+        Builder &keyframeInterval(core::u32 ticks) noexcept;
+        Builder &bandwidthBudgetBytes(core::u32 bytes) noexcept;
+        Builder &lodNearRadius(math::Fixed32 radius) noexcept;
+        Builder &lodFarInterval(core::u32 ticks) noexcept;
         Builder &sessionTimeoutMs(core::f64 ms) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
@@ -58,8 +62,12 @@ public:
         core::u32 _serverWorkerThreads{0};
         core::u32 _replaySnapshotInterval{0};
         core::u32 _maxPacketsPerTick{256};
+        core::u32 _keyframeInterval{60};
+        core::u32 _bandwidthBudgetBytes{0};
+        core::u32 _lodFarInterval{4};
         core::f64 _sessionTimeoutMs{30000.0};
         math::Fixed32 _interestRadius{math::Fixed32::zero()};
+        math::Fixed32 _lodNearRadius{math::Fixed32::zero()};
         bool _serverMode{false};
         bool _headless{false};
         core::usize _arenaSize{64 * 1024 * 1024};
@@ -140,6 +148,55 @@ public:
     [[nodiscard]] math::Fixed32 interestRadius() const noexcept { return _interestRadius; }
 
     /**
+     * @brief Ticks between full re-sends of an entity in a client's interest set.
+     *
+     * Between keyframes, the AOI broadcast sends an in-range entity as a field
+     * delta: only the fields that changed against the last state that client was
+     * told, so an unchanged field costs one bit of absence (§6.2.5). The keyframe
+     * periodically re-sends the whole entity, so a delta lost on the unreliable
+     * channel self-heals within this many ticks. 1 disables delta compression
+     * (every send is full); higher trades staleness-on-loss for bandwidth. Only
+     * used when @c interestRadius is positive. Default 60 (~1 s at 60 Hz).
+     *
+     * @return The keyframe interval in ticks.
+     */
+    [[nodiscard]] core::u32 keyframeInterval() const noexcept { return _keyframeInterval; }
+
+    /**
+     * @brief Per-client, per-tick byte budget for the AOI delta stream (§6.2.7).
+     *
+     * When positive, the entities that changed inside a client's interest radius
+     * are ranked by a relevancy priority (proximity to the client's avatar plus
+     * how long each has gone unsent) and only the highest-priority ones up to this
+     * many bytes are sent that tick; the rest age and are sent on a later tick, so
+     * nothing starves. This is the adaptive lever that caps a client's outbound
+     * bandwidth. 0 (the default) means unlimited: every changed entity is sent.
+     * Only used when @c interestRadius is positive.
+     *
+     * @return The budget in bytes, or 0 for unlimited.
+     */
+    [[nodiscard]] core::u32 bandwidthBudgetBytes() const noexcept { return _bandwidthBudgetBytes; }
+
+    /**
+     * @brief Radius of the full-rate near ring for network LOD (§6.2.6).
+     *
+     * Entities within this distance of a client's avatar replicate every tick;
+     * those farther (but still inside @c interestRadius) replicate once every
+     * @c lodFarInterval ticks. Zero (the default) disables LOD — every in-range
+     * entity is full-rate. Only used when @c interestRadius is positive and this
+     * is smaller than it.
+     *
+     * @return The near-ring radius in world units, or zero when LOD is off.
+     */
+    [[nodiscard]] math::Fixed32 lodNearRadius() const noexcept { return _lodNearRadius; }
+
+    /**
+     * @brief Update interval (ticks) for entities beyond the near ring (§6.2.6).
+     * @return The far-ring update cadence in ticks (clamped to >= 1 in use).
+     */
+    [[nodiscard]] core::u32 lodFarInterval() const noexcept { return _lodFarInterval; }
+
+    /**
      * @brief Idle timeout after which a client session (and its avatar) is reaped.
      *
      * A client that sends nothing for this long is treated as gone: its session,
@@ -205,8 +262,12 @@ private:
     core::u32 _serverWorkerThreads{0};
     core::u32 _replaySnapshotInterval{0};
     core::u32 _maxPacketsPerTick{256};
+    core::u32 _keyframeInterval{60};
+    core::u32 _bandwidthBudgetBytes{0};
+    core::u32 _lodFarInterval{4};
     core::f64 _sessionTimeoutMs{30000.0};
     math::Fixed32 _interestRadius{math::Fixed32::zero()};
+    math::Fixed32 _lodNearRadius{math::Fixed32::zero()};
     bool _serverMode{false};
     bool _headless{false};
     core::usize _arenaSize{64 * 1024 * 1024};

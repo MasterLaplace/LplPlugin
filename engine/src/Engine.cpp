@@ -408,7 +408,9 @@ core::Expected<void> Engine::init()
         {
             auto broadcast = pmr::make_unique<systems::AoiBroadcastSystem>(
                 *_impl->sessionManager, _impl->transport, *_impl->world->spatialPartition(), _impl->world->registry(),
-                _impl->config.interestRadius());
+                _impl->config.interestRadius(), _impl->config.keyframeInterval(),
+                _impl->config.bandwidthBudgetBytes());
+            broadcast->setNetworkLod(_impl->config.lodNearRadius(), _impl->config.lodFarInterval());
             [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(broadcast));
         }
         else

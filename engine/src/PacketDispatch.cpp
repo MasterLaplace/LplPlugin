@@ -13,6 +13,7 @@
 #ifdef LPL_HAS_NET
 
 #    include <lpl/net/protocol/Bitstream.hpp>
+#    include <lpl/net/protocol/EntityDelta.hpp>
 
 #    include <cstring>
 
@@ -131,14 +132,35 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     }
 
     case net::protocol::PacketType::StateDelta: {
-        // AOI: current transform of entities the client already holds and that
-        // stayed in range.
+        // AOI: field-masked delta of entities the client already holds and that
+        // stayed in range (§6.2.5). Each entity carries only the fields that
+        // changed against what the server last sent; absent fields are left to
+        // reconciliation, which merges onto the state the client already holds.
         StateDeltaEvent ev{};
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
         };
-        readEntitySnapshots(stream, ev.entities);
+        auto countResult = stream.readU16();
+        if (!countResult.has_value())
+            break;
+        const core::u16 count = countResult.value();
+        for (core::u16 e = 0; e < count; ++e)
+        {
+            net::protocol::EntitySnapshot snap{};
+            core::u32 id = 0;
+            core::u8 mask = 0;
+            if (!net::protocol::readEntityDelta(stream, snap, id, mask).has_value())
+                break;
+
+            StateEntity se{};
+            se.id = id;
+            se.pos = {snap.px, snap.py, snap.pz};
+            se.size = {snap.sx, snap.sy, snap.sz};
+            se.hp = snap.hp;
+            se.fieldMask = mask;
+            ev.entities.push_back(se);
+        }
         queues.deltas.push(std::move(ev));
         break;
     }

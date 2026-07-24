@@ -21,6 +21,7 @@
 #include <lpl/engine/EventQueue.hpp>
 #include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
+#include <lpl/net/protocol/EntityDelta.hpp>
 
 #include <cstdio>
 
@@ -149,6 +150,40 @@ int main()
         check(reg.liveCount() == 1, "a despawn removes exactly one entity");
         check(!reg.resolve(idA).has_value(), "the despawned entity no longer resolves");
         check(reg.resolve(idB).has_value(), "the other entity is untouched");
+    }
+
+    // ── A field delta (§6.2.5) merges only its present fields ───────────────── //
+    {
+        ecs::Registry reg;
+        ecs::WorldPartition world{math::Fixed32::fromFloat(10.0f), 4096};
+        engine::EventQueues queues;
+        engine::systems::StateReconciliationSystem reconcile{queues, world, reg};
+
+        const auto id = ecs::EntityId{0u, 20u};
+
+        // Full spawn seeds the client's baseline at (3, 4, 5).
+        engine::EntitySpawnEvent spawn{};
+        spawn.entities.push_back(makeSnap(id.raw(), 3.0f, 4.0f, 5.0f)); // fieldMask defaults to all
+        queues.spawns.push(std::move(spawn));
+        reconcile.execute(1.0f / 60.0f);
+
+        math::Vec3<math::Fixed32> pos{};
+        check(positionOf(reg, id, pos) && pos.x == math::Fixed32::fromFloat(3.0f) &&
+                  pos.z == math::Fixed32::fromFloat(5.0f),
+              "a full spawn seeds the whole position");
+
+        // A delta that carries ONLY posX (the entity slid along X). posY/posZ in
+        // the payload are meaningless and must be ignored.
+        engine::StateDeltaEvent delta{};
+        engine::StateEntity d = makeSnap(id.raw(), 9.0f, -999.0f, -999.0f);
+        d.fieldMask = net::protocol::FieldPosX; // only X present
+        delta.entities.push_back(d);
+        queues.deltas.push(std::move(delta));
+        reconcile.execute(1.0f / 60.0f);
+
+        check(positionOf(reg, id, pos) && pos.x == math::Fixed32::fromFloat(9.0f), "the delta's X is applied");
+        check(pos.y == math::Fixed32::fromFloat(4.0f) && pos.z == math::Fixed32::fromFloat(5.0f),
+              "the absent Y and Z keep their held value (not overwritten by garbage)");
     }
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);

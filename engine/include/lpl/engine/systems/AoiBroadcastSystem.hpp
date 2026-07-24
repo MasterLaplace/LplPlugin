@@ -57,7 +57,45 @@ public:
     AoiBroadcastSystem(net::session::SessionManager &sessionManager,
                        std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
                        ecs::Registry &registry, math::Fixed32 interestRadius);
+
+    /**
+     * @param keyframeInterval Ticks between full re-sends of an in-range entity.
+     *        Between keyframes an entity is sent as a field delta carrying only
+     *        what changed against the last state the client was told (§6.2.5); the
+     *        keyframe periodically re-sends everything so a lost delta self-heals.
+     *        1 (or 0) means "always full" — delta compression off.
+     */
+    AoiBroadcastSystem(net::session::SessionManager &sessionManager,
+                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
+                       ecs::Registry &registry, math::Fixed32 interestRadius, core::u32 keyframeInterval);
+
+    /**
+     * @param budgetBytes Per-client, per-tick byte budget for the delta stream
+     *        (§6.2.7). The in-range entities that changed are ordered by a
+     *        relevancy priority (proximity + staleness) and only the top ones up
+     *        to this many bytes are sent; the rest age and win a later tick, so
+     *        nothing starves. 0 means unlimited (send every due entity).
+     */
+    AoiBroadcastSystem(net::session::SessionManager &sessionManager,
+                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
+                       ecs::Registry &registry, math::Fixed32 interestRadius, core::u32 keyframeInterval,
+                       core::u32 budgetBytes);
     ~AoiBroadcastSystem() override;
+
+    /**
+     * @brief Enables network LOD: entities beyond @p nearRadius update less often.
+     *
+     * The cadence half of the concentric-ring model (§6.2.6). Entities within
+     * @p nearRadius of a client's avatar keep the full per-tick rate; those
+     * farther (but still inside the interest radius) are sent once every
+     * @p farInterval ticks, their field deltas batching the change between sends.
+     * A zero @p nearRadius (the default) disables LOD — every in-range entity is
+     * full-rate.
+     *
+     * @param nearRadius  Radius of the full-rate near ring, world units.
+     * @param farInterval Update interval in ticks for the far ring (clamped >= 1).
+     */
+    void setNetworkLod(math::Fixed32 nearRadius, core::u32 farInterval) noexcept;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
     void execute(core::f32 dt) override;

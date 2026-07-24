@@ -17,6 +17,7 @@
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/engine/systems/StateReconciliationSystem.hpp>
 #include <lpl/math/FixedPoint.hpp>
+#include <lpl/net/protocol/EntityDelta.hpp>
 
 namespace lpl::engine::systems {
 
@@ -49,15 +50,9 @@ struct StateReconciliationSystem::Impl {
     /// which carry the same StateEntity payload and reconcile identically.
     void applyEntity(const StateEntity &ent)
     {
+        using namespace net::protocol;
         auto entityId = ecs::EntityId{ent.id};
-
-        // Convert float position to Fixed32 for spatial index
-        auto fixedPos =
-            math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
-                                      math::Fixed32::fromFloat(ent.pos.z)};
-
-        // Update spatial index
-        [[maybe_unused]] auto res = world.insertOrUpdate(entityId, fixedPos);
+        const core::u8 mask = ent.fieldMask;
 
         // Write into SoA chunk buffers (Position, AABB, Health)
         auto refResult = registry.resolve(entityId);
@@ -109,21 +104,45 @@ struct StateReconciliationSystem::Impl {
                 {
                     found = true;
 
-                    // Write Position (network floats → authoritative Fixed32)
-                    if (auto *wpos =
-                            static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position)))
-                        wpos[i] = {math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
-                                   math::Fixed32::fromFloat(ent.pos.z)};
+                    // Merge only the fields the snapshot actually carries onto
+                    // what the client already holds (§6.2.5): a full snapshot /
+                    // spawn has every bit set and overwrites everything; a field
+                    // delta touches only the changed components and leaves the
+                    // rest as they stood. Position needs the MERGED value in full,
+                    // both for the SoA write and for the spatial index, so read
+                    // the current one first and replace only the masked axes.
+                    auto *wpos =
+                        static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
+                    math::Vec3<math::Fixed32> merged =
+                        wpos ? wpos[i]
+                             : math::Vec3<math::Fixed32>{math::Fixed32::zero(), math::Fixed32::zero(),
+                                                         math::Fixed32::zero()};
+                    if (mask & FieldPosX)
+                        merged.x = math::Fixed32::fromFloat(ent.pos.x);
+                    if (mask & FieldPosY)
+                        merged.y = math::Fixed32::fromFloat(ent.pos.y);
+                    if (mask & FieldPosZ)
+                        merged.z = math::Fixed32::fromFloat(ent.pos.z);
+                    if (wpos)
+                        wpos[i] = merged;
 
-                    // Write AABB
                     if (auto *wsize =
                             static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
-                        wsize[i] = {math::Fixed32::fromFloat(ent.size.x), math::Fixed32::fromFloat(ent.size.y),
-                                    math::Fixed32::fromFloat(ent.size.z)};
+                    {
+                        if (mask & FieldSizeX)
+                            wsize[i].x = math::Fixed32::fromFloat(ent.size.x);
+                        if (mask & FieldSizeY)
+                            wsize[i].y = math::Fixed32::fromFloat(ent.size.y);
+                        if (mask & FieldSizeZ)
+                            wsize[i].z = math::Fixed32::fromFloat(ent.size.z);
+                    }
 
-                    // Write Health
-                    if (auto *whp = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))
-                        whp[i] = ent.hp;
+                    if (mask & FieldHp)
+                        if (auto *whp = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))
+                            whp[i] = ent.hp;
+
+                    // Spatial index tracks the merged authoritative position.
+                    [[maybe_unused]] auto res = world.insertOrUpdate(entityId, merged);
 
                     break;
                 }

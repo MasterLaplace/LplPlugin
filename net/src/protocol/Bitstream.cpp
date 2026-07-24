@@ -79,6 +79,94 @@ void Bitstream::writeBytes(std::span<const core::byte> bytes)
 }
 
 // -------------------------------------------------------------------------- //
+//  Bit-packing / quantization (book §6.3.3)                                  //
+// -------------------------------------------------------------------------- //
+
+namespace {
+
+/// Largest integer representable in @p bits (the quantization ceiling).
+[[nodiscard]] core::u32 quantMax(core::u32 bits) noexcept
+{
+    // bits is 1..32; (1u << 32) is UB, so special-case the full width.
+    return (bits >= 32) ? 0xFFFFFFFFu : ((1u << bits) - 1u);
+}
+
+constexpr float kTwoPi = 6.28318530717958647692f;
+
+} // namespace
+
+void Bitstream::writeQuantizedFloat(float value, float min, float max, core::u32 bits)
+{
+    LPL_ASSERT(bits > 0 && bits <= 32);
+    LPL_ASSERT(max > min);
+
+    const float clamped = (value < min) ? min : (value > max ? max : value);
+    const float range = max - min;
+    const core::u32 maxQ = quantMax(bits);
+
+    // Round-to-nearest, then guard the top edge against float error pushing it
+    // one past the ceiling.
+    const float t = (clamped - min) / range;
+    core::u32 q = static_cast<core::u32>(t * static_cast<float>(maxQ) + 0.5f);
+    if (q > maxQ)
+        q = maxQ;
+
+    writeBits(q, bits);
+}
+
+core::Expected<float> Bitstream::readQuantizedFloat(float min, float max, core::u32 bits)
+{
+    auto r = readBits(bits);
+    if (!r.has_value())
+        return core::makeError(r.error().code(), r.error().message());
+
+    const core::u32 maxQ = quantMax(bits);
+    const float t = static_cast<float>(r.value()) / static_cast<float>(maxQ);
+    return min + t * (max - min);
+}
+
+void Bitstream::writeAngle(float radians, core::u32 bits)
+{
+    // Wrap into [0, 2*pi) so any real angle encodes.
+    float wrapped = radians - kTwoPi * static_cast<float>(static_cast<core::i32>(radians / kTwoPi));
+    if (wrapped < 0.0f)
+        wrapped += kTwoPi;
+    writeQuantizedFloat(wrapped, 0.0f, kTwoPi, bits);
+}
+
+core::Expected<float> Bitstream::readAngle(core::u32 bits) { return readQuantizedFloat(0.0f, kTwoPi, bits); }
+
+void Bitstream::writeVarint(core::u32 value)
+{
+    // LEB128: 7 payload bits per byte, high bit = "more bytes follow".
+    do
+    {
+        core::u8 septet = static_cast<core::u8>(value & 0x7Fu);
+        value >>= 7;
+        if (value != 0)
+            septet |= 0x80u;
+        writeU8(septet);
+    } while (value != 0);
+}
+
+core::Expected<core::u32> Bitstream::readVarint()
+{
+    core::u32 result = 0;
+    core::u32 shift = 0;
+    while (shift < 32)
+    {
+        auto b = readU8();
+        if (!b.has_value())
+            return core::makeError(b.error().code(), b.error().message());
+        result |= static_cast<core::u32>(b.value() & 0x7Fu) << shift;
+        if ((b.value() & 0x80u) == 0)
+            return result;
+        shift += 7;
+    }
+    return core::makeError(core::ErrorCode::CorruptedData, "Varint too long");
+}
+
+// -------------------------------------------------------------------------- //
 //  Read                                                                      //
 // -------------------------------------------------------------------------- //
 

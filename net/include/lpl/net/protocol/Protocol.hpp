@@ -48,6 +48,11 @@ enum class PacketType : core::u8 {
     RollbackRequest = 0x30,
     RollbackAck = 0x31,
     BciPayload = 0x40,
+    /// Server-mesh liveness ping between peer nodes (see net::ServerMesh, §6.2.8).
+    NodeHeartbeat = 0x50,
+    /// Server-mesh entity handoff: an entity's serialised state migrating to the
+    /// node that now owns its region (server meshing).
+    EntityMigrate = 0x51,
     Custom = 0xFF
 };
 

@@ -52,6 +52,12 @@ struct StateEntity {
     math::Vec3<float> pos;
     math::Vec3<float> size;
     core::i32 hp;
+    /// Which fields this snapshot actually carries (net::protocol::EntityField
+    /// bits). A full snapshot or AOI spawn sets every bit; an AOI field delta
+    /// (§6.2.5) sets only the fields that changed, and reconciliation leaves the
+    /// rest of the entity as it already stood. 0xFF (all) keeps the full-snapshot
+    /// and spawn paths byte-for-byte unchanged.
+    core::u8 fieldMask{0xFF};
 };
 
 /** @brief Full state update from the server. */

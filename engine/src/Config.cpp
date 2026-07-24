@@ -126,6 +126,30 @@ Config::Builder &Config::Builder::interestRadius(math::Fixed32 radius) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::keyframeInterval(core::u32 ticks) noexcept
+{
+    _keyframeInterval = ticks;
+    return *this;
+}
+
+Config::Builder &Config::Builder::bandwidthBudgetBytes(core::u32 bytes) noexcept
+{
+    _bandwidthBudgetBytes = bytes;
+    return *this;
+}
+
+Config::Builder &Config::Builder::lodNearRadius(math::Fixed32 radius) noexcept
+{
+    _lodNearRadius = radius;
+    return *this;
+}
+
+Config::Builder &Config::Builder::lodFarInterval(core::u32 ticks) noexcept
+{
+    _lodFarInterval = ticks;
+    return *this;
+}
+
 Config::Builder &Config::Builder::sessionTimeoutMs(core::f64 ms) noexcept
 {
     _sessionTimeoutMs = ms;
@@ -150,6 +174,10 @@ Config Config::Builder::build() const noexcept
     cfg._maxPacketsPerTick = _maxPacketsPerTick;
     cfg._sessionTimeoutMs = _sessionTimeoutMs;
     cfg._interestRadius = _interestRadius;
+    cfg._keyframeInterval = _keyframeInterval;
+    cfg._bandwidthBudgetBytes = _bandwidthBudgetBytes;
+    cfg._lodNearRadius = _lodNearRadius;
+    cfg._lodFarInterval = _lodFarInterval;
     cfg._serverMode = _serverMode;
     cfg._headless = _headless;
     cfg._arenaSize = _arenaSize;

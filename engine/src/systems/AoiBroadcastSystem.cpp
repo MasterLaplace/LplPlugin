@@ -25,7 +25,9 @@
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/math/FixedPoint.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
+#include <lpl/net/protocol/EntityDelta.hpp>
 #include <lpl/net/protocol/Protocol.hpp>
+#include <lpl/net/relevancy/Relevancy.hpp>
 #include <lpl/std/vector.hpp>
 
 #include <algorithm>
@@ -78,6 +80,11 @@ struct AoiBroadcastSystem::Impl {
     ecs::WorldPartition &world;
     ecs::Registry &registry;
     math::Fixed32 interestRadius;
+    core::u32 keyframeInterval; ///< Ticks between full re-sends of an in-range entity (§6.2.5).
+    core::u32 budgetBytes;      ///< Per-client delta byte budget per tick; 0 = unlimited (§6.2.7).
+    float nearRadiusSq{0.0f};   ///< Squared radius of the full-rate near ring; 0 = LOD off (§6.2.6).
+    core::u32 lodFarInterval{1};///< Update interval (ticks) for entities beyond the near ring.
+    core::u64 tickCounter{0};   ///< Advances each execute; a keyframe tick forces a full snapshot.
 
     /// One entity's authoritative snapshot, collected once per tick. Position and
     /// size stay Fixed32 (authoritative) until the wire boundary, so the radius
@@ -102,6 +109,18 @@ struct AoiBroadcastSystem::Impl {
     std::unordered_map<core::u32, std::unordered_set<core::u32>> known; ///< playerId -> known ids.
     std::vector<core::u32> seenPlayers;       ///< playerIds present this tick (for reaping `known`).
 
+    /// The last snapshot the server sent each client, per entity — the baseline a
+    /// field delta is computed against (§6.2.5). Mirrors `known`: an id enters
+    /// with its spawn snapshot, updates on each delta, and is erased when it
+    /// leaves the radius or the client disconnects.
+    std::unordered_map<core::u32, std::unordered_map<core::u32, net::protocol::EntitySnapshot>> lastSent;
+
+    /// Tick at which each entity was last actually sent to each client. Feeds the
+    /// staleness term of the relevancy priority so a starved entity rises until it
+    /// is sent, and lets an over-budget entity age instead of being dropped for
+    /// good (§6.2.7).
+    std::unordered_map<core::u32, std::unordered_map<core::u32, core::u64>> lastSentTick;
+
     // ---- Outbound batching. Buffers are pooled so their bytes outlive sendBatch
     // without reallocating each tick; a vector move keeps a buffer's data pointer.
     std::vector<std::vector<core::byte>> packetPool;
@@ -110,9 +129,34 @@ struct AoiBroadcastSystem::Impl {
     net::protocol::Bitstream stream;
 
     Impl(net::session::SessionManager &sm, std::shared_ptr<net::transport::ITransport> t, ecs::WorldPartition &w,
-         ecs::Registry &reg, math::Fixed32 radius)
-        : sessionManager{sm}, transport{std::move(t)}, world{w}, registry{reg}, interestRadius{radius}
+         ecs::Registry &reg, math::Fixed32 radius, core::u32 keyframe, core::u32 budget)
+        : sessionManager{sm}, transport{std::move(t)}, world{w}, registry{reg}, interestRadius{radius},
+          keyframeInterval{keyframe}, budgetBytes{budget}
     {
+    }
+
+    /// The wire snapshot of a collected record (Fixed32 → float at the boundary).
+    [[nodiscard]] net::protocol::EntitySnapshot snapshotOf(core::u32 recIndex) const
+    {
+        const Record &rec = records[recIndex];
+        net::protocol::EntitySnapshot s{};
+        s.id = rec.id;
+        s.px = rec.pos.x.toFloat();
+        s.py = rec.pos.y.toFloat();
+        s.pz = rec.pos.z.toFloat();
+        s.sx = rec.size.x.toFloat();
+        s.sy = rec.size.y.toFloat();
+        s.sz = rec.size.z.toFloat();
+        s.hp = rec.hp;
+        return s;
+    }
+
+    /// True when this tick re-sends in-range entities in full, so a lost delta
+    /// self-heals. keyframeInterval <= 1 means "always full" (delta compression
+    /// off); otherwise every keyframeInterval-th tick is a keyframe.
+    [[nodiscard]] bool isKeyframeTick() const noexcept
+    {
+        return keyframeInterval <= 1 || (tickCounter % keyframeInterval == 0);
     }
 
     /// Grabs the next pooled buffer, writes header + payload into it, and queues a
@@ -164,6 +208,119 @@ struct AoiBroadcastSystem::Impl {
                 stream.writeI32(rec.hp);
             }
             emitPacket(type, stream.data(), address);
+        }
+    }
+
+    // ---- Field-delta scratch for one session (reused, capacity kept).
+    struct Candidate {
+        net::protocol::EntitySnapshot snap;
+        core::u8 mask;
+        float priority;
+    };
+    std::vector<Candidate> candidates;
+    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaScratch;
+
+    /// Byte size of one field-delta on the wire (id + mask + one float per bit).
+    [[nodiscard]] static core::u32 deltaBytes(core::u8 mask) noexcept
+    {
+        return kIdBytes + 1u + static_cast<core::u32>(__builtin_popcount(mask)) * 4u;
+    }
+
+    /// Serialises the still-in-range entities for @p playerId as field-masked
+    /// deltas (§6.2.5) under a relevancy priority and a byte budget (§6.2.7):
+    ///   - dormancy: an entity whose fields did not change sends nothing between
+    ///     keyframes, so a resting world costs no traffic;
+    ///   - priority: the rest are ordered by proximity + staleness, so the closest
+    ///     and the longest-unsent go first;
+    ///   - budget: only the top entities up to @c budgetBytes are sent; the others
+    ///     age (their staleness rises) and win a later tick — nothing starves.
+    /// The per-client baseline and last-sent tick are updated only for entities
+    /// actually sent. Fragments on the real (variable) byte size.
+    void emitDeltas(core::u32 playerId, const std::vector<core::u32> &recIndices,
+                    const math::Vec3<math::Fixed32> &center, const net::Endpoint *address)
+    {
+        auto &baseline = lastSent[playerId];
+        auto &sentTick = lastSentTick[playerId];
+        const bool keyframe = isKeyframeTick();
+
+        // 1. Build the due, scored candidate set (dormant entities drop out here).
+        candidates.clear();
+        for (const core::u32 recIndex : recIndices)
+        {
+            net::protocol::EntitySnapshot cur = snapshotOf(recIndex);
+            auto it = baseline.find(cur.id);
+            const bool known = (it != baseline.end());
+            core::u8 mask = (keyframe || !known) ? static_cast<core::u8>(net::protocol::FieldAll)
+                                                 : net::protocol::computeFieldMask(it->second, cur);
+
+            const auto &pos = records[recIndex].pos;
+            const float dx = (pos.x - center.x).toFloat();
+            const float dy = (pos.y - center.y).toFloat();
+            const float dz = (pos.z - center.z).toFloat();
+            const float distanceSq = dx * dx + dy * dy + dz * dz;
+
+            auto tickIt = sentTick.find(cur.id);
+            const core::u64 last = (tickIt != sentTick.end()) ? tickIt->second : 0;
+            const auto ticksSince = static_cast<core::u32>(tickCounter > last ? tickCounter - last : 0);
+
+            if (!keyframe)
+            {
+                if (mask == 0)
+                    continue; // dormant: unchanged and not a keyframe → no traffic
+                // Network LOD (§6.2.6): a far entity updates on a slower cadence.
+                const core::u32 interval = net::relevancy::lodUpdateInterval(distanceSq, nearRadiusSq, lodFarInterval);
+                if (ticksSince < interval)
+                    continue; // far ring, not its tick yet — its change batches
+            }
+
+            candidates.push_back(Candidate{cur, mask, net::relevancy::priority(distanceSq, ticksSince)});
+        }
+
+        // 2. Highest priority first.
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const Candidate &a, const Candidate &b) { return a.priority > b.priority; });
+
+        // 3. Emit under budget; the rest age for a later tick.
+        deltaScratch.clear();
+        core::u32 spent = 0;
+        for (const auto &c : candidates)
+        {
+            const core::u32 cost = deltaBytes(c.mask);
+            if (budgetBytes != 0 && !deltaScratch.empty() && spent + cost > budgetBytes)
+                break; // always send at least one to guarantee progress
+            deltaScratch.emplace_back(c.snap, c.mask);
+            baseline[c.snap.id] = c.snap;   // the client will now hold this
+            sentTick[c.snap.id] = tickCounter;
+            spent += cost;
+        }
+
+        // Pack into datagrams, fragmenting when the next entity would overflow.
+        // An entity's wire size is known from its mask (id + mask byte + one float
+        // per set bit), so a group's boundary is found by arithmetic — no
+        // throwaway serialisation pass.
+        const core::u32 maxPayload = net::session::SessionManager::kMaxPayloadSize;
+        core::u32 i = 0;
+        const auto n = static_cast<core::u32>(deltaScratch.size());
+        while (i < n)
+        {
+            core::u32 bytes = kCountHeaderBytes;
+            core::u32 j = i;
+            for (; j < n; ++j)
+            {
+                const core::u32 entBytes =
+                    kIdBytes + 1u + static_cast<core::u32>(__builtin_popcount(deltaScratch[j].second)) * 4u;
+                if (bytes + entBytes > maxPayload && j > i)
+                    break;
+                bytes += entBytes;
+            }
+
+            stream.reset();
+            stream.writeU16(static_cast<core::u16>(j - i));
+            for (core::u32 k = i; k < j; ++k)
+                net::protocol::writeEntityDelta(stream, deltaScratch[k].first, deltaScratch[k].second);
+
+            emitPacket(net::protocol::PacketType::StateDelta, stream.data(), address);
+            i = j;
         }
     }
 
@@ -245,11 +402,34 @@ struct AoiBroadcastSystem::Impl {
 AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
                                        std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
                                        ecs::Registry &registry, math::Fixed32 interestRadius)
-    : _impl{std::make_unique<Impl>(sessionManager, std::move(transport), world, registry, interestRadius)}
+    : AoiBroadcastSystem{sessionManager, std::move(transport), world, registry, interestRadius, 60, 0}
+{
+}
+
+AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
+                                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
+                                       ecs::Registry &registry, math::Fixed32 interestRadius, core::u32 keyframeInterval)
+    : AoiBroadcastSystem{sessionManager, std::move(transport), world, registry, interestRadius, keyframeInterval, 0}
+{
+}
+
+AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
+                                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
+                                       ecs::Registry &registry, math::Fixed32 interestRadius, core::u32 keyframeInterval,
+                                       core::u32 budgetBytes)
+    : _impl{std::make_unique<Impl>(sessionManager, std::move(transport), world, registry, interestRadius,
+                                   keyframeInterval, budgetBytes)}
 {
 }
 
 AoiBroadcastSystem::~AoiBroadcastSystem() = default;
+
+void AoiBroadcastSystem::setNetworkLod(math::Fixed32 nearRadius, core::u32 farInterval) noexcept
+{
+    const float r = nearRadius.toFloat();
+    _impl->nearRadiusSq = (r > 0.0f) ? r * r : 0.0f;
+    _impl->lodFarInterval = farInterval < 1 ? 1 : farInterval;
+}
 
 const ecs::SystemDescriptor &AoiBroadcastSystem::descriptor() const noexcept { return kAoiDesc; }
 
@@ -260,6 +440,7 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
     d.packetUsed = 0;
     d.batch.clear();
     d.seenPlayers.clear();
+    ++d.tickCounter;
 
     // One snapshot pass over the whole world; each session then filters it by its
     // own radius. This is what turns O(clients × N) serialisation into O(N) +
@@ -317,26 +498,50 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
         }
 
         const net::Endpoint *address = session.address();
+        auto &baseline = d.lastSent[playerId];
+        auto &sentTick = d.lastSentTick[playerId];
         if (!d.enteredRecs.empty())
+        {
+            // A spawn is a full snapshot; record it as the delta baseline (and its
+            // send tick) so the next tick's field delta and priority have a base.
             d.emitEntities(net::protocol::PacketType::EntitySpawn, d.enteredRecs, address);
+            for (const core::u32 recIndex : d.enteredRecs)
+            {
+                const core::u32 rawId = d.records[recIndex].id;
+                baseline[rawId] = d.snapshotOf(recIndex);
+                sentTick[rawId] = d.tickCounter;
+            }
+        }
         if (!d.movedRecs.empty())
-            d.emitEntities(net::protocol::PacketType::StateDelta, d.movedRecs, address);
+            d.emitDeltas(playerId, d.movedRecs, center, address);
         if (!d.leftIds.empty())
+        {
             d.emitDestroy(d.leftIds, address);
+            for (const core::u32 raw : d.leftIds)
+            {
+                baseline.erase(raw); // no longer replicated to this client
+                sentTick.erase(raw);
+            }
+        }
 
         // The neighbour set becomes what the client now knows. Swap, not copy: the
         // scratch is cleared at the top of the next session anyway.
         known.swap(d.neighborSet);
     });
 
-    // Drop known-sets of clients that are gone, so a disconnected player's memory
-    // does not linger (and a recycled playerId does not inherit a stale set).
+    // Drop the per-client memory (known set AND delta baseline) of clients that
+    // are gone, so a disconnected player's state does not linger — and a recycled
+    // playerId does not inherit a stale set or baseline.
     if (d.known.size() != d.seenPlayers.size())
     {
         for (auto it = d.known.begin(); it != d.known.end();)
         {
             if (d.sessionManager.find(it->first) == nullptr)
+            {
+                d.lastSent.erase(it->first);
+                d.lastSentTick.erase(it->first);
                 it = d.known.erase(it);
+            }
             else
                 ++it;
         }

@@ -27,6 +27,7 @@
 #    include <lpl/net/protocol/Protocol.hpp>
 #    include <lpl/net/session/SessionManager.hpp>
 
+#    include <algorithm>
 #    include <cstdio>
 #    include <memory>
 #    include <set>
@@ -242,7 +243,8 @@ int main()
         check(!aliceSpawn.count(eRoamer.raw()), "the far roamer is outside A's radius");
     }
 
-    // ── Tick 2: nothing moved — a known entity is a delta, not a re-spawn ────── //
+    // ── Tick 2: dormancy — an unchanged entity sends nothing, a moved one deltas ─ //
+    placeEntity(registry, world, eNearA, 6.0f, 0.0f, 0.0f); // eNearA slides, stays in range
     transport->clear();
     aoi.execute(1.0f / 60.0f);
 
@@ -251,15 +253,16 @@ int main()
         const auto aliceDelta = transport->idsFor(alice, net::protocol::PacketType::StateDelta);
 
         check(aliceSpawn.empty(), "an already-known entity is not spawned again");
-        check(aliceDelta.count(eAvatarA.raw()) && aliceDelta.count(eNearA.raw()),
-              "a known entity that stayed in range is sent as a delta");
+        check(aliceDelta.count(eNearA.raw()), "a known entity that moved is sent as a delta");
+        check(!aliceDelta.count(eAvatarA.raw()), "an unchanged entity is dormant — no traffic (§6.2.7)");
         check(transport->idsFor(alice, net::protocol::PacketType::EntityDestroy).empty(),
               "nothing left A's radius, so nothing is destroyed");
     }
 
-    // ── Tick 3: one entity leaves the radius, one enters ─────────────────────── //
+    // ── Tick 3: one entity leaves the radius, one enters, the avatar moves ───── //
     placeEntity(registry, world, eNearA, 0.0f, 5000.0f, 0.0f); // leaves A's radius
     placeEntity(registry, world, eRoamer, 10.0f, 0.0f, 0.0f);  // enters A's radius
+    placeEntity(registry, world, eAvatarA, 1.0f, 0.0f, 0.0f);  // the avatar itself slides
 
     transport->clear();
     aoi.execute(1.0f / 60.0f);
@@ -271,7 +274,7 @@ int main()
 
         check(aliceSpawn.count(eRoamer.raw()), "an entity entering the radius is spawned");
         check(aliceDestroy.count(eNearA.raw()), "an entity leaving the radius is destroyed");
-        check(aliceDelta.count(eAvatarA.raw()), "an entity still in range stays a delta");
+        check(aliceDelta.count(eAvatarA.raw()), "an entity that moved and stayed in range is a delta");
         check(!aliceDelta.count(eNearA.raw()), "the departed entity is not also sent as a delta");
         check(!aliceSpawn.count(eAvatarA.raw()), "the still-present avatar is not re-spawned");
     }
@@ -332,6 +335,123 @@ int main()
         std::printf("  full broadcast sent %zu entity-records, AOI sent %zu\n", static_cast<size_t>(fullTotal),
                     static_cast<size_t>(aoiTotal));
         check(aoiTotal < fullTotal, "AOI serialises strictly fewer entity-records than the full broadcast");
+    }
+
+    // ── Bandwidth budget + priority + anti-starvation (§6.2.7) ───────────────── //
+    // One client, six movers all in range at increasing distance. A byte budget
+    // that fits ~two deltas per tick forces the server to choose: it must send the
+    // closest first, yet still serve every entity within a few ticks (nothing
+    // starves, because a skipped entity's staleness rises until it wins).
+    {
+        ecs::Registry reg3;
+        ecs::WorldPartition world3{cellSize, 4096};
+        net::session::SessionManager sm3;
+
+        const auto avatar = spawnEntity(reg3);
+        placeEntity(reg3, world3, avatar, 0.0f, 0.0f, 0.0f);
+
+        constexpr int kMovers = 6;
+        ecs::EntityId movers[kMovers];
+        float moverX[kMovers];
+        for (int i = 0; i < kMovers; ++i)
+        {
+            movers[i] = spawnEntity(reg3);
+            moverX[i] = 5.0f * static_cast<float>(i + 1); // 5,10,15,20,25,30 — all in radius
+            placeEntity(reg3, world3, movers[i], moverX[i], 0.0f, 0.0f);
+        }
+        check(joinClient(sm3, 1, alice, avatar) != nullptr, "the budget client joins");
+
+        auto budgetTransport = std::make_shared<CapturingTransport>();
+        // Each single-axis delta is 9 bytes (id + mask + one float); a 20-byte
+        // budget therefore admits exactly two per tick.
+        const core::u32 kBudget = 20;
+        engine::systems::AoiBroadcastSystem budgeted{sm3,   budgetTransport,       world3,
+                                                     reg3,  math::Fixed32::fromFloat(100.0f), /*keyframe*/ 1000,
+                                                     kBudget};
+
+        // Tick 1: everything is spawned (spawns are not budgeted — a client must
+        // learn who is there). Establishes the baseline for the delta stream.
+        budgeted.execute(1.0f / 60.0f);
+
+        std::set<core::u32> served; // union of delta ids across the budgeted ticks
+        int perTickMax = 0;
+        std::set<core::u32> firstDeltaTick;
+        for (int tick = 0; tick < kMovers; ++tick) // enough ticks to serve all six
+        {
+            for (int i = 0; i < kMovers; ++i) // nudge every mover so all are due
+            {
+                moverX[i] += 0.5f;
+                placeEntity(reg3, world3, movers[i], moverX[i], 0.0f, 0.0f);
+            }
+            budgetTransport->clear();
+            budgeted.execute(1.0f / 60.0f);
+
+            const auto delta = budgetTransport->idsFor(alice, net::protocol::PacketType::StateDelta);
+            perTickMax = std::max(perTickMax, static_cast<int>(delta.size()));
+            if (tick == 0)
+                firstDeltaTick = delta;
+            for (const auto id : delta)
+                served.insert(id);
+        }
+
+        check(perTickMax <= 2, "the byte budget caps the delta stream (~2 entities per tick)");
+        check(firstDeltaTick.count(movers[0].raw()) && firstDeltaTick.count(movers[1].raw()),
+              "the closest entities are sent first");
+        bool allServed = true;
+        for (int i = 0; i < kMovers; ++i)
+            if (!served.count(movers[i].raw()))
+                allServed = false;
+        check(allServed, "every entity is served within a few ticks — nothing starves");
+    }
+
+    // ── Network LOD: a far entity updates on a slower cadence (§6.2.6) ───────── //
+    // One client at the origin, a near entity and a far one, both moving every
+    // tick. With a full-rate near ring and a 4-tick far ring, the near entity is
+    // sent every tick and the far one only every fourth — measured over 8 ticks.
+    {
+        ecs::Registry reg4;
+        ecs::WorldPartition world4{cellSize, 4096};
+        net::session::SessionManager sm4;
+
+        const auto avatar = spawnEntity(reg4);
+        const auto nearE = spawnEntity(reg4);
+        const auto farE = spawnEntity(reg4);
+        placeEntity(reg4, world4, avatar, 0.0f, 0.0f, 0.0f);
+        placeEntity(reg4, world4, nearE, 5.0f, 0.0f, 0.0f);   // inside the near ring
+        placeEntity(reg4, world4, farE, 60.0f, 0.0f, 0.0f);   // near ring < d < interest radius
+        check(joinClient(sm4, 1, alice, avatar) != nullptr, "the LOD client joins");
+
+        auto lodTransport = std::make_shared<CapturingTransport>();
+        engine::systems::AoiBroadcastSystem lod{sm4,  lodTransport, world4, reg4, math::Fixed32::fromFloat(100.0f),
+                                                /*keyframe*/ 1000};
+        constexpr core::u32 kFarInterval = 4;
+        lod.setNetworkLod(math::Fixed32::fromFloat(20.0f), kFarInterval);
+
+        lod.execute(1.0f / 60.0f); // tick 1: spawn both, baseline set
+
+        float nearX = 5.0f, farX = 60.0f;
+        int nearSends = 0, farSends = 0;
+        constexpr int kTicks = 8;
+        for (int t = 0; t < kTicks; ++t)
+        {
+            nearX += 0.5f;
+            farX += 0.5f;
+            placeEntity(reg4, world4, nearE, nearX, 0.0f, 0.0f);
+            placeEntity(reg4, world4, farE, farX, 0.0f, 0.0f);
+            lodTransport->clear();
+            lod.execute(1.0f / 60.0f);
+            const auto delta = lodTransport->idsFor(alice, net::protocol::PacketType::StateDelta);
+            if (delta.count(nearE.raw()))
+                ++nearSends;
+            if (delta.count(farE.raw()))
+                ++farSends;
+        }
+
+        std::printf("  over %d ticks: near sent %d times, far sent %d times\n", kTicks, nearSends, farSends);
+        check(nearSends == kTicks, "the near entity updates every tick (full rate)");
+        check(farSends == kTicks / static_cast<int>(kFarInterval),
+              "the far entity updates once per far-interval (fewer packets, LOD)");
+        check(farSends < nearSends, "network LOD sends the far entity strictly less often than the near one");
     }
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);

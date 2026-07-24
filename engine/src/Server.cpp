@@ -110,6 +110,10 @@ struct Server::Impl {
     core::u64 matchedReportCount{0};
     core::u64 staleReportCount{0};
 
+    /// The most recent captured divergence, for post-mortem diagnosis (§6.4.2).
+    Server::DesyncReport lastDesync{};
+    bool hasDesync{false};
+
     /// Reused receive scratch: one contiguous block sliced into per-slot buffers,
     /// so draining the socket never allocates on the hot path.
     std::vector<core::byte> receiveStorage;
@@ -296,7 +300,9 @@ void Server::registerInstanceSystems(WorldId id)
     if (_impl->config.interestRadius() > math::Fixed32::zero())
     {
         auto broadcast = lpl::pmr::make_unique<systems::AoiBroadcastSystem>(
-            *_impl->sessions[id], _impl->transport, *spatial, world.registry(), _impl->config.interestRadius());
+            *_impl->sessions[id], _impl->transport, *spatial, world.registry(), _impl->config.interestRadius(),
+            _impl->config.keyframeInterval(), _impl->config.bandwidthBudgetBytes());
+        broadcast->setNetworkLod(_impl->config.lodNearRadius(), _impl->config.lodFarInterval());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(broadcast));
     }
     else
@@ -585,12 +591,30 @@ void Server::consumeStateHashReports()
 
             switch (verdict)
             {
-            case DesyncVerdict::Diverged:
+            case DesyncVerdict::Diverged: {
                 // The book's answer is a forced resynchronisation of that client.
                 // We report it; acting on it is the netcode strategy's call.
                 core::Log::error("Server: client desync detected, its state diverged from ours");
                 ++_impl->desyncCount;
+
+                // Capture the divergence for post-mortem (§6.4.2): the tick, both
+                // digests, and who reported it. The server's own full state for
+                // that tick lives in its ReplayRecorder (replay(id)), so this is
+                // enough to reconstruct and compare the two states after the fact.
+                DesyncReport rep{};
+                rep.instance = static_cast<WorldId>(i);
+                rep.tick = report.tick;
+                rep.clientDigest = report.digest;
+                rep.source = report.source;
+                if (const auto &ring = _impl->hashes[i])
+                {
+                    const auto slot = static_cast<core::usize>(report.tick % kStateHashHistory);
+                    rep.serverDigest = ring->digests[slot];
+                }
+                _impl->lastDesync = rep;
+                _impl->hasDesync = true;
                 break;
+            }
 
             case DesyncVerdict::TickUnknown:
                 // Normal for a very late report, or a client ahead of us.
@@ -610,6 +634,14 @@ core::u64 Server::desyncCount() const noexcept { return _impl->desyncCount; }
 core::u64 Server::matchedReportCount() const noexcept { return _impl->matchedReportCount; }
 
 core::u64 Server::staleReportCount() const noexcept { return _impl->staleReportCount; }
+
+bool Server::lastDesyncReport(DesyncReport &out) const noexcept
+{
+    if (!_impl->hasDesync)
+        return false;
+    out = _impl->lastDesync;
+    return true;
+}
 
 core::u64 Server::backpressureEvents() const noexcept { return _impl->backpressureEvents; }
 

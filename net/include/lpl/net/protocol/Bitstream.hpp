@@ -79,6 +79,53 @@ public:
     void writeBytes(std::span<const core::byte> bytes);
 
     // --------------------------------------------------------------------- //
+    //  Bit-packing / quantization (book §6.3.3)                              //
+    // --------------------------------------------------------------------- //
+
+    /**
+     * @brief Writes @p value quantized into @p bits over the range [min, max].
+     *
+     * The value is clamped to the range, mapped to an integer in
+     * [0, 2^bits - 1] and written with @p bits bits. A position in a 1000 m
+     * world quantized on 16 bits keeps a resolution of ~15 mm for a fraction of
+     * the 32-bit cost. Non-authoritative wire data only: the quantization is
+     * lossy, so a quantized value never flows back into authoritative Fixed32.
+     *
+     * @param value Value to encode.
+     * @param min   Lower bound of the range.
+     * @param max   Upper bound of the range (must exceed @p min).
+     * @param bits  Bit width (1..32).
+     */
+    void writeQuantizedFloat(float value, float min, float max, core::u32 bits);
+
+    /** @brief Reads a value written by @ref writeQuantizedFloat with the same params. */
+    [[nodiscard]] core::Expected<float> readQuantizedFloat(float min, float max, core::u32 bits);
+
+    /**
+     * @brief Writes an angle in radians quantized into @p bits over [0, 2*pi).
+     *
+     * Wraps @p radians into the circle first, so any real angle encodes. Ten
+     * bits give ~0.35 degrees, enough for gameplay orientation at a third of a
+     * raw float.
+     */
+    void writeAngle(float radians, core::u32 bits);
+
+    /** @brief Reads an angle written by @ref writeAngle, in [0, 2*pi). */
+    [[nodiscard]] core::Expected<float> readAngle(core::u32 bits);
+
+    /**
+     * @brief Writes @p value as a LEB128 variable-length integer (7 bits/byte).
+     *
+     * Small ids and counts cost one byte instead of four; the top bit of each
+     * byte is the continuation flag. Byte-granular, so it does not fight the
+     * bit cursor beyond whole bytes.
+     */
+    void writeVarint(core::u32 value);
+
+    /** @brief Reads a LEB128 varint written by @ref writeVarint. */
+    [[nodiscard]] core::Expected<core::u32> readVarint();
+
+    // --------------------------------------------------------------------- //
     //  Read                                                                  //
     // --------------------------------------------------------------------- //
 
