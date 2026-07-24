@@ -56,6 +56,7 @@ public:
     struct Packet {
         net::Endpoint dest;
         net::protocol::PacketType type;
+        core::u8 flags;
         std::vector<core::u32> ids;
     };
     std::vector<Packet> packets;
@@ -78,6 +79,7 @@ public:
             Packet p{};
             p.dest = address ? *address : net::Endpoint{};
             p.type = header.type;
+            p.flags = header.flags;
             for (const auto &ev : q.states.drain())
                 for (const auto &e : ev.entities)
                     p.ids.push_back(e.id);
@@ -114,6 +116,22 @@ public:
             if (p.dest == dest)
                 for (const auto id : p.ids)
                     out.insert(id);
+        return out;
+    }
+
+    // Ids delivered to @p dest in a StateDelta whose Compressed flag matches @p compressed.
+    [[nodiscard]] std::set<core::u32> deltaIdsByCompression(const net::Endpoint &dest, bool compressed) const
+    {
+        std::set<core::u32> out;
+        for (const auto &p : packets)
+        {
+            if (p.dest != dest || p.type != net::protocol::PacketType::StateDelta)
+                continue;
+            const bool isCompressed = net::protocol::hasFlag(p.flags, net::protocol::PacketFlag::Compressed);
+            if (isCompressed == compressed)
+                for (const auto id : p.ids)
+                    out.insert(id);
+        }
         return out;
     }
 
@@ -452,6 +470,95 @@ int main()
         check(farSends == kTicks / static_cast<int>(kFarInterval),
               "the far entity updates once per far-interval (fewer packets, LOD)");
         check(farSends < nearSends, "network LOD sends the far entity strictly less often than the near one");
+    }
+
+    // ── Strict acked-baseline: resend until confirmed, then stop (§6.2.5) ────── //
+    // With reliableBaseline on, the delta baseline advances only on the client's
+    // ack. An unacked change is resent every tick (reliability); once acked, the
+    // entity goes dormant. Driven by feeding the session ack sequences directly.
+    {
+        ecs::Registry reg5;
+        ecs::WorldPartition world5{cellSize, 4096};
+        net::session::SessionManager sm5;
+
+        const auto avatar = spawnEntity(reg5);
+        const auto ent = spawnEntity(reg5);
+        placeEntity(reg5, world5, avatar, 0.0f, 0.0f, 0.0f);
+        placeEntity(reg5, world5, ent, 5.0f, 0.0f, 0.0f);
+        auto *session = joinClient(sm5, 1, alice, avatar);
+        check(session != nullptr, "the acked-baseline client joins");
+
+        auto tr = std::make_shared<CapturingTransport>();
+        engine::systems::AoiBroadcastSystem strict{sm5,  tr,           world5,
+                                                   reg5, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 100000};
+        strict.setReliableBaseline(true);
+
+        auto entInDelta = [&]() {
+            return tr->idsFor(alice, net::protocol::PacketType::StateDelta).count(ent.raw()) > 0;
+        };
+
+        // Tick 1: the entity enters → spawn at sequence 1. Client acks it.
+        strict.execute(1.0f / 60.0f);
+        session->setAckedSnapshotSeq(1);
+
+        // Tick 2: nothing moved and the spawn is acked → dormant.
+        tr->clear();
+        strict.execute(1.0f / 60.0f);
+        check(!entInDelta(), "after the spawn is acked, an unchanged entity is dormant");
+
+        // The entity moves. Tick 3 sends the delta (sequence 3), NOT yet acked.
+        placeEntity(reg5, world5, ent, 6.0f, 0.0f, 0.0f);
+        tr->clear();
+        strict.execute(1.0f / 60.0f);
+        check(entInDelta(), "a change is sent as a delta");
+
+        // Tick 4: still not acked and unchanged since → the change is RESENT.
+        tr->clear();
+        strict.execute(1.0f / 60.0f);
+        check(entInDelta(), "an unacknowledged change is resent (reliability, not lost)");
+
+        // The client finally acks up to the last sent sequence (tick 4). Tick 5:
+        // the change is confirmed, the baseline advances, dormant again.
+        session->setAckedSnapshotSeq(4);
+        tr->clear();
+        strict.execute(1.0f / 60.0f);
+        check(!entInDelta(), "once the change is acked, it stops being resent");
+    }
+
+    // ── Precision LOD: far entities are quantized, near ones are not (§6.2.6) ── //
+    {
+        ecs::Registry reg6;
+        ecs::WorldPartition world6{cellSize, 4096};
+        net::session::SessionManager sm6;
+
+        const auto avatar = spawnEntity(reg6);
+        const auto nearE = spawnEntity(reg6);
+        const auto farE = spawnEntity(reg6);
+        placeEntity(reg6, world6, avatar, 0.0f, 0.0f, 0.0f);
+        placeEntity(reg6, world6, nearE, 5.0f, 0.0f, 0.0f);  // inside the near ring
+        placeEntity(reg6, world6, farE, 60.0f, 0.0f, 0.0f);  // far ring
+        check(joinClient(sm6, 1, alice, avatar) != nullptr, "the precision-LOD client joins");
+
+        auto tr = std::make_shared<CapturingTransport>();
+        engine::systems::AoiBroadcastSystem lod{sm6,  tr,           world6,
+                                                reg6, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 100000};
+        lod.setNetworkLod(math::Fixed32::fromFloat(20.0f), /*farInterval*/ 1); // far ring every tick, to observe it
+        lod.setPrecisionLod(math::Fixed32::fromFloat(1024.0f), 16);
+
+        lod.execute(1.0f / 60.0f); // spawn both
+
+        // Move both so each is a delta, then observe how each was encoded.
+        placeEntity(reg6, world6, nearE, 6.0f, 0.0f, 0.0f);
+        placeEntity(reg6, world6, farE, 61.0f, 0.0f, 0.0f);
+        tr->clear();
+        lod.execute(1.0f / 60.0f);
+
+        const auto full = tr->deltaIdsByCompression(alice, /*compressed*/ false);
+        const auto quant = tr->deltaIdsByCompression(alice, /*compressed*/ true);
+        check(full.count(nearE.raw()), "the near entity's delta is full precision (uncompressed)");
+        check(quant.count(farE.raw()), "the far entity's delta is quantized (compressed)");
+        check(!quant.count(nearE.raw()) && !full.count(farE.raw()),
+              "near and far are not encoded the same way — precision falls off with distance");
     }
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);

@@ -29,10 +29,21 @@
 #include <lpl/memory/PoolAllocator.hpp>
 #include <lpl/physics/CpuPhysicsBackend.hpp>
 
+#include <lpl/engine/EventQueue.hpp>
+#include <lpl/engine/PacketDispatch.hpp>
+#include <lpl/engine/systems/AoiBroadcastSystem.hpp>
+#include <lpl/engine/systems/BroadcastSystem.hpp>
+#include <lpl/net/Endpoint.hpp>
+#include <lpl/net/protocol/Bitstream.hpp>
+#include <lpl/net/protocol/Protocol.hpp>
+#include <lpl/net/session/SessionManager.hpp>
+#include <lpl/net/transport/ITransport.hpp>
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <future>
 #include <vector>
@@ -640,6 +651,216 @@ void benchmarkCollisionBroadphase()
     });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Networking: the two load walls of chapter 6.2.10, measured on this machine.
+// The point is not a headline number but to *show* the O(N²) send wall of a full
+// broadcast, and how interest management turns it into O(N·k). A byte-counting
+// transport stands in for the socket, so this measures the serialiser and the
+// bandwidth it produces, independent of loopback noise.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class CountingTransport final : public net::transport::ITransport {
+public:
+    std::atomic<core::u64> bytes{0};
+    std::atomic<core::u64> packets{0};
+
+    core::Expected<void> open() override { return {}; }
+    void close() override {}
+    const char *name() const noexcept override { return "CountingTransport"; }
+    core::Expected<core::u32> receive(std::span<core::byte>, net::Endpoint *) override { return core::u32{0}; }
+    core::Expected<core::u32> send(std::span<const core::byte> d, const net::Endpoint *) override
+    {
+        bytes.fetch_add(d.size(), std::memory_order_relaxed);
+        packets.fetch_add(1, std::memory_order_relaxed);
+        return static_cast<core::u32>(d.size());
+    }
+    void reset()
+    {
+        bytes.store(0, std::memory_order_relaxed);
+        packets.store(0, std::memory_order_relaxed);
+    }
+};
+
+// Places @p n entities on a square grid and returns their ids; the first @p
+// clients of them are also bound as session avatars, each with its own endpoint.
+struct NetWorld {
+    ecs::Registry registry;
+    ecs::WorldPartition world;
+    net::session::SessionManager sessions;
+    std::vector<ecs::EntityId> ids;
+
+    explicit NetWorld(math::Fixed32 cell) : world{cell, 1u << 20} {}
+};
+
+void seedNetWorld(NetWorld &nw, core::u32 n, core::u32 clients, float spacing)
+{
+    const ecs::ComponentId comps[] = {ecs::ComponentId::Position, ecs::ComponentId::AABB, ecs::ComponentId::Health};
+    const ecs::Archetype arch{comps};
+    const auto side = static_cast<core::u32>(std::sqrt(static_cast<double>(n))) + 1;
+
+    for (core::u32 i = 0; i < n; ++i)
+    {
+        auto e = nw.registry.createEntity(arch);
+        if (!e)
+            continue;
+        const auto id = e.value();
+        nw.ids.push_back(id);
+
+        const float x = static_cast<float>(i % side) * spacing;
+        const float z = static_cast<float>(i / side) * spacing;
+        using Vec = math::Vec3<math::Fixed32>;
+        const Vec pos{math::Fixed32::fromFloat(x), math::Fixed32::zero(), math::Fixed32::fromFloat(z)};
+        const Vec one{math::Fixed32::one(), math::Fixed32::one(), math::Fixed32::one()};
+
+        auto ref = nw.registry.resolve(id);
+        auto &part = nw.registry.getOrCreatePartition(arch);
+        auto &chunk = *part.chunks()[ref.value().chunkIndex];
+        const core::u32 li = ref.value().localIndex;
+        for (auto which : {ecs::ComponentId::Position, ecs::ComponentId::AABB})
+        {
+            const Vec v = (which == ecs::ComponentId::Position) ? pos : one;
+            if (auto *w = static_cast<Vec *>(chunk.writeComponent(which)))
+                w[li] = v;
+            if (auto *r = const_cast<Vec *>(static_cast<const Vec *>(chunk.readComponent(which))))
+                r[li] = v;
+        }
+        [[maybe_unused]] auto s = nw.world.insertOrUpdate(id, pos);
+    }
+
+    for (core::u32 c = 0; c < clients && c < nw.ids.size(); ++c)
+    {
+        auto joined = nw.sessions.connect(c + 1);
+        if (!joined)
+            continue;
+        auto *sess = joined.value();
+        sess->setAddress(net::Endpoint::fromOctets(10, 0, static_cast<core::u8>(c >> 8), static_cast<core::u8>(c & 0xFF),
+                                                   static_cast<core::u16>(40000 + (c & 0x3FFF))));
+        // Spread avatars across the whole grid so each client's radius sees a
+        // different local neighbourhood, not all the same cluster.
+        sess->bindEntity(nw.ids[(static_cast<core::u64>(c) * nw.ids.size() / clients) % nw.ids.size()]);
+    }
+}
+
+void benchmarkNetworking()
+{
+    std::printf("\n  --- Networking: broadcast send wall vs interest management (§6.2.10) ---\n");
+    constexpr core::u32 kTickRate = 144;
+    constexpr core::u32 kEntities = 1000;
+    constexpr core::u32 kClientCounts[] = {10, 50, 100, 500, 1000};
+    const float dt = 1.0f / static_cast<float>(kTickRate);
+
+    // A sparse map: 1000 entities on a ~790-unit grid (spacing 25), interest
+    // radius 40 → each client sees only a handful of neighbours (k ≪ N), the
+    // regime interest management is actually for. A dense map where the radius
+    // covers half the world would make AOI both marginal on bandwidth and far
+    // slower than a flat broadcast — the parameters matter, and are reported.
+    constexpr float kSpacing = 25.0f;
+
+    std::printf("    %6s | %10s | %12s | %10s\n", "clients", "bytes/tick", "out Gbit/s", "us/tick");
+    std::printf("    Full broadcast (every entity to every client — O(clients x N)):\n");
+    for (core::u32 c : kClientCounts)
+    {
+        NetWorld nw{math::Fixed32::fromFloat(10.0f)};
+        seedNetWorld(nw, kEntities, c, kSpacing);
+        auto tr = std::make_shared<CountingTransport>();
+        engine::systems::BroadcastSystem full{nw.sessions, tr, nw.world, nw.registry};
+
+        tr->reset();
+        full.execute(dt);
+        const core::u64 bytesPerTick = tr->bytes.load();
+        const double gbit = static_cast<double>(bytesPerTick) * 8.0 * kTickRate / 1e9;
+
+        bench::Config cfg;
+        cfg.minReps = 3;
+        cfg.maxReps = 100;
+        cfg.targetTotalMs = 300.0;
+        const bench::Result r = bench::run("full-broadcast", [&]() { full.execute(dt); }, cfg);
+        std::printf("    %6u | %10llu | %11.2f | %10.1f\n", c, static_cast<unsigned long long>(bytesPerTick), gbit,
+                    r.medianNs / 1e3);
+    }
+
+    std::printf("    Interest-managed (each client only its neighbours — O(clients x k)):\n");
+    std::printf("    %6s | %10s | %12s | %10s | %8s\n", "clients", "bytes/tick", "out Gbit/s", "us/tick", "k (ent/cl)");
+    const auto radius = math::Fixed32::fromFloat(40.0f);
+    for (core::u32 c : kClientCounts)
+    {
+        NetWorld nw{math::Fixed32::fromFloat(10.0f)};
+        seedNetWorld(nw, kEntities, c, kSpacing);
+        auto tr = std::make_shared<CountingTransport>();
+        engine::systems::AoiBroadcastSystem aoi{nw.sessions, tr, nw.world, nw.registry, radius, /*keyframe*/ 1};
+
+        // One warmup tick so per-client interest sets exist; then measure a tick
+        // where every entity is a fresh full send (keyframe=1 → worst-case AOI).
+        aoi.execute(dt);
+        tr->reset();
+        aoi.execute(dt);
+        const core::u64 bytesPerTick = tr->bytes.load();
+        const double gbit = static_cast<double>(bytesPerTick) * 8.0 * kTickRate / 1e9;
+        // ~32 bytes/entity on the wire → average neighbours each client received.
+        const double k = static_cast<double>(bytesPerTick) / static_cast<double>(c) / 32.0;
+
+        bench::Config cfg;
+        cfg.minReps = 3;
+        cfg.maxReps = 100;
+        cfg.targetTotalMs = 300.0;
+        const bench::Result r = bench::run("aoi-broadcast", [&]() { aoi.execute(dt); }, cfg);
+        std::printf("    %6u | %10llu | %11.2f | %10.1f | %8.1f\n", c,
+                    static_cast<unsigned long long>(bytesPerTick), gbit, r.medianNs / 1e3, k);
+    }
+
+    // Receive wall: how fast one thread parses + dispatches inbound INPUT packets
+    // — what a server actually decodes from clients (a small WASD + neural
+    // payload), not the heavy state snapshots it sends. The §6.1 policy caps a
+    // single thread at 256 pkt/tick x 144 Hz = 36,864 pkt/s; this is the CPU
+    // ceiling underneath that cap.
+    std::printf("    Receive/decode throughput (single thread, small InputPayload packets):\n");
+    {
+        net::protocol::Bitstream stream;
+        stream.writeU32(1);      // entityId
+        stream.writeU16(4);      // 4 key events (WASD)
+        for (int k = 0; k < 4; ++k)
+        {
+            stream.writeU16(static_cast<core::u16>('W' + k));
+            stream.writeBool(true);
+        }
+        stream.writeU8(0);       // 0 axes
+        stream.writeFloat(0.3f); // neural alpha / beta / concentration + blink
+        stream.writeFloat(0.5f);
+        stream.writeFloat(0.7f);
+        stream.writeBool(false);
+
+        std::vector<core::byte> datagram(sizeof(net::protocol::PacketHeader) + stream.data().size());
+        auto &h = *reinterpret_cast<net::protocol::PacketHeader *>(datagram.data());
+        h.magic = net::protocol::kProtocolMagic;
+        h.version = net::protocol::kProtocolVersion;
+        h.type = net::protocol::PacketType::InputPayload;
+        h.flags = 0;
+        h.padding = 0;
+        h.sequence = 0;
+        h.payloadSize = static_cast<core::u32>(stream.data().size());
+        std::memcpy(datagram.data() + sizeof(h), stream.data().data(), stream.data().size());
+
+        const net::Endpoint from = net::Endpoint::fromOctets(10, 0, 0, 1, 40000);
+        bench::Config cfg;
+        cfg.minReps = 5;
+        cfg.maxReps = 500;
+        cfg.targetTotalMs = 300.0;
+        const bench::Result r = bench::run("decode-10k-input-packets", [&]() {
+            engine::EventQueues q;
+            for (int p = 0; p < 10000; ++p)
+            {
+                net::protocol::PacketHeader ph{};
+                std::span<const core::byte> payload;
+                if (engine::detail::parsePacket(datagram, ph, payload))
+                    engine::detail::dispatchPacket(ph, payload, from, q);
+            }
+        }, cfg);
+        const double pktPerSec = 10000.0 / (r.medianNs / 1e9);
+        std::printf("    -> %.2e input packets/sec decoded on one thread (policy cap %u pkt/s at 256/tick x %u Hz)\n",
+                    pktPerSec, 256u * kTickRate, kTickRate);
+    }
+}
+
 } // anonymous namespace
 
 int main(int /*argc*/, char * /*argv*/[])
@@ -664,6 +885,7 @@ int main(int /*argc*/, char * /*argv*/[])
     benchmarkSoA_vs_AoS();
     benchmarkEntityLookup();
     benchmarkCollisionBroadphase();
+    benchmarkNetworking();
 
     std::printf("\nDone.\n");
     return 0;

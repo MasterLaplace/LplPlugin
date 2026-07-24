@@ -84,6 +84,9 @@ struct AoiBroadcastSystem::Impl {
     core::u32 budgetBytes;      ///< Per-client delta byte budget per tick; 0 = unlimited (§6.2.7).
     float nearRadiusSq{0.0f};   ///< Squared radius of the full-rate near ring; 0 = LOD off (§6.2.6).
     core::u32 lodFarInterval{1};///< Update interval (ticks) for entities beyond the near ring.
+    bool strictAcked{false};    ///< Advance the delta baseline only on client ack, not on send (§6.2.5).
+    float farExtent{0.0f};      ///< World half-extent for far-ring position quantization; 0 = off (§6.2.6).
+    core::u32 farPosBits{16};   ///< Bits per position axis for the far ring (multiple of 8).
     core::u64 tickCounter{0};   ///< Advances each execute; a keyframe tick forces a full snapshot.
 
     /// One entity's authoritative snapshot, collected once per tick. Position and
@@ -120,6 +123,14 @@ struct AoiBroadcastSystem::Impl {
     /// is sent, and lets an over-budget entity age instead of being dropped for
     /// good (§6.2.7).
     std::unordered_map<core::u32, std::unordered_map<core::u32, core::u64>> lastSentTick;
+
+    /// Strict acked-baseline bookkeeping (§6.2.5), used only when @c strictAcked.
+    /// `sentSnap`/`sentSeq` are the last snapshot sent per entity and the sequence
+    /// it went out at; when the client acks a sequence, every entity whose send
+    /// sequence is at or below it is promoted into `lastSent` (the confirmed
+    /// baseline the delta diffs against). Until then its change keeps being resent.
+    std::unordered_map<core::u32, std::unordered_map<core::u32, net::protocol::EntitySnapshot>> sentSnap;
+    std::unordered_map<core::u32, std::unordered_map<core::u32, core::u64>> sentSeq;
 
     // ---- Outbound batching. Buffers are pooled so their bytes outlive sendBatch
     // without reallocating each tick; a vector move keeps a buffer's data pointer.
@@ -161,7 +172,8 @@ struct AoiBroadcastSystem::Impl {
 
     /// Grabs the next pooled buffer, writes header + payload into it, and queues a
     /// datagram pointing at it (borrowing @p address, which outlives the tick).
-    void emitPacket(net::protocol::PacketType type, std::span<const core::byte> payload, const net::Endpoint *address)
+    void emitPacket(net::protocol::PacketType type, std::span<const core::byte> payload, const net::Endpoint *address,
+                    core::u8 flags = 0)
     {
         if (packetUsed >= packetPool.size())
             packetPool.emplace_back();
@@ -173,9 +185,12 @@ struct AoiBroadcastSystem::Impl {
         header.magic = net::protocol::kProtocolMagic;
         header.version = net::protocol::kProtocolVersion;
         header.type = type;
-        header.flags = 0;
+        header.flags = flags;
         header.padding = 0;
-        header.sequence = 0;
+        // Tag every snapshot/delta with the current tick as its sequence, so the
+        // client can acknowledge it (§6.2.5) and the server advance that client's
+        // baseline. u32 is ample: at 144 Hz it wraps only after ~345 days.
+        header.sequence = static_cast<core::u32>(tickCounter);
         header.payloadSize = static_cast<core::u32>(payload.size());
 
         if (!payload.empty())
@@ -216,9 +231,11 @@ struct AoiBroadcastSystem::Impl {
         net::protocol::EntitySnapshot snap;
         core::u8 mask;
         float priority;
+        bool far; ///< In the far ring → quantized position on the wire (§6.2.6).
     };
     std::vector<Candidate> candidates;
-    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaScratch;
+    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaScratch; ///< Near (full-float) group.
+    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaFar;     ///< Far (quantized) group.
 
     /// Byte size of one field-delta on the wire (id + mask + one float per bit).
     [[nodiscard]] static core::u32 deltaBytes(core::u8 mask) noexcept
@@ -237,11 +254,29 @@ struct AoiBroadcastSystem::Impl {
     /// The per-client baseline and last-sent tick are updated only for entities
     /// actually sent. Fragments on the real (variable) byte size.
     void emitDeltas(core::u32 playerId, const std::vector<core::u32> &recIndices,
-                    const math::Vec3<math::Fixed32> &center, const net::Endpoint *address)
+                    const math::Vec3<math::Fixed32> &center, core::u64 ackedSeq, const net::Endpoint *address)
     {
         auto &baseline = lastSent[playerId];
         auto &sentTick = lastSentTick[playerId];
         const bool keyframe = isKeyframeTick();
+
+        // Strict acked-baseline (§6.2.5): promote into the confirmed baseline every
+        // entity whose last send the client has now acknowledged. Until an entity
+        // is promoted, the delta keeps diffing against the older confirmed state,
+        // so an unacked change is resent rather than silently lost.
+        if (strictAcked)
+        {
+            auto &snaps = sentSnap[playerId];
+            for (const auto &[id, seq] : sentSeq[playerId])
+            {
+                if (seq <= ackedSeq)
+                {
+                    auto sit = snaps.find(id);
+                    if (sit != snaps.end())
+                        baseline[id] = sit->second;
+                }
+            }
+        }
 
         // 1. Build the due, scored candidate set (dormant entities drop out here).
         candidates.clear();
@@ -273,53 +308,110 @@ struct AoiBroadcastSystem::Impl {
                     continue; // far ring, not its tick yet — its change batches
             }
 
-            candidates.push_back(Candidate{cur, mask, net::relevancy::priority(distanceSq, ticksSince)});
+            const bool far = (farExtent > 0.0f) && (nearRadiusSq > 0.0f) && (distanceSq > nearRadiusSq);
+            candidates.push_back(Candidate{cur, mask, net::relevancy::priority(distanceSq, ticksSince), far});
         }
 
         // 2. Highest priority first.
         std::sort(candidates.begin(), candidates.end(),
                   [](const Candidate &a, const Candidate &b) { return a.priority > b.priority; });
 
-        // 3. Emit under budget; the rest age for a later tick.
+        // 3. Emit under budget; the rest age for a later tick. Near entities keep
+        // full-float positions; far ones are split off to be quantized (§6.2.6).
         deltaScratch.clear();
+        deltaFar.clear();
         core::u32 spent = 0;
+        core::u32 sentCount = 0;
         for (const auto &c : candidates)
         {
-            const core::u32 cost = deltaBytes(c.mask);
-            if (budgetBytes != 0 && !deltaScratch.empty() && spent + cost > budgetBytes)
+            const core::u32 cost = c.far ? quantBytes(c.mask) : deltaBytes(c.mask);
+            if (budgetBytes != 0 && sentCount > 0 && spent + cost > budgetBytes)
                 break; // always send at least one to guarantee progress
-            deltaScratch.emplace_back(c.snap, c.mask);
-            baseline[c.snap.id] = c.snap;   // the client will now hold this
+            if (c.far)
+                deltaFar.emplace_back(c.snap, c.mask);
+            else
+                deltaScratch.emplace_back(c.snap, c.mask);
+            if (strictAcked)
+            {
+                // Record what we sent and when; the baseline advances only once
+                // the client acks this sequence (handled at the top of next tick).
+                sentSnap[playerId][c.snap.id] = c.snap;
+                sentSeq[playerId][c.snap.id] = tickCounter;
+            }
+            else
+            {
+                baseline[c.snap.id] = c.snap; // optimistic: the client is assumed to hold this
+            }
             sentTick[c.snap.id] = tickCounter;
             spent += cost;
+            ++sentCount;
         }
 
-        // Pack into datagrams, fragmenting when the next entity would overflow.
-        // An entity's wire size is known from its mask (id + mask byte + one float
-        // per set bit), so a group's boundary is found by arithmetic — no
-        // throwaway serialisation pass.
+        packGroup(deltaScratch, address, /*quantized*/ false);
+        packGroup(deltaFar, address, /*quantized*/ true);
+    }
+
+    /// Wire size of one field-delta with quantized position (§6.2.6): id + mask +
+    /// (farPosBits/8) per position axis + a full float per size axis + hp.
+    [[nodiscard]] core::u32 quantBytes(core::u8 mask) const noexcept
+    {
+        const core::u32 posBytes = farPosBits / 8u;
+        core::u32 bytes = kIdBytes + 1u;
+        for (core::u32 bit = 0; bit < 3; ++bit)
+            if (mask & (1u << bit))
+                bytes += posBytes;
+        for (core::u32 bit = 3; bit < 6; ++bit)
+            if (mask & (1u << bit))
+                bytes += 4u;
+        if (mask & net::protocol::FieldHp)
+            bytes += 4u;
+        return bytes;
+    }
+
+    /// Packs a delta group into StateDelta datagrams, fragmenting on real byte
+    /// size. A quantized group carries a small header ([posBits][extent]) and the
+    /// Compressed flag so the client decodes its positions at reduced precision.
+    void packGroup(const std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> &group,
+                   const net::Endpoint *address, bool quantized)
+    {
+        const auto n = static_cast<core::u32>(group.size());
+        if (n == 0)
+            return;
+
         const core::u32 maxPayload = net::session::SessionManager::kMaxPayloadSize;
+        const core::u32 headerBytes = quantized ? (1u + 4u + kCountHeaderBytes) // posBits + extent + count
+                                                : kCountHeaderBytes;
+        const core::u8 flags = quantized ? static_cast<core::u8>(net::protocol::PacketFlag::Compressed) : 0;
+
         core::u32 i = 0;
-        const auto n = static_cast<core::u32>(deltaScratch.size());
         while (i < n)
         {
-            core::u32 bytes = kCountHeaderBytes;
+            core::u32 bytes = headerBytes;
             core::u32 j = i;
             for (; j < n; ++j)
             {
-                const core::u32 entBytes =
-                    kIdBytes + 1u + static_cast<core::u32>(__builtin_popcount(deltaScratch[j].second)) * 4u;
+                const core::u32 entBytes = quantized ? quantBytes(group[j].second) : deltaBytes(group[j].second);
                 if (bytes + entBytes > maxPayload && j > i)
                     break;
                 bytes += entBytes;
             }
 
             stream.reset();
+            if (quantized)
+            {
+                stream.writeU8(static_cast<core::u8>(farPosBits));
+                stream.writeFloat(farExtent);
+            }
             stream.writeU16(static_cast<core::u16>(j - i));
             for (core::u32 k = i; k < j; ++k)
-                net::protocol::writeEntityDelta(stream, deltaScratch[k].first, deltaScratch[k].second);
-
-            emitPacket(net::protocol::PacketType::StateDelta, stream.data(), address);
+            {
+                if (quantized)
+                    net::protocol::writeEntityDeltaQuantized(stream, group[k].first, group[k].second, farExtent,
+                                                             farPosBits);
+                else
+                    net::protocol::writeEntityDelta(stream, group[k].first, group[k].second);
+            }
+            emitPacket(net::protocol::PacketType::StateDelta, stream.data(), address, flags);
             i = j;
         }
     }
@@ -431,6 +523,16 @@ void AoiBroadcastSystem::setNetworkLod(math::Fixed32 nearRadius, core::u32 farIn
     _impl->lodFarInterval = farInterval < 1 ? 1 : farInterval;
 }
 
+void AoiBroadcastSystem::setReliableBaseline(bool enabled) noexcept { _impl->strictAcked = enabled; }
+
+void AoiBroadcastSystem::setPrecisionLod(math::Fixed32 worldExtent, core::u32 posBits) noexcept
+{
+    const float e = worldExtent.toFloat();
+    _impl->farExtent = (e > 0.0f) ? e : 0.0f;
+    // Byte-aligned only, so quantized positions mix cleanly with full-width fields.
+    _impl->farPosBits = (posBits >= 8 && posBits <= 32 && posBits % 8 == 0) ? posBits : 16;
+}
+
 const ecs::SystemDescriptor &AoiBroadcastSystem::descriptor() const noexcept { return kAoiDesc; }
 
 void AoiBroadcastSystem::execute(core::f32 /*dt*/)
@@ -498,22 +600,33 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
         }
 
         const net::Endpoint *address = session.address();
+        const core::u64 ackedSeq = session.ackedSnapshotSeq();
         auto &baseline = d.lastSent[playerId];
         auto &sentTick = d.lastSentTick[playerId];
         if (!d.enteredRecs.empty())
         {
-            // A spawn is a full snapshot; record it as the delta baseline (and its
-            // send tick) so the next tick's field delta and priority have a base.
+            // A spawn is a full snapshot. In the optimistic model it becomes the
+            // delta baseline immediately; in the strict model the baseline waits
+            // for the client's ack, so record it as "sent at this sequence".
             d.emitEntities(net::protocol::PacketType::EntitySpawn, d.enteredRecs, address);
             for (const core::u32 recIndex : d.enteredRecs)
             {
                 const core::u32 rawId = d.records[recIndex].id;
-                baseline[rawId] = d.snapshotOf(recIndex);
+                const auto snap = d.snapshotOf(recIndex);
+                if (d.strictAcked)
+                {
+                    d.sentSnap[playerId][rawId] = snap;
+                    d.sentSeq[playerId][rawId] = d.tickCounter;
+                }
+                else
+                {
+                    baseline[rawId] = snap;
+                }
                 sentTick[rawId] = d.tickCounter;
             }
         }
         if (!d.movedRecs.empty())
-            d.emitDeltas(playerId, d.movedRecs, center, address);
+            d.emitDeltas(playerId, d.movedRecs, center, ackedSeq, address);
         if (!d.leftIds.empty())
         {
             d.emitDestroy(d.leftIds, address);
@@ -521,6 +634,11 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
             {
                 baseline.erase(raw); // no longer replicated to this client
                 sentTick.erase(raw);
+                if (d.strictAcked)
+                {
+                    d.sentSnap[playerId].erase(raw);
+                    d.sentSeq[playerId].erase(raw);
+                }
             }
         }
 
@@ -540,6 +658,8 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
             {
                 d.lastSent.erase(it->first);
                 d.lastSentTick.erase(it->first);
+                d.sentSnap.erase(it->first);
+                d.sentSeq.erase(it->first);
                 it = d.known.erase(it);
             }
             else

@@ -97,6 +97,28 @@ public:
      */
     void setNetworkLod(math::Fixed32 nearRadius, core::u32 farInterval) noexcept;
 
+    /**
+     * @brief Selects the strict acked-baseline delta model (§6.2.5).
+     *
+     * When enabled, the delta baseline for a client advances only when that client
+     * acknowledges the sequence (SnapshotAck), so an unconfirmed change keeps being
+     * resent until confirmed — reliable at the cost of the ack traffic and some
+     * redundancy. Disabled (the default), the baseline advances on send and a
+     * keyframe self-heals a lost delta. Kept as a choice, per Config::reliableBaseline.
+     */
+    void setReliableBaseline(bool enabled) noexcept;
+
+    /**
+     * @brief Enables far-ring position quantization — the precision half of LOD (§6.2.6).
+     *
+     * With a positive @p worldExtent and network LOD on, an entity in the far ring
+     * has each replicated position axis quantized to @p posBits bits over
+     * [-worldExtent, worldExtent] instead of a full float, in a StateDelta marked
+     * Compressed. Near-ring entities keep full precision. @p posBits must be a
+     * multiple of 8 (else it falls back to 16). A zero @p worldExtent disables it.
+     */
+    void setPrecisionLod(math::Fixed32 worldExtent, core::u32 posBits) noexcept;
+
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
     void execute(core::f32 dt) override;
 

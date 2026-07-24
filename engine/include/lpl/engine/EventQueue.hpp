@@ -36,6 +36,18 @@ struct ConnectEvent {
     net::Endpoint source{}; ///< Address the handshake arrived from.
 };
 
+/**
+ * @brief A client confirming it has applied every snapshot up to @c seq.
+ *
+ * The acked-baseline half of §6.2.5: the server advances that client's delta
+ * baseline to this sequence, so a field it has confirmed is never resent and one
+ * it has not keeps being resent until it is.
+ */
+struct SnapshotAckEvent {
+    net::Endpoint source{}; ///< Who acked.
+    core::u64 seq{0};       ///< Highest snapshot sequence the client has applied.
+};
+
 /** @brief A client asks to disconnect cleanly (or is dropped). */
 struct DisconnectEvent {
     net::Endpoint source{}; ///< Address the disconnect arrived from.
@@ -63,6 +75,7 @@ struct StateEntity {
 /** @brief Full state update from the server. */
 struct StateUpdateEvent {
     pmr::vector<StateEntity> entities;
+    core::u64 seq{0}; ///< Server sequence of this snapshot, for the client to ack (§6.2.5).
 };
 
 /**
@@ -74,6 +87,7 @@ struct StateUpdateEvent {
  */
 struct EntitySpawnEvent {
     pmr::vector<StateEntity> entities;
+    core::u64 seq{0}; ///< Server sequence of this snapshot, for the client to ack (§6.2.5).
 };
 
 /**
@@ -84,6 +98,7 @@ struct EntitySpawnEvent {
  */
 struct StateDeltaEvent {
     pmr::vector<StateEntity> entities;
+    core::u64 seq{0}; ///< Server sequence of this snapshot, for the client to ack (§6.2.5).
 };
 
 /**
@@ -207,6 +222,7 @@ struct EventQueues {
     TypedQueue<EntityDestroyEvent> destroys;
     TypedQueue<InputEvent> inputs;
     TypedQueue<StateHashReportEvent> stateHashReports;
+    TypedQueue<SnapshotAckEvent> snapshotAcks;
 };
 
 } // namespace lpl::engine

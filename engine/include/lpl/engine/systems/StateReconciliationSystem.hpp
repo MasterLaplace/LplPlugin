@@ -42,6 +42,14 @@ public:
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
     void execute(core::f32 dt) override;
 
+    /**
+     * @brief Highest server snapshot sequence this client has applied.
+     *
+     * The value a client sends back in a SnapshotAck so the server can advance its
+     * delta baseline (§6.2.5). Zero until the first sequenced snapshot arrives.
+     */
+    [[nodiscard]] core::u64 lastAppliedSnapshotSeq() const noexcept;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

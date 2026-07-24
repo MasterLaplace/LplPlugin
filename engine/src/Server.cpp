@@ -303,6 +303,8 @@ void Server::registerInstanceSystems(WorldId id)
             *_impl->sessions[id], _impl->transport, *spatial, world.registry(), _impl->config.interestRadius(),
             _impl->config.keyframeInterval(), _impl->config.bandwidthBudgetBytes());
         broadcast->setNetworkLod(_impl->config.lodNearRadius(), _impl->config.lodFarInterval());
+        broadcast->setPrecisionLod(_impl->config.worldExtent(), _impl->config.lodFarPosBits());
+        broadcast->setReliableBaseline(_impl->config.reliableBaseline());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(broadcast));
     }
     else

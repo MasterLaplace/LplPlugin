@@ -42,6 +42,11 @@ enum class PacketType : core::u8 {
     /// The server compares it against its own digest for that tick to detect a
     /// desync (see engine::Server::checkClientHash and the book's §6.4).
     StateHashReport = 0x13,
+    /// Client -> server: "I have fully applied every snapshot up to sequence N".
+    /// The server advances that client's delta baseline to N, so it never resends
+    /// what the client has confirmed and keeps resending what it has not — the
+    /// acked-baseline model of Quake III / DOOM III (§6.2.5).
+    SnapshotAck = 0x14,
     EntitySpawn = 0x20,
     EntityDestroy = 0x21,
     ComponentUpdate = 0x22,

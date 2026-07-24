@@ -92,6 +92,22 @@ void writeEntityDelta(Bitstream &stream, const EntitySnapshot &cur, core::u8 mas
 [[nodiscard]] core::Expected<void> readEntityDelta(Bitstream &stream, EntitySnapshot &inOut, core::u32 &outId,
                                                    core::u8 &outMask);
 
+/**
+ * @brief Writes one entity delta with its position quantized (§6.2.6).
+ *
+ * The precision half of network LOD: a far entity's position is not worth a full
+ * float. Each present position axis is quantized to @p posBits bits over
+ * [-extent, extent] (so a 2000 m world on 16 bits keeps ~3 cm), while size and hp
+ * stay full. @p posBits must be a multiple of 8 so the stream stays byte-aligned
+ * and mixes cleanly with the full-width size/hp writes.
+ */
+void writeEntityDeltaQuantized(Bitstream &stream, const EntitySnapshot &cur, core::u8 mask, float extent,
+                               core::u32 posBits);
+
+/** @brief Reads an entity written by @ref writeEntityDeltaQuantized (same params). */
+[[nodiscard]] core::Expected<void> readEntityDeltaQuantized(Bitstream &stream, EntitySnapshot &inOut, core::u32 &outId,
+                                                            core::u8 &outMask, float extent, core::u32 posBits);
+
 } // namespace lpl::net::protocol
 
 #endif // LPL_NET_PROTOCOL_ENTITYDELTA_HPP

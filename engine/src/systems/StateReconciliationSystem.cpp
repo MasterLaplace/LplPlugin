@@ -42,6 +42,7 @@ struct StateReconciliationSystem::Impl {
     EventQueues &queues;
     ecs::WorldPartition &world;
     ecs::Registry &registry;
+    core::u64 lastAppliedSeq{0}; ///< Highest snapshot sequence applied (§6.2.5 ack source).
 
     Impl(EventQueues &q, ecs::WorldPartition &w, ecs::Registry &reg) : queues{q}, world{w}, registry{reg} {}
 
@@ -175,24 +176,33 @@ StateReconciliationSystem::~StateReconciliationSystem() = default;
 
 const ecs::SystemDescriptor &StateReconciliationSystem::descriptor() const noexcept { return kReconcileDesc; }
 
+core::u64 StateReconciliationSystem::lastAppliedSnapshotSeq() const noexcept { return _impl->lastAppliedSeq; }
+
 void StateReconciliationSystem::execute(core::f32 /*dt*/)
 {
     // Full snapshots (non-AOI server) and AOI spawn/delta all reconcile the same
     // way: create-or-overwrite each entity from its authoritative snapshot.
+    const auto noteSeq = [&](core::u64 seq) {
+        if (seq > _impl->lastAppliedSeq)
+            _impl->lastAppliedSeq = seq;
+    };
     for (const auto &ev : _impl->queues.states.drain())
     {
         for (const auto &ent : ev.entities)
             _impl->applyEntity(ent);
+        noteSeq(ev.seq);
     }
     for (const auto &ev : _impl->queues.spawns.drain())
     {
         for (const auto &ent : ev.entities)
             _impl->applyEntity(ent);
+        noteSeq(ev.seq);
     }
     for (const auto &ev : _impl->queues.deltas.drain())
     {
         for (const auto &ent : ev.entities)
             _impl->applyEntity(ent);
+        noteSeq(ev.seq);
     }
     // AOI despawn: entities that left the interest radius are removed locally.
     for (const auto &ev : _impl->queues.destroys.drain())

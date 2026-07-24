@@ -50,6 +50,9 @@ public:
         Builder &bandwidthBudgetBytes(core::u32 bytes) noexcept;
         Builder &lodNearRadius(math::Fixed32 radius) noexcept;
         Builder &lodFarInterval(core::u32 ticks) noexcept;
+        Builder &worldExtent(math::Fixed32 halfSize) noexcept;
+        Builder &lodFarPosBits(core::u32 bits) noexcept;
+        Builder &reliableBaseline(bool enabled) noexcept;
         Builder &sessionTimeoutMs(core::f64 ms) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
@@ -65,9 +68,12 @@ public:
         core::u32 _keyframeInterval{60};
         core::u32 _bandwidthBudgetBytes{0};
         core::u32 _lodFarInterval{4};
+        core::u32 _lodFarPosBits{16};
         core::f64 _sessionTimeoutMs{30000.0};
         math::Fixed32 _interestRadius{math::Fixed32::zero()};
         math::Fixed32 _lodNearRadius{math::Fixed32::zero()};
+        math::Fixed32 _worldExtent{math::Fixed32::zero()};
+        bool _reliableBaseline{false};
         bool _serverMode{false};
         bool _headless{false};
         core::usize _arenaSize{64 * 1024 * 1024};
@@ -197,6 +203,43 @@ public:
     [[nodiscard]] core::u32 lodFarInterval() const noexcept { return _lodFarInterval; }
 
     /**
+     * @brief Selects the acked-baseline delta model over the optimistic one (§6.2.5).
+     *
+     * Off (the default): the AOI delta baseline advances the moment a field is
+     * *sent*, and a keyframe periodically re-sends everything so a lost delta
+     * self-heals. Low bandwidth, bounded staleness on loss.
+     *
+     * On: the baseline advances only when the client *acknowledges* the sequence
+     * (SnapshotAck), so a field the client has not confirmed keeps being resent
+     * until it is — the reliable Quake III / DOOM III model. Costs the ack traffic
+     * and some redundancy under loss, in exchange for no silent staleness. Both
+     * are kept because the right choice depends on the game.
+     *
+     * @return True when the reliable acked-baseline model is selected.
+     */
+    [[nodiscard]] bool reliableBaseline() const noexcept { return _reliableBaseline; }
+
+    /**
+     * @brief Half-extent of the world for far-ring position quantization (§6.2.6).
+     *
+     * The precision half of network LOD. When positive (and network LOD is on),
+     * an entity in the far ring has its replicated position quantized to
+     * @c lodFarPosBits bits per axis over [-worldExtent, worldExtent] instead of a
+     * full float — half the position bytes for a distant entity whose exact
+     * position the eye cannot resolve anyway. Zero (the default) keeps full-float
+     * positions everywhere.
+     *
+     * @return The world half-extent in world units, or zero when off.
+     */
+    [[nodiscard]] math::Fixed32 worldExtent() const noexcept { return _worldExtent; }
+
+    /**
+     * @brief Bits per position axis for the far ring (§6.2.6). Multiple of 8.
+     * @return The far-ring position bit width (default 16).
+     */
+    [[nodiscard]] core::u32 lodFarPosBits() const noexcept { return _lodFarPosBits; }
+
+    /**
      * @brief Idle timeout after which a client session (and its avatar) is reaped.
      *
      * A client that sends nothing for this long is treated as gone: its session,
@@ -265,9 +308,12 @@ private:
     core::u32 _keyframeInterval{60};
     core::u32 _bandwidthBudgetBytes{0};
     core::u32 _lodFarInterval{4};
+    core::u32 _lodFarPosBits{16};
     core::f64 _sessionTimeoutMs{30000.0};
     math::Fixed32 _interestRadius{math::Fixed32::zero()};
     math::Fixed32 _lodNearRadius{math::Fixed32::zero()};
+    math::Fixed32 _worldExtent{math::Fixed32::zero()};
+    bool _reliableBaseline{false};
     bool _serverMode{false};
     bool _headless{false};
     core::usize _arenaSize{64 * 1024 * 1024};

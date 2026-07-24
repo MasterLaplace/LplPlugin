@@ -210,6 +210,13 @@ target("test-server-mesh")
     add_files("parity/test_server_mesh.cpp")
 target_end()
 
+target("test-config-profiles")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-engine", "lpl-net")
+    add_files("parity/test_config_profiles.cpp")
+target_end()
+
 target("test-aoi")
     set_kind("binary")
     set_group("tests")

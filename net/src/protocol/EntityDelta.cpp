@@ -105,4 +105,84 @@ core::Expected<void> readEntityDelta(Bitstream &stream, EntitySnapshot &inOut, c
     return {};
 }
 
+void writeEntityDeltaQuantized(Bitstream &stream, const EntitySnapshot &cur, core::u8 mask, float extent,
+                               core::u32 posBits)
+{
+    stream.writeU32(cur.id);
+    stream.writeU8(mask);
+
+    if (mask & FieldPosX)
+        stream.writeQuantizedFloat(cur.px, -extent, extent, posBits);
+    if (mask & FieldPosY)
+        stream.writeQuantizedFloat(cur.py, -extent, extent, posBits);
+    if (mask & FieldPosZ)
+        stream.writeQuantizedFloat(cur.pz, -extent, extent, posBits);
+    if (mask & FieldSizeX)
+        stream.writeFloat(cur.sx);
+    if (mask & FieldSizeY)
+        stream.writeFloat(cur.sy);
+    if (mask & FieldSizeZ)
+        stream.writeFloat(cur.sz);
+    if (mask & FieldHp)
+        stream.writeI32(cur.hp);
+}
+
+core::Expected<void> readEntityDeltaQuantized(Bitstream &stream, EntitySnapshot &inOut, core::u32 &outId,
+                                              core::u8 &outMask, float extent, core::u32 posBits)
+{
+    auto rId = stream.readU32();
+    if (!rId.has_value())
+        return core::makeError(rId.error().code(), rId.error().message());
+    auto rMask = stream.readU8();
+    if (!rMask.has_value())
+        return core::makeError(rMask.error().code(), rMask.error().message());
+
+    outId = rId.value();
+    outMask = rMask.value();
+    inOut.id = outId;
+
+    const auto readQ = [&](float &dst) -> core::Expected<void> {
+        auto r = stream.readQuantizedFloat(-extent, extent, posBits);
+        if (!r.has_value())
+            return core::makeError(r.error().code(), r.error().message());
+        dst = r.value();
+        return {};
+    };
+    const auto readF = [&](float &dst) -> core::Expected<void> {
+        auto r = stream.readFloat();
+        if (!r.has_value())
+            return core::makeError(r.error().code(), r.error().message());
+        dst = r.value();
+        return {};
+    };
+
+    if (outMask & FieldPosX)
+        if (auto r = readQ(inOut.px); !r.has_value())
+            return r;
+    if (outMask & FieldPosY)
+        if (auto r = readQ(inOut.py); !r.has_value())
+            return r;
+    if (outMask & FieldPosZ)
+        if (auto r = readQ(inOut.pz); !r.has_value())
+            return r;
+    if (outMask & FieldSizeX)
+        if (auto r = readF(inOut.sx); !r.has_value())
+            return r;
+    if (outMask & FieldSizeY)
+        if (auto r = readF(inOut.sy); !r.has_value())
+            return r;
+    if (outMask & FieldSizeZ)
+        if (auto r = readF(inOut.sz); !r.has_value())
+            return r;
+    if (outMask & FieldHp)
+    {
+        auto r = stream.readI32();
+        if (!r.has_value())
+            return core::makeError(r.error().code(), r.error().message());
+        inOut.hp = r.value();
+    }
+
+    return {};
+}
+
 } // namespace lpl::net::protocol

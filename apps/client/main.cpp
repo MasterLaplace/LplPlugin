@@ -11,11 +11,24 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/core/Types.hpp>
 #include <lpl/engine/Config.hpp>
+#include <lpl/engine/ConfigValidation.hpp>
 #include <lpl/engine/Engine.hpp>
+#include <lpl/engine/GameProfile.hpp>
 
-int main(int /*argc*/, char * /*argv*/[])
+#include <cstring>
+
+int main(int argc, char *argv[])
 {
     lpl::core::Log::info("=== LplPlugin Client ===");
+
+    // The genre is chosen server-side; the client only notes it (its replication
+    // behaviour — prediction, interpolation, reconciliation — is genre-independent
+    // today). Parsed for symmetry with the server and future client-side tuning.
+    auto profile = lpl::engine::GameProfile::Mmorpg;
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--game") == 0 && i + 1 < argc)
+            (void) lpl::engine::parseGameProfile(argv[i + 1], profile);
+    lpl::core::Log::info("Client game profile: {}", lpl::engine::gameProfileName(profile));
 
     auto config = lpl::engine::Config::Builder{}
                       .tickRate(144)
@@ -28,6 +41,8 @@ int main(int /*argc*/, char * /*argv*/[])
                       .serverAddress("127.0.0.1")
                       .serverPort(4242)
                       .build();
+
+    lpl::engine::forEachConfigWarning(config, [](const char *msg) { lpl::core::Log::warn("config: {}", msg); });
 
     lpl::engine::Engine engine{config};
 

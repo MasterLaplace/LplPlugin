@@ -114,6 +114,14 @@ void SessionSystem::execute(core::f32 /*dt*/)
                                                [this](const net::session::Session &s) { _impl->teardown(s); });
     }
 
+    // Snapshot acks: advance each client's confirmed baseline sequence so the
+    // AOI broadcast stops resending what that client has applied (§6.2.5).
+    for (const auto &ev : _impl->queues.snapshotAcks.drain())
+    {
+        if (auto *session = _impl->sessionManager.findByAddress(ev.source))
+            session->setAckedSnapshotSeq(ev.seq);
+    }
+
     auto events = _impl->queues.connects.drain();
 
     for (const auto &ev : events)

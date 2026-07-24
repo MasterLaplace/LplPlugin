@@ -77,6 +77,22 @@ public:
     /** @brief Updates the last input sequence. */
     void setLastInputSequence(core::u32 seq) noexcept;
 
+    /**
+     * @brief Highest snapshot sequence this client has acknowledged applying.
+     *
+     * The server's delta baseline for this client advances only up to here, so a
+     * field the client has confirmed is never resent and one it has not keeps
+     * being resent (§6.2.5). Zero means nothing acked yet.
+     */
+    [[nodiscard]] core::u64 ackedSnapshotSeq() const noexcept { return _ackedSnapshotSeq; }
+
+    /** @brief Advances the acked snapshot sequence (monotonic; ignores regressions). */
+    void setAckedSnapshotSeq(core::u64 seq) noexcept
+    {
+        if (seq > _ackedSnapshotSeq)
+            _ackedSnapshotSeq = seq;
+    }
+
     /** @brief Returns time of last packet received. */
     [[nodiscard]] TimePoint lastActivity() const noexcept;
 
@@ -95,6 +111,7 @@ private:
     ecs::EntityId _entity{};
     core::f32 _smoothedRtt{0.0f};
     core::u32 _lastInputSeq{0};
+    core::u64 _ackedSnapshotSeq{0};
     TimePoint _lastActivity;
     Endpoint _address{};
 };

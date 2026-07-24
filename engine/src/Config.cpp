@@ -150,6 +150,24 @@ Config::Builder &Config::Builder::lodFarInterval(core::u32 ticks) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::worldExtent(math::Fixed32 halfSize) noexcept
+{
+    _worldExtent = halfSize;
+    return *this;
+}
+
+Config::Builder &Config::Builder::lodFarPosBits(core::u32 bits) noexcept
+{
+    _lodFarPosBits = bits;
+    return *this;
+}
+
+Config::Builder &Config::Builder::reliableBaseline(bool enabled) noexcept
+{
+    _reliableBaseline = enabled;
+    return *this;
+}
+
 Config::Builder &Config::Builder::sessionTimeoutMs(core::f64 ms) noexcept
 {
     _sessionTimeoutMs = ms;
@@ -178,6 +196,9 @@ Config Config::Builder::build() const noexcept
     cfg._bandwidthBudgetBytes = _bandwidthBudgetBytes;
     cfg._lodNearRadius = _lodNearRadius;
     cfg._lodFarInterval = _lodFarInterval;
+    cfg._worldExtent = _worldExtent;
+    cfg._lodFarPosBits = _lodFarPosBits;
+    cfg._reliableBaseline = _reliableBaseline;
     cfg._serverMode = _serverMode;
     cfg._headless = _headless;
     cfg._arenaSize = _arenaSize;

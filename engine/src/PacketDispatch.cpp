@@ -109,6 +109,7 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
 
     case net::protocol::PacketType::StateSnapshot: {
         StateUpdateEvent ev{};
+        ev.seq = header.sequence;
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
@@ -122,6 +123,7 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
         // AOI: entities that just entered the client's interest radius. Full
         // snapshot, so the client can create them exactly as a StateSnapshot does.
         EntitySpawnEvent ev{};
+        ev.seq = header.sequence;
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
@@ -137,10 +139,26 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
         // changed against what the server last sent; absent fields are left to
         // reconciliation, which merges onto the state the client already holds.
         StateDeltaEvent ev{};
+        ev.seq = header.sequence;
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
         };
+        // A Compressed StateDelta is a far-ring group (§6.2.6): its positions are
+        // quantized, prefixed by [posBits][extent] so the client can dequantize.
+        const bool quantized = net::protocol::hasFlag(header.flags, net::protocol::PacketFlag::Compressed);
+        core::u32 posBits = 0;
+        float extent = 0.0f;
+        if (quantized)
+        {
+            auto rBits = stream.readU8();
+            auto rExtent = stream.readFloat();
+            if (!rBits.has_value() || !rExtent.has_value())
+                break;
+            posBits = rBits.value();
+            extent = rExtent.value();
+        }
+
         auto countResult = stream.readU16();
         if (!countResult.has_value())
             break;
@@ -150,7 +168,11 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
             net::protocol::EntitySnapshot snap{};
             core::u32 id = 0;
             core::u8 mask = 0;
-            if (!net::protocol::readEntityDelta(stream, snap, id, mask).has_value())
+            const bool ok = quantized
+                                ? net::protocol::readEntityDeltaQuantized(stream, snap, id, mask, extent, posBits)
+                                      .has_value()
+                                : net::protocol::readEntityDelta(stream, snap, id, mask).has_value();
+            if (!ok)
                 break;
 
             StateEntity se{};
@@ -209,6 +231,24 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
         ev.tick = (static_cast<core::u64>(rTickHigh.value()) << 32) | rTickLow.value();
         ev.digest = (static_cast<core::u64>(rDigestHigh.value()) << 32) | rDigestLow.value();
         queues.stateHashReports.push(std::move(ev));
+        break;
+    }
+
+    case net::protocol::PacketType::SnapshotAck: {
+        // Client confirms it has applied every snapshot up to a sequence (§6.2.5).
+        net::protocol::Bitstream stream{
+            std::span<const core::byte>{payload, payloadSize},
+             payloadSize * 8
+        };
+        auto rSeqHigh = stream.readU32();
+        auto rSeqLow = stream.readU32();
+        if (!rSeqHigh.has_value() || !rSeqLow.has_value())
+            break;
+
+        SnapshotAckEvent ev{};
+        ev.source = fromAddr;
+        ev.seq = (static_cast<core::u64>(rSeqHigh.value()) << 32) | rSeqLow.value();
+        queues.snapshotAcks.push(std::move(ev));
         break;
     }
 

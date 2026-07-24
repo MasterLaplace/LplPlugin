@@ -10,6 +10,7 @@
 
 #include <lpl/net/protocol/EntityDelta.hpp>
 
+#include <cmath>
 #include <cstdio>
 
 using namespace lpl;
@@ -131,6 +132,39 @@ int main()
 
         check(receiver.px == 8.0f && receiver.hp == 90 && receiver.sy == 3.0f,
               "chained field deltas converge to the source state");
+    }
+
+    // ── Quantized far-ring delta: coarser position, fewer bytes (§6.2.6) ───── //
+    {
+        EntitySnapshot cur{};
+        cur.id = 5;
+        cur.px = 123.4f;
+        cur.py = -50.0f;
+        cur.pz = 999.9f;
+        cur.sx = 2.0f;
+        cur.sy = 2.0f;
+        cur.sz = 2.0f;
+        cur.hp = 70;
+
+        const float extent = 1024.0f;
+        const core::u32 bits = 16; // 2 bytes per axis
+
+        net::protocol::Bitstream w;
+        net::protocol::writeEntityDeltaQuantized(w, cur, net::protocol::FieldAll, extent, bits);
+        // id 4 + mask 1 + 3*2 (pos 16-bit) + 3*4 (size full) + 4 (hp) = 27, vs 33 full.
+        check(w.data().size() == 27, "a quantized keyframe is smaller than the full-float one (27 vs 33)");
+
+        net::protocol::Bitstream r{w.data(), w.bitsWritten()};
+        EntitySnapshot held{};
+        core::u32 id = 0;
+        core::u8 mask = 0;
+        check(net::protocol::readEntityDeltaQuantized(r, held, id, mask, extent, bits).has_value(),
+              "quantized entity decodes");
+
+        const float step = 2.0f * extent / static_cast<float>((1u << bits) - 1u);
+        check(std::fabs(held.px - cur.px) <= step && std::fabs(held.pz - cur.pz) <= step,
+              "quantized position is within one quantization step");
+        check(held.sx == 2.0f && held.sz == 2.0f && held.hp == 70, "size and hp stay exact (full precision)");
     }
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);
