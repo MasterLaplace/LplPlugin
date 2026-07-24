@@ -23,7 +23,8 @@ const ecs::SystemDescriptor &SpawnSystem::descriptor() const noexcept { return k
 
 void SpawnSystem::execute(core::f32 /*dt*/)
 {
-    if (!_spawned && _connected && _myEntityId != 0 && !_registry.isAlive(ecs::EntityId{_myEntityId}))
+    if (!_spawned && _connected && _myEntityId != ecs::EntityId::kNull &&
+        !_registry.isAlive(ecs::EntityId{_myEntityId}))
     {
         ecs::Archetype arch;
         arch.add(ecs::ComponentId::Position);
@@ -31,9 +32,12 @@ void SpawnSystem::execute(core::f32 /*dt*/)
         arch.add(ecs::ComponentId::AABB);
         arch.add(ecs::ComponentId::Health);
 
-        [[maybe_unused]] auto res = _registry.createEntity(arch);
-        // Note: the newly created entity gets its own generated ID which may not be _myEntityId.
-        // We set _spawned = true so we only do this once.
+        // Create the avatar UNDER the server-assigned id (from the welcome), not a
+        // fresh local one — otherwise CameraSystem/input, which name the entity by
+        // _myEntityId, could never find it, and a reconciliation snapshot for the
+        // same id would spawn a second copy. Idempotent with StateReconciliation:
+        // whichever runs first, the other adopts the same live id.
+        [[maybe_unused]] auto res = _registry.createEntityWithId(ecs::EntityId{_myEntityId}, arch);
         _spawned = true;
     }
 }

@@ -120,6 +120,18 @@ Config::Builder &Config::Builder::maxPacketsPerTick(core::u32 n) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::interestRadius(math::Fixed32 radius) noexcept
+{
+    _interestRadius = radius;
+    return *this;
+}
+
+Config::Builder &Config::Builder::sessionTimeoutMs(core::f64 ms) noexcept
+{
+    _sessionTimeoutMs = ms;
+    return *this;
+}
+
 Config::Builder &Config::Builder::serverPort(core::u16 port) noexcept
 {
     _serverPort = port;
@@ -136,6 +148,8 @@ Config Config::Builder::build() const noexcept
     cfg._serverWorkerThreads = _serverWorkerThreads;
     cfg._replaySnapshotInterval = _replaySnapshotInterval;
     cfg._maxPacketsPerTick = _maxPacketsPerTick;
+    cfg._sessionTimeoutMs = _sessionTimeoutMs;
+    cfg._interestRadius = _interestRadius;
     cfg._serverMode = _serverMode;
     cfg._headless = _headless;
     cfg._arenaSize = _arenaSize;

@@ -41,10 +41,12 @@ public:
      * @param inputManager   Input manager to create per-entity input state.
      * @param world          World partition to spawn entities.
      * @param registry       ECS registry for entity creation.
+     * @param sessionTimeoutMs Idle timeout after which a session and its avatar
+     *                         are reaped; 0 disables timeout reaping.
      */
     SessionSystem(net::session::SessionManager &sessionManager, EventQueues &queues,
                   std::shared_ptr<net::transport::ITransport> transport, input::InputManager &inputManager,
-                  ecs::WorldPartition &world, ecs::Registry &registry);
+                  ecs::WorldPartition &world, ecs::Registry &registry, core::f64 sessionTimeoutMs = 0.0);
     ~SessionSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;

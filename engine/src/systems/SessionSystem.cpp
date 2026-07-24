@@ -46,12 +46,30 @@ struct SessionSystem::Impl {
     input::InputManager &inputManager;
     ecs::WorldPartition &world;
     ecs::Registry &registry;
-    core::u32 nextEntityId{100};
+    core::f64 sessionTimeoutMs;
 
     Impl(net::session::SessionManager &sm, EventQueues &q, std::shared_ptr<net::transport::ITransport> t,
-         input::InputManager &im, ecs::WorldPartition &w, ecs::Registry &reg)
-        : sessionManager{sm}, queues{q}, transport{std::move(t)}, inputManager{im}, world{w}, registry{reg}
+         input::InputManager &im, ecs::WorldPartition &w, ecs::Registry &reg, core::f64 timeout)
+        : sessionManager{sm}, queues{q}, transport{std::move(t)}, inputManager{im}, world{w}, registry{reg},
+          sessionTimeoutMs{timeout}
     {
+    }
+
+    /// Tear down everything a departing client owned: its avatar entity, its
+    /// input state and its spatial-index entry. Keyed on the entity id, which is
+    /// also the session's playerId (see the id-unification note above). Without
+    /// this a disconnect would leak an avatar that lingers and is broadcast — AOI
+    /// then sends the neighbours an EntityDestroy on the next tick, once the
+    /// entity is gone from the registry and the grid.
+    void teardown(const net::session::Session &session)
+    {
+        const ecs::EntityId avatar = session.boundEntity();
+        if (avatar.isValid())
+        {
+            [[maybe_unused]] auto sr = world.remove(avatar);
+            [[maybe_unused]] auto dr = registry.destroyEntity(avatar);
+        }
+        inputManager.removeEntity(session.playerId());
     }
 };
 
@@ -61,8 +79,9 @@ struct SessionSystem::Impl {
 
 SessionSystem::SessionSystem(net::session::SessionManager &sessionManager, EventQueues &queues,
                              std::shared_ptr<net::transport::ITransport> transport, input::InputManager &inputManager,
-                             ecs::WorldPartition &world, ecs::Registry &registry)
-    : _impl{std::make_unique<Impl>(sessionManager, queues, std::move(transport), inputManager, world, registry)}
+                             ecs::WorldPartition &world, ecs::Registry &registry, core::f64 sessionTimeoutMs)
+    : _impl{std::make_unique<Impl>(sessionManager, queues, std::move(transport), inputManager, world, registry,
+                                   sessionTimeoutMs)}
 {
 }
 
@@ -72,6 +91,29 @@ const ecs::SystemDescriptor &SessionSystem::descriptor() const noexcept { return
 
 void SessionSystem::execute(core::f32 /*dt*/)
 {
+    // ─── Departures first, so a slot freed this tick can be reused ─── //
+    // Explicit disconnects: the client asked to leave.
+    for (const auto &ev : _impl->queues.disconnects.drain())
+    {
+        if (!ev.source.valid())
+            continue;
+        if (auto *session = _impl->sessionManager.findByAddress(ev.source))
+        {
+            _impl->teardown(*session);
+            [[maybe_unused]] auto d = _impl->sessionManager.disconnect(session->playerId());
+        }
+    }
+
+    // Idle timeout: a client that stopped sending is treated as gone. Input is
+    // the heartbeat (InputProcessingSystem touches the session every tick a client
+    // sends), so this only fires for clients that truly went silent.
+    if (_impl->sessionTimeoutMs > 0.0)
+    {
+        [[maybe_unused]] auto reaped =
+            _impl->sessionManager.reapTimedOut(_impl->sessionTimeoutMs,
+                                               [this](const net::session::Session &s) { _impl->teardown(s); });
+    }
+
     auto events = _impl->queues.connects.drain();
 
     for (const auto &ev : events)
@@ -85,25 +127,6 @@ void SessionSystem::execute(core::f32 /*dt*/)
         {
             continue;
         }
-
-        // Only mint an id once the connection is accepted, so a rejected
-        // duplicate does not burn one.
-        const core::u32 newId = _impl->nextEntityId++;
-
-        auto sessionResult = _impl->sessionManager.connect(newId);
-        if (!sessionResult.has_value())
-        {
-            continue;
-        }
-
-        // Store the client's network address in the session for broadcast
-        auto *session = sessionResult.value();
-        if (ev.source.valid())
-        {
-            session->setAddress(ev.source);
-        }
-
-        [[maybe_unused]] auto &_ = _impl->inputManager.getOrCreate(newId);
 
         // ─── Create entity in Registry with full component set ─── //
         // Mirrors legacy SessionManager::connect() which created a full
@@ -124,6 +147,40 @@ void SessionSystem::execute(core::f32 /*dt*/)
         }
 
         auto entityId = entityResult.value();
+
+        // ONE network identity: the entity's ECS id. The legacy keyed session,
+        // input and the welcome on a single publicId; the modern port had split it
+        // into a separate player counter (session/input) and the ECS id
+        // (broadcast/hash), so the input a client sent — tagged with the welcome
+        // id — never matched the entity MovementSystem drives (keyed by the ECS
+        // id), and the client could not find its own avatar in a snapshot. Keying
+        // everything on entityId.raw() closes the loop: welcome → client input →
+        // InputProcessing → Movement all name the same entity.
+        const core::u32 netId = entityId.raw();
+
+        auto sessionResult = _impl->sessionManager.connect(netId);
+        if (!sessionResult.has_value())
+        {
+            // Undo the entity: a session id collision means we would leak it.
+            [[maybe_unused]] auto d = _impl->registry.destroyEntity(entityId);
+            continue;
+        }
+
+        // Store the client's network address in the session for broadcast
+        auto *session = sessionResult.value();
+        if (ev.source.valid())
+        {
+            session->setAddress(ev.source);
+        }
+
+        // Bind the avatar to the session: this is the client's centre of interest.
+        // AoiBroadcastSystem reads it back (Session::boundEntity) to know where to
+        // run the radius query; without the bind the session has a null entity and
+        // AOI could not place the client in the world.
+        session->bindEntity(entityId);
+
+        [[maybe_unused]] auto &_ = _impl->inputManager.getOrCreate(netId);
+
         auto refResult = _impl->registry.resolve(entityId);
         if (!refResult.has_value())
             continue;
@@ -192,7 +249,7 @@ void SessionSystem::execute(core::f32 /*dt*/)
 
         core::byte packet[sizeof(header) + 4];
         std::memcpy(packet, &header, sizeof(header));
-        std::memcpy(packet + sizeof(header), &newId, 4);
+        std::memcpy(packet + sizeof(header), &netId, 4);
 
         [[maybe_unused]] auto sendRes =
             _impl->transport->send(std::span<const core::byte>{packet, sizeof(packet)}, session->address());

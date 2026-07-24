@@ -36,6 +36,11 @@ struct ConnectEvent {
     net::Endpoint source{}; ///< Address the handshake arrived from.
 };
 
+/** @brief A client asks to disconnect cleanly (or is dropped). */
+struct DisconnectEvent {
+    net::Endpoint source{}; ///< Address the disconnect arrived from.
+};
+
 /** @brief Server acknowledges a connection with an entity ID. */
 struct WelcomeEvent {
     core::u32 entityId;
@@ -52,6 +57,37 @@ struct StateEntity {
 /** @brief Full state update from the server. */
 struct StateUpdateEvent {
     pmr::vector<StateEntity> entities;
+};
+
+/**
+ * @brief Entities that just entered the client's interest radius (AOI).
+ *
+ * Sent by systems::AoiBroadcastSystem when a client's radius query first sees an
+ * entity. Carries the full snapshot so the client can create it locally, exactly
+ * as a StateUpdateEvent would for an entity it does not yet hold.
+ */
+struct EntitySpawnEvent {
+    pmr::vector<StateEntity> entities;
+};
+
+/**
+ * @brief Position/state update for entities already known to the client (AOI).
+ *
+ * The delta half of area-of-interest broadcasting: entities the client already
+ * holds and that remain in range get their current transform, not a re-spawn.
+ */
+struct StateDeltaEvent {
+    pmr::vector<StateEntity> entities;
+};
+
+/**
+ * @brief Entities that just left the client's interest radius (AOI).
+ *
+ * Only the ids travel: the client removes them from its local world. The mirror
+ * image of EntitySpawnEvent.
+ */
+struct EntityDestroyEvent {
+    pmr::vector<core::u32> ids;
 };
 
 /** @brief A single key press/release. */
@@ -157,8 +193,12 @@ private:
  */
 struct EventQueues {
     TypedQueue<ConnectEvent> connects;
+    TypedQueue<DisconnectEvent> disconnects;
     TypedQueue<WelcomeEvent> welcomes;
     TypedQueue<StateUpdateEvent> states;
+    TypedQueue<EntitySpawnEvent> spawns;
+    TypedQueue<StateDeltaEvent> deltas;
+    TypedQueue<EntityDestroyEvent> destroys;
     TypedQueue<InputEvent> inputs;
     TypedQueue<StateHashReportEvent> stateHashReports;
 };

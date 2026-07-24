@@ -18,6 +18,43 @@
 
 namespace lpl::engine::detail {
 
+namespace {
+
+/// Reads a [u16 count][32-byte entity]* body into @p out. Shared by the full
+/// StateSnapshot and by the AOI EntitySpawn / StateDelta packets, which carry the
+/// exact same entity layout.
+void readEntitySnapshots(net::protocol::Bitstream &stream, pmr::vector<StateEntity> &out)
+{
+    auto countResult = stream.readU16();
+    if (!countResult.has_value())
+        return;
+
+    const core::u16 count = countResult.value();
+    for (core::u16 e = 0; e < count; ++e)
+    {
+        auto rId = stream.readU32();
+        auto rPosX = stream.readFloat();
+        auto rPosY = stream.readFloat();
+        auto rPosZ = stream.readFloat();
+        auto rSzX = stream.readFloat();
+        auto rSzY = stream.readFloat();
+        auto rSzZ = stream.readFloat();
+        auto rHp = stream.readI32();
+
+        if (!rId.has_value() || !rHp.has_value())
+            break;
+
+        StateEntity se{};
+        se.id = rId.value();
+        se.pos = {rPosX.value(), rPosY.value(), rPosZ.value()};
+        se.size = {rSzX.value(), rSzY.value(), rSzZ.value()};
+        se.hp = rHp.value();
+        out.push_back(se);
+    }
+}
+
+} // namespace
+
 bool parsePacket(std::span<const core::byte> datagram, net::protocol::PacketHeader &outHeader,
                  std::span<const core::byte> &outPayload)
 {
@@ -51,6 +88,14 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
         break;
     }
 
+    case net::protocol::PacketType::Disconnect: {
+        // The sender's address is authoritative; the payload (if any) is ignored.
+        DisconnectEvent ev{};
+        ev.source = fromAddr;
+        queues.disconnects.push(ev);
+        break;
+    }
+
     case net::protocol::PacketType::HandshakeAck: {
         WelcomeEvent ev{};
         if (payloadSize >= 4)
@@ -67,6 +112,44 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
         };
+        readEntitySnapshots(stream, ev.entities);
+        queues.states.push(std::move(ev));
+        break;
+    }
+
+    case net::protocol::PacketType::EntitySpawn: {
+        // AOI: entities that just entered the client's interest radius. Full
+        // snapshot, so the client can create them exactly as a StateSnapshot does.
+        EntitySpawnEvent ev{};
+        net::protocol::Bitstream stream{
+            std::span<const core::byte>{payload, payloadSize},
+             payloadSize * 8
+        };
+        readEntitySnapshots(stream, ev.entities);
+        queues.spawns.push(std::move(ev));
+        break;
+    }
+
+    case net::protocol::PacketType::StateDelta: {
+        // AOI: current transform of entities the client already holds and that
+        // stayed in range.
+        StateDeltaEvent ev{};
+        net::protocol::Bitstream stream{
+            std::span<const core::byte>{payload, payloadSize},
+             payloadSize * 8
+        };
+        readEntitySnapshots(stream, ev.entities);
+        queues.deltas.push(std::move(ev));
+        break;
+    }
+
+    case net::protocol::PacketType::EntityDestroy: {
+        // AOI: entities that left the client's interest radius — ids only.
+        EntityDestroyEvent ev{};
+        net::protocol::Bitstream stream{
+            std::span<const core::byte>{payload, payloadSize},
+             payloadSize * 8
+        };
 
         auto countResult = stream.readU16();
         if (!countResult.has_value())
@@ -76,25 +159,11 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
         for (core::u16 e = 0; e < count; ++e)
         {
             auto rId = stream.readU32();
-            auto rPosX = stream.readFloat();
-            auto rPosY = stream.readFloat();
-            auto rPosZ = stream.readFloat();
-            auto rSzX = stream.readFloat();
-            auto rSzY = stream.readFloat();
-            auto rSzZ = stream.readFloat();
-            auto rHp = stream.readI32();
-
-            if (!rId.has_value() || !rHp.has_value())
+            if (!rId.has_value())
                 break;
-
-            StateEntity se{};
-            se.id = rId.value();
-            se.pos = {rPosX.value(), rPosY.value(), rPosZ.value()};
-            se.size = {rSzX.value(), rSzY.value(), rSzZ.value()};
-            se.hp = rHp.value();
-            ev.entities.push_back(se);
+            ev.ids.push_back(rId.value());
         }
-        queues.states.push(std::move(ev));
+        queues.destroys.push(std::move(ev));
         break;
     }
 

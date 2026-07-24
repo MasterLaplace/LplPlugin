@@ -46,6 +46,7 @@
 // them) is a host feature: it needs a sockets stack. LPL_HAS_NET keeps it out
 // of the freestanding kernel build, where net/ is not compiled at all.
 #ifdef LPL_HAS_NET
+#    include <lpl/engine/systems/AoiBroadcastSystem.hpp>
 #    include <lpl/engine/systems/BroadcastSystem.hpp>
 #    include <lpl/engine/systems/InputProcessingSystem.hpp>
 #    include <lpl/engine/systems/InputSendSystem.hpp>
@@ -128,7 +129,10 @@ struct Engine::Impl {
 #endif
 
     // Client-side state (set by WelcomeSystem)
-    core::u32 myEntityId{0};
+    // The client's own avatar id, assigned by the server's welcome. kNull (not 0)
+    // means "unset": 0 is a valid ECS id — the server's first player — so it must
+    // not double as the sentinel, or that player would read as unconnected.
+    core::u32 myEntityId{ecs::EntityId::kNull};
     bool connected{false};
 
 #ifdef LPL_HAS_RENDERER
@@ -387,18 +391,32 @@ core::Expected<void> Engine::init()
     {
         auto session = pmr::make_unique<systems::SessionSystem>(
             *_impl->sessionManager, _impl->eventQueues, _impl->transport, _impl->inputManager,
-            *_impl->world->spatialPartition(), _impl->world->registry());
+            *_impl->world->spatialPartition(), _impl->world->registry(), _impl->config.sessionTimeoutMs());
         [[maybe_unused]] auto r1 = _impl->world->scheduler().registerSystem(std::move(session));
 
-        auto inputProc = pmr::make_unique<systems::InputProcessingSystem>(_impl->eventQueues, _impl->inputManager);
+        auto inputProc = pmr::make_unique<systems::InputProcessingSystem>(_impl->eventQueues, _impl->inputManager,
+                                                                          _impl->sessionManager.get());
         [[maybe_unused]] auto r2 = _impl->world->scheduler().registerSystem(std::move(inputProc));
 
         auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
         [[maybe_unused]] auto r3 = _impl->world->scheduler().registerSystem(std::move(movement));
 
-        auto broadcast = pmr::make_unique<systems::BroadcastSystem>(
-            *_impl->sessionManager, _impl->transport, *_impl->world->spatialPartition(), _impl->world->registry());
-        [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(broadcast));
+        // Interest-managed broadcast when a radius is set, full broadcast otherwise
+        // (mirrors engine::Server::registerInstanceSystems). Zero keeps the current
+        // full-state fallback.
+        if (_impl->config.interestRadius() > math::Fixed32::zero())
+        {
+            auto broadcast = pmr::make_unique<systems::AoiBroadcastSystem>(
+                *_impl->sessionManager, _impl->transport, *_impl->world->spatialPartition(), _impl->world->registry(),
+                _impl->config.interestRadius());
+            [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(broadcast));
+        }
+        else
+        {
+            auto broadcast = pmr::make_unique<systems::BroadcastSystem>(
+                *_impl->sessionManager, _impl->transport, *_impl->world->spatialPartition(), _impl->world->registry());
+            [[maybe_unused]] auto r4 = _impl->world->scheduler().registerSystem(std::move(broadcast));
+        }
 
         auto monitor =
             pmr::make_unique<systems::ServerMonitorSystem>(*_impl->sessionManager, *_impl->world->spatialPartition());
@@ -534,7 +552,8 @@ void Engine::run()
             if (auto result = _impl->bciAdapter->update(); result.has_value())
             {
                 const auto &neural = result.value();
-                _impl->inputManager.setNeural(_impl->myEntityId,
+                if (_impl->myEntityId != ecs::EntityId::kNull)
+                    _impl->inputManager.setNeural(_impl->myEntityId,
                                               neural.channels[0].toFloat(),       // alpha
                                               neural.channels[1].toFloat(),       // beta
                                               neural.channels[2].toFloat(),       // concentration

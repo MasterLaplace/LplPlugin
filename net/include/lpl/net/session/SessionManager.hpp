@@ -70,10 +70,16 @@ public:
 
     /**
      * @brief Cleans up sessions that have been inactive for too long.
+     *
      * @param timeoutMs Inactivity timeout in milliseconds.
+     * @param onReap    Called with each session just before it is erased, so the
+     *                  caller can tear down what the session owns beyond the net
+     *                  layer — its avatar entity, input state and spatial-index
+     *                  entry — instead of leaking them. Runs before erasure so the
+     *                  session (its bound entity, its address) is still valid.
      * @return Number of sessions reaped.
      */
-    core::u32 reapTimedOut(core::f64 timeoutMs);
+    core::u32 reapTimedOut(core::f64 timeoutMs, const std::function<void(const Session &)> &onReap = {});
 
     /**
      * @brief Broadcasts state data to all active sessions with UDP fragmentation.

@@ -1,3 +1,4 @@
+#include <lpl/ecs/Entity.hpp>
 #include <lpl/engine/systems/LocalInputSystem.hpp>
 #include <lpl/input/InputManager.hpp>
 
@@ -19,7 +20,7 @@ const ecs::SystemDescriptor &LocalInputSystem::descriptor() const noexcept { ret
 
 void LocalInputSystem::execute(core::f32 /*dt*/)
 {
-    if (!_connected || _myEntityId == 0)
+    if (!_connected || _myEntityId == ecs::EntityId::kNull)
         return;
 
 #ifdef LPL_HAS_RENDERER

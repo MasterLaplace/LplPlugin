@@ -112,7 +112,7 @@ void CameraSystem::execute(core::f32 dt)
         updateCameraDirection(_cameraData);
     }
 
-    if (_connected && _myEntityId != 0)
+    if (_connected && _myEntityId != ecs::EntityId::kNull)
     {
         math::Vec3<float> pos;
         if (getEntityPosition(_registry, _myEntityId, pos))

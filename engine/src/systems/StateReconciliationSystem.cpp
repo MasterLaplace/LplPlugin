@@ -43,6 +43,103 @@ struct StateReconciliationSystem::Impl {
     ecs::Registry &registry;
 
     Impl(EventQueues &q, ecs::WorldPartition &w, ecs::Registry &reg) : queues{q}, world{w}, registry{reg} {}
+
+    /// Create-or-overwrite one authoritative entity snapshot into the local world.
+    /// Shared by the full snapshot (states) and by the AOI spawn/delta streams,
+    /// which carry the same StateEntity payload and reconcile identically.
+    void applyEntity(const StateEntity &ent)
+    {
+        auto entityId = ecs::EntityId{ent.id};
+
+        // Convert float position to Fixed32 for spatial index
+        auto fixedPos =
+            math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
+                                      math::Fixed32::fromFloat(ent.pos.z)};
+
+        // Update spatial index
+        [[maybe_unused]] auto res = world.insertOrUpdate(entityId, fixedPos);
+
+        // Write into SoA chunk buffers (Position, AABB, Health)
+        auto refResult = registry.resolve(entityId);
+        if (!refResult.has_value())
+        {
+            // Entity doesn't exist locally yet — create it UNDER THE SERVER'S ID.
+            // Minting a fresh local id here was the bug: the entity then lived
+            // under an id that never matched the server id the next snapshot
+            // carried, so resolve() failed forever and every tick spawned a new
+            // ghost that the write loop below (which matches on the server id)
+            // never populated. Adopting the id makes the same entity resolve and
+            // update in place — the legacy findEntity(publicId) semantics.
+            ecs::Archetype arch;
+            arch.add(ecs::ComponentId::Position);
+            arch.add(ecs::ComponentId::Velocity);
+            arch.add(ecs::ComponentId::Mass);
+            arch.add(ecs::ComponentId::AABB);
+            arch.add(ecs::ComponentId::Health);
+
+            auto createRes = registry.createEntityWithId(entityId, arch);
+            if (!createRes.has_value())
+                return;
+
+            refResult = registry.resolve(entityId);
+            if (!refResult.has_value())
+                return;
+        }
+
+        auto ref = refResult.value();
+        const auto &partitions = registry.partitions();
+        // Find the partition that owns this entity
+        for (const auto &part : partitions)
+        {
+            if (!part)
+                continue;
+
+            const auto &chunks = part->chunks();
+            if (ref.chunkIndex >= static_cast<core::u32>(chunks.size()))
+                continue;
+
+            auto &chunk = *chunks[ref.chunkIndex];
+
+            // Verify this chunk actually holds the entity
+            auto entityIds = chunk.entities();
+            bool found = false;
+            for (core::u32 i = 0; i < chunk.count(); ++i)
+            {
+                if (entityIds[i].raw() == entityId.raw())
+                {
+                    found = true;
+
+                    // Write Position (network floats → authoritative Fixed32)
+                    if (auto *wpos =
+                            static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position)))
+                        wpos[i] = {math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
+                                   math::Fixed32::fromFloat(ent.pos.z)};
+
+                    // Write AABB
+                    if (auto *wsize =
+                            static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
+                        wsize[i] = {math::Fixed32::fromFloat(ent.size.x), math::Fixed32::fromFloat(ent.size.y),
+                                    math::Fixed32::fromFloat(ent.size.z)};
+
+                    // Write Health
+                    if (auto *whp = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))
+                        whp[i] = ent.hp;
+
+                    break;
+                }
+            }
+            if (found)
+                break;
+        }
+    }
+
+    /// Remove one entity the server said left the client's interest radius.
+    void removeEntity(core::u32 rawId)
+    {
+        auto entityId = ecs::EntityId{rawId};
+        [[maybe_unused]] auto spatialRes = world.remove(entityId);
+        [[maybe_unused]] auto destroyRes = registry.destroyEntity(entityId);
+    }
 };
 
 // ========================================================================== //
@@ -61,89 +158,28 @@ const ecs::SystemDescriptor &StateReconciliationSystem::descriptor() const noexc
 
 void StateReconciliationSystem::execute(core::f32 /*dt*/)
 {
-    auto events = _impl->queues.states.drain();
-
-    for (const auto &ev : events)
+    // Full snapshots (non-AOI server) and AOI spawn/delta all reconcile the same
+    // way: create-or-overwrite each entity from its authoritative snapshot.
+    for (const auto &ev : _impl->queues.states.drain())
     {
         for (const auto &ent : ev.entities)
-        {
-            auto entityId = ecs::EntityId{ent.id};
-
-            // Convert float position to Fixed32 for spatial index
-            auto fixedPos =
-                math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
-                                          math::Fixed32::fromFloat(ent.pos.z)};
-
-            // Update spatial index
-            [[maybe_unused]] auto res = _impl->world.insertOrUpdate(entityId, fixedPos);
-
-            // Write into SoA chunk buffers (Position, AABB, Health)
-            auto refResult = _impl->registry.resolve(entityId);
-            if (!refResult.has_value())
-            {
-                // Entity doesn't exist locally yet — create it
-                ecs::Archetype arch;
-                arch.add(ecs::ComponentId::Position);
-                arch.add(ecs::ComponentId::Velocity);
-                arch.add(ecs::ComponentId::Mass);
-                arch.add(ecs::ComponentId::AABB);
-                arch.add(ecs::ComponentId::Health);
-
-                auto createRes = _impl->registry.createEntity(arch);
-                if (!createRes.has_value())
-                    continue;
-
-                refResult = _impl->registry.resolve(createRes.value());
-                if (!refResult.has_value())
-                    continue;
-            }
-
-            auto ref = refResult.value();
-            const auto &partitions = _impl->registry.partitions();
-            // Find the partition that owns this entity
-            for (const auto &part : partitions)
-            {
-                if (!part)
-                    continue;
-
-                const auto &chunks = part->chunks();
-                if (ref.chunkIndex >= static_cast<core::u32>(chunks.size()))
-                    continue;
-
-                auto &chunk = *chunks[ref.chunkIndex];
-
-                // Verify this chunk actually holds the entity
-                auto entityIds = chunk.entities();
-                bool found = false;
-                for (core::u32 i = 0; i < chunk.count(); ++i)
-                {
-                    if (entityIds[i].raw() == entityId.raw())
-                    {
-                        found = true;
-
-                        // Write Position (network floats → authoritative Fixed32)
-                        if (auto *wpos = static_cast<math::Vec3<math::Fixed32> *>(
-                                chunk.writeComponent(ecs::ComponentId::Position)))
-                            wpos[i] = {math::Fixed32::fromFloat(ent.pos.x), math::Fixed32::fromFloat(ent.pos.y),
-                                       math::Fixed32::fromFloat(ent.pos.z)};
-
-                        // Write AABB
-                        if (auto *wsize =
-                                static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
-                            wsize[i] = {math::Fixed32::fromFloat(ent.size.x), math::Fixed32::fromFloat(ent.size.y),
-                                        math::Fixed32::fromFloat(ent.size.z)};
-
-                        // Write Health
-                        if (auto *whp = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))
-                            whp[i] = ent.hp;
-
-                        break;
-                    }
-                }
-                if (found)
-                    break;
-            }
-        }
+            _impl->applyEntity(ent);
+    }
+    for (const auto &ev : _impl->queues.spawns.drain())
+    {
+        for (const auto &ent : ev.entities)
+            _impl->applyEntity(ent);
+    }
+    for (const auto &ev : _impl->queues.deltas.drain())
+    {
+        for (const auto &ent : ev.entities)
+            _impl->applyEntity(ent);
+    }
+    // AOI despawn: entities that left the interest radius are removed locally.
+    for (const auto &ev : _impl->queues.destroys.drain())
+    {
+        for (const core::u32 id : ev.ids)
+            _impl->removeEntity(id);
     }
 }
 

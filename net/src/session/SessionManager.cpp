@@ -80,7 +80,7 @@ void SessionManager::forEach(const std::function<void(Session &)> &callback)
     }
 }
 
-core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs)
+core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs, const std::function<void(const Session &)> &onReap)
 {
     const auto now = Session::Clock::now();
     core::u32 reaped = 0;
@@ -92,6 +92,10 @@ core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs)
         if (elapsed > timeoutMs)
         {
             it->second->setState(SessionState::Disconnected);
+            // Let the caller tear down the entity/input/spatial the session owned
+            // while it is still valid, then erase it.
+            if (onReap)
+                onReap(*it->second);
             it = _impl->sessions.erase(it);
             ++reaped;
         }

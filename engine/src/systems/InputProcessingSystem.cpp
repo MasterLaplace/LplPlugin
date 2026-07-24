@@ -30,16 +30,21 @@ static const ecs::SystemDescriptor kInputProcessingDesc{"InputProcessing", ecs::
 struct InputProcessingSystem::Impl {
     EventQueues &queues;
     input::InputManager &inputManager;
+    net::session::SessionManager *sessions;
 
-    Impl(EventQueues &q, input::InputManager &im) : queues{q}, inputManager{im} {}
+    Impl(EventQueues &q, input::InputManager &im, net::session::SessionManager *sm)
+        : queues{q}, inputManager{im}, sessions{sm}
+    {
+    }
 };
 
 // ========================================================================== //
 //  Public                                                                    //
 // ========================================================================== //
 
-InputProcessingSystem::InputProcessingSystem(EventQueues &queues, input::InputManager &inputManager)
-    : _impl{std::make_unique<Impl>(queues, inputManager)}
+InputProcessingSystem::InputProcessingSystem(EventQueues &queues, input::InputManager &inputManager,
+                                             net::session::SessionManager *sessions)
+    : _impl{std::make_unique<Impl>(queues, inputManager, sessions)}
 {
 }
 
@@ -54,6 +59,15 @@ void InputProcessingSystem::execute(core::f32 /*dt*/)
     for (const auto &ev : events)
     {
         const core::u32 eid = ev.entityId;
+
+        // An input is proof the client is alive: mark its session active so the
+        // reaper does not treat a playing client as idle. Sessions are keyed by
+        // the entity id (see SessionSystem), so this is an O(1) lookup.
+        if (_impl->sessions != nullptr)
+        {
+            if (auto *session = _impl->sessions->find(eid))
+                session->touch();
+        }
 
         // Ensure per-entity input state exists
         [[maybe_unused]] auto &_ = _impl->inputManager.getOrCreate(eid);

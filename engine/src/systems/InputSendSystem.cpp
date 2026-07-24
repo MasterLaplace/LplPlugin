@@ -1,3 +1,4 @@
+#include <lpl/ecs/Entity.hpp>
 #include <lpl/engine/systems/InputSendSystem.hpp>
 #include <lpl/input/InputManager.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
@@ -24,7 +25,7 @@ const ecs::SystemDescriptor &InputSendSystem::descriptor() const noexcept { retu
 
 void InputSendSystem::execute(core::f32 /*dt*/)
 {
-    if (!_connected || _myEntityId == 0 || !_transport)
+    if (!_connected || _myEntityId == ecs::EntityId::kNull || !_transport)
         return;
 
     const auto *state = _inputManager.getState(_myEntityId);

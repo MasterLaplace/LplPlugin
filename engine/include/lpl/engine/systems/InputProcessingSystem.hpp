@@ -21,6 +21,7 @@
 #    include <lpl/ecs/System.hpp>
 #    include <lpl/engine/EventQueue.hpp>
 #    include <lpl/input/InputManager.hpp>
+#    include <lpl/net/session/SessionManager.hpp>
 
 #    include <memory>
 
@@ -35,8 +36,13 @@ public:
     /**
      * @param queues       Event queues (reads inputs).
      * @param inputManager Input manager to populate.
+     * @param sessions     Optional session manager: when given, each input marks
+     *                     its sender's session active (the heartbeat that keeps a
+     *                     playing client from being reaped as idle). Null on a
+     *                     client, where there are no sessions to touch.
      */
-    InputProcessingSystem(EventQueues &queues, input::InputManager &inputManager);
+    InputProcessingSystem(EventQueues &queues, input::InputManager &inputManager,
+                          net::session::SessionManager *sessions = nullptr);
     ~InputProcessingSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;

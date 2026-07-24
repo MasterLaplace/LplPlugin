@@ -15,6 +15,7 @@
 #    include <lpl/core/Log.hpp>
 #    include <lpl/concurrency/JobSystem.hpp>
 #    include <lpl/engine/PacketDispatch.hpp>
+#    include <lpl/engine/systems/AoiBroadcastSystem.hpp>
 #    include <lpl/engine/systems/BroadcastSystem.hpp>
 #    include <lpl/engine/systems/InputProcessingSystem.hpp>
 #    include <lpl/engine/systems/MovementSystem.hpp>
@@ -261,12 +262,12 @@ void Server::registerInstanceSystems(WorldId id)
     {
         auto session = lpl::pmr::make_unique<systems::SessionSystem>(
             *_impl->sessions[id], *_impl->queues[id], _impl->transport, *_impl->inputs[id], *spatial,
-            world.registry());
+            world.registry(), _impl->config.sessionTimeoutMs());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(session));
     }
     {
-        auto inputProc =
-            lpl::pmr::make_unique<systems::InputProcessingSystem>(*_impl->queues[id], *_impl->inputs[id]);
+        auto inputProc = lpl::pmr::make_unique<systems::InputProcessingSystem>(*_impl->queues[id], *_impl->inputs[id],
+                                                                               _impl->sessions[id].get());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(inputProc));
     }
     {
@@ -288,6 +289,17 @@ void Server::registerInstanceSystems(WorldId id)
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(physics));
     }
 
+    // Interest-managed broadcast when a radius is set, full broadcast otherwise.
+    // A positive radius sends each client only what is near its avatar, as
+    // spawn/despawn/delta — the O(clients × N) wall goes away (§2.6). Zero keeps
+    // the full-state fallback, unchanged.
+    if (_impl->config.interestRadius() > math::Fixed32::zero())
+    {
+        auto broadcast = lpl::pmr::make_unique<systems::AoiBroadcastSystem>(
+            *_impl->sessions[id], _impl->transport, *spatial, world.registry(), _impl->config.interestRadius());
+        [[maybe_unused]] auto r = scheduler.registerSystem(std::move(broadcast));
+    }
+    else
     {
         auto broadcast = lpl::pmr::make_unique<systems::BroadcastSystem>(*_impl->sessions[id], _impl->transport,
                                                                         *spatial, world.registry());

@@ -65,6 +65,30 @@ public:
     [[nodiscard]] core::Expected<EntityId> createEntity(const Archetype &archetype);
 
     /**
+     * @brief Creates an entity under a caller-supplied id (network reconciliation).
+     *
+     * A networked client does not mint its own ids for the entities the server
+     * owns: their identity IS the server's EntityId, carried on the wire and
+     * folded into World::stateHash (§6.4). The client therefore adopts that exact
+     * id so a later snapshot for the same entity resolves to it — updated in
+     * place, not duplicated — and so client and server digest the same bytes.
+     * This is the modern form of the legacy EntityRegistry::registerEntity(publicId).
+     *
+     * The id's slot is reserved directly; a subsequent local createEntity never
+     * mints it (allocateSlot skips a slot already alive). Idempotent: if the slot
+     * already holds this exact id, the call succeeds and changes nothing.
+     *
+     * Not thread-safe against a concurrent createEntity: reconciliation runs in
+     * its scheduler phase, single-threaded, like the legacy StateReconciliation.
+     *
+     * @param id        The identity to adopt (typically from a state snapshot).
+     * @param archetype Components the entity has.
+     * @return @p id on success; an error if the slot is out of range or already
+     *         holds a different live entity.
+     */
+    [[nodiscard]] core::Expected<EntityId> createEntityWithId(EntityId id, const Archetype &archetype);
+
+    /**
      * @brief Destroys an entity, recycling its slot.
      * @param id Entity to destroy.
      * @return OK on success, or error if the entity is already dead.

@@ -68,6 +68,14 @@ struct Registry::Impl {
             const core::u32 nextVal = freeNext[head];
             if (freeHead.compare_exchange_weak(head, nextVal, std::memory_order_release, std::memory_order_acquire))
             {
+                // A slot on the free-list may since have been reserved by
+                // createEntityWithId (which does not unlink it); drop it and keep
+                // popping so a network-adopted id is never handed out locally.
+                if (slots[head].alive)
+                {
+                    head = freeHead.load(std::memory_order_acquire);
+                    continue;
+                }
                 return head;
             }
         }
@@ -143,6 +151,73 @@ core::Expected<EntityId> Registry::createEntity(const Archetype &archetype)
     info.ref = refResult.value();
 
     // Assign partitionIndex so destroyEntity finds the correct partition
+    for (core::u32 pi = 0; pi < static_cast<core::u32>(_impl->partitions.size()); ++pi)
+    {
+        if (_impl->partitions[pi].get() == &partition)
+        {
+            info.partitionIndex = pi;
+            break;
+        }
+    }
+
+    _impl->liveCount.fetch_add(1, std::memory_order_relaxed);
+
+    return id;
+}
+
+core::Expected<EntityId> Registry::createEntityWithId(EntityId id, const Archetype &archetype)
+{
+    const core::u32 slot = id.slot();
+    if (slot >= (1u << EntityId::kSlotBits))
+    {
+        return core::makeError(core::ErrorCode::OutOfMemory, "Entity slot pool exhausted");
+    }
+
+    // Grow the slot table to cover this slot, and advance the high-water mark past
+    // it so the local free-list allocator (allocateSlot) starts beyond it. Any
+    // slots skipped over become genuinely free — hand them to the free-list rather
+    // than leaking them.
+    if (slot >= static_cast<core::u32>(_impl->slots.size()))
+    {
+        const core::u32 newCap = slot + 256;
+        _impl->slots.resize(newCap);
+        _impl->freeNext.resize(newCap, Impl::kNoNext);
+    }
+    core::u32 hw = _impl->highWater.load(std::memory_order_acquire);
+    while (slot >= hw)
+    {
+        if (_impl->highWater.compare_exchange_weak(hw, slot + 1, std::memory_order_release, std::memory_order_acquire))
+        {
+            for (core::u32 s = hw; s < slot; ++s)
+                _impl->freeSlot(s);
+            break;
+        }
+    }
+
+    auto &info = _impl->slots[slot];
+    if (info.alive)
+    {
+        // The slot is already occupied. Same identity → idempotent success (a
+        // re-sent snapshot); a different generation is a real conflict.
+        const EntityId existing{info.generation, slot};
+        if (existing == id)
+            return id;
+        return core::makeError(core::ErrorCode::AlreadyExists, "Slot already holds a different live entity");
+    }
+
+    info.generation = id.generation();
+    info.alive = true;
+
+    Partition &partition = getOrCreatePartition(archetype);
+    auto refResult = partition.insert(id);
+    if (!refResult.has_value())
+    {
+        info.alive = false;
+        return core::makeError(refResult.error().code(), refResult.error().message());
+    }
+
+    info.ref = refResult.value();
+
     for (core::u32 pi = 0; pi < static_cast<core::u32>(_impl->partitions.size()); ++pi)
     {
         if (_impl->partitions[pi].get() == &partition)

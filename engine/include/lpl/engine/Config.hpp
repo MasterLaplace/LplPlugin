@@ -15,6 +15,7 @@
 #    include <lpl/core/Constants.hpp>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecs/WorldPartition.hpp>
+#    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/std/string.hpp>
 
 namespace lpl::engine {
@@ -44,6 +45,8 @@ public:
         Builder &serverWorkerThreads(core::u32 n) noexcept;
         Builder &replaySnapshotInterval(core::u32 ticks) noexcept;
         Builder &maxPacketsPerTick(core::u32 n) noexcept;
+        Builder &interestRadius(math::Fixed32 radius) noexcept;
+        Builder &sessionTimeoutMs(core::f64 ms) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
 
@@ -55,6 +58,8 @@ public:
         core::u32 _serverWorkerThreads{0};
         core::u32 _replaySnapshotInterval{0};
         core::u32 _maxPacketsPerTick{256};
+        core::f64 _sessionTimeoutMs{30000.0};
+        math::Fixed32 _interestRadius{math::Fixed32::zero()};
         bool _serverMode{false};
         bool _headless{false};
         core::usize _arenaSize{64 * 1024 * 1024};
@@ -118,6 +123,34 @@ public:
      * @return The per-tick receive budget.
      */
     [[nodiscard]] core::u32 maxPacketsPerTick() const noexcept { return _maxPacketsPerTick; }
+
+    /**
+     * @brief Interest radius for area-of-interest (AOI) broadcasting.
+     *
+     * Zero (the default) disables AOI: the server sends every client the full
+     * world state each tick, the O(clients × N) fallback (systems::BroadcastSystem).
+     * A positive radius switches an instance to systems::AoiBroadcastSystem, which
+     * sends each client only the entities within @c interestRadius of its own
+     * avatar, as spawn / despawn / delta — the lever that lets client count scale
+     * past the broadcast wall (§2.6). Non-authoritative: it changes only what each
+     * client receives, never the folded state.
+     *
+     * @return The radius in world units, or zero when AOI is off.
+     */
+    [[nodiscard]] math::Fixed32 interestRadius() const noexcept { return _interestRadius; }
+
+    /**
+     * @brief Idle timeout after which a client session (and its avatar) is reaped.
+     *
+     * A client that sends nothing for this long is treated as gone: its session,
+     * its entity, its input state and its spatial-index entry are all removed, so
+     * a disconnect does not leak an avatar that lingers and is broadcast forever.
+     * The input stream is the heartbeat (a connected client sends its input every
+     * tick). Zero disables timeout reaping. Default 30 s.
+     *
+     * @return The idle timeout in milliseconds, or 0 when reaping is off.
+     */
+    [[nodiscard]] core::f64 sessionTimeoutMs() const noexcept { return _sessionTimeoutMs; }
     [[nodiscard]] bool headless() const noexcept { return _headless; }
 
     /**
@@ -172,6 +205,8 @@ private:
     core::u32 _serverWorkerThreads{0};
     core::u32 _replaySnapshotInterval{0};
     core::u32 _maxPacketsPerTick{256};
+    core::f64 _sessionTimeoutMs{30000.0};
+    math::Fixed32 _interestRadius{math::Fixed32::zero()};
     bool _serverMode{false};
     bool _headless{false};
     core::usize _arenaSize{64 * 1024 * 1024};
