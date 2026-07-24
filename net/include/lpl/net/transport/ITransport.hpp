@@ -45,8 +45,8 @@ struct Datagram {
  */
 struct ReceiveSlot {
     std::span<core::byte> buffer; ///< In: where to write this packet's bytes.
-    Endpoint source;             ///< Out: who sent it.
-    core::u32 length{0};         ///< Out: bytes written; 0 if the slot went unused.
+    Endpoint source;              ///< Out: who sent it.
+    core::u32 length{0};          ///< Out: bytes written; 0 if the slot went unused.
 };
 
 /**

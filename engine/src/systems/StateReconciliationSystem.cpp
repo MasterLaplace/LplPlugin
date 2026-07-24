@@ -115,8 +115,8 @@ struct StateReconciliationSystem::Impl {
                     auto *wpos =
                         static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
                     math::Vec3<math::Fixed32> merged =
-                        wpos ? wpos[i]
-                             : math::Vec3<math::Fixed32>{math::Fixed32::zero(), math::Fixed32::zero(),
+                        wpos ? wpos[i] :
+                               math::Vec3<math::Fixed32>{math::Fixed32::zero(), math::Fixed32::zero(),
                                                          math::Fixed32::zero()};
                     if (mask & FieldPosX)
                         merged.x = math::Fixed32::fromFloat(ent.pos.x);

@@ -79,9 +79,8 @@ void ServerMonitorSystem::execute(core::f32 /*dt*/)
     // legacy server printed frame, clients, entities and chunks (see legacy
     // apps/server/main.cpp "ServerMonitor"), which is what is restored here.
     char line[160];
-    std::snprintf(line, sizeof(line),
-                  "instance %u | frame %llu | clients %u | cells %u | gc %u",
-                  _impl->instanceId, static_cast<unsigned long long>(_impl->totalFrames), clients, cells, gcCount);
+    std::snprintf(line, sizeof(line), "instance %u | frame %llu | clients %u | cells %u | gc %u", _impl->instanceId,
+                  static_cast<unsigned long long>(_impl->totalFrames), clients, cells, gcCount);
     core::Log::info("Monitor", line);
 }
 

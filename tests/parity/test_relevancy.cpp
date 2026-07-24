@@ -33,7 +33,8 @@ int main()
 
     // ── Proximity: closer wins at equal staleness ──────────────────────────── //
     check(rel::priority(1.0f, 0) > rel::priority(100.0f, 0), "closer entity outranks farther (equal staleness)");
-    check(rel::priority(0.0f, 5) > rel::priority(50.0f, 5), "at the avatar it outranks a distant one (equal staleness)");
+    check(rel::priority(0.0f, 5) > rel::priority(50.0f, 5),
+          "at the avatar it outranks a distant one (equal staleness)");
 
     // ── Staleness: waiting raises priority monotonically ───────────────────── //
     check(rel::priority(10.0f, 3) > rel::priority(10.0f, 0), "the same entity rises as it waits");
@@ -44,7 +45,7 @@ int main()
     check(monotone, "priority is strictly increasing in staleness");
 
     // ── Anti-starvation: a far, long-waiting entity beats a close, just-sent one //
-    const float closeJustSent = rel::priority(0.0f, 0);        // best possible proximity, no wait
+    const float closeJustSent = rel::priority(0.0f, 0); // best possible proximity, no wait
     check(rel::priority(1.0e6f, 1000) > closeJustSent,
           "a far entity starved long enough outranks the closest just-sent one");
 

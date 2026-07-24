@@ -35,8 +35,7 @@ struct StateHashReportSystem::Impl {
     }
 };
 
-StateHashReportSystem::StateHashReportSystem(const World &world,
-                                             std::shared_ptr<net::transport::ITransport> transport,
+StateHashReportSystem::StateHashReportSystem(const World &world, std::shared_ptr<net::transport::ITransport> transport,
                                              const bool &connected, core::u32 interval)
     : _impl{std::make_unique<Impl>(world, std::move(transport), connected, interval)}
 {
@@ -64,8 +63,8 @@ void StateHashReportSystem::execute(core::f32 /*dt*/)
     _impl->sinceLastReport = 0;
 
     // nullptr address: the client transport already points at the server.
-    [[maybe_unused]] auto result = net::protocol::sendStateHashReport(*_impl->transport, nullptr, _impl->tick,
-                                                                     _impl->world.stateHash());
+    [[maybe_unused]] auto result =
+        net::protocol::sendStateHashReport(*_impl->transport, nullptr, _impl->tick, _impl->world.stateHash());
 }
 
 } // namespace lpl::engine::systems

@@ -109,9 +109,8 @@ void SessionSystem::execute(core::f32 /*dt*/)
     // sends), so this only fires for clients that truly went silent.
     if (_impl->sessionTimeoutMs > 0.0)
     {
-        [[maybe_unused]] auto reaped =
-            _impl->sessionManager.reapTimedOut(_impl->sessionTimeoutMs,
-                                               [this](const net::session::Session &s) { _impl->teardown(s); });
+        [[maybe_unused]] auto reaped = _impl->sessionManager.reapTimedOut(
+            _impl->sessionTimeoutMs, [this](const net::session::Session &s) { _impl->teardown(s); });
     }
 
     // Snapshot acks: advance each client's confirmed baseline sequence so the

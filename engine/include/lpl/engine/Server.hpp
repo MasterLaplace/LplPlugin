@@ -26,9 +26,9 @@
 #        include <lpl/engine/Config.hpp>
 #        include <lpl/engine/EventQueue.hpp>
 #        include <lpl/engine/ResourceManager.hpp>
+#        include <lpl/engine/World.hpp>
 #        include <lpl/net/session/SessionManager.hpp>
 #        include <lpl/serial/ReplayRecorder.hpp>
-#        include <lpl/engine/World.hpp>
 #        include <lpl/std/memory.hpp>
 #        include <lpl/std/vector.hpp>
 
@@ -218,11 +218,11 @@ public:
      * error, a race, a logic bug, or a cheat.
      */
     struct DesyncReport {
-        WorldId instance{0};      ///< Which instance the reporter was playing in.
-        core::u64 tick{0};        ///< The tick that diverged.
-        core::u64 serverDigest{0};///< The authoritative digest we held for it.
-        core::u64 clientDigest{0};///< What the client reported for it.
-        net::Endpoint source{};   ///< Who reported the divergence.
+        WorldId instance{0};       ///< Which instance the reporter was playing in.
+        core::u64 tick{0};         ///< The tick that diverged.
+        core::u64 serverDigest{0}; ///< The authoritative digest we held for it.
+        core::u64 clientDigest{0}; ///< What the client reported for it.
+        net::Endpoint source{};    ///< Who reported the divergence.
     };
 
     /**

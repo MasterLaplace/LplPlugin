@@ -78,8 +78,7 @@ template <typename Emit> core::u32 forEachConfigWarning(const Config &config, Em
     if (precision && !lod)
         warn("worldExtent is set but lodNearRadius is 0: position quantization "
              "applies only to the far ring, which does not exist without LOD.");
-    if (precision && (config.lodFarPosBits() == 0 || config.lodFarPosBits() > 32 ||
-                      config.lodFarPosBits() % 8 != 0))
+    if (precision && (config.lodFarPosBits() == 0 || config.lodFarPosBits() > 32 || config.lodFarPosBits() % 8 != 0))
         warn("lodFarPosBits must be a non-zero multiple of 8 (<=32); the codec "
              "will fall back to 16 to keep the wire byte-aligned.");
 

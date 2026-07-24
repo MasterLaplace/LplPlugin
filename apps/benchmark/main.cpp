@@ -43,8 +43,8 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <future>
 #include <vector>
 
@@ -733,7 +733,8 @@ void seedNetWorld(NetWorld &nw, core::u32 n, core::u32 clients, float spacing)
         if (!joined)
             continue;
         auto *sess = joined.value();
-        sess->setAddress(net::Endpoint::fromOctets(10, 0, static_cast<core::u8>(c >> 8), static_cast<core::u8>(c & 0xFF),
+        sess->setAddress(net::Endpoint::fromOctets(10, 0, static_cast<core::u8>(c >> 8),
+                                                   static_cast<core::u8>(c & 0xFF),
                                                    static_cast<core::u16>(40000 + (c & 0x3FFF))));
         // Spread avatars across the whole grid so each client's radius sees a
         // different local neighbourhood, not all the same cluster.
@@ -804,8 +805,8 @@ void benchmarkNetworking()
         cfg.maxReps = 100;
         cfg.targetTotalMs = 300.0;
         const bench::Result r = bench::run("aoi-broadcast", [&]() { aoi.execute(dt); }, cfg);
-        std::printf("    %6u | %10llu | %11.2f | %10.1f | %8.1f\n", c,
-                    static_cast<unsigned long long>(bytesPerTick), gbit, r.medianNs / 1e3, k);
+        std::printf("    %6u | %10llu | %11.2f | %10.1f | %8.1f\n", c, static_cast<unsigned long long>(bytesPerTick),
+                    gbit, r.medianNs / 1e3, k);
     }
 
     // Receive wall: how fast one thread parses + dispatches inbound INPUT packets
@@ -816,8 +817,8 @@ void benchmarkNetworking()
     std::printf("    Receive/decode throughput (single thread, small InputPayload packets):\n");
     {
         net::protocol::Bitstream stream;
-        stream.writeU32(1);      // entityId
-        stream.writeU16(4);      // 4 key events (WASD)
+        stream.writeU32(1); // entityId
+        stream.writeU16(4); // 4 key events (WASD)
         for (int k = 0; k < 4; ++k)
         {
             stream.writeU16(static_cast<core::u16>('W' + k));
@@ -845,16 +846,19 @@ void benchmarkNetworking()
         cfg.minReps = 5;
         cfg.maxReps = 500;
         cfg.targetTotalMs = 300.0;
-        const bench::Result r = bench::run("decode-10k-input-packets", [&]() {
-            engine::EventQueues q;
-            for (int p = 0; p < 10000; ++p)
-            {
-                net::protocol::PacketHeader ph{};
-                std::span<const core::byte> payload;
-                if (engine::detail::parsePacket(datagram, ph, payload))
-                    engine::detail::dispatchPacket(ph, payload, from, q);
-            }
-        }, cfg);
+        const bench::Result r = bench::run(
+            "decode-10k-input-packets",
+            [&]() {
+                engine::EventQueues q;
+                for (int p = 0; p < 10000; ++p)
+                {
+                    net::protocol::PacketHeader ph{};
+                    std::span<const core::byte> payload;
+                    if (engine::detail::parsePacket(datagram, ph, payload))
+                        engine::detail::dispatchPacket(ph, payload, from, q);
+                }
+            },
+            cfg);
         const double pktPerSec = 10000.0 / (r.medianNs / 1e9);
         std::printf("    -> %.2e input packets/sec decoded on one thread (policy cap %u pkt/s at 256/tick x %u Hz)\n",
                     pktPerSec, 256u * kTickRate, kTickRate);

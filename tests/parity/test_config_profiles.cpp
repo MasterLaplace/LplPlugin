@@ -102,24 +102,21 @@ int main()
         check(anyWarningContains(noNet, "networking"), "AOI without networking is flagged");
 
         // Near ring >= interest radius → far ring empty.
-        const auto badRings = B{}
-                                  .serverMode(true)
+        const auto badRings = B{}.serverMode(true)
                                   .interestRadius(math::Fixed32::fromFloat(50.0f))
                                   .lodNearRadius(math::Fixed32::fromFloat(60.0f))
                                   .build();
         check(anyWarningContains(badRings, "near ring"), "a near ring wider than the interest radius is flagged");
 
         // Precision LOD without network LOD.
-        const auto badPrecision = B{}
-                                      .serverMode(true)
+        const auto badPrecision = B{}.serverMode(true)
                                       .interestRadius(math::Fixed32::fromFloat(50.0f))
                                       .worldExtent(math::Fixed32::fromFloat(1000.0f))
                                       .build();
         check(anyWarningContains(badPrecision, "quantization"), "precision LOD without network LOD is flagged");
 
         // Server-side AOI set on a client.
-        const auto clientAoi =
-            B{}.serverMode(false).interestRadius(math::Fixed32::fromFloat(50.0f)).build();
+        const auto clientAoi = B{}.serverMode(false).interestRadius(math::Fixed32::fromFloat(50.0f)).build();
         check(anyWarningContains(clientAoi, "client"), "server-side AOI on a client is flagged");
 
         // A clean full-broadcast server has nothing to warn about.

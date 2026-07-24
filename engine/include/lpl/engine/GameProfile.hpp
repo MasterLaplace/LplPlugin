@@ -147,8 +147,11 @@ inline Config::Builder &applyGameProfile(Config::Builder &builder, GameProfile p
         GameProfile profile;
     };
     static const Entry kTable[] = {
-        {"mmorpg", GameProfile::Mmorpg}, {"fps", GameProfile::Fps},   {"rts", GameProfile::Rts},
-        {"fighting", GameProfile::Fighting}, {"coop", GameProfile::CoOp},
+        {"mmorpg",   GameProfile::Mmorpg  },
+        {"fps",      GameProfile::Fps     },
+        {"rts",      GameProfile::Rts     },
+        {"fighting", GameProfile::Fighting},
+        {"coop",     GameProfile::CoOp    },
     };
     for (const auto &e : kTable)
         if (std::strcmp(name, e.name) == 0)

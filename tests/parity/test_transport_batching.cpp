@@ -11,8 +11,8 @@
 #include <lpl/net/session/SessionManager.hpp>
 #include <lpl/net/transport/ITransport.hpp>
 
-#include <cstdio>
 #include <array>
+#include <cstdio>
 #include <vector>
 
 using namespace lpl;
@@ -46,9 +46,9 @@ public:
 
     const char *name() const noexcept override { return "CountingTransport"; }
 
-    core::u32 sendCalls{0};      ///< One-at-a-time calls.
-    core::u32 batchCalls{0};     ///< Batched calls.
-    core::u32 datagrams{0};      ///< Packets actually handed over, either way.
+    core::u32 sendCalls{0};  ///< One-at-a-time calls.
+    core::u32 batchCalls{0}; ///< Batched calls.
+    core::u32 datagrams{0};  ///< Packets actually handed over, either way.
     std::vector<net::Endpoint> destinations;
 };
 
@@ -96,8 +96,7 @@ void seed(net::session::SessionManager &sessions, core::u32 count)
     {
         auto joined = sessions.connect(i + 1);
         if (joined.has_value())
-            joined.value()->setAddress(net::Endpoint::fromOctets(127, 0, 0, 1,
-                                                                 static_cast<core::u16>(40000 + i)));
+            joined.value()->setAddress(net::Endpoint::fromOctets(127, 0, 0, 1, static_cast<core::u16>(40000 + i)));
     }
 }
 

@@ -168,10 +168,10 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
             net::protocol::EntitySnapshot snap{};
             core::u32 id = 0;
             core::u8 mask = 0;
-            const bool ok = quantized
-                                ? net::protocol::readEntityDeltaQuantized(stream, snap, id, mask, extent, posBits)
-                                      .has_value()
-                                : net::protocol::readEntityDelta(stream, snap, id, mask).has_value();
+            const bool ok =
+                quantized ?
+                    net::protocol::readEntityDeltaQuantized(stream, snap, id, mask, extent, posBits).has_value() :
+                    net::protocol::readEntityDelta(stream, snap, id, mask).has_value();
             if (!ok)
                 break;
 

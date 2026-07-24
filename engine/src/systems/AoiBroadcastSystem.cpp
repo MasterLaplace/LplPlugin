@@ -58,9 +58,9 @@ static const ecs::SystemDescriptor kAoiDesc{"AoiBroadcast", ecs::SchedulePhase::
 
 namespace {
 
-constexpr core::u32 kEntityBytes = 32;      ///< id + 6 floats + hp.
-constexpr core::u32 kIdBytes = 4;           ///< one raw entity id.
-constexpr core::u32 kCountHeaderBytes = 2;  ///< u16 count prefix.
+constexpr core::u32 kEntityBytes = 32;     ///< id + 6 floats + hp.
+constexpr core::u32 kIdBytes = 4;          ///< one raw entity id.
+constexpr core::u32 kCountHeaderBytes = 2; ///< u16 count prefix.
 
 /// Entities that fit in one datagram: (1400 - 2) / 32 = 43.
 constexpr core::u32 kMaxEntitiesPerPacket =
@@ -80,14 +80,14 @@ struct AoiBroadcastSystem::Impl {
     ecs::WorldPartition &world;
     ecs::Registry &registry;
     math::Fixed32 interestRadius;
-    core::u32 keyframeInterval; ///< Ticks between full re-sends of an in-range entity (§6.2.5).
-    core::u32 budgetBytes;      ///< Per-client delta byte budget per tick; 0 = unlimited (§6.2.7).
-    float nearRadiusSq{0.0f};   ///< Squared radius of the full-rate near ring; 0 = LOD off (§6.2.6).
-    core::u32 lodFarInterval{1};///< Update interval (ticks) for entities beyond the near ring.
-    bool strictAcked{false};    ///< Advance the delta baseline only on client ack, not on send (§6.2.5).
-    float farExtent{0.0f};      ///< World half-extent for far-ring position quantization; 0 = off (§6.2.6).
-    core::u32 farPosBits{16};   ///< Bits per position axis for the far ring (multiple of 8).
-    core::u64 tickCounter{0};   ///< Advances each execute; a keyframe tick forces a full snapshot.
+    core::u32 keyframeInterval;  ///< Ticks between full re-sends of an in-range entity (§6.2.5).
+    core::u32 budgetBytes;       ///< Per-client delta byte budget per tick; 0 = unlimited (§6.2.7).
+    float nearRadiusSq{0.0f};    ///< Squared radius of the full-rate near ring; 0 = LOD off (§6.2.6).
+    core::u32 lodFarInterval{1}; ///< Update interval (ticks) for entities beyond the near ring.
+    bool strictAcked{false};     ///< Advance the delta baseline only on client ack, not on send (§6.2.5).
+    float farExtent{0.0f};       ///< World half-extent for far-ring position quantization; 0 = off (§6.2.6).
+    core::u32 farPosBits{16};    ///< Bits per position axis for the far ring (multiple of 8).
+    core::u64 tickCounter{0};    ///< Advances each execute; a keyframe tick forces a full snapshot.
 
     /// One entity's authoritative snapshot, collected once per tick. Position and
     /// size stay Fixed32 (authoritative) until the wire boundary, so the radius
@@ -100,17 +100,17 @@ struct AoiBroadcastSystem::Impl {
     };
 
     // ---- Per-tick scratch, reused (capacity kept) so a tick does not allocate.
-    std::vector<Record> records;              ///< Every entity with a Position, this tick.
+    std::vector<Record> records;                         ///< Every entity with a Position, this tick.
     std::unordered_map<core::u32, core::u32> idToRecord; ///< raw id -> index into `records`.
-    pmr::vector<ecs::EntityId> neighbors;     ///< queryRadius output.
-    std::unordered_set<core::u32> neighborSet;///< This session's neighbours (raw ids).
-    std::vector<core::u32> enteredRecs;       ///< Record indices new to the client.
-    std::vector<core::u32> movedRecs;         ///< Record indices still known to the client.
-    std::vector<core::u32> leftIds;           ///< Raw ids that left the client's radius.
+    pmr::vector<ecs::EntityId> neighbors;                ///< queryRadius output.
+    std::unordered_set<core::u32> neighborSet;           ///< This session's neighbours (raw ids).
+    std::vector<core::u32> enteredRecs;                  ///< Record indices new to the client.
+    std::vector<core::u32> movedRecs;                    ///< Record indices still known to the client.
+    std::vector<core::u32> leftIds;                      ///< Raw ids that left the client's radius.
 
     // ---- Per-session persistent state: what each client currently knows about.
     std::unordered_map<core::u32, std::unordered_set<core::u32>> known; ///< playerId -> known ids.
-    std::vector<core::u32> seenPlayers;       ///< playerIds present this tick (for reaping `known`).
+    std::vector<core::u32> seenPlayers; ///< playerIds present this tick (for reaping `known`).
 
     /// The last snapshot the server sent each client, per entity — the baseline a
     /// field delta is computed against (§6.2.5). Mirrors `known`: an id enters
@@ -196,7 +196,10 @@ struct AoiBroadcastSystem::Impl {
         if (!payload.empty())
             std::memcpy(buffer.data() + sizeof(header), payload.data(), payload.size());
 
-        batch.push_back(net::transport::Datagram{std::span<const core::byte>{buffer.data(), buffer.size()}, address});
+        batch.push_back(net::transport::Datagram{
+            std::span<const core::byte>{buffer.data(), buffer.size()},
+             address
+        });
     }
 
     /// Serialises record indices as one or more 32-byte-entity packets of @p type.
@@ -285,8 +288,8 @@ struct AoiBroadcastSystem::Impl {
             net::protocol::EntitySnapshot cur = snapshotOf(recIndex);
             auto it = baseline.find(cur.id);
             const bool known = (it != baseline.end());
-            core::u8 mask = (keyframe || !known) ? static_cast<core::u8>(net::protocol::FieldAll)
-                                                 : net::protocol::computeFieldMask(it->second, cur);
+            core::u8 mask = (keyframe || !known) ? static_cast<core::u8>(net::protocol::FieldAll) :
+                                                   net::protocol::computeFieldMask(it->second, cur);
 
             const auto &pos = records[recIndex].pos;
             const float dx = (pos.x - center.x).toFloat();
@@ -380,7 +383,8 @@ struct AoiBroadcastSystem::Impl {
 
         const core::u32 maxPayload = net::session::SessionManager::kMaxPayloadSize;
         const core::u32 headerBytes = quantized ? (1u + 4u + kCountHeaderBytes) // posBits + extent + count
-                                                : kCountHeaderBytes;
+                                                  :
+                                                  kCountHeaderBytes;
         const core::u8 flags = quantized ? static_cast<core::u8>(net::protocol::PacketFlag::Compressed) : 0;
 
         core::u32 i = 0;
@@ -463,10 +467,12 @@ struct AoiBroadcastSystem::Impl {
                     continue;
 
                 const auto *sizes =
-                    hasSize ? static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB))
-                            : nullptr;
+                    hasSize ?
+                        static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB)) :
+                        nullptr;
                 const auto *health =
-                    hasHealth ? static_cast<const core::i32 *>(chunk->readComponent(ecs::ComponentId::Health)) : nullptr;
+                    hasHealth ? static_cast<const core::i32 *>(chunk->readComponent(ecs::ComponentId::Health)) :
+                                nullptr;
 
                 const auto entityIds = chunk->entities();
                 for (core::u32 i = 0; i < count; ++i)
@@ -475,8 +481,8 @@ struct AoiBroadcastSystem::Impl {
                     Record rec{};
                     rec.id = raw;
                     rec.pos = positions[i];
-                    rec.size = sizes ? sizes[i]
-                                     : math::Vec3<math::Fixed32>{math::Fixed32::one(), math::Fixed32::one(),
+                    rec.size = sizes ? sizes[i] :
+                                       math::Vec3<math::Fixed32>{math::Fixed32::one(), math::Fixed32::one(),
                                                                  math::Fixed32::one()};
                     rec.hp = health ? health[i] : 100;
                     idToRecord[raw] = static_cast<core::u32>(records.size());
@@ -492,23 +498,25 @@ struct AoiBroadcastSystem::Impl {
 // ========================================================================== //
 
 AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
-                                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
-                                       ecs::Registry &registry, math::Fixed32 interestRadius)
+                                       std::shared_ptr<net::transport::ITransport> transport,
+                                       ecs::WorldPartition &world, ecs::Registry &registry,
+                                       math::Fixed32 interestRadius)
     : AoiBroadcastSystem{sessionManager, std::move(transport), world, registry, interestRadius, 60, 0}
 {
 }
 
 AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
-                                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
-                                       ecs::Registry &registry, math::Fixed32 interestRadius, core::u32 keyframeInterval)
+                                       std::shared_ptr<net::transport::ITransport> transport,
+                                       ecs::WorldPartition &world, ecs::Registry &registry,
+                                       math::Fixed32 interestRadius, core::u32 keyframeInterval)
     : AoiBroadcastSystem{sessionManager, std::move(transport), world, registry, interestRadius, keyframeInterval, 0}
 {
 }
 
 AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
-                                       std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
-                                       ecs::Registry &registry, math::Fixed32 interestRadius, core::u32 keyframeInterval,
-                                       core::u32 budgetBytes)
+                                       std::shared_ptr<net::transport::ITransport> transport,
+                                       ecs::WorldPartition &world, ecs::Registry &registry,
+                                       math::Fixed32 interestRadius, core::u32 keyframeInterval, core::u32 budgetBytes)
     : _impl{std::make_unique<Impl>(sessionManager, std::move(transport), world, registry, interestRadius,
                                    keyframeInterval, budgetBytes)}
 {

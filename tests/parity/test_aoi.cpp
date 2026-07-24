@@ -183,8 +183,8 @@ void placeEntity(ecs::Registry &registry, ecs::WorldPartition &world, ecs::Entit
                 r[i] = size;
             if (auto *w = static_cast<core::i32 *>(chunk.writeComponent(ecs::ComponentId::Health)))
                 w[i] = 100;
-            if (auto *r =
-                    const_cast<core::i32 *>(static_cast<const core::i32 *>(chunk.readComponent(ecs::ComponentId::Health))))
+            if (auto *r = const_cast<core::i32 *>(
+                    static_cast<const core::i32 *>(chunk.readComponent(ecs::ComponentId::Health))))
                 r[i] = 100;
         }
     }
@@ -251,9 +251,9 @@ int main()
               "A's first packet spawns its own cluster");
         check(!aliceSpawn.count(eAvatarB.raw()) && !aliceSpawn.count(eNearB.raw()),
               "A never receives B's distant cluster");
-        check(bobSpawn.count(eAvatarB.raw()) && bobSpawn.count(eNearB.raw()), "B's first packet spawns its own cluster");
-        check(!bobSpawn.count(eAvatarA.raw()) && !bobSpawn.count(eNearA.raw()),
-              "B never receives A's distant cluster");
+        check(bobSpawn.count(eAvatarB.raw()) && bobSpawn.count(eNearB.raw()),
+              "B's first packet spawns its own cluster");
+        check(!bobSpawn.count(eAvatarA.raw()) && !bobSpawn.count(eNearA.raw()), "B never receives A's distant cluster");
 
         check(transport->idsFor(alice, net::protocol::PacketType::StateDelta).empty(), "nothing is a delta on tick 1");
         check(transport->idsFor(alice, net::protocol::PacketType::EntityDestroy).empty(),
@@ -383,9 +383,8 @@ int main()
         // Each single-axis delta is 9 bytes (id + mask + one float); a 20-byte
         // budget therefore admits exactly two per tick.
         const core::u32 kBudget = 20;
-        engine::systems::AoiBroadcastSystem budgeted{sm3,   budgetTransport,       world3,
-                                                     reg3,  math::Fixed32::fromFloat(100.0f), /*keyframe*/ 1000,
-                                                     kBudget};
+        engine::systems::AoiBroadcastSystem budgeted{
+            sm3, budgetTransport, world3, reg3, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 1000, kBudget};
 
         // Tick 1: everything is spawned (spawns are not budgeted — a client must
         // learn who is there). Establishes the baseline for the delta stream.
@@ -435,12 +434,16 @@ int main()
         const auto nearE = spawnEntity(reg4);
         const auto farE = spawnEntity(reg4);
         placeEntity(reg4, world4, avatar, 0.0f, 0.0f, 0.0f);
-        placeEntity(reg4, world4, nearE, 5.0f, 0.0f, 0.0f);   // inside the near ring
-        placeEntity(reg4, world4, farE, 60.0f, 0.0f, 0.0f);   // near ring < d < interest radius
+        placeEntity(reg4, world4, nearE, 5.0f, 0.0f, 0.0f); // inside the near ring
+        placeEntity(reg4, world4, farE, 60.0f, 0.0f, 0.0f); // near ring < d < interest radius
         check(joinClient(sm4, 1, alice, avatar) != nullptr, "the LOD client joins");
 
         auto lodTransport = std::make_shared<CapturingTransport>();
-        engine::systems::AoiBroadcastSystem lod{sm4,  lodTransport, world4, reg4, math::Fixed32::fromFloat(100.0f),
+        engine::systems::AoiBroadcastSystem lod{sm4,
+                                                lodTransport,
+                                                world4,
+                                                reg4,
+                                                math::Fixed32::fromFloat(100.0f),
                                                 /*keyframe*/ 1000};
         constexpr core::u32 kFarInterval = 4;
         lod.setNetworkLod(math::Fixed32::fromFloat(20.0f), kFarInterval);
@@ -489,8 +492,8 @@ int main()
         check(session != nullptr, "the acked-baseline client joins");
 
         auto tr = std::make_shared<CapturingTransport>();
-        engine::systems::AoiBroadcastSystem strict{sm5,  tr,           world5,
-                                                   reg5, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 100000};
+        engine::systems::AoiBroadcastSystem strict{
+            sm5, tr, world5, reg5, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 100000};
         strict.setReliableBaseline(true);
 
         auto entInDelta = [&]() {
@@ -535,13 +538,13 @@ int main()
         const auto nearE = spawnEntity(reg6);
         const auto farE = spawnEntity(reg6);
         placeEntity(reg6, world6, avatar, 0.0f, 0.0f, 0.0f);
-        placeEntity(reg6, world6, nearE, 5.0f, 0.0f, 0.0f);  // inside the near ring
-        placeEntity(reg6, world6, farE, 60.0f, 0.0f, 0.0f);  // far ring
+        placeEntity(reg6, world6, nearE, 5.0f, 0.0f, 0.0f); // inside the near ring
+        placeEntity(reg6, world6, farE, 60.0f, 0.0f, 0.0f); // far ring
         check(joinClient(sm6, 1, alice, avatar) != nullptr, "the precision-LOD client joins");
 
         auto tr = std::make_shared<CapturingTransport>();
-        engine::systems::AoiBroadcastSystem lod{sm6,  tr,           world6,
-                                                reg6, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 100000};
+        engine::systems::AoiBroadcastSystem lod{
+            sm6, tr, world6, reg6, math::Fixed32::fromFloat(100.0f), /*keyframe*/ 100000};
         lod.setNetworkLod(math::Fixed32::fromFloat(20.0f), /*farInterval*/ 1); // far ring every tick, to observe it
         lod.setPrecisionLod(math::Fixed32::fromFloat(1024.0f), 16);
 

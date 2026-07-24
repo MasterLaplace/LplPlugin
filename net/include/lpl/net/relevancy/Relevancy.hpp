@@ -48,7 +48,7 @@ inline constexpr float kProximityWeight = 8.0f;
  */
 [[nodiscard]] inline float priority(float distanceSq, core::u32 ticksSinceLastSent) noexcept
 {
-    const float proximity = 1.0f / (1.0f + distanceSq);          // (0, 1], 1 at the avatar
+    const float proximity = 1.0f / (1.0f + distanceSq);             // (0, 1], 1 at the avatar
     const float staleness = static_cast<float>(ticksSinceLastSent); // unbounded, anti-starvation
     return kProximityWeight * proximity + staleness;
 }

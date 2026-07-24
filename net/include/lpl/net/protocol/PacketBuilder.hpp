@@ -34,8 +34,8 @@ namespace lpl::net::protocol {
  * @param flags   Packet flags.
  * @return The raw packet bytes (header + payload).
  */
-[[nodiscard]] std::vector<core::byte> buildPacket(PacketType type, std::span<const core::byte> payload, core::u32 seq = 0,
-                                                  core::u8 flags = 0);
+[[nodiscard]] std::vector<core::byte> buildPacket(PacketType type, std::span<const core::byte> payload,
+                                                  core::u32 seq = 0, core::u8 flags = 0);
 
 /**
  * @brief Builds and sends a Handshake (connect) packet.

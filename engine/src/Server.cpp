@@ -12,8 +12,8 @@
 
 #ifdef LPL_HAS_NET
 
-#    include <lpl/core/Log.hpp>
 #    include <lpl/concurrency/JobSystem.hpp>
+#    include <lpl/core/Log.hpp>
 #    include <lpl/engine/PacketDispatch.hpp>
 #    include <lpl/engine/systems/AoiBroadcastSystem.hpp>
 #    include <lpl/engine/systems/BroadcastSystem.hpp>
@@ -25,14 +25,13 @@
 #    include <lpl/input/InputManager.hpp>
 #    include <lpl/memory/ArenaAllocator.hpp>
 #    include <lpl/net/netcode/AuthoritativeStrategy.hpp>
+#    include <lpl/net/protocol/Protocol.hpp>
+#    include <lpl/net/session/SessionManager.hpp>
+#    include <lpl/net/transport/KernelTransport.hpp>
+#    include <lpl/net/transport/SocketTransport.hpp>
 #    include <lpl/physics/CpuPhysicsBackend.hpp>
 #    include <lpl/serial/ReplayRecorder.hpp>
 #    include <lpl/serial/StateSnapshot.hpp>
-#    include <lpl/net/session/SessionManager.hpp>
-#    include <lpl/net/transport/KernelTransport.hpp>
-#    include <lpl/net/protocol/Protocol.hpp>
-#    include <lpl/net/session/SessionManager.hpp>
-#    include <lpl/net/transport/SocketTransport.hpp>
 #    include <lpl/std/unordered_map.hpp>
 
 #    include <array>
@@ -265,8 +264,8 @@ void Server::registerInstanceSystems(WorldId id)
     // stealing datagrams meant for the others.
     {
         auto session = lpl::pmr::make_unique<systems::SessionSystem>(
-            *_impl->sessions[id], *_impl->queues[id], _impl->transport, *_impl->inputs[id], *spatial,
-            world.registry(), _impl->config.sessionTimeoutMs());
+            *_impl->sessions[id], *_impl->queues[id], _impl->transport, *_impl->inputs[id], *spatial, world.registry(),
+            _impl->config.sessionTimeoutMs());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(session));
     }
     {
@@ -288,8 +287,8 @@ void Server::registerInstanceSystems(WorldId id)
         _impl->physicsBackends[id] = lpl::pmr::make_unique<physics::CpuPhysicsBackend>(world.registry());
         [[maybe_unused]] auto initRes = _impl->physicsBackends[id]->init();
 
-        auto physics = lpl::pmr::make_unique<systems::PhysicsSystem>(*spatial, *_impl->physicsBackends[id],
-                                                                     world.registry());
+        auto physics =
+            lpl::pmr::make_unique<systems::PhysicsSystem>(*spatial, *_impl->physicsBackends[id], world.registry());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(physics));
     }
 
@@ -310,7 +309,7 @@ void Server::registerInstanceSystems(WorldId id)
     else
     {
         auto broadcast = lpl::pmr::make_unique<systems::BroadcastSystem>(*_impl->sessions[id], _impl->transport,
-                                                                        *spatial, world.registry());
+                                                                         *spatial, world.registry());
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(broadcast));
     }
     {
@@ -423,7 +422,8 @@ void Server::pumpNetwork()
         storage.resize(static_cast<core::usize>(kBurst) * kSlotSize);
         slots.resize(kBurst);
         for (core::u32 i = 0; i < kBurst; ++i)
-            slots[i].buffer = std::span<core::byte>{storage.data() + static_cast<core::usize>(i) * kSlotSize, kSlotSize};
+            slots[i].buffer =
+                std::span<core::byte>{storage.data() + static_cast<core::usize>(i) * kSlotSize, kSlotSize};
     }
 
     const core::u32 budget = _impl->config.maxPacketsPerTick();
@@ -434,7 +434,8 @@ void Server::pumpNetwork()
         for (auto &slot : slots)
             slot.length = 0;
 
-        auto result = _impl->transport->receiveBatch(std::span<net::transport::ReceiveSlot>{slots.data(), slots.size()});
+        auto result =
+            _impl->transport->receiveBatch(std::span<net::transport::ReceiveSlot>{slots.data(), slots.size()});
         if (!result.has_value())
             break;
 
@@ -623,9 +624,7 @@ void Server::consumeStateHashReports()
                 ++_impl->staleReportCount;
                 break;
 
-            case DesyncVerdict::Match:
-                ++_impl->matchedReportCount;
-                break;
+            case DesyncVerdict::Match: ++_impl->matchedReportCount; break;
             }
         }
     }

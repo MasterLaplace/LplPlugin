@@ -12,13 +12,13 @@
 
 #ifdef LPL_HAS_NET
 
-#    include <lpl/engine/PacketDispatch.hpp>
 #    include <lpl/ecs/Archetype.hpp>
+#    include <lpl/engine/PacketDispatch.hpp>
 #    include <lpl/engine/World.hpp>
 #    include <lpl/net/Endpoint.hpp>
 #    include <lpl/net/protocol/PacketBuilder.hpp>
-#    include <lpl/net/transport/ITransport.hpp>
 #    include <lpl/net/session/SessionManager.hpp>
+#    include <lpl/net/transport/ITransport.hpp>
 #    include <lpl/std/memory.hpp>
 
 #    include <arpa/inet.h>
@@ -73,8 +73,8 @@ public:
     {
         (void) context;
 
-        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity,
-                                        ecs::ComponentId::AABB, ecs::ComponentId::Mass};
+        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity, ecs::ComponentId::AABB,
+                                        ecs::ComponentId::Mass};
         const ecs::Archetype archetype{ids};
         for (core::u32 i = 0; i < 8; ++i)
             (void) registry().createEntity(archetype);
@@ -241,8 +241,7 @@ int main()
 
     // --- removing an instance drops its routes ------------------------------ //
     check(server.removeWorld(worldB), "instance B removed");
-    check(server.worldForSender(bob) == engine::Server::kInvalidWorldId,
-          "routes to a removed instance are dropped");
+    check(server.worldForSender(bob) == engine::Server::kInvalidWorldId, "routes to a removed instance are dropped");
     check(server.worldCount() == 1, "one live instance remains");
 
     // --- §6.4 state hashing and desync detection ----------------------------- //
@@ -320,8 +319,7 @@ int main()
         std::span<const core::byte> reportPayload;
         check(engine::detail::parsePacket(loopback.lastPacket(), reportHeader, reportPayload),
               "the report parses as one of our packets");
-        check(reportHeader.type == net::protocol::PacketType::StateHashReport,
-              "and carries the StateHashReport type");
+        check(reportHeader.type == net::protocol::PacketType::StateHashReport, "and carries the StateHashReport type");
 
         engine::detail::dispatchPacket(reportHeader, reportPayload, reporter, *wired.queues(instance));
         wired.tick(1.0f / 60.0f); // the server consumes reports at the top of a tick
@@ -347,12 +345,8 @@ int main()
 
     // --- §6.5: snapshots are kept for post-mortem diagnosis ----------------- //
     {
-        auto replayConfig = engine::Config::Builder{}
-                                .serverMode(true)
-                                .tickRate(60)
-                                .serverPort(45995)
-                                .replaySnapshotInterval(4)
-                                .build();
+        auto replayConfig =
+            engine::Config::Builder{}.serverMode(true).tickRate(60).serverPort(45995).replaySnapshotInterval(4).build();
         engine::Server recorded{replayConfig};
         check(recorded.init().has_value(), "replay server opens its socket");
 
@@ -372,12 +366,8 @@ int main()
     // socket within its budget, and backpressureEvents must record it. This runs
     // the real SocketTransport (recvmmsg on Linux), not a fake.
     {
-        auto floodConfig = engine::Config::Builder{}
-                               .serverMode(true)
-                               .tickRate(60)
-                               .serverPort(45994)
-                               .maxPacketsPerTick(8)
-                               .build();
+        auto floodConfig =
+            engine::Config::Builder{}.serverMode(true).tickRate(60).serverPort(45994).maxPacketsPerTick(8).build();
         engine::Server flooded{floodConfig};
         check(flooded.init().has_value(), "flood server opens its socket");
         check(flooded.addWorld(lpl::pmr::make_unique<engine::World>()) != engine::Server::kInvalidWorldId,
@@ -397,13 +387,12 @@ int main()
             // Well past the budget of 8, so the socket is still full when the
             // server stops at its budget.
             for (int i = 0; i < 64; ++i)
-                (void) ::sendto(client, datagram.data(), datagram.size(), 0,
-                                reinterpret_cast<sockaddr *>(&server), sizeof(server));
+                (void) ::sendto(client, datagram.data(), datagram.size(), 0, reinterpret_cast<sockaddr *>(&server),
+                                sizeof(server));
 
             flooded.tick(1.0f / 60.0f);
             check(flooded.backpressureEvents() >= 1, "hitting the receive budget with a full socket is recorded");
-            check(flooded.lastBackpressureTick() == flooded.currentTick(),
-                  "and the tick it happened on is recorded");
+            check(flooded.lastBackpressureTick() == flooded.currentTick(), "and the tick it happened on is recorded");
 
             ::close(client);
         }

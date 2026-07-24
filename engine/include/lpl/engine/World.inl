@@ -48,13 +48,11 @@ inline core::u64 World::stateHash() const noexcept
             // samples::CubePile's parity fold reads the same side.
             const auto *positions =
                 hasPosition ?
-                    static_cast<const math::Vec3<math::Fixed32> *>(
-                        chunk->writeComponent(ecs::ComponentId::Position)) :
+                    static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position)) :
                     nullptr;
             const auto *velocities =
                 hasVelocity ?
-                    static_cast<const math::Vec3<math::Fixed32> *>(
-                        chunk->writeComponent(ecs::ComponentId::Velocity)) :
+                    static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Velocity)) :
                     nullptr;
 
             const auto entityIds = chunk->entities();

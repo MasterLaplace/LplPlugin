@@ -408,8 +408,7 @@ core::Expected<void> Engine::init()
         {
             auto broadcast = pmr::make_unique<systems::AoiBroadcastSystem>(
                 *_impl->sessionManager, _impl->transport, *_impl->world->spatialPartition(), _impl->world->registry(),
-                _impl->config.interestRadius(), _impl->config.keyframeInterval(),
-                _impl->config.bandwidthBudgetBytes());
+                _impl->config.interestRadius(), _impl->config.keyframeInterval(), _impl->config.bandwidthBudgetBytes());
             broadcast->setNetworkLod(_impl->config.lodNearRadius(), _impl->config.lodFarInterval());
             broadcast->setPrecisionLod(_impl->config.worldExtent(), _impl->config.lodFarPosBits());
             broadcast->setReliableBaseline(_impl->config.reliableBaseline());
@@ -455,8 +454,8 @@ core::Expected<void> Engine::init()
         // §6.4: tell the server what our authoritative state hashed to, so a
         // divergence between its simulation and ours is detected rather than
         // silently drifting.
-        auto hashReport = pmr::make_unique<systems::StateHashReportSystem>(*_impl->world, _impl->transport,
-                                                                          _impl->connected);
+        auto hashReport =
+            pmr::make_unique<systems::StateHashReportSystem>(*_impl->world, _impl->transport, _impl->connected);
         [[maybe_unused]] auto rHash = _impl->world->scheduler().registerSystem(std::move(hashReport));
 
         auto inputSend = pmr::make_unique<systems::InputSendSystem>(_impl->inputManager, _impl->transport,
@@ -558,11 +557,11 @@ void Engine::run()
                 const auto &neural = result.value();
                 if (_impl->myEntityId != ecs::EntityId::kNull)
                     _impl->inputManager.setNeural(_impl->myEntityId,
-                                              neural.channels[0].toFloat(),       // alpha
-                                              neural.channels[1].toFloat(),       // beta
-                                              neural.channels[2].toFloat(),       // concentration
-                                              neural.channels[3].toFloat() > 0.5f // blink
-                );
+                                                  neural.channels[0].toFloat(),       // alpha
+                                                  neural.channels[1].toFloat(),       // beta
+                                                  neural.channels[2].toFloat(),       // concentration
+                                                  neural.channels[3].toFloat() > 0.5f // blink
+                    );
             }
         }
 #endif // LPL_HAS_BCI

@@ -84,8 +84,8 @@ int main()
         auto *s = sessions.findByAddress(client);
         const core::u32 id = s ? s->playerId() : ecs::EntityId::kNull;
         check(s != nullptr && inputs.hasEntity(id), "its input slot exists");
-        const auto center = math::Vec3<math::Fixed32>{math::Fixed32::zero(), math::Fixed32::fromFloat(10.0f),
-                                                      math::Fixed32::zero()};
+        const auto center =
+            math::Vec3<math::Fixed32>{math::Fixed32::zero(), math::Fixed32::fromFloat(10.0f), math::Fixed32::zero()};
         pmr::vector<ecs::EntityId> hits;
         world.queryRadius(center, math::Fixed32::fromFloat(20.0f), hits);
         check(!hits.empty(), "and it is in the spatial index");

@@ -93,8 +93,7 @@ int main()
     check(server.lastDesyncReport(captured), "the divergence is captured for post-mortem");
     check(captured.tick == targetTick, "the captured report names the divergent tick");
     check(captured.clientDigest == wrongDigest, "it records the client's reported digest");
-    check(captured.serverDigest != captured.clientDigest,
-          "server and client digests differ — that IS the divergence");
+    check(captured.serverDigest != captured.clientDigest, "server and client digests differ — that IS the divergence");
     check(captured.instance == world, "it records which instance diverged");
     check(captured.source == reporter, "it records who reported it");
 

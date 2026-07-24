@@ -14,10 +14,10 @@
 
 #include "../../../kernel/lpl_protocol.h"
 
+#include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
-#include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>

@@ -130,8 +130,7 @@ int main()
         // Beat up to the miss threshold with no ack for either node.
         for (core::u32 i = 1; i < net::ServerMesh::kMaxMissedHeartbeats; ++i)
             mesh.heartbeat();
-        check(!aliveOf(mesh, 1) && !aliveOf(mesh, 2),
-              "a node that misses kMaxMissedHeartbeats beats is declared dead");
+        check(!aliveOf(mesh, 1) && !aliveOf(mesh, 2), "a node that misses kMaxMissedHeartbeats beats is declared dead");
 
         // Node 1 answers; node 2 stays silent.
         mesh.onHeartbeatAck(1);

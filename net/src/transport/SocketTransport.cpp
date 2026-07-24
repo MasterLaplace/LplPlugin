@@ -150,8 +150,8 @@ core::Expected<core::u32> SocketTransport::sendBatch(std::span<const Datagram> d
         for (core::usize i = 0; i < burst; ++i)
         {
             const auto &datagram = datagrams[offset + i];
-            const Endpoint &target = (datagram.address != nullptr && datagram.address->valid()) ? *datagram.address :
-                                                                                                  _impl->defaultDest;
+            const Endpoint &target =
+                (datagram.address != nullptr && datagram.address->valid()) ? *datagram.address : _impl->defaultDest;
             addresses[i] = toSockaddr(target);
 
             iovecs[i].iov_base = const_cast<core::byte *>(datagram.data.data());
@@ -167,8 +167,8 @@ core::Expected<core::u32> SocketTransport::sendBatch(std::span<const Datagram> d
         if (sent < 0)
         {
             // Report what did get out rather than losing the count entirely.
-            return totalSent > 0 ? core::Expected<core::u32>{totalSent}
-                                 : core::makeError(core::ErrorCode::IoError, "sendmmsg() failed");
+            return totalSent > 0 ? core::Expected<core::u32>{totalSent} :
+                                   core::makeError(core::ErrorCode::IoError, "sendmmsg() failed");
         }
 
         totalSent += static_cast<core::u32>(sent);
