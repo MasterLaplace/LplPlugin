@@ -444,9 +444,12 @@ TerrainData generateTerrain(const Options &options, ecs::Registry *registry,
     if (options.settlement && options.grammarBuildings)
     {
         procgen::BuildingGrammarParams grammar;
+        // Three storeys, not five: the grid is one world unit per cell, so a plot
+        // is three or four units across and an eight-level volume reads as a tower
+        // block dropped on a village.
         grammar.minFloors = 1u;
-        grammar.maxFloors = 5u;
-        grammar.roofHeight = 2u;
+        grammar.maxFloors = 3u;
+        grammar.roofHeight = 1u;
         builder.buildings(grammar);
     }
     if (options.roads && options.grammarBuildings)
@@ -962,7 +965,8 @@ std::vector<Vertex> buildTownMesh(const TerrainData &world, const lpl::pmr::vect
  * @param palette   Colour per material id; index 0 is never drawn.
  */
 std::vector<Vertex> buildVoxelMesh(const procgen::VoxelVolume &volume, const TerrainData &world, float baseLift,
-                                   const Rgb *palette, core::u32 paletteSize)
+                                   const Rgb *palette, core::u32 paletteSize,
+                                   const std::vector<float> *datum = nullptr)
 {
     std::vector<Vertex> vertices;
     if (volume.empty() || world.height.empty())
@@ -1003,11 +1007,21 @@ std::vector<Vertex> buildVoxelMesh(const procgen::VoxelVolume &volume, const Ter
                     continue;
                 const Rgb colour = palette[material < paletteSize ? material : 0u];
 
-                // The ground under the whole footprint, not under this column: a
-                // building sampled per column would follow the slope it stands on and
-                // shear apart. The volume is a plan, and a plan sits on one datum.
+                // The ground under the whole FOOTPRINT, not under this column.
+                //
+                // The comment here used to claim exactly that while the code did the
+                // opposite, and the difference is visible from across the map: a plot
+                // on a slope had each of its columns start at its own ground level, so
+                // an eight-level building sheared into a staircase and, along a ridge,
+                // into a long brown wall standing free of the hillside. A plan sits on
+                // one datum; @p datum carries it per cell, filled from the plot
+                // footprints, and falls back to the column when a caller has none
+                // (the roadside decoration genuinely does follow the ground).
+                const core::u32 index = z * volume.width + x;
                 const float ground =
-                    world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
+                    datum != nullptr && index < datum->size()
+                        ? (*datum)[index]
+                        : world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
                 const float y0 = ground + baseLift + static_cast<float>(y) * cell;
                 const float y1 = y0 + cell;
                 const float x0 = static_cast<float>(x) - halfW;
@@ -2991,6 +3005,42 @@ public:
 private:
     using FVec3 = math::Vec3<math::Fixed32>;
 
+    /**
+     * @brief One base height per cell: the lowest ground each building footprint covers.
+     *
+     * A building is a plan, and a plan has one floor level. Cells outside every
+     * footprint keep their own ground, which is what the roadside decoration
+     * wants — a fence does follow the slope.
+     */
+    [[nodiscard]] const std::vector<float> &buildPlotDatum()
+    {
+        _plotDatum.assign(static_cast<std::size_t>(_terrain.height.width()) * _terrain.height.depth(), 0.0f);
+        for (core::u32 z = 0u; z < _terrain.height.depth(); ++z)
+            for (core::u32 x = 0u; x < _terrain.height.width(); ++x)
+                _plotDatum[_terrain.height.index(x, z)] = _terrain.height.at(x, z).toFloat();
+
+        for (core::usize p = 0u; p < _terrain.plots.size(); ++p)
+        {
+            const procgen::BuildingPlot &plot = _terrain.plots[p];
+            float lowest = 1.0e9f;
+            for (core::u32 z = plot.z; z < plot.z + plot.depth; ++z)
+                for (core::u32 x = plot.x; x < plot.x + plot.width; ++x)
+                    if (_terrain.height.contains(static_cast<core::i32>(x), static_cast<core::i32>(z)))
+                    {
+                        const float h = _terrain.height.at(x, z).toFloat();
+                        if (h < lowest)
+                            lowest = h;
+                    }
+            if (lowest > 1.0e8f)
+                continue;
+            for (core::u32 z = plot.z; z < plot.z + plot.depth; ++z)
+                for (core::u32 x = plot.x; x < plot.x + plot.width; ++x)
+                    if (_terrain.height.contains(static_cast<core::i32>(x), static_cast<core::i32>(z)))
+                        _plotDatum[_terrain.height.index(x, z)] = lowest;
+        }
+        return _plotDatum;
+    }
+
     /// Rebuilds the terrain and everything derived from it, entities included.
     void regenerate()
     {
@@ -3668,6 +3718,7 @@ private:
     std::vector<Vertex> _floraMesh;
     std::vector<Vertex> _roadsideMesh;
     std::vector<Vertex> _liminalMesh;
+    std::vector<float> _plotDatum;
     MeshList _surfaceList;
     MeshList _surfaceGhostList;
     MeshList _undergroundList;

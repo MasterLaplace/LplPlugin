@@ -55,6 +55,20 @@ namespace lpl::ecology {
  * before it is an engine object, and ring 0 has neither a heap to grow into nor a
  * reason to trust a length field it did not write.
  */
+/// Species a single living recipe may declare. Bounded for the same reason the
+/// scatter rules are: this is a wire object before it is an engine object.
+inline constexpr core::u32 kMaxLivingSpecies = 4u;
+
+/**
+ * @struct LivingSpecies
+ * @brief One authored population: its demography and what it eats.
+ */
+struct LivingSpecies {
+    SpeciesParams params{};    ///< Growth, mortality, predation, capacity, refuge.
+    math::Fixed32 initial{};   ///< Head count at tick 0.
+    core::u32 preyIndex{Species::kNoPrey}; ///< Index into the table; kNoPrey for a producer.
+};
+
 struct LivingRecipe {
     core::u32 seed{2027u}; ///< Master seed; every subsystem derives its own stream.
     core::u32 ticks{48u};  ///< Steps to run. The fold is taken after the last one.
@@ -72,6 +86,23 @@ struct LivingRecipe {
     core::u32 boids{16u};       ///< Flocking bodies.
     core::u32 genomes{16u};     ///< Breeding population size (kept constant).
     core::u32 packMembers{16u}; ///< Animals in the social layer.
+
+    /**
+     * @brief The food web, as data.
+     *
+     * It used to be four species hardcoded inside `runLiving`, which made the
+     * gate's ecosystem unauthorable: a `.lplscene` could describe the terrain
+     * down to the erosion iteration count and had no way to say what lived on
+     * it. @ref parityLivingRecipe declares exactly the web the hardcoded version
+     * built, so the folds are unchanged by the move.
+     */
+    LivingSpecies species[kMaxLivingSpecies]{};
+    core::u32 speciesCount{0u};
+
+    /// Ticks a grazed plant takes to come back, for hosts that model vegetation.
+    core::u32 regrowthTicks{900u};
+    /// Head count one drawn body stands for; 0 means the host decides.
+    core::u32 headPerBody{2u};
 
     ai::StigmergyParams stigmergy{}; ///< Evaporation, diffusion, floor.
     ai::AntParams foraging{};        ///< Exploration balance.
@@ -145,6 +176,32 @@ struct LivingResult {
     // population over forty-eight generations barely mutates, and a gate should
     // exercise the path it exists to protect.
     recipe.heredity.mutationChance16 = 3u;
+
+    // The four-level web the run exercises: each level eats the one below, so the
+    // cascade the module exists to produce is actually in the fold — remove the
+    // top and the mesopredator is released. Written out here rather than built in
+    // the run, so a cartridge can describe its own.
+    recipe.species[0].params.level = TrophicLevel::Producer;
+    recipe.species[0].params.capacity = math::Fixed32::fromInt(1000);
+    recipe.species[0].initial = math::Fixed32::fromInt(800);
+    recipe.species[0].preyIndex = Species::kNoPrey;
+
+    recipe.species[1].params.level = TrophicLevel::Primary;
+    recipe.species[1].params.capacity = math::Fixed32::fromInt(200);
+    recipe.species[1].initial = math::Fixed32::fromInt(120);
+    recipe.species[1].preyIndex = 0u;
+
+    recipe.species[2].params.level = TrophicLevel::Secondary;
+    recipe.species[2].params.capacity = math::Fixed32::fromInt(40);
+    recipe.species[2].initial = math::Fixed32::fromInt(24);
+    recipe.species[2].preyIndex = 1u;
+
+    recipe.species[3].params.level = TrophicLevel::Apex;
+    recipe.species[3].params.capacity = math::Fixed32::fromInt(8);
+    recipe.species[3].initial = math::Fixed32::fromInt(5);
+    recipe.species[3].preyIndex = 2u;
+
+    recipe.speciesCount = 4u;
 
     return recipe;
 }

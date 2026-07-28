@@ -1,0 +1,50 @@
+{
+  "format": "lplscene/1",
+  "_comment": "The world the kernel's graphical profile draws. Baked to world.lplpak and carried in the ISO as a second GRUB module, ALONGSIDE game.lplpak — which stays the parity gate's cartridge. Two modules rather than one because the gate folds what it boots: giving it this scene instead would change the folded world and compare the kernel against an oracle that baked something else.",
+  "metadata": {
+    "title": "Laplace World Viewer", "version": "0.1.0", "profile": "solo",
+    "startScene": "overworld", "online": false,
+    "minPlayers": 1, "maxPlayers": 1, "maxInstances": 1
+  },
+  "scenes": [
+    {
+      "name": "overworld",
+      "systems": ["position", "handleCollision", "rigid_body", "render"],
+      "resources": [],
+      "_procedural_comment": "Sized for the kernel: 64x64 is ~8000 triangles a frame in the software rasterizer and a few hundred kilobytes of grids on a 4 MiB heap. Everything else is turned UP relative to the parity recipe, because this one exists to be looked at rather than folded — a town, a road network, caves and a scatter dense enough to read as vegetation.",
+      "procedural": {
+        "seed": 20260728, "width": 64, "depth": 64, "cellSize": 1.0,
+        "terrain":    {"seed": 20260728, "frequency": 0.09, "amplitude": 14.0, "octaves": 5,
+                       "lacunarity": 2.0, "persistence": 0.5,
+                       "low": -6.0, "high": 16.0},
+        "erosion":    {"enabled": true, "thermalIterations": 12, "hydraulicIterations": 18},
+        "rivers":     {"enabled": true},
+        "climate":    {"enabled": true},
+        "caves":      {"enabled": true, "width": 64, "depth": 64, "seed": 88117, "minRegionSize": 24},
+        "settlement": {"enabled": true, "districtSize": 26},
+        "roads":      {"enabled": true, "iterations": 4, "stepLength": 3},
+        "gate":       {"enabled": true, "minPathLength": 8, "minWalkableCells": 64},
+        "scatter": [
+          {"biome": "forest",     "density": 0.22, "halfExtent": 0.5,  "tag": 1, "collidable": true},
+          {"biome": "taiga",      "density": 0.18, "halfExtent": 0.45, "tag": 2, "collidable": true},
+          {"biome": "rainforest", "density": 0.26, "halfExtent": 0.55, "tag": 3, "collidable": true},
+          {"biome": "savanna",    "density": 0.07, "halfExtent": 0.3,  "tag": 4}
+        ]
+      },r
+      "_living_comment": "What lives on it. Ordered table: \"eats\" is an index into this array, so a species can only eat something declared before it and a cycle is unwritable. The counts the host draws follow from headPerBody — the population is the model's, the bodies are what the map can hold.",
+      "living": {
+        "seed": 20260728,
+        "regrowthTicks": 900, "headPerBody": 3,
+        "stigmergy": {"evaporation": 0.9, "diffusion": 0.1},
+        "flock": {"separation": 1.0, "alignment": 0.7, "cohesion": 0.4, "maxSpeed": 1.0},
+        "heredity": {"mutationChance16": 3, "anomalySigma": 2.5},
+        "species": [
+          {"level": "producer",  "capacity": 400.0, "initial": 400.0},
+          {"level": "primary",   "capacity": 90.0,  "initial": 60.0, "eats": 0},
+          {"level": "secondary", "capacity": 24.0,  "initial": 12.0, "eats": 1}
+        ]
+      },
+      "entities": []
+    }
+  ]
+}

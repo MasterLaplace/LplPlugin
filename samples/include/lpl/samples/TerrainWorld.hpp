@@ -38,6 +38,7 @@
 #    include <lpl/core/Log.hpp>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecology/Genome.hpp>
+#    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/ecology/Populations.hpp>
 #    include <lpl/engine/Engine.hpp>
 #    include <lpl/engine/World.hpp>
@@ -50,6 +51,7 @@
 #    include <lpl/procgen/Hydrology.hpp>
 #    include <lpl/procgen/Random.hpp>
 #    include <lpl/procgen/WorldBuilder.hpp>
+#    include <lpl/procgen/WorldRecipe.hpp>
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
 
@@ -61,6 +63,31 @@ namespace lpl::samples {
  */
 class TerrainWorld final : public engine::World {
 public:
+    /**
+     * @brief Builds the viewer around a recipe.
+     *
+     * The recipe is the game. It arrives decoded from a `.lplpak` cartridge — a
+     * GRUB module sitting next to the kernel — or from the reference pack compiled
+     * into the image when no cartridge is present. Either way the viewer runs
+     * @ref procgen::applyRecipe, the same one function the parity gate and the
+     * editor run, so what is on screen is what the `.lplscene` document says and
+     * not a second pipeline that happens to look similar.
+     */
+    explicit TerrainWorld(const procgen::WorldRecipe &recipe) noexcept : _recipe(recipe), _seed(recipe.seed) {}
+
+    /**
+     * @brief Builds the viewer around a world AND the ecosystem declared on it.
+     *
+     * Both come from the same cartridge. Before this the `.lplscene` could
+     * describe a valley down to its erosion iteration count and had no way to say
+     * what grazed in it — the food web was compiled into this header.
+     */
+    TerrainWorld(const procgen::WorldRecipe &recipe, const ecology::LivingRecipe &living) noexcept
+        : _recipe(recipe), _living(living), _seed(recipe.seed)
+    {
+    }
+
+    TerrainWorld() = default;
     [[nodiscard]] core::Expected<void> onInit(engine::WorldContext &context) override
     {
         if (!context.platform.display().querySurface(_surface) || _surface.buffer == nullptr ||
@@ -120,12 +147,12 @@ private:
     // the world arena is half a megabyte. A 48x48 field is ~2300 cells, which is
     // ~4400 triangles a frame — the same order as the 1024 cubes the other sample
     // already rasterizes at a usable rate in QEMU.
-    static constexpr core::u32 kSize = 48u;
+    /// Upper bound on the grid a cartridge may ask for, so the budgets hold.
+    static constexpr core::u32 kMaxSize = 96u;
     static constexpr core::u32 kRenderWidth = 480u;
     static constexpr core::u32 kRenderHeight = 300u;
     static constexpr core::u32 kMaxCreatures = 48u;
     static constexpr core::u32 kWebPeriod = 60u;
-    static constexpr core::u32 kRegrowthTicks = 900u;
 
     /// How the surface is coloured.
     enum class Shading : core::u32 {
@@ -168,20 +195,49 @@ private:
      */
     void generate()
     {
-        {
-            procgen::NoiseParams noise;
-            noise.seed = _seed;
-            noise.frequency = 6.0f / static_cast<core::f32>(kSize);
-            noise.amplitude = 12.0f;
-            noise.octaves = 4u;
+        // Retire the previous world's props before the next one is scattered: the
+        // registry has no bulk clear by design, and the ids came back from
+        // materializeProps for exactly this.
+        for (core::usize i = 0u; i < _propIds.size(); ++i)
+            (void) registry().destroyEntity(_propIds[i]);
+        _propIds.clear();
 
-            procgen::WorldBuilder builder{_seed};
-            builder.terrain(kSize, kSize, noise).normalize(kFloor, kCeiling).erode().rivers().biomes();
+        {
+            // The cartridge's own seed on the first build; N derives the next
+            // ones from it. Overwriting it unconditionally — which is what this
+            // did — meant the document could describe a world and the viewer
+            // would draw a different one, silently, from a default the .lplscene
+            // never mentions.
+            procgen::WorldRecipe recipe = _recipe;
+            recipe.seed = _seed;
+            recipe.terrain.seed = _seed;
+            recipe.caves.seed = _seed ^ 0xCA4Eu;
+            // The viewer draws a heightfield; it does not need one entity per
+            // ground cell, and on a 4 MiB heap it very much cannot afford them.
+            recipe.materializeGround = false;
+
+            procgen::WorldBuilder builder{recipe.seed};
+            procgen::applyRecipe(builder, recipe);
+
+            // The scatter's props become real entities in the World's own
+            // registry — the same thing a game would do, rather than something
+            // the viewer paints on top.
+            const procgen::BuiltWorldStats stats = builder.materializeProps(registry(), &_propIds);
+            _propCount = stats.propEntities;
+            _plotCount = stats.settlementPlots;
+            _roadCells = stats.roadCells;
+            _riverCells = stats.riverCells;
+            _caveFloor = stats.dungeonFloor;
+            _gatePassed = builder.gatePassed();
 
             _height = builder.heightfield();
             _biomes = builder.biomeMap();
             _moisture = builder.moisture();
             _rivers = procgen::riverMask(builder.drainage(), 0.02f);
+            _settlement = builder.settlementMap();
+            _roads = builder.roadMap();
+            _gridWidth = _height.width();
+            _gridDepth = _height.depth();
         }
 
         (void) procgen::heightRange(_height, _low, _high);
@@ -193,16 +249,16 @@ private:
         // it, the herd refuses to walk into it, and the spawn refuses to start in
         // it. Three separate notions of "blocked" is how an animal ends up
         // standing in a lake that the scent flows around.
-        _blocked = procgen::Grid<core::u8>{kSize, kSize, 0u};
-        for (core::u32 z = 0u; z < kSize; ++z)
-            for (core::u32 x = 0u; x < kSize; ++x)
+        _blocked = procgen::Grid<core::u8>{_gridWidth, _gridDepth, 0u};
+        for (core::u32 z = 0u; z < _gridDepth; ++z)
+            for (core::u32 x = 0u; x < _gridWidth; ++x)
             {
                 const bool drowned = _height.at(x, z).toFloat() < kSeaLevel;
                 const bool steep = procgen::slopeAt(_height, x, z).toFloat() > 2.4f;
                 _blocked.at(x, z) = (drowned || steep) ? 1u : 0u;
             }
 
-        _field = ai::StigmergyField{kSize, kSize, 2u};
+        _field = ai::StigmergyField{_gridWidth, _gridDepth, 2u};
         _field.setObstacles(_blocked);
 
         // Vegetation: one plant per forested cell, thinned so the map is not a
@@ -211,8 +267,8 @@ private:
         // plants are gone.
         _plants.clear();
         procgen::Random thin{_seed ^ 0x5EED11u};
-        for (core::u32 z = 0u; z < kSize; ++z)
-            for (core::u32 x = 0u; x < kSize; ++x)
+        for (core::u32 z = 0u; z < _gridDepth; ++z)
+            for (core::u32 x = 0u; x < _gridWidth; ++x)
             {
                 const procgen::BiomeId biome = _biomes.at(x, z);
                 const bool wooded = biome == procgen::BiomeId::Forest || biome == procgen::BiomeId::Taiga ||
@@ -225,28 +281,35 @@ private:
                 _plants.push_back(plant);
             }
 
+        // The food web is the cartridge's, not this header's. The producer's
+        // capacity is the one exception and it is not a knob: it is the standing
+        // vegetation this terrain actually grew, counted — a document cannot know
+        // how many trees a seed will produce.
         _web = ecology::TrophicWeb{};
-        ecology::SpeciesParams producer{};
-        producer.level = ecology::TrophicLevel::Producer;
-        producer.capacity = math::Fixed32::fromInt(static_cast<core::i32>(_plants.size() + 1u));
-        const core::u32 grass = _web.add(producer, producer.capacity, ecology::Species::kNoPrey);
-
-        ecology::SpeciesParams herbivore{};
-        herbivore.level = ecology::TrophicLevel::Primary;
-        herbivore.capacity = math::Fixed32::fromInt(64);
-        const core::u32 grazers = _web.add(herbivore, math::Fixed32::fromInt(48), grass);
-
-        ecology::SpeciesParams predator{};
-        predator.level = ecology::TrophicLevel::Secondary;
-        predator.capacity = math::Fixed32::fromInt(16);
-        (void) _web.add(predator, math::Fixed32::fromInt(8), grazers);
+        const core::u32 declared = _living.speciesCount < ecology::kMaxLivingSpecies ? _living.speciesCount
+                                                                                    : ecology::kMaxLivingSpecies;
+        for (core::u32 i = 0u; i < declared; ++i)
+        {
+            ecology::SpeciesParams params = _living.species[i].params;
+            math::Fixed32 initial = _living.species[i].initial;
+            if (params.level == ecology::TrophicLevel::Producer)
+            {
+                params.capacity = math::Fixed32::fromInt(static_cast<core::i32>(_plants.size() + 1u));
+                initial = params.capacity;
+            }
+            (void) _web.add(params, initial, _living.species[i].preyIndex);
+        }
 
         _creatures.clear();
         _heredity = _seed ^ 0xA57E22u;
         _nextId = 1u;
         procgen::Random stock{_seed ^ 0xB0D533u};
-        for (core::u32 i = 0u; i < 24u; ++i)
-            spawn(stock, i < 18u ? 0u : 1u);
+        for (core::u32 species = 0u; species + 1u < _web.species.size() && species < 2u; ++species)
+        {
+            const core::u32 wanted = bodiesFor(species);
+            for (core::u32 i = 0u; i < wanted; ++i)
+                spawn(stock, species);
+        }
 
         _ticks = 0u;
         _grazed = 0u;
@@ -278,12 +341,12 @@ private:
 
         for (core::u32 attempt = 0u; attempt < 24u; ++attempt)
         {
-            const core::u32 x = random.below(kSize);
-            const core::u32 z = random.below(kSize);
+            const core::u32 x = random.below(_gridWidth);
+            const core::u32 z = random.below(_gridDepth);
             if (_blocked.at(x, z) != 0u)
                 continue;
-            creature.body.x = cellToWorld(x);
-            creature.body.z = cellToWorld(z);
+            creature.body.x = cellToWorldX(x);
+            creature.body.z = cellToWorldZ(z);
             creature.body.vx = random.unit() - math::Fixed32::half();
             creature.body.vz = random.unit() - math::Fixed32::half();
             creature.heading = creature.body.vx;
@@ -399,7 +462,7 @@ private:
 
         // The field forgets: without this the scent saturates within seconds and
         // stops meaning "the herd went that way".
-        _field.step(_stigmergy);
+        _field.step(_living.stigmergy);
         tickVegetation();
     }
 
@@ -414,7 +477,7 @@ private:
             if (dx > 1 || dx < -1 || dz > 1 || dz < -1)
                 continue;
             _plants[i].standing = false;
-            _plants[i].regrowth = kRegrowthTicks;
+            _plants[i].regrowth = _living.regrowthTicks;
             ++_grazed;
             return;
         }
@@ -430,16 +493,35 @@ private:
             _web.species[0].population = math::Fixed32::fromInt(static_cast<core::i32>(standingPlants()));
     }
 
+    /**
+     * @brief How many bodies one species' head count is worth on screen.
+     *
+     * @c headPerBody comes from the cartridge, and the cap is this host's: the
+     * model may say four thousand, a 4 MiB heap may not. A ratio that floored to
+     * zero left the map empty while the HUD reported a working ecosystem, so the
+     * floor is three for any species the model still considers alive.
+     */
+    [[nodiscard]] core::u32 bodiesFor(core::u32 species) const noexcept
+    {
+        if (_web.species.size() <= species + 1u)
+            return 0u;
+        const ecology::Species &row = _web.species[species + 1u];
+        if (row.population <= row.params.refuge)
+            return 0u;
+        const core::u32 ratio = _living.headPerBody != 0u ? _living.headPerBody : 2u;
+        core::i32 wanted = row.population.toInt() / static_cast<core::i32>(ratio);
+        if (wanted < 3)
+            wanted = 3;
+        return static_cast<core::u32>(wanted) > kMaxCreatures ? kMaxCreatures : static_cast<core::u32>(wanted);
+    }
+
     /// Brings the number of bodies in line with what the web says exists.
     void reconcile()
     {
         procgen::Random stock{_heredity ^ (_ticks * 0x9E3779B9u)};
         for (core::u32 species = 0u; species < 2u; ++species)
         {
-            if (_web.species.size() <= species + 1u)
-                continue;
-            const core::i32 head = _web.species[species + 1u].population.toInt() / 2;
-            const core::u32 wanted = head <= 0 ? 0u : static_cast<core::u32>(head);
+            const core::u32 wanted = bodiesFor(species);
 
             core::u32 have = 0u;
             for (core::u32 i = 0u; i < _creatures.size(); ++i)
@@ -505,21 +587,22 @@ private:
         const auto proj = render::perspectiveFov(math::Fixed32::fromFloat(1.04719755f), aspect, 0.4f, 400.0f);
         const auto mvp = proj * view;
 
-        const core::f32 half = static_cast<core::f32>(kSize) * 0.5f;
+        const core::f32 halfX = static_cast<core::f32>(_gridWidth) * 0.5f;
+        const core::f32 halfZ = static_cast<core::f32>(_gridDepth) * 0.5f;
 
         // ── The ground, one quad per cell ────────────────────────────────────
-        for (core::u32 z = 0u; z + 1u < kSize; ++z)
+        for (core::u32 z = 0u; z + 1u < _gridDepth; ++z)
         {
-            for (core::u32 x = 0u; x + 1u < kSize; ++x)
+            for (core::u32 x = 0u; x + 1u < _gridWidth; ++x)
             {
                 const core::f32 y00 = _height.at(x, z).toFloat();
                 const core::f32 y10 = _height.at(x + 1u, z).toFloat();
                 const core::f32 y11 = _height.at(x + 1u, z + 1u).toFloat();
                 const core::f32 y01 = _height.at(x, z + 1u).toFloat();
 
-                const core::f32 x0 = static_cast<core::f32>(x) - half;
+                const core::f32 x0 = static_cast<core::f32>(x) - halfX;
                 const core::f32 x1 = x0 + 1.0f;
-                const core::f32 z0 = static_cast<core::f32>(z) - half;
+                const core::f32 z0 = static_cast<core::f32>(z) - halfZ;
                 const core::f32 z1 = z0 + 1.0f;
 
                 const auto a = render::detail::projectVertex(mvp, x0, y00, z0, rt.width, rt.height);
@@ -545,10 +628,10 @@ private:
 
         // ── The sea, one flat quad ───────────────────────────────────────────
         {
-            const auto a = render::detail::projectVertex(mvp, -half, kSeaLevel, -half, rt.width, rt.height);
-            const auto b = render::detail::projectVertex(mvp, half, kSeaLevel, -half, rt.width, rt.height);
-            const auto c = render::detail::projectVertex(mvp, half, kSeaLevel, half, rt.width, rt.height);
-            const auto d = render::detail::projectVertex(mvp, -half, kSeaLevel, half, rt.width, rt.height);
+            const auto a = render::detail::projectVertex(mvp, -halfX, kSeaLevel, -halfZ, rt.width, rt.height);
+            const auto b = render::detail::projectVertex(mvp, halfX, kSeaLevel, -halfZ, rt.width, rt.height);
+            const auto c = render::detail::projectVertex(mvp, halfX, kSeaLevel, halfZ, rt.width, rt.height);
+            const auto d = render::detail::projectVertex(mvp, -halfX, kSeaLevel, halfZ, rt.width, rt.height);
             fillSheet(rt, a, b, c, 0x00123A6Au);
             fillSheet(rt, a, c, d, 0x00123A6Au);
         }
@@ -558,8 +641,8 @@ private:
         {
             if (!_plants[i].standing)
                 continue;
-            const core::f32 px = static_cast<core::f32>(_plants[i].cellX) - half + 0.5f;
-            const core::f32 pz = static_cast<core::f32>(_plants[i].cellZ) - half + 0.5f;
+            const core::f32 px = static_cast<core::f32>(_plants[i].cellX) - halfX + 0.5f;
+            const core::f32 pz = static_cast<core::f32>(_plants[i].cellZ) - halfZ + 0.5f;
             const core::f32 ground = _height.at(_plants[i].cellX, _plants[i].cellZ).toFloat();
             const auto base0 = render::detail::projectVertex(mvp, px - 0.3f, ground, pz, rt.width, rt.height);
             const auto base1 = render::detail::projectVertex(mvp, px + 0.3f, ground, pz, rt.width, rt.height);
@@ -611,6 +694,23 @@ private:
 
         if (!_rivers.empty() && _rivers.at(x, z) != 0u)
             return 0x002A6BB8u;
+
+        // The town, then the highways over it. Drawn as part of the ground rather
+        // than as an overlay, for the same reason a river is: they are properties
+        // of the cell, and an overlay would z-fight with the surface it describes.
+        if (!_settlement.empty())
+        {
+            switch (_settlement.at(x, z))
+            {
+            case procgen::SettlementCell::Road: return 0x00595049u;
+            case procgen::SettlementCell::Plaza: return 0x008C7F70u;
+            case procgen::SettlementCell::Plot: return 0x00D18C38u;
+            default: break;
+            }
+        }
+        if (!_roads.empty() && _roads.at(x, z) != 0u)
+            return 0x003D3833u;
+
         return biomeColour(_biomes.at(x, z));
     }
 
@@ -688,7 +788,7 @@ private:
         const core::u32 pitchPixels = _surface.pitch / 4u;
         char line[80];
 
-        format(line, sizeof(line), "LPLKERNEL WORLD VIEWER  seed ", _seed, "  ", kSize, "x", kSize);
+        format(line, sizeof(line), "LPLKERNEL WORLD VIEWER  seed ", _seed, "  ", _gridWidth, "x", _gridDepth);
         image::drawText8x16(_surface.buffer, pitchPixels, 8u, 8u, line, 0x00FFAA22u);
 
         format(line, sizeof(line), shadingName(), presentBiomes(), " biomes  ", standingPlants(), " plants of ",
@@ -698,6 +798,14 @@ private:
         format(line, sizeof(line), "herd ", countSpecies(0u), " grazers  ", countSpecies(1u), " hunters  grazed ",
                _grazed);
         image::drawText8x16(_surface.buffer, pitchPixels, 8u, 44u, line, 0x0060FF80u);
+
+        format(line, sizeof(line), "cartridge: ", _plotCount, " plots  ", _roadCells, " road cells  ", _propCount,
+               " props");
+        image::drawText8x16(_surface.buffer, pitchPixels, 8u, 62u, line, 0x00A0B4C8u);
+
+        format(line, sizeof(line), "rivers ", _riverCells, "  cave floor ", _caveFloor, "  gate ",
+               _gatePassed ? 1u : 0u);
+        image::drawText8x16(_surface.buffer, pitchPixels, 8u, 80u, line, 0x00A0B4C8u);
 
         image::drawText8x16(_surface.buffer, pitchPixels, 8u, _surface.height - 20u,
                             "WASD=cam Q/E=zoom N=new seed B=shading X=exit", 0x00808890u);
@@ -717,7 +825,7 @@ private:
 
     /// Tiny formatter: no snprintf in a freestanding build, and none needed.
     static void format(char *out, core::u32 capacity, const char *a, core::u32 v0, const char *b, core::u32 v1,
-                       const char *c, core::u32 v2) noexcept
+                       const char *c, core::u32 v2, const char *tail = "") noexcept
     {
         core::u32 n = 0u;
         appendText(out, capacity, n, a);
@@ -726,6 +834,7 @@ private:
         appendNumber(out, capacity, n, v1);
         appendText(out, capacity, n, c);
         appendNumber(out, capacity, n, v2);
+        appendText(out, capacity, n, tail);
         if (n < capacity)
             out[n] = '\0';
         else if (capacity != 0u)
@@ -793,17 +902,23 @@ private:
         return value < low ? low : (value > high ? high : value);
     }
 
-    [[nodiscard]] static math::Fixed32 cellToWorld(core::u32 cell) noexcept
+    [[nodiscard]] math::Fixed32 cellToWorldX(core::u32 cell) const noexcept
     {
         return math::Fixed32::fromInt(static_cast<core::i32>(cell)) -
-               math::Fixed32::fromInt(static_cast<core::i32>(kSize / 2u));
+               math::Fixed32::fromInt(static_cast<core::i32>(_gridWidth / 2u));
     }
 
-    [[nodiscard]] static bool worldToCell(math::Fixed32 x, math::Fixed32 z, core::u32 &outX, core::u32 &outZ) noexcept
+    [[nodiscard]] math::Fixed32 cellToWorldZ(core::u32 cell) const noexcept
     {
-        const core::i32 gx = (x + math::Fixed32::fromInt(static_cast<core::i32>(kSize / 2u))).toInt();
-        const core::i32 gz = (z + math::Fixed32::fromInt(static_cast<core::i32>(kSize / 2u))).toInt();
-        if (gx < 0 || gz < 0 || static_cast<core::u32>(gx) >= kSize || static_cast<core::u32>(gz) >= kSize)
+        return math::Fixed32::fromInt(static_cast<core::i32>(cell)) -
+               math::Fixed32::fromInt(static_cast<core::i32>(_gridDepth / 2u));
+    }
+
+    [[nodiscard]] bool worldToCell(math::Fixed32 x, math::Fixed32 z, core::u32 &outX, core::u32 &outZ) const noexcept
+    {
+        const core::i32 gx = (x + math::Fixed32::fromInt(static_cast<core::i32>(_gridWidth / 2u))).toInt();
+        const core::i32 gz = (z + math::Fixed32::fromInt(static_cast<core::i32>(_gridDepth / 2u))).toInt();
+        if (gx < 0 || gz < 0 || static_cast<core::u32>(gx) >= _gridWidth || static_cast<core::u32>(gz) >= _gridDepth)
             return false;
         outX = static_cast<core::u32>(gx);
         outZ = static_cast<core::u32>(gz);
@@ -865,12 +980,27 @@ private:
     procgen::BiomeMap _biomes;
     procgen::Grid<core::u8> _rivers;
     procgen::Grid<core::u8> _blocked;
+    procgen::SettlementMap _settlement;
+    procgen::Grid<core::u8> _roads;
+    procgen::WorldRecipe _recipe{procgen::parityWorldRecipe()};
+    ecology::LivingRecipe _living{ecology::parityLivingRecipe()};
+    lpl::pmr::vector<ecs::EntityId> _propIds;
+    core::u32 _gridWidth{0u};
+    core::u32 _gridDepth{0u};
+    core::u32 _propCount{0u};
+    core::u32 _plotCount{0u};
+    core::u32 _roadCells{0u};
+    core::u32 _riverCells{0u};
+    core::u32 _caveFloor{0u};
+    bool _gatePassed{false};
     math::Fixed32 _low{};
     math::Fixed32 _high{};
     core::u32 _biomeCounts[static_cast<core::u32>(procgen::BiomeId::Count)] = {};
 
     ai::StigmergyField _field;
-    ai::StigmergyParams _stigmergy{};
+    // The field's rates are the cartridge's too; keeping a second copy here is how
+    // a document ends up describing one ecosystem while the host runs another.
+
     ecology::TrophicWeb _web;
     lpl::pmr::vector<Creature> _creatures;
     lpl::pmr::vector<Plant> _plants;

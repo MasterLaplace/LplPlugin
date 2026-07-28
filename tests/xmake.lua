@@ -194,7 +194,7 @@ target_end()
 target("test-game-pack")
     set_kind("binary")
     set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-pack", "lpl-editor")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-pack", "lpl-editor", "lpl-ai", "lpl-ecology")
     add_files("parity/test_game_pack.cpp")
 target_end()
 

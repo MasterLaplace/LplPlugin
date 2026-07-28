@@ -219,6 +219,20 @@ struct WorldRecipeResult {
 [[nodiscard]] core::u32 foldWorldState(const ecs::Registry &registry) noexcept;
 
 /**
+ * @brief Configures @p builder with every enabled pass of @p recipe, in order.
+ *
+ * The pass order is the contract, and it lives here so that the cartridge, the
+ * editor, the parity gate and the in-kernel viewer all run the SAME pipeline.
+ * A caller that wants the grids and not the entities stops after this; one that
+ * wants a populated world calls @ref bakeWorld, which is this plus
+ * materialisation.
+ *
+ * @param builder Destination builder, freshly constructed with the recipe's seed.
+ * @param recipe  The passes to configure.
+ */
+void applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe);
+
+/**
  * @brief Runs every enabled pass of @p recipe into @p registry and folds it.
  * @param registry Destination world (should be empty on entry).
  * @param recipe   The passes to run.

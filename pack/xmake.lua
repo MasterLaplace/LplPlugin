@@ -11,7 +11,7 @@
 target("lpl-pack")
     set_kind("static")
     set_group("modules")
-    add_deps("lpl-core", "lpl-math", "lpl-procgen")
+    add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-ecology")
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
     add_headerfiles("include/(lpl/pack/**.hpp)")

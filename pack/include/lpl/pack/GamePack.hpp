@@ -57,7 +57,8 @@ inline constexpr core::u32 kFormatVersion = 1u;
  */
 enum class SectionType : core::u32 {
     Unknown = 0u,
-    WorldRecipe = 1u, ///< A procgen recipe: seed + passes (see RecipeV1).
+    WorldRecipe = 1u,  ///< A procgen recipe: seed + passes (see RecipeV1).
+    LivingRecipe = 2u, ///< What lives on it: food web, herd, stigmergy (see LivingV1).
 };
 
 /**
@@ -267,6 +268,108 @@ struct RecipeV1 {
 static_assert(sizeof(RecipeV1) == 532u, "GamePack recipe layout is wire format");
 
 /**
+ * @struct LivingSpeciesV1
+ * @brief Wire form of one authored population.
+ *
+ * Fixed32 travels as its RAW Q16.16 word, never as a float: the value IS the
+ * bits, and a decimal round trip would be a different number on the other side
+ * of the gate.
+ */
+struct LivingSpeciesV1 {
+    core::u32 level;      ///< ecology::TrophicLevel value.
+    core::i32 growth;     ///< Raw Q16.16.
+    core::i32 mortality;  ///< Raw Q16.16.
+    core::i32 predation;  ///< Raw Q16.16.
+    core::i32 conversion; ///< Raw Q16.16.
+    core::i32 capacity;   ///< Raw Q16.16.
+    core::i32 refuge;     ///< Raw Q16.16.
+    core::i32 initial;    ///< Raw Q16.16 head count at tick 0.
+    core::u32 preyIndex;  ///< Index into the table; 0xFFFFFFFF for a producer.
+};
+static_assert(sizeof(LivingSpeciesV1) == 36u, "GamePack living species layout is wire format");
+
+/**
+ * @struct LivingV1
+ * @brief Wire form of a living recipe: what lives on the world the recipe built.
+ *
+ * A second section rather than more fields on @ref RecipeV1, because sections
+ * ARE this format's extension mechanism: a pack without this one is a world with
+ * no declared life, which the reader reports as absent rather than as zeroes. A
+ * grown RecipeV1 would instead have made every previously baked cartridge the
+ * wrong size.
+ *
+ * The world was authorable down to the erosion iteration count while what lived
+ * on it was compiled into the host — so a `.lplscene` could describe a valley and
+ * had no way to say what grazed in it. This closes that.
+ */
+struct LivingV1 {
+    // ── Run ─────────────────────────────────────────────────────────────────
+    core::u32 seed;
+    core::u32 ticks;
+    core::i32 stepSeconds; ///< Raw Q16.16 seconds per step.
+
+    // ── Field ───────────────────────────────────────────────────────────────
+    core::u32 width;
+    core::u32 depth;
+    core::u32 channels;
+
+    // ── Populations ─────────────────────────────────────────────────────────
+    core::u32 rooms;
+    core::u32 creatures;
+    core::u32 ants;
+    core::u32 boids;
+    core::u32 genomes;
+    core::u32 packMembers;
+    core::u32 regrowthTicks;
+    core::u32 headPerBody;
+
+    // ── Stigmergy ───────────────────────────────────────────────────────────
+    core::f32 evaporation;
+    core::f32 diffusion;
+    core::f32 maximum;
+    core::f32 floorValue;
+
+    // ── Foraging ────────────────────────────────────────────────────────────
+    core::u32 explore16;
+    core::i32 depositQuality; ///< Raw Q16.16.
+    core::u32 trailChannel;
+
+    // ── Flock ───────────────────────────────────────────────────────────────
+    core::i32 separationRadius; ///< Raw Q16.16.
+    core::i32 neighbourRadius;  ///< Raw Q16.16.
+    core::f32 separationWeight;
+    core::f32 alignmentWeight;
+    core::f32 cohesionWeight;
+    core::f32 maxSpeed;
+
+    // ── Realisation budget ──────────────────────────────────────────────────
+    core::u32 maxRealisedRooms;
+    core::u32 changeWeight;
+    core::u32 adjacentBonus;
+    core::u32 predictedBonus;
+    core::u32 unlikelyPenalty;
+
+    // ── Heredity ────────────────────────────────────────────────────────────
+    core::u32 mutationChance16;
+    core::f32 mutationAmplitude;
+    core::u32 collapseShare16;
+    core::u32 meltdownChance16;
+    core::f32 meltdownAmplitude;
+    core::f32 anomalySigma;
+
+    // ── Packs ───────────────────────────────────────────────────────────────
+    core::u32 packMaxSize;
+    core::u32 packMinSize;
+    core::u32 dissolutionChance16;
+    core::u32 adoptStrays; ///< 0 or 1.
+
+    // ── The food web ────────────────────────────────────────────────────────
+    LivingSpeciesV1 species[4];
+    core::u32 speciesCount;
+};
+static_assert(sizeof(LivingV1) == 316u, "GamePack living layout is wire format");
+
+/**
  * @brief FNV-1a over a byte range — the pack's integrity check.
  * @param bytes Start of the range (may be null when @p size is 0).
  * @param size  Length in bytes.
@@ -316,6 +419,18 @@ public:
      * @return false when there is no recipe section or it is the wrong size.
      */
     [[nodiscard]] bool readRecipe(RecipeV1 &outRecipe) const noexcept;
+
+    /**
+     * @brief Reads the living section, when the pack carries one.
+     *
+     * Absence is legitimate and is NOT an error: a cartridge may describe a world
+     * with nothing living on it, and the host then keeps its own defaults. It is
+     * a wrong-sized section that must be refused.
+     *
+     * @param outLiving Receives the living recipe.
+     * @return true when the section is present and exactly the right size.
+     */
+    [[nodiscard]] bool readLiving(LivingV1 &outLiving) const noexcept;
 
 private:
     const core::u8 *_bytes{nullptr};

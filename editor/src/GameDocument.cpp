@@ -186,6 +186,12 @@ SceneDescription parseScene(const detail::JVal &object, std::string defaultName)
             scene.hasRecipe = true;
     }
 
+    // The ecosystem, read straight off the scene object: unlike the recipe it
+    // needs no wrapping, because parseSceneLiving takes the scene rather than a
+    // whole document.
+    if (parseSceneLiving(object, scene.living))
+        scene.hasLiving = true;
+
     scene.templatesJson = subDocumentOr(object, "templates", "{}");
     scene.entitiesJson = subDocumentOr(object, "entities", "[]");
     return scene;
@@ -334,6 +340,8 @@ std::string emitGameDocument(const GameDocument &document)
 
         if (scene.hasRecipe)
             out += ",\"procedural\":" + emitSceneRecipe(scene.recipe);
+        if (scene.hasLiving)
+            out += ",\"living\":" + emitSceneLiving(scene.living);
 
         out += ",\"templates\":" + scene.templatesJson;
         out += ",\"entities\":" + scene.entitiesJson;

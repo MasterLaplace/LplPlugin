@@ -56,25 +56,25 @@ LivingResult runLiving(const LivingRecipe &recipe)
     // released. A two-species web would fold just as deterministically and prove
     // a tenth as much.
     TrophicWeb web;
-    SpeciesParams grass{};
-    grass.level = TrophicLevel::Producer;
-    grass.capacity = math::Fixed32::fromInt(1000);
-    const core::u32 producer = web.add(grass, math::Fixed32::fromInt(800), Species::kNoPrey);
+    core::u32 primary = 0u;
+    {
+        const core::u32 declared =
+            recipe.speciesCount < kMaxLivingSpecies ? recipe.speciesCount : kMaxLivingSpecies;
+        for (core::u32 i = 0u; i < declared; ++i)
+            (void) web.add(recipe.species[i].params, recipe.species[i].initial, recipe.species[i].preyIndex);
 
-    SpeciesParams herbivore{};
-    herbivore.level = TrophicLevel::Primary;
-    herbivore.capacity = math::Fixed32::fromInt(200);
-    const core::u32 primary = web.add(herbivore, math::Fixed32::fromInt(120), producer);
-
-    SpeciesParams predator{};
-    predator.level = TrophicLevel::Secondary;
-    predator.capacity = math::Fixed32::fromInt(40);
-    const core::u32 secondary = web.add(predator, math::Fixed32::fromInt(24), primary);
-
-    SpeciesParams apex{};
-    apex.level = TrophicLevel::Apex;
-    apex.capacity = math::Fixed32::fromInt(8);
-    (void) web.add(apex, math::Fixed32::fromInt(5), secondary);
+        // The heredity pass reads the pressure on the first CONSUMER, which is
+        // what its collapse threshold is relative to. With no consumer declared
+        // it falls back to species 0, so a producer-only web still runs.
+        for (core::u32 i = 0u; i < declared; ++i)
+            if (recipe.species[i].preyIndex != Species::kNoPrey)
+            {
+                primary = i;
+                break;
+            }
+    }
+    if (web.species.empty())
+        return result;
 
     // ── The breeding population ──────────────────────────────────────────────
     lpl::pmr::vector<Genome> population;

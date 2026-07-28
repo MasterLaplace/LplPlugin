@@ -38,6 +38,7 @@
 
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
 #    include <string>
@@ -103,6 +104,9 @@ struct SceneDescription {
 
     bool hasRecipe{false};         ///< Does a procedural pass build this scene?
     procgen::WorldRecipe recipe{}; ///< The pass, when hasRecipe.
+
+    bool hasLiving{false};           ///< Does the scene declare an ecosystem?
+    ecology::LivingRecipe living{};  ///< Food web, herd and stigmergy, when hasLiving.
 
     std::string templatesJson; ///< Prefab table, as JSON text ("{}" when absent).
     std::string entitiesJson;  ///< Explicit instances, as JSON text ("[]" when absent).

@@ -18,10 +18,15 @@
 #    define LPL_PACK_RECIPECODEC_HPP
 
 #    include <lpl/pack/GamePack.hpp>
+#    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
 static_assert(lpl::pack::kWireScatterRules == lpl::procgen::kMaxScatterRules,
               "wire and engine must agree on how many scatter rules a recipe carries");
+
+static_assert(sizeof(lpl::pack::LivingV1::species) / sizeof(lpl::pack::LivingSpeciesV1) ==
+                  lpl::ecology::kMaxLivingSpecies,
+              "wire and engine must agree on how many species a living recipe carries");
 
 namespace lpl::pack {
 
@@ -307,6 +312,173 @@ namespace lpl::pack {
         wire.flags |= kRecipeFlagGateRequireGoal;
     if (recipe.gate.requireFullyConnected)
         wire.flags |= kRecipeFlagGateRequireConnected;
+
+    return wire;
+}
+
+/**
+ * @brief Wire living recipe to engine living recipe.
+ *
+ * Field by field and by NAME, like its world counterpart: a rename on either
+ * side is then a compile error rather than a silently reinterpreted ecosystem.
+ * Fixed32 crosses as its raw Q16.16 word — the value is the bits.
+ *
+ * @param wire Decoded living section.
+ * @return The engine recipe it describes.
+ */
+[[nodiscard]] inline ecology::LivingRecipe toEngineLiving(const LivingV1 &wire) noexcept
+{
+    ecology::LivingRecipe recipe{};
+
+    recipe.seed = wire.seed;
+    recipe.ticks = wire.ticks;
+    recipe.stepSeconds = math::Fixed32::fromRaw(wire.stepSeconds);
+
+    recipe.width = wire.width;
+    recipe.depth = wire.depth;
+    recipe.channels = wire.channels;
+
+    recipe.rooms = wire.rooms;
+    recipe.creatures = wire.creatures;
+    recipe.ants = wire.ants;
+    recipe.boids = wire.boids;
+    recipe.genomes = wire.genomes;
+    recipe.packMembers = wire.packMembers;
+    recipe.regrowthTicks = wire.regrowthTicks;
+    recipe.headPerBody = wire.headPerBody;
+
+    recipe.stigmergy.evaporation = wire.evaporation;
+    recipe.stigmergy.diffusion = wire.diffusion;
+    recipe.stigmergy.maximum = wire.maximum;
+    recipe.stigmergy.floor = wire.floorValue;
+
+    recipe.foraging.explore16 = wire.explore16;
+    recipe.foraging.depositQuality = math::Fixed32::fromRaw(wire.depositQuality);
+    recipe.foraging.channel = wire.trailChannel;
+
+    recipe.flock.separationRadius = math::Fixed32::fromRaw(wire.separationRadius);
+    recipe.flock.neighbourRadius = math::Fixed32::fromRaw(wire.neighbourRadius);
+    recipe.flock.separationWeight = wire.separationWeight;
+    recipe.flock.alignmentWeight = wire.alignmentWeight;
+    recipe.flock.cohesionWeight = wire.cohesionWeight;
+    recipe.flock.maxSpeed = wire.maxSpeed;
+
+    recipe.budget.maxRealisedRooms = wire.maxRealisedRooms;
+    recipe.budget.changeWeight = wire.changeWeight;
+    recipe.budget.adjacentBonus = wire.adjacentBonus;
+    recipe.budget.predictedBonus = wire.predictedBonus;
+    recipe.budget.unlikelyPenalty = wire.unlikelyPenalty;
+
+    recipe.heredity.mutationChance16 = wire.mutationChance16;
+    recipe.heredity.mutationAmplitude = wire.mutationAmplitude;
+    recipe.heredity.collapseShare16 = wire.collapseShare16;
+    recipe.heredity.meltdownChance16 = wire.meltdownChance16;
+    recipe.heredity.meltdownAmplitude = wire.meltdownAmplitude;
+    recipe.heredity.anomalySigma = wire.anomalySigma;
+
+    recipe.packs.maxSize = wire.packMaxSize;
+    recipe.packs.minSize = wire.packMinSize;
+    recipe.packs.dissolutionChance16 = wire.dissolutionChance16;
+    recipe.packs.adoptStrays = wire.adoptStrays != 0u;
+
+    const core::u32 count =
+        wire.speciesCount < ecology::kMaxLivingSpecies ? wire.speciesCount : ecology::kMaxLivingSpecies;
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        const LivingSpeciesV1 &from = wire.species[i];
+        ecology::LivingSpecies &to = recipe.species[i];
+        to.params.level = static_cast<ecology::TrophicLevel>(from.level);
+        to.params.growth = math::Fixed32::fromRaw(from.growth);
+        to.params.mortality = math::Fixed32::fromRaw(from.mortality);
+        to.params.predation = math::Fixed32::fromRaw(from.predation);
+        to.params.conversion = math::Fixed32::fromRaw(from.conversion);
+        to.params.capacity = math::Fixed32::fromRaw(from.capacity);
+        to.params.refuge = math::Fixed32::fromRaw(from.refuge);
+        to.initial = math::Fixed32::fromRaw(from.initial);
+        to.preyIndex = from.preyIndex;
+    }
+    recipe.speciesCount = count;
+
+    return recipe;
+}
+
+/**
+ * @brief Engine living recipe to wire living recipe.
+ * @param recipe Engine recipe.
+ * @return Its wire form.
+ */
+[[nodiscard]] inline LivingV1 toWireLiving(const ecology::LivingRecipe &recipe) noexcept
+{
+    LivingV1 wire{};
+
+    wire.seed = recipe.seed;
+    wire.ticks = recipe.ticks;
+    wire.stepSeconds = recipe.stepSeconds.raw();
+
+    wire.width = recipe.width;
+    wire.depth = recipe.depth;
+    wire.channels = recipe.channels;
+
+    wire.rooms = recipe.rooms;
+    wire.creatures = recipe.creatures;
+    wire.ants = recipe.ants;
+    wire.boids = recipe.boids;
+    wire.genomes = recipe.genomes;
+    wire.packMembers = recipe.packMembers;
+    wire.regrowthTicks = recipe.regrowthTicks;
+    wire.headPerBody = recipe.headPerBody;
+
+    wire.evaporation = recipe.stigmergy.evaporation;
+    wire.diffusion = recipe.stigmergy.diffusion;
+    wire.maximum = recipe.stigmergy.maximum;
+    wire.floorValue = recipe.stigmergy.floor;
+
+    wire.explore16 = recipe.foraging.explore16;
+    wire.depositQuality = recipe.foraging.depositQuality.raw();
+    wire.trailChannel = recipe.foraging.channel;
+
+    wire.separationRadius = recipe.flock.separationRadius.raw();
+    wire.neighbourRadius = recipe.flock.neighbourRadius.raw();
+    wire.separationWeight = recipe.flock.separationWeight;
+    wire.alignmentWeight = recipe.flock.alignmentWeight;
+    wire.cohesionWeight = recipe.flock.cohesionWeight;
+    wire.maxSpeed = recipe.flock.maxSpeed;
+
+    wire.maxRealisedRooms = recipe.budget.maxRealisedRooms;
+    wire.changeWeight = recipe.budget.changeWeight;
+    wire.adjacentBonus = recipe.budget.adjacentBonus;
+    wire.predictedBonus = recipe.budget.predictedBonus;
+    wire.unlikelyPenalty = recipe.budget.unlikelyPenalty;
+
+    wire.mutationChance16 = recipe.heredity.mutationChance16;
+    wire.mutationAmplitude = recipe.heredity.mutationAmplitude;
+    wire.collapseShare16 = recipe.heredity.collapseShare16;
+    wire.meltdownChance16 = recipe.heredity.meltdownChance16;
+    wire.meltdownAmplitude = recipe.heredity.meltdownAmplitude;
+    wire.anomalySigma = recipe.heredity.anomalySigma;
+
+    wire.packMaxSize = recipe.packs.maxSize;
+    wire.packMinSize = recipe.packs.minSize;
+    wire.dissolutionChance16 = recipe.packs.dissolutionChance16;
+    wire.adoptStrays = recipe.packs.adoptStrays ? 1u : 0u;
+
+    const core::u32 count =
+        recipe.speciesCount < ecology::kMaxLivingSpecies ? recipe.speciesCount : ecology::kMaxLivingSpecies;
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        const ecology::LivingSpecies &from = recipe.species[i];
+        LivingSpeciesV1 &to = wire.species[i];
+        to.level = static_cast<core::u32>(from.params.level);
+        to.growth = from.params.growth.raw();
+        to.mortality = from.params.mortality.raw();
+        to.predation = from.params.predation.raw();
+        to.conversion = from.params.conversion.raw();
+        to.capacity = from.params.capacity.raw();
+        to.refuge = from.params.refuge.raw();
+        to.initial = from.initial.raw();
+        to.preyIndex = from.preyIndex;
+    }
+    wire.speciesCount = count;
 
     return wire;
 }

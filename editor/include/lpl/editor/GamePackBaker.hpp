@@ -26,6 +26,8 @@
 
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/ecology/LivingRecipe.hpp>
+#    include <lpl/editor/Json.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
 #    include <string>
@@ -60,6 +62,35 @@ namespace lpl::editor {
  * @return The full byte image, ready to write to disk or hand to a target.
  */
 [[nodiscard]] std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe);
+
+/**
+ * @brief Bakes a world AND what lives on it.
+ *
+ * Two sections when @p living is given, one when it is null — and a one-section
+ * image is byte-for-byte the one this function produced before living recipes
+ * existed, which is what keeps every cartridge already baked valid.
+ *
+ * @param recipe The world.
+ * @param living The ecosystem, or nullptr for a world with nothing declared on it.
+ * @return The packed image.
+ */
+[[nodiscard]] std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe,
+                                                 const ecology::LivingRecipe *living);
+
+/**
+ * @brief Reads the optional "living" block of a scene object.
+ * @param scene   Parsed scene (or document root, for the flat form).
+ * @param outLiving Receives the recipe when the block is present.
+ * @return true when the document declared one.
+ */
+[[nodiscard]] bool parseSceneLiving(const detail::JVal &scene, ecology::LivingRecipe &outLiving);
+
+/**
+ * @brief Emits a living recipe as the JSON a `.lplscene` carries.
+ * @param living The recipe.
+ * @return Its "living" object, every field written out.
+ */
+[[nodiscard]] std::string emitSceneLiving(const ecology::LivingRecipe &living);
 
 /**
  * @brief Convenience: parse a `.lplscene` document and bake it in one step.

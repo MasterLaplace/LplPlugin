@@ -17,6 +17,7 @@
  */
 
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/ecology/LivingRecipe.hpp>
 #include <lpl/editor/GamePackBaker.hpp>
 #include <lpl/pack/GamePack.hpp>
 #include <lpl/pack/ParityPackBlob.hpp>
@@ -155,6 +156,69 @@ int main()
     for (core::u32 i = 0u; blobMatches && i < pack::kParityPackSize; ++i)
         blobMatches = referenceImage[i] == pack::kParityPackBytes[i];
     check(blobMatches, "the checked-in reference cartridge matches the baker");
+
+    // ── The ecosystem crosses the wire too ──────────────────────────────────
+    //
+    // The world was authorable down to the erosion iteration count while what
+    // lived on it was compiled into the host. These checks are what stop that
+    // regressing: a section that round-trips wrong is a cartridge describing one
+    // ecosystem while the game runs another, and nothing on screen would say so.
+    {
+        std::printf("\n-- living section --\n");
+
+        const ecology::LivingRecipe living = ecology::parityLivingRecipe();
+        const std::vector<core::u8> withLife = editor::bakeGamePack(reference, &living);
+
+        pack::View lifeView;
+        check(lifeView.open(withLife.data(), static_cast<core::u32>(withLife.size())),
+              "a two-section pack opens");
+        check(lifeView.sectionCount() == 2u, "and carries both sections");
+
+        pack::RecipeV1 worldWire{};
+        check(lifeView.readRecipe(worldWire), "the world section still reads");
+        check(worldWire.seed == reference.seed, "and is unchanged by the new neighbour");
+
+        pack::LivingV1 lifeWire{};
+        check(lifeView.readLiving(lifeWire), "the living section reads");
+
+        const ecology::LivingRecipe decoded = pack::toEngineLiving(lifeWire);
+        check(decoded.seed == living.seed, "the seed survives the round trip");
+        check(decoded.ticks == living.ticks, "the tick count survives");
+        check(decoded.speciesCount == living.speciesCount, "every species survives");
+        check(decoded.stepSeconds.raw() == living.stepSeconds.raw(), "the step is carried as raw Q16.16");
+        check(decoded.headPerBody == living.headPerBody, "so does the body ratio");
+
+        bool webMatches = true;
+        for (core::u32 i = 0u; i < decoded.speciesCount; ++i)
+        {
+            webMatches = webMatches && decoded.species[i].params.capacity.raw() == living.species[i].params.capacity.raw();
+            webMatches = webMatches && decoded.species[i].initial.raw() == living.species[i].initial.raw();
+            webMatches = webMatches && decoded.species[i].preyIndex == living.species[i].preyIndex;
+            webMatches = webMatches && decoded.species[i].params.level == living.species[i].params.level;
+        }
+        check(webMatches, "and every species keeps its demography, its prey and its level");
+
+        // The decisive one: the same recipe must FOLD the same. A layout that
+        // survives a field-by-field comparison and still changes the simulation
+        // is a layout that reorders something the run reads in order.
+        const ecology::LivingResult direct = ecology::runLiving(living);
+        const ecology::LivingResult viaWire = ecology::runLiving(decoded);
+        check(direct.populationSignature == viaWire.populationSignature, "the decoded recipe folds the same populations");
+        check(direct.genomeSignature == viaWire.genomeSignature, "the same genomes");
+        check(direct.stigmergySignature == viaWire.stigmergySignature, "the same field");
+        check(direct.socialSignature == viaWire.socialSignature, "the same social state");
+
+        // A one-section pack is still valid, and reports the absence rather than
+        // handing back zeroes: a world with nothing declared living on it is a
+        // legitimate cartridge, not a corrupt one.
+        pack::View barren;
+        check(barren.open(image.data(), static_cast<core::u32>(image.size())), "a one-section pack still opens");
+        pack::LivingV1 absent{};
+        check(!barren.readLiving(absent), "and reports that it declares no ecosystem");
+
+        std::printf("  two-section image = %zu bytes\n", withLife.size());
+        std::printf("  species carried   = %u\n", decoded.speciesCount);
+    }
 
     std::printf("\n-- pack --\n");
     std::printf("  image size   = %zu bytes\n", image.size());

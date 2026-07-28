@@ -71,15 +71,18 @@ core::u32 foldWorldState(const ecs::Registry &registry) noexcept
     return hash;
 }
 
-WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe)
+void applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
 {
-    WorldRecipeResult result{};
-
     // The pass order lives here, in one place, rather than at every call site.
     // It is not a style preference: two callers ordering erosion and rivers
     // differently would produce two different worlds from the same recipe, and
     // the parity gate would be comparing worlds that were never meant to match.
-    WorldBuilder builder{recipe.seed};
+    //
+    // It is a free function rather than a step inside bakeWorld because a caller
+    // may want the GRIDS without the entities — a viewer draws a heightfield, it
+    // does not need one entity per ground cell. Before this existed the in-kernel
+    // viewer built its own pipeline by hand, which is exactly how a project ends
+    // up with two generators and a gate that exercises the one nothing else runs.
     builder.cellSize(recipe.cellSize);
     builder.terrain(recipe.width, recipe.depth, recipe.terrain);
 
@@ -120,6 +123,14 @@ WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe)
 
     if (recipe.checkPlayability)
         builder.validate(recipe.gate);
+}
+
+WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe)
+{
+    WorldRecipeResult result{};
+
+    WorldBuilder builder{recipe.seed};
+    applyRecipe(builder, recipe);
 
     const BuiltWorldStats stats =
         recipe.materializeGround ? builder.materialize(registry) : builder.materializeProps(registry);

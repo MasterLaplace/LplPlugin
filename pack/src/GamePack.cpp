@@ -131,4 +131,17 @@ bool View::readRecipe(RecipeV1 &outRecipe) const noexcept
     return true;
 }
 
+bool View::readLiving(LivingV1 &outLiving) const noexcept
+{
+    const core::u8 *payload = nullptr;
+    core::u32 payloadSize = 0u;
+    if (!findSection(SectionType::LivingRecipe, payload, payloadSize))
+        return false;
+    if (payloadSize != sizeof(LivingV1))
+        return false;
+
+    lpl::pmr::memcpy(&outLiving, payload, sizeof(LivingV1));
+    return true;
+}
+
 } // namespace lpl::pack

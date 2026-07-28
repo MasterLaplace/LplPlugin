@@ -105,7 +105,148 @@ void appendBool(std::string &out, const char *key, bool value)
     out += value ? "true" : "false";
 }
 
+/// Reads a Fixed32 field written as a decimal number in the document.
+math::Fixed32 readFixed(const detail::JVal &object, const char *key, math::Fixed32 fallback)
+{
+    const detail::JVal *value = object.find(key);
+    if (value == nullptr || value->t != detail::JVal::T::Num)
+        return fallback;
+    return math::Fixed32::fromFloat(static_cast<core::f32>(value->num));
+}
+
+/// Reads a trophic level by name, else @p fallback.
+ecology::TrophicLevel readTrophicLevel(const detail::JVal &object, const char *key, ecology::TrophicLevel fallback)
+{
+    const detail::JVal *value = object.find(key);
+    if (value == nullptr || value->t != detail::JVal::T::Str)
+        return fallback;
+    if (value->str == "producer")
+        return ecology::TrophicLevel::Producer;
+    if (value->str == "primary" || value->str == "herbivore")
+        return ecology::TrophicLevel::Primary;
+    if (value->str == "secondary" || value->str == "predator")
+        return ecology::TrophicLevel::Secondary;
+    if (value->str == "apex")
+        return ecology::TrophicLevel::Apex;
+    return fallback;
+}
+
+const char *trophicLevelName(ecology::TrophicLevel level)
+{
+    switch (level)
+    {
+    case ecology::TrophicLevel::Producer: return "producer";
+    case ecology::TrophicLevel::Primary: return "primary";
+    case ecology::TrophicLevel::Secondary: return "secondary";
+    case ecology::TrophicLevel::Apex: return "apex";
+    }
+    return "primary";
+}
+
 } // namespace
+
+bool parseSceneLiving(const detail::JVal &scene, ecology::LivingRecipe &outLiving)
+{
+    const detail::JVal *living = scene.find("living");
+    if (living == nullptr || living->t != detail::JVal::T::Obj)
+        return false;
+
+    // Start from the engine defaults, so a document states only what it changes —
+    // the same rule the procedural block follows, and the reason a default that
+    // moves moves both sides together instead of silently splitting them.
+    ecology::LivingRecipe recipe{};
+
+    recipe.seed = readU32(*living, "seed", recipe.seed);
+    recipe.ticks = readU32(*living, "ticks", recipe.ticks);
+    recipe.width = readU32(*living, "width", recipe.width);
+    recipe.depth = readU32(*living, "depth", recipe.depth);
+    recipe.channels = readU32(*living, "channels", recipe.channels);
+    recipe.rooms = readU32(*living, "rooms", recipe.rooms);
+    recipe.creatures = readU32(*living, "creatures", recipe.creatures);
+    recipe.ants = readU32(*living, "ants", recipe.ants);
+    recipe.boids = readU32(*living, "boids", recipe.boids);
+    recipe.genomes = readU32(*living, "genomes", recipe.genomes);
+    recipe.packMembers = readU32(*living, "packMembers", recipe.packMembers);
+    recipe.regrowthTicks = readU32(*living, "regrowthTicks", recipe.regrowthTicks);
+    recipe.headPerBody = readU32(*living, "headPerBody", recipe.headPerBody);
+
+    if (const detail::JVal *field = living->find("stigmergy"); field != nullptr && field->t == detail::JVal::T::Obj)
+    {
+        recipe.stigmergy.evaporation = readF32(*field, "evaporation", recipe.stigmergy.evaporation);
+        recipe.stigmergy.diffusion = readF32(*field, "diffusion", recipe.stigmergy.diffusion);
+        recipe.stigmergy.maximum = readF32(*field, "maximum", recipe.stigmergy.maximum);
+        recipe.stigmergy.floor = readF32(*field, "floor", recipe.stigmergy.floor);
+    }
+
+    if (const detail::JVal *flock = living->find("flock"); flock != nullptr && flock->t == detail::JVal::T::Obj)
+    {
+        recipe.flock.separationRadius = readFixed(*flock, "separationRadius", recipe.flock.separationRadius);
+        recipe.flock.neighbourRadius = readFixed(*flock, "neighbourRadius", recipe.flock.neighbourRadius);
+        recipe.flock.separationWeight = readF32(*flock, "separation", recipe.flock.separationWeight);
+        recipe.flock.alignmentWeight = readF32(*flock, "alignment", recipe.flock.alignmentWeight);
+        recipe.flock.cohesionWeight = readF32(*flock, "cohesion", recipe.flock.cohesionWeight);
+        recipe.flock.maxSpeed = readF32(*flock, "maxSpeed", recipe.flock.maxSpeed);
+    }
+
+    if (const detail::JVal *heredity = living->find("heredity");
+        heredity != nullptr && heredity->t == detail::JVal::T::Obj)
+    {
+        recipe.heredity.mutationChance16 = readU32(*heredity, "mutationChance16", recipe.heredity.mutationChance16);
+        recipe.heredity.mutationAmplitude = readF32(*heredity, "mutationAmplitude", recipe.heredity.mutationAmplitude);
+        recipe.heredity.collapseShare16 = readU32(*heredity, "collapseShare16", recipe.heredity.collapseShare16);
+        recipe.heredity.meltdownChance16 = readU32(*heredity, "meltdownChance16", recipe.heredity.meltdownChance16);
+        recipe.heredity.meltdownAmplitude = readF32(*heredity, "meltdownAmplitude", recipe.heredity.meltdownAmplitude);
+        recipe.heredity.anomalySigma = readF32(*heredity, "anomalySigma", recipe.heredity.anomalySigma);
+    }
+
+    if (const detail::JVal *packs = living->find("packs"); packs != nullptr && packs->t == detail::JVal::T::Obj)
+    {
+        recipe.packs.maxSize = readU32(*packs, "maxSize", recipe.packs.maxSize);
+        recipe.packs.minSize = readU32(*packs, "minSize", recipe.packs.minSize);
+        recipe.packs.dissolutionChance16 = readU32(*packs, "dissolutionChance16", recipe.packs.dissolutionChance16);
+        recipe.packs.adoptStrays = readBool(*packs, "adoptStrays", recipe.packs.adoptStrays);
+    }
+
+    if (const detail::JVal *budget = living->find("budget"); budget != nullptr && budget->t == detail::JVal::T::Obj)
+    {
+        recipe.budget.maxRealisedRooms = readU32(*budget, "maxRealisedRooms", recipe.budget.maxRealisedRooms);
+        recipe.budget.changeWeight = readU32(*budget, "changeWeight", recipe.budget.changeWeight);
+        recipe.budget.adjacentBonus = readU32(*budget, "adjacentBonus", recipe.budget.adjacentBonus);
+        recipe.budget.predictedBonus = readU32(*budget, "predictedBonus", recipe.budget.predictedBonus);
+        recipe.budget.unlikelyPenalty = readU32(*budget, "unlikelyPenalty", recipe.budget.unlikelyPenalty);
+    }
+
+    // The food web, as an ordered table: "eats" is an INDEX into it, so a species
+    // can only eat something declared before it and a cycle is unwritable.
+    if (const detail::JVal *species = living->find("species"); species != nullptr && species->t == detail::JVal::T::Arr)
+    {
+        core::u32 count = 0u;
+        for (const detail::JVal &entry : species->arr)
+        {
+            if (count >= ecology::kMaxLivingSpecies || entry.t != detail::JVal::T::Obj)
+                break;
+            ecology::LivingSpecies &slot = recipe.species[count];
+            slot.params.level = readTrophicLevel(entry, "level", slot.params.level);
+            slot.params.growth = readFixed(entry, "growth", slot.params.growth);
+            slot.params.mortality = readFixed(entry, "mortality", slot.params.mortality);
+            slot.params.predation = readFixed(entry, "predation", slot.params.predation);
+            slot.params.conversion = readFixed(entry, "conversion", slot.params.conversion);
+            slot.params.capacity = readFixed(entry, "capacity", slot.params.capacity);
+            slot.params.refuge = readFixed(entry, "refuge", slot.params.refuge);
+            slot.initial = readFixed(entry, "initial", slot.initial);
+
+            const detail::JVal *eats = entry.find("eats");
+            slot.preyIndex = (eats != nullptr && eats->t == detail::JVal::T::Num)
+                                 ? static_cast<core::u32>(eats->num)
+                                 : ecology::Species::kNoPrey;
+            ++count;
+        }
+        recipe.speciesCount = count;
+    }
+
+    outLiving = recipe;
+    return true;
+}
 
 core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRecipe &outRecipe)
 {
@@ -541,40 +682,192 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
     return out;
 }
 
+std::string emitSceneLiving(const ecology::LivingRecipe &living)
+{
+    // Every field, not only the ones that differ from the defaults: a document
+    // that emits a subset is not a round trip, it is a lossy save that looks like
+    // one until a default moves under it.
+    std::string out = "{";
+    appendU32(out, "seed", living.seed);
+    out += ',';
+    appendU32(out, "ticks", living.ticks);
+    out += ',';
+    appendU32(out, "width", living.width);
+    out += ',';
+    appendU32(out, "depth", living.depth);
+    out += ',';
+    appendU32(out, "channels", living.channels);
+    out += ',';
+    appendU32(out, "rooms", living.rooms);
+    out += ',';
+    appendU32(out, "creatures", living.creatures);
+    out += ',';
+    appendU32(out, "ants", living.ants);
+    out += ',';
+    appendU32(out, "boids", living.boids);
+    out += ',';
+    appendU32(out, "genomes", living.genomes);
+    out += ',';
+    appendU32(out, "packMembers", living.packMembers);
+    out += ',';
+    appendU32(out, "regrowthTicks", living.regrowthTicks);
+    out += ',';
+    appendU32(out, "headPerBody", living.headPerBody);
+
+    out += ",\"stigmergy\":{";
+    appendF32(out, "evaporation", living.stigmergy.evaporation);
+    out += ',';
+    appendF32(out, "diffusion", living.stigmergy.diffusion);
+    out += ',';
+    appendF32(out, "maximum", living.stigmergy.maximum);
+    out += ',';
+    appendF32(out, "floor", living.stigmergy.floor);
+    out += '}';
+
+    out += ",\"flock\":{";
+    appendF32(out, "separationRadius", living.flock.separationRadius.toFloat());
+    out += ',';
+    appendF32(out, "neighbourRadius", living.flock.neighbourRadius.toFloat());
+    out += ',';
+    appendF32(out, "separation", living.flock.separationWeight);
+    out += ',';
+    appendF32(out, "alignment", living.flock.alignmentWeight);
+    out += ',';
+    appendF32(out, "cohesion", living.flock.cohesionWeight);
+    out += ',';
+    appendF32(out, "maxSpeed", living.flock.maxSpeed);
+    out += '}';
+
+    out += ",\"heredity\":{";
+    appendU32(out, "mutationChance16", living.heredity.mutationChance16);
+    out += ',';
+    appendF32(out, "mutationAmplitude", living.heredity.mutationAmplitude);
+    out += ',';
+    appendU32(out, "collapseShare16", living.heredity.collapseShare16);
+    out += ',';
+    appendU32(out, "meltdownChance16", living.heredity.meltdownChance16);
+    out += ',';
+    appendF32(out, "meltdownAmplitude", living.heredity.meltdownAmplitude);
+    out += ',';
+    appendF32(out, "anomalySigma", living.heredity.anomalySigma);
+    out += '}';
+
+    out += ",\"packs\":{";
+    appendU32(out, "maxSize", living.packs.maxSize);
+    out += ',';
+    appendU32(out, "minSize", living.packs.minSize);
+    out += ',';
+    appendU32(out, "dissolutionChance16", living.packs.dissolutionChance16);
+    out += ',';
+    appendBool(out, "adoptStrays", living.packs.adoptStrays);
+    out += '}';
+
+    out += ",\"budget\":{";
+    appendU32(out, "maxRealisedRooms", living.budget.maxRealisedRooms);
+    out += ',';
+    appendU32(out, "changeWeight", living.budget.changeWeight);
+    out += ',';
+    appendU32(out, "adjacentBonus", living.budget.adjacentBonus);
+    out += ',';
+    appendU32(out, "predictedBonus", living.budget.predictedBonus);
+    out += ',';
+    appendU32(out, "unlikelyPenalty", living.budget.unlikelyPenalty);
+    out += '}';
+
+    out += ",\"species\":[";
+    const core::u32 count =
+        living.speciesCount < ecology::kMaxLivingSpecies ? living.speciesCount : ecology::kMaxLivingSpecies;
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        const ecology::LivingSpecies &species = living.species[i];
+        if (i != 0u)
+            out += ',';
+        out += "{\"level\":\"";
+        out += trophicLevelName(species.params.level);
+        out += "\",";
+        appendF32(out, "growth", species.params.growth.toFloat());
+        out += ',';
+        appendF32(out, "mortality", species.params.mortality.toFloat());
+        out += ',';
+        appendF32(out, "predation", species.params.predation.toFloat());
+        out += ',';
+        appendF32(out, "conversion", species.params.conversion.toFloat());
+        out += ',';
+        appendF32(out, "capacity", species.params.capacity.toFloat());
+        out += ',';
+        appendF32(out, "refuge", species.params.refuge.toFloat());
+        out += ',';
+        appendF32(out, "initial", species.initial.toFloat());
+        if (species.preyIndex != ecology::Species::kNoPrey)
+        {
+            out += ',';
+            appendU32(out, "eats", species.preyIndex);
+        }
+        out += '}';
+    }
+    out += "]}";
+    return out;
+}
+
 std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe)
+{
+    return bakeGamePack(recipe, nullptr);
+}
+
+std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const ecology::LivingRecipe *living)
 {
     const pack::RecipeV1 wire = pack::toWireRecipe(recipe);
 
-    constexpr core::u32 kSectionCount = 1u;
+    // One section or two. A world with nothing declared living on it stays a
+    // one-section pack, byte for byte what it was before this existed — which is
+    // what keeps every cartridge baked so far valid, and the parity gate's own
+    // image unchanged.
+    const core::u32 sectionCount = living != nullptr ? 2u : 1u;
     constexpr core::u32 kHeaderBytes = static_cast<core::u32>(sizeof(pack::Header));
-    constexpr core::u32 kTableBytes = kSectionCount * static_cast<core::u32>(sizeof(pack::SectionEntry));
-    constexpr core::u32 kPayloadOffset = kHeaderBytes + kTableBytes;
-    constexpr core::u32 kTotalSize = kPayloadOffset + static_cast<core::u32>(sizeof(pack::RecipeV1));
+    const core::u32 tableBytes = sectionCount * static_cast<core::u32>(sizeof(pack::SectionEntry));
+    const core::u32 recipeOffset = kHeaderBytes + tableBytes;
+    const core::u32 livingOffset = recipeOffset + static_cast<core::u32>(sizeof(pack::RecipeV1));
+    const core::u32 totalSize =
+        livingOffset + (living != nullptr ? static_cast<core::u32>(sizeof(pack::LivingV1)) : 0u);
 
     // Build the content first: the header carries a hash over everything that
     // follows it, so it can only be finalised once the content exists.
     std::vector<core::u8> content;
-    content.reserve(kTotalSize - kHeaderBytes);
+    content.reserve(totalSize - kHeaderBytes);
 
     pack::SectionEntry entry{};
     entry.type = static_cast<core::u32>(pack::SectionType::WorldRecipe);
-    entry.offset = kPayloadOffset;
+    entry.offset = recipeOffset;
     entry.size = static_cast<core::u32>(sizeof(pack::RecipeV1));
     entry.reserved = 0u;
     appendPod(content, entry);
+
+    if (living != nullptr)
+    {
+        pack::SectionEntry livingEntry{};
+        livingEntry.type = static_cast<core::u32>(pack::SectionType::LivingRecipe);
+        livingEntry.offset = livingOffset;
+        livingEntry.size = static_cast<core::u32>(sizeof(pack::LivingV1));
+        livingEntry.reserved = 0u;
+        appendPod(content, livingEntry);
+    }
+
+    // Payloads in table order, so an offset is always ahead of the entry naming it.
     appendPod(content, wire);
+    if (living != nullptr)
+        appendPod(content, pack::toWireLiving(*living));
 
     pack::Header header{};
     std::memcpy(header.magic, "LPLPAK\0\0", pack::kMagicSize);
     header.formatVersion = pack::kFormatVersion;
-    header.totalSize = kTotalSize;
-    header.sectionCount = kSectionCount;
+    header.totalSize = totalSize;
+    header.sectionCount = sectionCount;
     header.contentHash = pack::hashBytes(content.data(), static_cast<core::u32>(content.size()));
     header.reserved0 = 0u;
     header.reserved1 = 0u;
 
     std::vector<core::u8> image;
-    image.reserve(kTotalSize);
+    image.reserve(totalSize);
     appendPod(image, header);
     image.insert(image.end(), content.begin(), content.end());
     return image;
@@ -589,7 +882,7 @@ core::Expected<std::vector<core::u8>> bakeSceneDocument(std::string_view documen
     {
         const SceneDescription *scene = game->startScene();
         if (scene != nullptr && scene->hasRecipe)
-            return bakeGamePack(scene->recipe);
+            return bakeGamePack(scene->recipe, scene->hasLiving ? &scene->living : nullptr);
     }
 
     procgen::WorldRecipe recipe{};
