@@ -128,7 +128,12 @@ private:
     static constexpr core::u32 kRegrowthTicks = 900u;
 
     /// How the surface is coloured.
-    enum class Shading : core::u32 { Biome = 0, Height, Moisture, Count };
+    enum class Shading : core::u32 {
+        Biome = 0,
+        Height,
+        Moisture,
+        Count
+    };
 
     struct Camera {
         core::f32 yaw{0.7f};
@@ -341,8 +346,8 @@ private:
                 const core::u32 direction = _field.gradientDirection(1u, cx, cz, true);
                 if (direction != ai::StigmergyField::kNoDirection)
                 {
-                    const math::Fixed32 pull = math::Fixed32::fromFloat(0.06f) *
-                                               (math::Fixed32::half() + traits.energy);
+                    const math::Fixed32 pull =
+                        math::Fixed32::fromFloat(0.06f) * (math::Fixed32::half() + traits.energy);
                     creature.body.vx =
                         creature.body.vx + math::Fixed32::fromInt(procgen::kNeighbor8X[direction]) * pull;
                     creature.body.vz =
@@ -367,8 +372,8 @@ private:
                 creature.headingZ = creature.body.vz / length;
             }
 
-            const math::Fixed32 pace =
-                creature.genome.maxSpeed * kStep * (math::Fixed32::fromFloat(0.7f) + traits.energy * math::Fixed32::half());
+            const math::Fixed32 pace = creature.genome.maxSpeed * kStep *
+                                       (math::Fixed32::fromFloat(0.7f) + traits.energy * math::Fixed32::half());
             const math::Fixed32 stepX = creature.heading * pace;
             const math::Fixed32 stepZ = creature.headingZ * pace;
             const math::Fixed32 tryX = creature.body.x + stepX;
@@ -584,10 +589,10 @@ private:
             // of pixels, and six lit faces cost six times as much to say the same.
             const auto b0 = render::detail::projectVertex(mvp, wx - size, ground, wz, rt.width, rt.height);
             const auto b1 = render::detail::projectVertex(mvp, wx + size, ground, wz, rt.width, rt.height);
-            const auto t1 = render::detail::projectVertex(mvp, wx + size, ground + size * 2.4f, wz, rt.width,
-                                                          rt.height);
-            const auto t0 = render::detail::projectVertex(mvp, wx - size, ground + size * 2.4f, wz, rt.width,
-                                                          rt.height);
+            const auto t1 =
+                render::detail::projectVertex(mvp, wx + size, ground + size * 2.4f, wz, rt.width, rt.height);
+            const auto t0 =
+                render::detail::projectVertex(mvp, wx - size, ground + size * 2.4f, wz, rt.width, rt.height);
             fillSheet(rt, b0, b1, t1, tint);
             fillSheet(rt, b0, t1, t0, tint);
         }
