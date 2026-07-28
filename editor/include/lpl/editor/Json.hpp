@@ -89,6 +89,16 @@ struct Parser {
 /// Parses @p text into a JSON value; sets @p ok (if given) to the parse status.
 [[nodiscard]] JVal parse(std::string_view text, bool *ok = nullptr);
 
+/**
+ * @brief Re-serialises a parsed value back to JSON text.
+ *
+ * Needed wherever a sub-document has to survive on its own — a journal entry
+ * replayed later, a template instantiated elsewhere — because the parser keeps
+ * no byte spans into the source. Numbers print with %.17g so a value that made
+ * the round trip rebuilds the same world it described.
+ */
+[[nodiscard]] std::string emit(const JVal &value);
+
 } // namespace lpl::editor::detail
 
 #endif // LPL_EDITOR_JSON_HPP

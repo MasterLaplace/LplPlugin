@@ -66,12 +66,15 @@ int main()
 {
     std::printf("== editor command stream determinism ==\n\n");
 
-    // A recipe an AI/editor could emit: build terrain, scatter props, gate it.
+    // A recipe an AI/editor could emit: a whole world — terrain, erosion, water,
+    // climate, props, an underground and its playability verdict — then a count.
     const char *batch = R"([
-      {"cmd":"generate_heightfield","seed":7,"cols":16,"rows":16,"amplitude":3.0},
-      {"cmd":"scatter_poisson","seed":7,"width":12,"depth":12,"radius":1.25},
-      {"cmd":"check_playability","seed":7,"cols":16,"rows":16,"wallThreshold":0.6,
-       "goalCol":15,"goalRow":15},
+      {"cmd":"generate_world","seed":7,"width":16,"depth":16,
+       "terrain":{"seed":7,"frequency":0.15,"amplitude":12.0,"octaves":4},
+       "caves":{"width":16,"depth":16,"minRegionSize":8},
+       "settlement":{"districtSize":8},
+       "gate":{"minPathLength":4,"minWalkableCells":16},
+       "scatter":[{"biome":"grassland","density":0.08,"halfExtent":0.2}]},
       {"cmd":"count"}
     ])";
 

@@ -214,12 +214,17 @@ void EditorSession::clear()
     for (const ecs::EntityId id : ids)
         (void) registry_.destroyEntity(id);
     clearSelection();
+    // The history describes how this world was built. Emptying the world without
+    // forgetting it would leave an undo that replays commands onto a world that
+    // no longer matches them.
+    journal_.reset();
 }
 
 core::Expected<std::string> EditorSession::command(std::string_view json)
 {
-    CommandProcessor processor(registry_);
-    return processor.execute(json);
+    // Through the journal, never straight to the processor: the journal is what
+    // makes undo possible without any command knowing how to reverse itself.
+    return journal_.execute(json);
 }
 
 std::string EditorSession::save() const { return toLplScene(registry_); }

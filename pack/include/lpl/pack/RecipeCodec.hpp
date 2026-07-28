@@ -1,0 +1,316 @@
+/**
+ * @file RecipeCodec.hpp
+ * @brief Translates between the wire recipe and the engine recipe.
+ *
+ * The one place that knows both layouts, kept apart from GamePack.hpp so the
+ * container format stays usable without pulling procgen in. Every field is
+ * copied by name: a reordering on either side is then a compile error rather
+ * than a silently reinterpreted world.
+ *
+ * @author MasterLaplace
+ * @version 0.1.0
+ * @copyright MIT License
+ */
+
+#pragma once
+
+#ifndef LPL_PACK_RECIPECODEC_HPP
+#    define LPL_PACK_RECIPECODEC_HPP
+
+#    include <lpl/pack/GamePack.hpp>
+#    include <lpl/procgen/WorldRecipe.hpp>
+
+static_assert(lpl::pack::kWireScatterRules == lpl::procgen::kMaxScatterRules,
+              "wire and engine must agree on how many scatter rules a recipe carries");
+
+namespace lpl::pack {
+
+/**
+ * @brief Expands a wire recipe into the engine's in-memory recipe.
+ * @param wire The decoded section payload.
+ * @return The recipe procgen::bakeWorld consumes.
+ */
+[[nodiscard]] inline procgen::WorldRecipe toEngineRecipe(const RecipeV1 &wire) noexcept
+{
+    procgen::WorldRecipe recipe{};
+
+    recipe.seed = wire.seed;
+    recipe.width = wire.width;
+    recipe.depth = wire.depth;
+    recipe.cellSize = wire.cellSize;
+
+    recipe.terrain.seed = wire.noiseSeed;
+    recipe.terrain.frequency = wire.noiseFrequency;
+    recipe.terrain.amplitude = wire.noiseAmplitude;
+    recipe.terrain.octaves = wire.noiseOctaves;
+    recipe.terrain.baseHeight = wire.noiseBaseHeight;
+    recipe.terrain.lacunarity = wire.noiseLacunarity;
+    recipe.terrain.persistence = wire.noisePersistence;
+    recipe.terrain.warpStrength = wire.noiseWarpStrength;
+    recipe.terrain.kind = static_cast<procgen::NoiseKind>(wire.noiseKind);
+    recipe.heightLow = wire.heightLow;
+    recipe.heightHigh = wire.heightHigh;
+
+    recipe.thermal.iterations = wire.thermalIterations;
+    recipe.thermal.talus = wire.thermalTalus;
+    recipe.thermal.carryFraction = wire.thermalCarryFraction;
+
+    recipe.hydraulic.iterations = wire.hydraulicIterations;
+    recipe.hydraulic.rainAmount = wire.hydraulicRainAmount;
+    recipe.hydraulic.solubility = wire.hydraulicSolubility;
+    recipe.hydraulic.evaporation = wire.hydraulicEvaporation;
+    recipe.hydraulic.sedimentCapacity = wire.hydraulicSedimentCapacity;
+    recipe.hydraulic.deposition = wire.hydraulicDeposition;
+    recipe.hydraulic.minSlope = wire.hydraulicMinSlope;
+
+    recipe.rivers.density = wire.riverDensity;
+    recipe.rivers.carveDepth = wire.riverCarveDepth;
+    recipe.rivers.smoothing = wire.riverSmoothing;
+
+    recipe.climate.rainfallWeight = wire.climateRainfallWeight;
+    recipe.climate.flowWeight = wire.climateFlowWeight;
+    recipe.climate.altitudeWeight = wire.climateAltitudeWeight;
+    recipe.climate.coastWeight = wire.climateCoastWeight;
+    recipe.climate.seaLevel = wire.climateSeaLevel;
+    recipe.climate.coastReach = wire.climateCoastReach;
+    recipe.climate.rainShadow = wire.climateRainShadow;
+    recipe.climate.windDirection = wire.climateWindDirection;
+    recipe.climate.smoothing = wire.climateSmoothing;
+    recipe.climate.rainfallSeed = wire.climateRainfallSeed;
+    recipe.climate.rainfallBelts = wire.climateRainfallBelts;
+    recipe.climate.rainfallOctaves = wire.climateRainfallOctaves;
+
+    recipe.biomes.seaLevel = wire.biomeSeaLevel;
+    recipe.biomes.beachHeight = wire.biomeBeachHeight;
+    recipe.biomes.mountainHeight = wire.biomeMountainHeight;
+    recipe.biomes.snowHeight = wire.biomeSnowHeight;
+    recipe.biomes.snowlineWarmth = wire.biomeSnowlineWarmth;
+
+    recipe.axes.coldLatitude = wire.axisColdLatitude;
+    recipe.axes.lapseRate = wire.axisLapseRate;
+    recipe.axes.coastReach = wire.axisCoastReach;
+    recipe.axes.weirdnessSeed = wire.axisWeirdnessSeed;
+    recipe.axes.weirdnessBelts = wire.axisWeirdnessBelts;
+    recipe.axes.weirdnessOctaves = wire.axisWeirdnessOctaves;
+    recipe.axes.surfaceDepth = wire.axisSurfaceDepth;
+
+    recipe.caves.width = wire.caveWidth;
+    recipe.caves.depth = wire.caveDepth;
+    recipe.caves.seed = wire.caveSeed;
+    recipe.caves.fillProbability = wire.caveFillProbability;
+    recipe.caves.steps = wire.caveSteps;
+    recipe.caves.birthLimit = wire.caveBirthLimit;
+    recipe.caves.survivalLimit = wire.caveSurvivalLimit;
+    recipe.caves.minRegionSize = wire.caveMinRegionSize;
+
+    recipe.settlement.seed = wire.settlementSeed;
+    recipe.settlement.districtSize = wire.settlementDistrictSize;
+    recipe.settlement.roadWidth = wire.settlementRoadWidth;
+    recipe.settlement.plazaRadius = wire.settlementPlazaRadius;
+    recipe.settlement.minPlot = wire.settlementMinPlot;
+    recipe.settlement.maxPlot = wire.settlementMaxPlot;
+    recipe.settlement.plotDensity = wire.settlementPlotDensity;
+    recipe.settlement.maxSlope = wire.settlementMaxSlope;
+    recipe.settlement.minHeight = wire.settlementMinHeight;
+
+    recipe.roads.seed = wire.roadSeed;
+    recipe.roads.iterations = wire.roadIterations;
+    recipe.roads.stepLength = wire.roadStepLength;
+    recipe.roads.conform = wire.roadConform;
+    recipe.roads.maxSlope = wire.roadMaxSlope;
+    recipe.roads.minHeight = wire.roadMinHeight;
+    recipe.roads.gridDistricts = wire.roadGridDistricts;
+    recipe.roads.arterials = (wire.flags & kRecipeFlagRoadArterials) != 0u;
+
+    recipe.gate.minPathLength = wire.gateMinPathLength;
+    recipe.gate.minWalkableCells = wire.gateMinWalkableCells;
+    recipe.gate.maxDeadEndRatio = wire.gateMaxDeadEndRatio;
+    recipe.gate.requireGoalReachable = (wire.flags & kRecipeFlagGateRequireGoal) != 0u;
+    recipe.gate.requireFullyConnected = (wire.flags & kRecipeFlagGateRequireConnected) != 0u;
+
+    // A count from untrusted bytes indexes an array, so it is clamped here
+    // rather than trusted: a cartridge is input, not a promise.
+    recipe.scatterCount = wire.scatterCount < kWireScatterRules ? wire.scatterCount : kWireScatterRules;
+    for (core::u32 i = 0u; i < recipe.scatterCount; ++i)
+    {
+        const ScatterV1 &from = wire.scatter[i];
+        procgen::ScatterRule &to = recipe.scatter[i];
+        to.biome = static_cast<procgen::BiomeId>(from.biome);
+        to.density = from.density;
+        to.halfExtent = from.halfExtent;
+        to.maxSlope = from.maxSlope;
+        to.minMoisture = from.minMoisture;
+        to.maxMoisture = from.maxMoisture;
+        to.moistureAffinity = from.moistureAffinity;
+        to.tag = from.tag;
+        to.treeLine = from.treeLine;
+        to.altitudeFalloff = from.altitudeFalloff;
+        to.maxRiverDistance = from.maxRiverDistance;
+        to.endemicShare = from.endemicShare;
+        to.collidable = (from.flags & kScatterFlagCollidable) != 0u;
+    }
+
+    recipe.normalizeTerrain = (wire.flags & kRecipeFlagNormalizeTerrain) != 0u;
+    recipe.erodeTerrain = (wire.flags & kRecipeFlagErodeTerrain) != 0u;
+    recipe.carveRivers = (wire.flags & kRecipeFlagCarveRivers) != 0u;
+    recipe.classifyBiomes = (wire.flags & kRecipeFlagClassifyBiomes) != 0u;
+    recipe.carveCaves = (wire.flags & kRecipeFlagCarveCaves) != 0u;
+    recipe.placeSettlement = (wire.flags & kRecipeFlagPlaceSettlement) != 0u;
+    recipe.materializeGround = (wire.flags & kRecipeFlagMaterializeGround) != 0u;
+    recipe.growRoads = (wire.flags & kRecipeFlagGrowRoads) != 0u;
+    recipe.checkPlayability = (wire.flags & kRecipeFlagCheckPlayability) != 0u;
+
+    return recipe;
+}
+
+/**
+ * @brief Flattens an engine recipe into its wire form, for baking.
+ * @param recipe The in-memory recipe.
+ * @return The payload to write into a WorldRecipe section.
+ */
+[[nodiscard]] inline RecipeV1 toWireRecipe(const procgen::WorldRecipe &recipe) noexcept
+{
+    RecipeV1 wire{};
+
+    wire.seed = recipe.seed;
+    wire.width = recipe.width;
+    wire.depth = recipe.depth;
+    wire.cellSize = recipe.cellSize;
+
+    wire.noiseSeed = recipe.terrain.seed;
+    wire.noiseFrequency = recipe.terrain.frequency;
+    wire.noiseAmplitude = recipe.terrain.amplitude;
+    wire.noiseOctaves = recipe.terrain.octaves;
+    wire.noiseBaseHeight = recipe.terrain.baseHeight;
+    wire.noiseLacunarity = recipe.terrain.lacunarity;
+    wire.noisePersistence = recipe.terrain.persistence;
+    wire.noiseWarpStrength = recipe.terrain.warpStrength;
+    wire.noiseKind = static_cast<core::u32>(recipe.terrain.kind);
+    wire.heightLow = recipe.heightLow;
+    wire.heightHigh = recipe.heightHigh;
+
+    wire.thermalIterations = recipe.thermal.iterations;
+    wire.thermalTalus = recipe.thermal.talus;
+    wire.thermalCarryFraction = recipe.thermal.carryFraction;
+
+    wire.hydraulicIterations = recipe.hydraulic.iterations;
+    wire.hydraulicRainAmount = recipe.hydraulic.rainAmount;
+    wire.hydraulicSolubility = recipe.hydraulic.solubility;
+    wire.hydraulicEvaporation = recipe.hydraulic.evaporation;
+    wire.hydraulicSedimentCapacity = recipe.hydraulic.sedimentCapacity;
+    wire.hydraulicDeposition = recipe.hydraulic.deposition;
+    wire.hydraulicMinSlope = recipe.hydraulic.minSlope;
+
+    wire.riverDensity = recipe.rivers.density;
+    wire.riverCarveDepth = recipe.rivers.carveDepth;
+    wire.riverSmoothing = recipe.rivers.smoothing;
+
+    wire.climateRainfallWeight = recipe.climate.rainfallWeight;
+    wire.climateFlowWeight = recipe.climate.flowWeight;
+    wire.climateAltitudeWeight = recipe.climate.altitudeWeight;
+    wire.climateCoastWeight = recipe.climate.coastWeight;
+    wire.climateSeaLevel = recipe.climate.seaLevel;
+    wire.climateCoastReach = recipe.climate.coastReach;
+    wire.climateRainShadow = recipe.climate.rainShadow;
+    wire.climateWindDirection = recipe.climate.windDirection;
+    wire.climateSmoothing = recipe.climate.smoothing;
+    wire.climateRainfallSeed = recipe.climate.rainfallSeed;
+    wire.climateRainfallBelts = recipe.climate.rainfallBelts;
+    wire.climateRainfallOctaves = recipe.climate.rainfallOctaves;
+
+    wire.biomeSeaLevel = recipe.biomes.seaLevel;
+    wire.biomeBeachHeight = recipe.biomes.beachHeight;
+    wire.biomeMountainHeight = recipe.biomes.mountainHeight;
+    wire.biomeSnowHeight = recipe.biomes.snowHeight;
+    wire.axisColdLatitude = recipe.axes.coldLatitude;
+    wire.axisLapseRate = recipe.axes.lapseRate;
+    wire.axisCoastReach = recipe.axes.coastReach;
+    wire.axisWeirdnessSeed = recipe.axes.weirdnessSeed;
+    wire.axisWeirdnessBelts = recipe.axes.weirdnessBelts;
+    wire.axisWeirdnessOctaves = recipe.axes.weirdnessOctaves;
+    wire.axisSurfaceDepth = recipe.axes.surfaceDepth;
+    wire.biomeSnowlineWarmth = recipe.biomes.snowlineWarmth;
+
+    wire.caveWidth = recipe.caves.width;
+    wire.caveDepth = recipe.caves.depth;
+    wire.caveSeed = recipe.caves.seed;
+    wire.caveFillProbability = recipe.caves.fillProbability;
+    wire.caveSteps = recipe.caves.steps;
+    wire.caveBirthLimit = recipe.caves.birthLimit;
+    wire.caveSurvivalLimit = recipe.caves.survivalLimit;
+    wire.caveMinRegionSize = recipe.caves.minRegionSize;
+
+    wire.settlementSeed = recipe.settlement.seed;
+    wire.settlementDistrictSize = recipe.settlement.districtSize;
+    wire.settlementRoadWidth = recipe.settlement.roadWidth;
+    wire.settlementPlazaRadius = recipe.settlement.plazaRadius;
+    wire.settlementMinPlot = recipe.settlement.minPlot;
+    wire.settlementMaxPlot = recipe.settlement.maxPlot;
+    wire.settlementPlotDensity = recipe.settlement.plotDensity;
+    wire.settlementMaxSlope = recipe.settlement.maxSlope;
+    wire.settlementMinHeight = recipe.settlement.minHeight;
+
+    wire.roadSeed = recipe.roads.seed;
+    wire.roadIterations = recipe.roads.iterations;
+    wire.roadStepLength = recipe.roads.stepLength;
+    wire.roadConform = recipe.roads.conform;
+    wire.roadMaxSlope = recipe.roads.maxSlope;
+    wire.roadMinHeight = recipe.roads.minHeight;
+    wire.roadGridDistricts = recipe.roads.gridDistricts;
+
+    wire.gateMinPathLength = recipe.gate.minPathLength;
+    wire.gateMinWalkableCells = recipe.gate.minWalkableCells;
+    wire.gateMaxDeadEndRatio = recipe.gate.maxDeadEndRatio;
+
+    wire.scatterCount = recipe.scatterCount < kWireScatterRules ? recipe.scatterCount : kWireScatterRules;
+    for (core::u32 i = 0u; i < wire.scatterCount; ++i)
+    {
+        const procgen::ScatterRule &from = recipe.scatter[i];
+        ScatterV1 &to = wire.scatter[i];
+        to.biome = static_cast<core::u32>(from.biome);
+        to.density = from.density;
+        to.halfExtent = from.halfExtent;
+        to.maxSlope = from.maxSlope;
+        to.minMoisture = from.minMoisture;
+        to.maxMoisture = from.maxMoisture;
+        to.moistureAffinity = from.moistureAffinity;
+        to.tag = from.tag;
+        to.treeLine = from.treeLine;
+        to.altitudeFalloff = from.altitudeFalloff;
+        to.maxRiverDistance = from.maxRiverDistance;
+        to.endemicShare = from.endemicShare;
+        to.flags = from.collidable ? kScatterFlagCollidable : 0u;
+    }
+
+    wire.flags = 0u;
+    if (recipe.normalizeTerrain)
+        wire.flags |= kRecipeFlagNormalizeTerrain;
+    if (recipe.erodeTerrain)
+        wire.flags |= kRecipeFlagErodeTerrain;
+    if (recipe.carveRivers)
+        wire.flags |= kRecipeFlagCarveRivers;
+    if (recipe.classifyBiomes)
+        wire.flags |= kRecipeFlagClassifyBiomes;
+    if (recipe.carveCaves)
+        wire.flags |= kRecipeFlagCarveCaves;
+    if (recipe.placeSettlement)
+        wire.flags |= kRecipeFlagPlaceSettlement;
+    if (recipe.materializeGround)
+        wire.flags |= kRecipeFlagMaterializeGround;
+    if (recipe.growRoads)
+        wire.flags |= kRecipeFlagGrowRoads;
+    if (recipe.roads.arterials)
+        wire.flags |= kRecipeFlagRoadArterials;
+    if (recipe.checkPlayability)
+        wire.flags |= kRecipeFlagCheckPlayability;
+    if (recipe.gate.requireGoalReachable)
+        wire.flags |= kRecipeFlagGateRequireGoal;
+    if (recipe.gate.requireFullyConnected)
+        wire.flags |= kRecipeFlagGateRequireConnected;
+
+    return wire;
+}
+
+} // namespace lpl::pack
+
+#endif // LPL_PACK_RECIPECODEC_HPP

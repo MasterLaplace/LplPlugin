@@ -29,6 +29,7 @@
 #    include <lpl/ecs/Component.hpp>
 #    include <lpl/ecs/ComponentReflection.hpp>
 #    include <lpl/ecs/Registry.hpp>
+#    include <lpl/editor/CommandJournal.hpp>
 
 #    include <string>
 #    include <string_view>
@@ -84,8 +85,41 @@ public:
                                 double value);
 
     // ── Scene / procgen passthrough ────────────────────────────────────────────
-    /// Runs a JSON command (or batch) through the CommandProcessor.
+    /**
+     * @brief Runs a JSON command (or batch), recording it in the journal.
+     *
+     * Every session edit goes through the journal rather than straight to the
+     * processor, which is what makes @ref undo possible at all: no command knows
+     * how to reverse itself, so undoing is replaying the journal without its last
+     * entry. A session that executed and forgot could offer no undo without every
+     * command growing an inverse — and the first inverse that is subtly wrong
+     * corrupts a world with nothing to catch it.
+     */
     [[nodiscard]] core::Expected<std::string> command(std::string_view json);
+
+    /// Rewinds the last recorded command; false when there is nothing to undo.
+    bool undo() { return journal_.undo(); }
+
+    /// Re-applies the last undone command; false when there is nothing to redo.
+    bool redo() { return journal_.redo(); }
+
+    /// @return Commands currently applied to the world.
+    [[nodiscard]] core::u32 historySize() const noexcept { return journal_.size(); }
+
+    /// @return Commands available to @ref redo.
+    [[nodiscard]] core::u32 redoSize() const noexcept { return journal_.redoSize(); }
+
+    /**
+     * @brief The session's history as a replayable document.
+     *
+     * The recipe of everything that was done, which replays to a bit-identical
+     * world — the same parity slice a `.lplscene` gives, for authoring rather
+     * than for the result.
+     */
+    [[nodiscard]] std::string history() const { return journal_.toJson(); }
+
+    /// Rebuilds the world from a serialised history, discarding the current one.
+    [[nodiscard]] core::Expected<core::u32> replayHistory(std::string_view json) { return journal_.replay(json); }
     /// Serializes the world to a `.lplscene` document.
     [[nodiscard]] std::string save() const;
     /// Loads a `.lplscene` document into the world (appends entities).
@@ -99,6 +133,7 @@ public:
 
 private:
     ecs::Registry registry_;
+    CommandJournal journal_{registry_};
     static constexpr core::u32 kNoSelection = 0xFFFFFFFFu;
     core::u32 selected_{kNoSelection};
 };

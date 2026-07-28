@@ -25,6 +25,13 @@ target_end()
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Editor (deterministic scene command REPL — human twin of the Caine AI bridge)
 -- ─────────────────────────────────────────────────────────────────────────────
+target("lpl-bake")
+    set_kind("binary")
+    set_group("apps")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-pack", "lpl-editor")
+    add_files("bake/main.cpp")
+target_end()
+
 target("lpl-editor-cli")
     set_kind("binary")
     set_group("apps")
@@ -40,14 +47,12 @@ target_end()
 -- only when `--worldforge` is on so it never burdens the headless/kernel builds.
 -- ─────────────────────────────────────────────────────────────────────────────
 if has_config("worldforge") then
-    add_requires("glfw 3.4", {system = false})
-    add_requires("imgui", {alias = "imgui-gl", configs = {glfw = true, opengl2 = true}})
-
+    -- glfw/imgui are required once at the root, with the backend union.
 target("lpl-worldforge")
     set_kind("binary")
     set_group("apps")
     add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-editor", "lpl-procgen", "lpl-physics")
-    add_packages("glfw", "imgui-gl")
+    add_packages("glfw", "imgui")
     if is_plat("linux") then
         add_syslinks("GL")
     elseif is_plat("windows") then
@@ -80,3 +85,19 @@ target("lpl-benchmark")
     )
     add_files("benchmark/main.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Map viewer (standalone X11 + GLX, no package dependencies)
+--
+-- Behind an option so the headless and kernel builds never see it: it links
+-- libGL and libX11, which exist on a desktop and nowhere else.
+-- ─────────────────────────────────────────────────────────────────────────────
+if has_config("mapview") then
+    target("lpl-mapview")
+        set_kind("binary")
+        set_group("apps")
+        add_deps("lpl-engine", "lpl-procgen", "lpl-image", "lpl-ai", "lpl-ecology")
+        add_files("mapview/main.cpp")
+        add_syslinks("GL", "X11", "m")
+    target_end()
+end

@@ -39,7 +39,9 @@ int main()
     editor::EditorSession session;
 
     // Build a small world through the same command path the UI would use.
-    const auto gen = session.command(R"({"cmd":"generate_heightfield","seed":3,"cols":8,"rows":8})");
+    const auto gen = session.command(R"({"cmd":"generate_world","seed":3,"width":8,"depth":8,
+                                         "caves":{"enabled":false},"settlement":{"enabled":false},
+                                         "gate":{"enabled":false}})");
     check(gen.has_value(), "generate command runs");
     check(session.entityCount() == 64u, "world has 64 entities");
 
@@ -89,6 +91,39 @@ int main()
             }
             std::printf("]\n");
         }
+    }
+
+    // ── The session has a history, not just a world ─────────────────────────
+    //
+    // The journal existed with its own test and no caller: a session executed
+    // and forgot, so nothing a user did through the editor could be undone. What
+    // this pins is the wiring — that a session edit is recorded, and that undo
+    // restores the exact previous world rather than an approximation of it.
+    std::printf("\n  -- history --\n");
+    {
+        const core::u32 before = session.entityCount();
+        check(session.historySize() == 1u, "the generate command was recorded");
+
+        const auto spawn = session.command(R"({"cmd":"spawn_from_template",
+            "templates":{"crate":{"Health":{"points":5}}},"name":"crate","count":4})");
+        check(spawn.has_value(), "a second command runs");
+        check(session.entityCount() == before + 4u, "the world grew");
+        check(session.historySize() == 2u, "the second command was recorded");
+
+        check(session.undo(), "undo reports success");
+        check(session.entityCount() == before, "undo restores the previous entity count");
+        check(session.historySize() == 1u, "undo drops the entry");
+
+        check(session.redo(), "redo reports success");
+        check(session.entityCount() == before + 4u, "redo restores the undone world");
+
+        // Inspection must not enter the history: an undo that depends on how
+        // often somebody looked at the world is not an undo.
+        (void) session.command(R"({"cmd":"count"})");
+        check(session.historySize() == 2u, "looking at the world does not record anything");
+
+        check(session.history().find("lplcommands/1") != std::string::npos,
+              "the history serialises as a replayable document");
     }
 
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);

@@ -14,6 +14,7 @@
 #ifndef LPL_MATH_MAT4_HPP
 #    define LPL_MATH_MAT4_HPP
 
+#    include "Cordic.hpp"
 #    include "Quat.hpp"
 #    include "Vec3.hpp"
 

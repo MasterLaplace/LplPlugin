@@ -117,6 +117,39 @@ int main()
     check(flatDoc.find("$use") == std::string::npos, "serialized document is flattened (no $use)");
     check(lr.has_value() && foldState(reload) == foldState(tpl), "flattened document round-trips");
 
+    // ── Template chains: a template may extend another (§5.2 prefab graph) ──
+    {
+        const char *chained = R"({"format":"lplscene/1",
+          "templates":{
+            "base":   {"Health":{"points":50}},
+            "elite":  {"$use":"base","Health":{"points":200}},
+            "boss":   {"$use":"elite","Position":{"value":{"x":65536,"y":0,"z":0}}}
+          },
+          "entities":[{"$use":"boss"}]})";
+        ecs::Registry chainWorld;
+        const auto loaded = editor::fromLplScene(chained, chainWorld);
+        check(loaded.has_value() && loaded.value() == 1u, "a 3-deep template chain instantiates");
+
+        const std::string flat = editor::toLplScene(chainWorld);
+        // boss inherits Position from itself, Health from elite (200, not base's 50).
+        check(flat.find("\"points\":200") != std::string::npos, "the most-derived template wins the field");
+        check(flat.find("\"points\":50") == std::string::npos, "the base value is overridden, not kept");
+        check(flat.find("65536") != std::string::npos, "the leaf template's own component survives");
+    }
+
+    // ── A cycle must not hang or crash ──────────────────────────────────────
+    {
+        const char *cyclic = R"({"format":"lplscene/1",
+          "templates":{
+            "a":{"$use":"b","Health":{"points":10}},
+            "b":{"$use":"a","Mass":{"kilograms":65536}}
+          },
+          "entities":[{"$use":"a"}]})";
+        ecs::Registry cycleWorld;
+        const auto loaded = editor::fromLplScene(cyclic, cycleWorld);
+        check(loaded.has_value(), "a cyclic template chain is survived, not hung on");
+    }
+
     std::printf("\n%s (%d failures)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
 }

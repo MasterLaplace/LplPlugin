@@ -182,47 +182,74 @@ void overlayComponent(detail::JVal &dst, const detail::JVal &src)
     }
 }
 
-// Produces the effective component map for @p entity: if it carries a "$use"
-// reference, the named template's components are laid down first (deep-merged),
-// then the entity's own components override them field-by-field. This is the
-// Flakkari prefab pattern — a template graph flattened at instantiation time.
-detail::JVal resolveEntity(const detail::JVal &entity, const detail::JVal *templates)
+// Merges every component of @p source into @p target, field-wise.
+void overlayEntity(detail::JVal &target, const detail::JVal &source)
 {
-    detail::JVal eff;
-    eff.t = detail::JVal::T::Obj;
-
-    if (templates != nullptr)
-    {
-        const detail::JVal *use = entity.find("$use");
-        if (use != nullptr && use->t == detail::JVal::T::Str)
-        {
-            const detail::JVal *tmpl = templates->find(use->str);
-            if (tmpl != nullptr && tmpl->t == detail::JVal::T::Obj)
-                for (const auto &comp : tmpl->obj)
-                {
-                    if (comp.first == "$use")
-                        continue;
-                    eff.obj.push_back(comp);
-                }
-        }
-    }
-
-    for (const auto &comp : entity.obj)
+    for (const auto &comp : source.obj)
     {
         if (comp.first == "$use")
             continue;
         detail::JVal *existing = nullptr;
-        for (auto &e : eff.obj)
+        for (auto &e : target.obj)
             if (e.first == comp.first)
             {
                 existing = &e.second;
                 break;
             }
         if (existing == nullptr)
-            eff.obj.push_back(comp);
+            target.obj.push_back(comp);
         else
             overlayComponent(*existing, comp.second);
     }
+}
+
+// Flattens a template, following its own "$use" first so a template can extend
+// another — the prefab GRAPH the report asks for (§5.2), generalising
+// Flakkari's Involve/Bullet cross-references. Resolution is depth-first from the
+// root of the chain, so the most-derived template wins field by field.
+//
+// A chain can be malformed in two ways that must not hang or blow the stack: a
+// cycle (a -> b -> a) and a chain long enough to exhaust it. `visiting` catches
+// the first, the depth cap the second; both simply stop resolving further,
+// leaving whatever was merged so far rather than failing the whole document.
+void resolveTemplateInto(detail::JVal &target, std::string_view name, const detail::JVal *templates,
+                         std::vector<std::string_view> &visiting)
+{
+    constexpr std::size_t kMaxTemplateDepth = 16;
+
+    if (templates == nullptr || visiting.size() >= kMaxTemplateDepth)
+        return;
+    for (const std::string_view seen : visiting)
+        if (seen == name)
+            return; // cycle
+
+    const detail::JVal *tmpl = templates->find(name);
+    if (tmpl == nullptr || tmpl->t != detail::JVal::T::Obj)
+        return;
+
+    visiting.push_back(name);
+
+    if (const detail::JVal *parent = tmpl->find("$use"); parent != nullptr && parent->t == detail::JVal::T::Str)
+        resolveTemplateInto(target, parent->str, templates, visiting);
+
+    overlayEntity(target, *tmpl);
+    visiting.pop_back();
+}
+
+// Produces the effective component map for @p entity: the flattened chain of
+// templates it references, with its own components overriding field by field.
+detail::JVal resolveEntity(const detail::JVal &entity, const detail::JVal *templates)
+{
+    detail::JVal eff;
+    eff.t = detail::JVal::T::Obj;
+
+    if (const detail::JVal *use = entity.find("$use"); use != nullptr && use->t == detail::JVal::T::Str)
+    {
+        std::vector<std::string_view> visiting;
+        resolveTemplateInto(eff, use->str, templates, visiting);
+    }
+
+    overlayEntity(eff, entity);
     return eff;
 }
 

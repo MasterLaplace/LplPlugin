@@ -53,17 +53,45 @@ option("cuda")
     set_description("Enable CUDA GPU physics kernels")
 option_end()
 
+option("mapview")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build lpl-mapview, the standalone X11/GLX viewer for generated worlds")
+option_end()
+
+option("worldforge")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build the standalone lpl-worldforge OpenGL world editor (GLFW+imgui, no engine renderer)")
+option_end()
+
 -- /////////////////////////////////////////////////////////////////////////////
 -- Conditional packages
 -- /////////////////////////////////////////////////////////////////////////////
 
 if has_config("renderer") then
     add_requires("vulkan-headers", "vulkan-loader", "vulkan-hpp")
-    add_requires("glfw 3.4", {system = false})
     add_requires("glm")
-    add_requires("imgui", {system = false, configs = {glfw = true, vulkan = true}})
     add_defines("LPL_HAS_RENDERER")
     add_defines("VULKAN_HPP_NO_EXCEPTIONS")
+end
+
+-- imgui and glfw are declared ONCE, here, with the union of the backends the
+-- enabled options need. Declaring the same package twice with different configs
+-- (render wanting vulkan, worldforge wanting opengl2) does not give two
+-- packages: xmake resolves the name to a single instance, and the loser's
+-- backend headers simply are not there — which is exactly how worldforge ended
+-- up unable to find imgui.h while imgui was "installed".
+if has_config("renderer") or has_config("worldforge") then
+    add_requires("glfw 3.4", {system = false})
+    add_requires("imgui", {
+        system = false,
+        configs = {
+            glfw = true,
+            vulkan = has_config("renderer") or false,
+            opengl2 = has_config("worldforge") or false,
+        }
+    })
 end
 
 -- The hosted build always has a sockets stack and the BCI dependencies, so the
@@ -97,6 +125,9 @@ includes(
     "serial",
     "editor",
     "procgen",
+    "ai",
+    "ecology",
+    "pack",
     "kernel",
     "engine",
     "samples",

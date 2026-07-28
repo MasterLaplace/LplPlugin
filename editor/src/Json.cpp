@@ -11,6 +11,7 @@
 #include <lpl/editor/Json.hpp>
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 
 namespace lpl::editor::detail {
@@ -184,6 +185,80 @@ JVal parse(std::string_view text, bool *ok)
     if (ok != nullptr)
         *ok = parser.ok;
     return root;
+}
+
+
+
+namespace {
+
+void emitEscaped(std::string &out, std::string_view text)
+{
+    for (const char c : text)
+    {
+        switch (c)
+        {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break;
+        case '\t': out += "\\t"; break;
+        default: out += c; break;
+        }
+    }
+}
+
+} // namespace
+
+std::string emit(const JVal &value)
+{
+    switch (value.t)
+    {
+    case JVal::T::Null: return "null";
+    case JVal::T::Bool: return value.b ? "true" : "false";
+    case JVal::T::Num: {
+        char buffer[40];
+        // %.17g is the shortest precision that round-trips every double
+        // exactly; anything shorter can shift a parameter and therefore the
+        // world a replayed command rebuilds. Integral values are printed
+        // without a decimal point so a journal stays readable.
+        if (value.num == static_cast<double>(static_cast<long long>(value.num)))
+            std::snprintf(buffer, sizeof(buffer), "%lld", static_cast<long long>(value.num));
+        else
+            std::snprintf(buffer, sizeof(buffer), "%.17g", value.num);
+        return std::string{buffer};
+    }
+    case JVal::T::Str: {
+        std::string out = "\"";
+        emitEscaped(out, value.str);
+        out += "\"";
+        return out;
+    }
+    case JVal::T::Arr: {
+        std::string out = "[";
+        for (std::size_t i = 0; i < value.arr.size(); ++i)
+        {
+            if (i != 0)
+                out += ",";
+            out += emit(value.arr[i]);
+        }
+        out += "]";
+        return out;
+    }
+    case JVal::T::Obj: {
+        std::string out = "{";
+        for (std::size_t i = 0; i < value.obj.size(); ++i)
+        {
+            if (i != 0)
+                out += ",";
+            out += "\"";
+            emitEscaped(out, value.obj[i].first);
+            out += "\":";
+            out += emit(value.obj[i].second);
+        }
+        out += "}";
+        return out;
+    }
+    }
+    return "null";
 }
 
 } // namespace lpl::editor::detail

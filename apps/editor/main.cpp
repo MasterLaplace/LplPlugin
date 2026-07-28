@@ -26,7 +26,7 @@ namespace {
 void printBanner()
 {
     std::puts("lpl-editor — deterministic scene command REPL");
-    std::puts("  type a JSON command, e.g. {\"cmd\":\"generate_heightfield\",\"seed\":7,\"cols\":16,\"rows\":16}");
+    std::puts("  type a JSON command, e.g. {\"cmd\":\"generate_world\",\"seed\":7,\"width\":16,\"depth\":16}");
     std::puts("  shortcuts: count | save | quit    (# starts a comment line)");
     std::puts("");
 }
