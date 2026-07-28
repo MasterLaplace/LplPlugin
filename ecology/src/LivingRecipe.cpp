@@ -58,8 +58,7 @@ LivingResult runLiving(const LivingRecipe &recipe)
     TrophicWeb web;
     core::u32 primary = 0u;
     {
-        const core::u32 declared =
-            recipe.speciesCount < kMaxLivingSpecies ? recipe.speciesCount : kMaxLivingSpecies;
+        const core::u32 declared = recipe.speciesCount < kMaxLivingSpecies ? recipe.speciesCount : kMaxLivingSpecies;
         for (core::u32 i = 0u; i < declared; ++i)
             (void) web.add(recipe.species[i].params, recipe.species[i].initial, recipe.species[i].preyIndex);
 

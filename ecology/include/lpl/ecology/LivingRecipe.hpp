@@ -64,8 +64,8 @@ inline constexpr core::u32 kMaxLivingSpecies = 4u;
  * @brief One authored population: its demography and what it eats.
  */
 struct LivingSpecies {
-    SpeciesParams params{};    ///< Growth, mortality, predation, capacity, refuge.
-    math::Fixed32 initial{};   ///< Head count at tick 0.
+    SpeciesParams params{};                ///< Growth, mortality, predation, capacity, refuge.
+    math::Fixed32 initial{};               ///< Head count at tick 0.
     core::u32 preyIndex{Species::kNoPrey}; ///< Index into the table; kNoPrey for a producer.
 };
 

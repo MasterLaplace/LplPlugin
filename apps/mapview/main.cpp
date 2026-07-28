@@ -965,8 +965,7 @@ std::vector<Vertex> buildTownMesh(const TerrainData &world, const lpl::pmr::vect
  * @param palette   Colour per material id; index 0 is never drawn.
  */
 std::vector<Vertex> buildVoxelMesh(const procgen::VoxelVolume &volume, const TerrainData &world, float baseLift,
-                                   const Rgb *palette, core::u32 paletteSize,
-                                   const std::vector<float> *datum = nullptr)
+                                   const Rgb *palette, core::u32 paletteSize, const std::vector<float> *datum = nullptr)
 {
     std::vector<Vertex> vertices;
     if (volume.empty() || world.height.empty())
@@ -1019,9 +1018,9 @@ std::vector<Vertex> buildVoxelMesh(const procgen::VoxelVolume &volume, const Ter
                 // (the roadside decoration genuinely does follow the ground).
                 const core::u32 index = z * volume.width + x;
                 const float ground =
-                    datum != nullptr && index < datum->size()
-                        ? (*datum)[index]
-                        : world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
+                    datum != nullptr && index < datum->size() ?
+                        (*datum)[index] :
+                        world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
                 const float y0 = ground + baseLift + static_cast<float>(y) * cell;
                 const float y1 = y0 + cell;
                 const float x0 = static_cast<float>(x) - halfW;

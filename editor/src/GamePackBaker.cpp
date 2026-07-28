@@ -236,9 +236,8 @@ bool parseSceneLiving(const detail::JVal &scene, ecology::LivingRecipe &outLivin
             slot.initial = readFixed(entry, "initial", slot.initial);
 
             const detail::JVal *eats = entry.find("eats");
-            slot.preyIndex = (eats != nullptr && eats->t == detail::JVal::T::Num)
-                                 ? static_cast<core::u32>(eats->num)
-                                 : ecology::Species::kNoPrey;
+            slot.preyIndex = (eats != nullptr && eats->t == detail::JVal::T::Num) ? static_cast<core::u32>(eats->num) :
+                                                                                    ecology::Species::kNoPrey;
             ++count;
         }
         recipe.speciesCount = count;
@@ -809,10 +808,7 @@ std::string emitSceneLiving(const ecology::LivingRecipe &living)
     return out;
 }
 
-std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe)
-{
-    return bakeGamePack(recipe, nullptr);
-}
+std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe) { return bakeGamePack(recipe, nullptr); }
 
 std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const ecology::LivingRecipe *living)
 {

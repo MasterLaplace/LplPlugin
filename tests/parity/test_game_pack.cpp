@@ -16,8 +16,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/ecs/Registry.hpp>
 #include <lpl/ecology/LivingRecipe.hpp>
+#include <lpl/ecs/Registry.hpp>
 #include <lpl/editor/GamePackBaker.hpp>
 #include <lpl/pack/GamePack.hpp>
 #include <lpl/pack/ParityPackBlob.hpp>
@@ -170,8 +170,7 @@ int main()
         const std::vector<core::u8> withLife = editor::bakeGamePack(reference, &living);
 
         pack::View lifeView;
-        check(lifeView.open(withLife.data(), static_cast<core::u32>(withLife.size())),
-              "a two-section pack opens");
+        check(lifeView.open(withLife.data(), static_cast<core::u32>(withLife.size())), "a two-section pack opens");
         check(lifeView.sectionCount() == 2u, "and carries both sections");
 
         pack::RecipeV1 worldWire{};
@@ -191,7 +190,8 @@ int main()
         bool webMatches = true;
         for (core::u32 i = 0u; i < decoded.speciesCount; ++i)
         {
-            webMatches = webMatches && decoded.species[i].params.capacity.raw() == living.species[i].params.capacity.raw();
+            webMatches =
+                webMatches && decoded.species[i].params.capacity.raw() == living.species[i].params.capacity.raw();
             webMatches = webMatches && decoded.species[i].initial.raw() == living.species[i].initial.raw();
             webMatches = webMatches && decoded.species[i].preyIndex == living.species[i].preyIndex;
             webMatches = webMatches && decoded.species[i].params.level == living.species[i].params.level;
@@ -203,7 +203,8 @@ int main()
         // is a layout that reorders something the run reads in order.
         const ecology::LivingResult direct = ecology::runLiving(living);
         const ecology::LivingResult viaWire = ecology::runLiving(decoded);
-        check(direct.populationSignature == viaWire.populationSignature, "the decoded recipe folds the same populations");
+        check(direct.populationSignature == viaWire.populationSignature,
+              "the decoded recipe folds the same populations");
         check(direct.genomeSignature == viaWire.genomeSignature, "the same genomes");
         check(direct.stigmergySignature == viaWire.stigmergySignature, "the same field");
         check(direct.socialSignature == viaWire.socialSignature, "the same social state");

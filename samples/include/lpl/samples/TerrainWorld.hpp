@@ -286,8 +286,8 @@ private:
         // vegetation this terrain actually grew, counted — a document cannot know
         // how many trees a seed will produce.
         _web = ecology::TrophicWeb{};
-        const core::u32 declared = _living.speciesCount < ecology::kMaxLivingSpecies ? _living.speciesCount
-                                                                                    : ecology::kMaxLivingSpecies;
+        const core::u32 declared =
+            _living.speciesCount < ecology::kMaxLivingSpecies ? _living.speciesCount : ecology::kMaxLivingSpecies;
         for (core::u32 i = 0u; i < declared; ++i)
         {
             ecology::SpeciesParams params = _living.species[i].params;

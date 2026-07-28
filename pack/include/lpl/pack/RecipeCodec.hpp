@@ -17,8 +17,8 @@
 #ifndef LPL_PACK_RECIPECODEC_HPP
 #    define LPL_PACK_RECIPECODEC_HPP
 
-#    include <lpl/pack/GamePack.hpp>
 #    include <lpl/ecology/LivingRecipe.hpp>
+#    include <lpl/pack/GamePack.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
 static_assert(lpl::pack::kWireScatterRules == lpl::procgen::kMaxScatterRules,
