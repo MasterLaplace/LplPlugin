@@ -362,8 +362,7 @@ void testOverflowAndInvasion()
 
     const ecology::OverflowState crowdedButFed =
         ecology::evaluateOverflow(math::Fixed32::fromInt(98), math::Fixed32::fromInt(100), wellFed, 8u, params);
-    check(crowdedButFed.overcrowded && !crowdedButFed.raiding,
-          "crowding alone is not enough — they have to be hungry");
+    check(crowdedButFed.overcrowded && !crowdedButFed.raiding, "crowding alone is not enough — they have to be hungry");
 
     const ecology::OverflowState spill =
         ecology::evaluateOverflow(math::Fixed32::fromInt(98), math::Fixed32::fromInt(100), starving, 8u, params);

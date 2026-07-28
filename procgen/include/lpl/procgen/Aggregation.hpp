@@ -40,13 +40,13 @@ namespace lpl::procgen {
  * @brief Grid, seed and growth budget.
  */
 struct DlaParams {
-    core::u32 width{64u};          ///< Map width.
-    core::u32 depth{64u};          ///< Map depth.
-    core::u32 seed{1337u};         ///< Determinism anchor.
-    core::u32 particles{600u};     ///< Particles to release.
+    core::u32 width{64u};                 ///< Map width.
+    core::u32 depth{64u};                 ///< Map depth.
+    core::u32 seed{1337u};                ///< Determinism anchor.
+    core::u32 particles{600u};            ///< Particles to release.
     core::u32 maxStepsPerParticle{2000u}; ///< Walk budget before a particle is abandoned.
-    core::u32 spawnMargin{3u};     ///< Cells beyond the cluster's extent a particle spawns.
-    core::u32 thickness{0u};       ///< Radius carved around each stuck particle; 0 keeps the fractal thin.
+    core::u32 spawnMargin{3u};            ///< Cells beyond the cluster's extent a particle spawns.
+    core::u32 thickness{0u};              ///< Radius carved around each stuck particle; 0 keeps the fractal thin.
 };
 
 /**
@@ -54,10 +54,10 @@ struct DlaParams {
  * @brief What the growth achieved.
  */
 struct DlaReport {
-    core::u32 stuck{0u};      ///< Particles that found the cluster.
-    core::u32 abandoned{0u};  ///< Particles that exhausted their budget.
-    core::u32 openCells{0u};  ///< Cells the cluster occupies.
-    core::u32 extent{0u};     ///< Largest distance from the seed reached.
+    core::u32 stuck{0u};     ///< Particles that found the cluster.
+    core::u32 abandoned{0u}; ///< Particles that exhausted their budget.
+    core::u32 openCells{0u}; ///< Cells the cluster occupies.
+    core::u32 extent{0u};    ///< Largest distance from the seed reached.
 };
 
 /**

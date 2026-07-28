@@ -150,8 +150,7 @@ WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe)
     result.stateSignature = foldWorldState(registry);
 
     const bool gateOk = !recipe.checkPlayability || builder.gatePassed();
-    result.ok =
-        (result.entityCount > 0u && result.stateSignature != kFnv1aOffsetBasis && gateOk) ? 1u : 0u;
+    result.ok = (result.entityCount > 0u && result.stateSignature != kFnv1aOffsetBasis && gateOk) ? 1u : 0u;
     return result;
 }
 

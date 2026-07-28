@@ -270,8 +270,8 @@ int main()
                         continue;
                     ++total;
                     const core::u16 here = diagram.regions.at(x, z);
-                    const bool horizontal = diagram.regions.at(x - 1u, z) != here ||
-                                            diagram.regions.at(x + 1u, z) != here;
+                    const bool horizontal =
+                        diagram.regions.at(x - 1u, z) != here || diagram.regions.at(x + 1u, z) != here;
                     const bool vertical =
                         diagram.regions.at(x, z - 1u) != here || diagram.regions.at(x, z + 1u) != here;
                     // A cell on a straight run of border differs on one axis only.

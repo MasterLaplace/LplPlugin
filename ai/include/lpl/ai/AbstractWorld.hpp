@@ -73,10 +73,10 @@ struct AbstractCreature {
  * @brief A node of the world graph, and what the budget needs to know about it.
  */
 struct AbstractRoom {
-    lpl::pmr::vector<RoomId> exits; ///< Adjacent rooms.
-    core::u32 lastVisitTick{0u};    ///< When a focus was last here.
-    core::u32 changesSinceVisit{0u};///< Room transitions elsewhere since then.
-    bool realised{false};           ///< Whether this room's creatures have bodies.
+    lpl::pmr::vector<RoomId> exits;  ///< Adjacent rooms.
+    core::u32 lastVisitTick{0u};     ///< When a focus was last here.
+    core::u32 changesSinceVisit{0u}; ///< Room transitions elsewhere since then.
+    bool realised{false};            ///< Whether this room's creatures have bodies.
 };
 
 /**
@@ -84,11 +84,11 @@ struct AbstractRoom {
  * @brief The constants of the deletion score, and the cap it enforces.
  */
 struct RealizationBudget {
-    core::u32 maxRealisedRooms{6u};    ///< Rooms allowed a body at once.
-    core::u32 changeWeight{4u};        ///< @f$k@f$: weight of room changes since the visit.
-    core::u32 adjacentBonus{100u};     ///< Protection for a room next to the focus.
-    core::u32 predictedBonus{200u};    ///< Protection for the room the focus is heading to.
-    core::u32 unlikelyPenalty{20u};    ///< Extra ageing for a room the focus is moving away from.
+    core::u32 maxRealisedRooms{6u}; ///< Rooms allowed a body at once.
+    core::u32 changeWeight{4u};     ///< @f$k@f$: weight of room changes since the visit.
+    core::u32 adjacentBonus{100u};  ///< Protection for a room next to the focus.
+    core::u32 predictedBonus{200u}; ///< Protection for the room the focus is heading to.
+    core::u32 unlikelyPenalty{20u}; ///< Extra ageing for a room the focus is moving away from.
 };
 
 /**

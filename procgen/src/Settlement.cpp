@@ -68,8 +68,7 @@ bool facesRoad(const SettlementMap &map, core::u32 x, core::u32 z)
     {
         const core::i32 nx = static_cast<core::i32>(x) + kNeighbor4X[n];
         const core::i32 nz = static_cast<core::i32>(z) + kNeighbor4Z[n];
-        if (map.contains(nx, nz) &&
-            isWalkableCell(map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz))))
+        if (map.contains(nx, nz) && isWalkableCell(map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz))))
             return true;
     }
     return false;

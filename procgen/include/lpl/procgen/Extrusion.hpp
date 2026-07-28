@@ -44,9 +44,9 @@ namespace lpl::procgen {
  * order a mesher, a renderer or a collision builder walks it in.
  */
 struct VoxelVolume {
-    core::u32 width{0u};   ///< Cells along X.
-    core::u32 depth{0u};   ///< Cells along Z.
-    core::u32 levels{0u};  ///< Cells along Y.
+    core::u32 width{0u};              ///< Cells along X.
+    core::u32 depth{0u};              ///< Cells along Z.
+    core::u32 levels{0u};             ///< Cells along Y.
     lpl::pmr::vector<core::u8> cells; ///< Material per voxel; 0 means empty.
 
     /// @return Flat index of (@p x, @p y, @p z).
@@ -67,10 +67,10 @@ struct VoxelVolume {
  * @brief How a plan gains height.
  */
 struct ExtrusionParams {
-    core::u32 levels{8u};        ///< Vertical extent of the volume.
-    core::u32 baseLevel{0u};     ///< Level the ground starts at.
-    core::f32 heightScale{0.25f};///< World units per level, when extruding a heightfield.
-    bool solidBelow{true};       ///< Fill every level under the surface, not just the surface itself.
+    core::u32 levels{8u};         ///< Vertical extent of the volume.
+    core::u32 baseLevel{0u};      ///< Level the ground starts at.
+    core::f32 heightScale{0.25f}; ///< World units per level, when extruding a heightfield.
+    bool solidBelow{true};        ///< Fill every level under the surface, not just the surface itself.
 };
 
 /**

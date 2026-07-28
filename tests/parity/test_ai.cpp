@@ -27,8 +27,8 @@
 #include <lpl/ai/Social.hpp>
 #include <lpl/ai/SpringBody.hpp>
 #include <lpl/ai/StigmergyField.hpp>
-#include <lpl/procgen/FixedMath.hpp>
 #include <lpl/ai/Swarm.hpp>
+#include <lpl/procgen/FixedMath.hpp>
 
 #include <cstdio>
 
@@ -140,7 +140,14 @@ void testEncirclementEmerges()
     struct Hunter {
         core::u32 x, z;
     };
-    Hunter hunters[6] = {{2u, 20u}, {3u, 19u}, {2u, 21u}, {4u, 20u}, {3u, 21u}, {4u, 19u}};
+    Hunter hunters[6] = {
+        {2u, 20u},
+        {3u, 19u},
+        {2u, 21u},
+        {4u, 20u},
+        {3u, 21u},
+        {4u, 19u}
+    };
 
     for (core::u32 tick = 0u; tick < 300u; ++tick)
     {
@@ -412,9 +419,8 @@ void testRealizationBudget()
         movedTotal += world.tickAbstract(tick);
     }
 
-    std::printf("    %u ticks over budget, %u abstract migrations, %u/%u creatures realised at the end\n",
-                overBudget, movedTotal, world.realisedCreatureCount(),
-                static_cast<core::u32>(world.creatures().size()));
+    std::printf("    %u ticks over budget, %u abstract migrations, %u/%u creatures realised at the end\n", overBudget,
+                movedTotal, world.realisedCreatureCount(), static_cast<core::u32>(world.creatures().size()));
 
     check(overBudget == 0u, "the room budget is never exceeded");
     check(movedTotal > 0u, "creatures migrate while abstract — the world does not wait");
@@ -455,8 +461,7 @@ void testRelationshipsAndAffordances()
     for (core::u32 i = 0u; i < 5u; ++i)
         (void) tracker.tick(32u, 32u, math::Fixed32::fromFloat(0.9f));
     (void) tracker.opinion(1u, 2u, opinion);
-    std::printf("    remembered position drifted from %u to %u while out of sight\n", firstCell,
-                opinion.lastSeenCell);
+    std::printf("    remembered position drifted from %u to %u while out of sight\n", firstCell, opinion.lastSeenCell);
     check(opinion.lastSeenCell != firstCell, "a lost target is extrapolated, not frozen");
     check(opinion.confidence < math::Fixed32::one(), "confidence decays out of sight");
 
@@ -513,14 +518,14 @@ void testSpringBodyStaysBounded()
     check(peakStrain < math::Fixed32::fromInt(100), "the body's energy stays bounded");
 
     // Two-bone IK: reach, and refuse honestly when it cannot.
-    const ai::TwoBoneSolution near = ai::solveTwoBone(math::Fixed32::zero(), math::Fixed32::zero(),
-                                                      math::Fixed32::fromInt(3), math::Fixed32::zero(),
-                                                      math::Fixed32::fromInt(2), math::Fixed32::fromInt(2), false);
+    const ai::TwoBoneSolution near =
+        ai::solveTwoBone(math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::fromInt(3), math::Fixed32::zero(),
+                         math::Fixed32::fromInt(2), math::Fixed32::fromInt(2), false);
     check(near.reachable, "a target inside the limb's reach is solved");
 
-    const ai::TwoBoneSolution far = ai::solveTwoBone(math::Fixed32::zero(), math::Fixed32::zero(),
-                                                     math::Fixed32::fromInt(9), math::Fixed32::zero(),
-                                                     math::Fixed32::fromInt(2), math::Fixed32::fromInt(2), false);
+    const ai::TwoBoneSolution far =
+        ai::solveTwoBone(math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::fromInt(9), math::Fixed32::zero(),
+                         math::Fixed32::fromInt(2), math::Fixed32::fromInt(2), false);
     check(!far.reachable, "an unreachable target is reported rather than silently clamped");
 
     // The knee must actually lie at the right distance from both ends, or the

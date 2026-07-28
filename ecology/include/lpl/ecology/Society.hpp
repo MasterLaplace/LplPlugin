@@ -115,8 +115,7 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
  * @param stream  Random stream state.
  * @return What happened as a result.
  */
-PackEvents killMember(PackMember *members, core::u32 count, core::u32 id, const PackParams &params,
-                      core::u32 &stream);
+PackEvents killMember(PackMember *members, core::u32 count, core::u32 id, const PackParams &params, core::u32 &stream);
 
 /**
  * @struct IslandParams

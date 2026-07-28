@@ -117,8 +117,8 @@ int main()
     check(clientBaked.biomeSignature == documentBaked.biomeSignature, "both consumers fold the same biomes");
 
     // ── The emitted block round-trips ───────────────────────────────────────
-    const std::string emitted = "{\"format\":\"lplscene/1\",\"procedural\":" + editor::emitSceneRecipe(fromDocument) +
-                                ",\"entities\":[]}";
+    const std::string emitted =
+        "{\"format\":\"lplscene/1\",\"procedural\":" + editor::emitSceneRecipe(fromDocument) + ",\"entities\":[]}";
     procgen::WorldRecipe reparsed{};
     const auto reparsedOk = editor::parseSceneRecipe(emitted, reparsed);
     ecs::Registry reparsedWorld;

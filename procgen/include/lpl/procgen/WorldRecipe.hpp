@@ -73,14 +73,14 @@ inline constexpr core::u32 kMaxScatterRules = 4u;
  * with a different answer — see lpl/pack/GamePack.hpp.)
  */
 struct WorldRecipe {
-    core::u32 seed{1337u};   ///< Master seed; every pass derives its own stream.
-    core::u32 width{24u};    ///< Terrain cells along X.
-    core::u32 depth{24u};    ///< Terrain cells along Z.
-    core::f32 cellSize{0.5f};///< World units between two cells.
+    core::u32 seed{1337u};    ///< Master seed; every pass derives its own stream.
+    core::u32 width{24u};     ///< Terrain cells along X.
+    core::u32 depth{24u};     ///< Terrain cells along Z.
+    core::f32 cellSize{0.5f}; ///< World units between two cells.
 
-    NoiseParams terrain{};        ///< Base terrain layer.
-    core::f32 heightLow{-8.0f};   ///< Normalised range floor, when @ref normalizeTerrain.
-    core::f32 heightHigh{16.0f};  ///< Normalised range ceiling.
+    NoiseParams terrain{};       ///< Base terrain layer.
+    core::f32 heightLow{-8.0f};  ///< Normalised range floor, when @ref normalizeTerrain.
+    core::f32 heightHigh{16.0f}; ///< Normalised range ceiling.
 
     ThermalErosionParams thermal{};     ///< Talus relaxation.
     HydraulicErosionParams hydraulic{}; ///< Capacity-limited water erosion.
@@ -96,15 +96,15 @@ struct WorldRecipe {
     ScatterRule scatter[kMaxScatterRules]{}; ///< Prop rules, first @ref scatterCount used.
     core::u32 scatterCount{0u};              ///< Rules actually in play.
 
-    bool normalizeTerrain{true}; ///< Rescale the field before any absolute threshold reads it.
-    bool erodeTerrain{true};     ///< Run both erosion models.
-    bool carveRivers{true};      ///< Route drainage and cut river beds.
-    bool classifyBiomes{true};   ///< Compute moisture and classify.
-    bool carveCaves{true};       ///< Generate the underground layer.
-    bool placeSettlement{true};  ///< Lay a town onto the terrain.
-    bool growRoads{true};        ///< Grow a road network over it.
-    bool materializeGround{true};///< Emit one entity per ground cell (off: props only).
-    bool checkPlayability{true}; ///< Judge the underground against @ref gate.
+    bool normalizeTerrain{true};  ///< Rescale the field before any absolute threshold reads it.
+    bool erodeTerrain{true};      ///< Run both erosion models.
+    bool carveRivers{true};       ///< Route drainage and cut river beds.
+    bool classifyBiomes{true};    ///< Compute moisture and classify.
+    bool carveCaves{true};        ///< Generate the underground layer.
+    bool placeSettlement{true};   ///< Lay a town onto the terrain.
+    bool growRoads{true};         ///< Grow a road network over it.
+    bool materializeGround{true}; ///< Emit one entity per ground cell (off: props only).
+    bool checkPlayability{true};  ///< Judge the underground against @ref gate.
 };
 
 /**
@@ -123,19 +123,19 @@ struct WorldRecipe {
  * diverge between targets actually happens.
  */
 struct WorldRecipeResult {
-    core::u32 entityCount{0u};      ///< Entities materialised by all passes.
-    core::u32 stateSignature{0u};   ///< FNV-1a fold of authoritative Fixed32 entity state.
-    core::u32 heightSignature{0u};  ///< FNV-1a fold of the final height field.
-    core::u32 biomeSignature{0u};   ///< FNV-1a fold of the biome map.
-    core::u32 riverCells{0u};       ///< Cells carved as river.
-    core::u32 roadCells{0u};        ///< Cells the road network occupies.
-    core::u32 lakeCells{0u};        ///< Cells holding standing water.
-    core::u32 dungeonFloor{0u};     ///< Open cells in the underground layer.
-    core::u32 settlementPlots{0u};  ///< Building footprints laid out.
-    core::u32 gateReachable{0u};    ///< 1 if the underground's goal is reachable.
-    core::u32 gateVisited{0u};      ///< Cells the gate's flood actually reached.
-    core::u32 gatePathLength{0u};   ///< Steps from entrance to exit.
-    core::u32 ok{0u};               ///< 1 if the world is non-empty AND passes its gate.
+    core::u32 entityCount{0u};     ///< Entities materialised by all passes.
+    core::u32 stateSignature{0u};  ///< FNV-1a fold of authoritative Fixed32 entity state.
+    core::u32 heightSignature{0u}; ///< FNV-1a fold of the final height field.
+    core::u32 biomeSignature{0u};  ///< FNV-1a fold of the biome map.
+    core::u32 riverCells{0u};      ///< Cells carved as river.
+    core::u32 roadCells{0u};       ///< Cells the road network occupies.
+    core::u32 lakeCells{0u};       ///< Cells holding standing water.
+    core::u32 dungeonFloor{0u};    ///< Open cells in the underground layer.
+    core::u32 settlementPlots{0u}; ///< Building footprints laid out.
+    core::u32 gateReachable{0u};   ///< 1 if the underground's goal is reachable.
+    core::u32 gateVisited{0u};     ///< Cells the gate's flood actually reached.
+    core::u32 gatePathLength{0u};  ///< Steps from entrance to exit.
+    core::u32 ok{0u};              ///< 1 if the world is non-empty AND passes its gate.
 };
 
 /**

@@ -53,9 +53,9 @@ enum class Attitude : core::u8 {
  * @brief What A thinks of B, and how sure it is.
  */
 struct Opinion {
-    core::u32 subject{0u};    ///< Who this is about.
+    core::u32 subject{0u}; ///< Who this is about.
     Attitude attitude{Attitude::Ignores};
-    math::Fixed32 intensity{};///< Strength of the attitude, in [0, 1].
+    math::Fixed32 intensity{}; ///< Strength of the attitude, in [0, 1].
 
     /**
      * @brief How much the model is still trusted, in [0, 1].

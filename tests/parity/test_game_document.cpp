@@ -93,8 +93,7 @@ int main()
     const editor::GameDocument &game = *parsed;
 
     // ── Stage 1: metadata ───────────────────────────────────────────────────
-    check(game.metadata.title == "Reference Game" && game.metadata.version == "0.1.0",
-          "game metadata is read");
+    check(game.metadata.title == "Reference Game" && game.metadata.version == "0.1.0", "game metadata is read");
     check(game.metadata.online && game.metadata.maxPlayers == 64u && game.metadata.maxInstances == 8u,
           "server-facing metadata is read");
     check(game.metadata.profile == "mmorpg", "the netcode profile is carried by name");
@@ -111,8 +110,7 @@ int main()
     // ── Stage 3: ordered systems ────────────────────────────────────────────
     check(lobby.systems.size() == 3u && lobby.systems[0] == "position" && lobby.systems[2] == "render",
           "the system list keeps its declaration ORDER");
-    check(arena.systems.size() == 4u && arena.systems[1] == "handleCollision",
-          "each scene has its own system list");
+    check(arena.systems.size() == 4u && arena.systems[1] == "handleCollision", "each scene has its own system list");
 
     // ── Stage 2: named resources, scoped by consumer ────────────────────────
     check(lobby.resources.size() == 3u, "the flat resource table is read");
@@ -179,8 +177,7 @@ int main()
     // ── Backward compatibility ──────────────────────────────────────────────
     const auto legacy = editor::parseGameDocument(kLegacy);
     check(legacy.has_value(), "a document with no scenes array still parses");
-    check(legacy->scenes.size() == 1u && legacy->scenes[0].name == "main",
-          "it is treated as one implicit scene");
+    check(legacy->scenes.size() == 1u && legacy->scenes[0].name == "main", "it is treated as one implicit scene");
     ecs::Registry legacyWorld;
     const auto legacyCount = editor::instantiateScene(legacy->scenes[0], legacyWorld);
     check(legacyCount.has_value() && legacyCount.value() == 3u, "the implicit scene instantiates its entities");

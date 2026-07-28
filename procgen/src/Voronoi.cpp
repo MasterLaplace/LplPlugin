@@ -108,9 +108,9 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
     // the block by however many coarse cells the displacement can cross restores
     // the guarantee.
     const core::i32 warpReach =
-        warpStrength.raw() <= 0
-            ? 0
-            : static_cast<core::i32>(warpStrength.toInt()) / static_cast<core::i32>(params.cellSize) + 1;
+        warpStrength.raw() <= 0 ?
+            0 :
+            static_cast<core::i32>(warpStrength.toInt()) / static_cast<core::i32>(params.cellSize) + 1;
     const core::i32 reach = 1 + warpReach;
 
     for (core::u32 z = 0u; z < params.depth; ++z)
@@ -193,9 +193,9 @@ Grid<math::Fixed32> regionDistanceField(const VoronoiDiagram &diagram, DistanceM
             const core::u16 region = diagram.regions.at(x, z);
             if (region == kNoRegion || region >= diagram.sites.size())
                 continue;
-            field.at(x, z) = metricDistance(math::Fixed32::fromInt(static_cast<core::i32>(x)),
-                                            math::Fixed32::fromInt(static_cast<core::i32>(z)),
-                                            diagram.sites[region], metric);
+            field.at(x, z) =
+                metricDistance(math::Fixed32::fromInt(static_cast<core::i32>(x)),
+                               math::Fixed32::fromInt(static_cast<core::i32>(z)), diagram.sites[region], metric);
         }
     }
     return field;

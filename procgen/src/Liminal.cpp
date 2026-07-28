@@ -22,15 +22,15 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 /// How each zone shapes its partition. This table IS the difference between the
 /// four zones — everything downstream reads it rather than testing the zone.
 struct ZoneShape {
-    core::u32 minLeafSize;  ///< Smallest room the partition allows.
-    core::u32 corridorWidth;///< Corridor thickness.
-    core::f32 erodeScale;   ///< Multiplier on the erosion strength.
-    core::f32 mergeScale;   ///< Multiplier on the wall-dissolution strength.
+    core::u32 minLeafSize;   ///< Smallest room the partition allows.
+    core::u32 corridorWidth; ///< Corridor thickness.
+    core::f32 erodeScale;    ///< Multiplier on the erosion strength.
+    core::f32 mergeScale;    ///< Multiplier on the wall-dissolution strength.
 };
 
 constexpr ZoneShape kZoneShapes[static_cast<core::u32>(LiminalZone::Count)] = {
-    {5u, 1u, 1.30f, 0.40f},  // Corridor: small rooms, thin links, heavily chewed.
-    {8u, 1u, 0.70f, 1.00f},  // Office: the uncanny baseline — regular, lightly merged.
+    {5u,  1u, 1.30f, 0.40f}, // Corridor: small rooms, thin links, heavily chewed.
+    {8u,  1u, 0.70f, 1.00f}, // Office: the uncanny baseline — regular, lightly merged.
     {18u, 3u, 0.50f, 1.60f}, // Hall: few big rooms, walls mostly dissolved.
     {13u, 2u, 0.35f, 1.20f}, // Pool: wide, shallow partitions, barely eroded.
 };
@@ -180,10 +180,9 @@ LiminalZoneMap zoneMap(const LiminalParams &params)
     {
         for (core::u32 x = 0u; x < params.width; ++x)
         {
-            const math::Fixed32 n =
-                ValueNoise2D::fbm(math::Fixed32::fromInt(static_cast<core::i32>(x)) * frequency,
-                                  math::Fixed32::fromInt(static_cast<core::i32>(z)) * frequency, params.zoneOctaves,
-                                  params.zoneSeed);
+            const math::Fixed32 n = ValueNoise2D::fbm(math::Fixed32::fromInt(static_cast<core::i32>(x)) * frequency,
+                                                      math::Fixed32::fromInt(static_cast<core::i32>(z)) * frequency,
+                                                      params.zoneOctaves, params.zoneSeed);
             // [-1, 1] into one of four bands, by quarters. Even bands rather than
             // tuned ones: a zone that covers a tenth of every map is a zone a
             // player will never knowingly visit.
@@ -236,9 +235,9 @@ LiminalSpace generateLiminalChunk(const LiminalParams &params, ChunkCoord coord)
         {
             const core::i32 worldX = originX + static_cast<core::i32>(x);
             const core::i32 worldZ = originZ + static_cast<core::i32>(z);
-            const math::Fixed32 n = ValueNoise2D::fbm(math::Fixed32::fromInt(worldX) * frequency,
-                                                      math::Fixed32::fromInt(worldZ) * frequency, params.zoneOctaves,
-                                                      params.zoneSeed);
+            const math::Fixed32 n =
+                ValueNoise2D::fbm(math::Fixed32::fromInt(worldX) * frequency,
+                                  math::Fixed32::fromInt(worldZ) * frequency, params.zoneOctaves, params.zoneSeed);
             const math::Fixed32 unit = (n + math::Fixed32::one()) * math::Fixed32::half();
             core::i32 band = (unit * math::Fixed32::fromInt(static_cast<core::i32>(LiminalZone::Count))).toInt();
             if (band < 0)

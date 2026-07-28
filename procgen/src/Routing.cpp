@@ -109,9 +109,9 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
     const math::Fixed32 slopeCost = math::Fixed32::fromFloat(params.slopePenalty);
     const math::Fixed32 waterCost = math::Fixed32::fromFloat(params.waterPenalty);
     const math::Fixed32 waterLevel = math::Fixed32::fromFloat(params.waterLevel);
-    const math::Fixed32 discount = math::Fixed32::fromFloat(params.reuseDiscount < 0.0f    ? 0.0f
-                                                            : params.reuseDiscount > 1.0f ? 1.0f
-                                                                                          : params.reuseDiscount);
+    const math::Fixed32 discount = math::Fixed32::fromFloat(params.reuseDiscount < 0.0f ? 0.0f :
+                                                            params.reuseDiscount > 1.0f ? 1.0f :
+                                                                                          params.reuseDiscount);
     const bool hasExisting =
         existing != nullptr && existing->width() == field.width() && existing->depth() == field.depth();
 
@@ -237,9 +237,9 @@ core::u32 connectPlaces(const Heightfield &field, const lpl::pmr::vector<core::u
     const math::Fixed32 slopeCost = math::Fixed32::fromFloat(params.slopePenalty);
     const math::Fixed32 waterCost = math::Fixed32::fromFloat(params.waterPenalty);
     const math::Fixed32 waterLevel = math::Fixed32::fromFloat(params.waterLevel);
-    const math::Fixed32 discount = math::Fixed32::fromFloat(params.reuseDiscount < 0.0f    ? 0.0f
-                                                            : params.reuseDiscount > 1.0f ? 1.0f
-                                                                                          : params.reuseDiscount);
+    const math::Fixed32 discount = math::Fixed32::fromFloat(params.reuseDiscount < 0.0f ? 0.0f :
+                                                            params.reuseDiscount > 1.0f ? 1.0f :
+                                                                                          params.reuseDiscount);
 
     // Grow one tree: the first place is in, and each round attaches whichever
     // outsider is cheapest to reach from anything already connected. Prim's

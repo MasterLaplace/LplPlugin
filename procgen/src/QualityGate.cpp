@@ -250,8 +250,7 @@ DistanceMap computeFleeMap(const DungeonMap &map, const DistanceMap &danger, cor
     return computeDistanceMapFrom(map, havens);
 }
 
-LevelQuality evaluateLevel(const DungeonMap &map, core::u32 startX, core::u32 startZ, core::u32 goalX,
-                           core::u32 goalZ)
+LevelQuality evaluateLevel(const DungeonMap &map, core::u32 startX, core::u32 startZ, core::u32 goalX, core::u32 goalZ)
 {
     LevelQuality quality;
     if (map.empty())

@@ -43,31 +43,21 @@ constexpr ClimateVector vec(core::f32 t, core::f32 m, core::f32 c, core::f32 e, 
 // rather than as another consequence of altitude.
 //                                            T     M     C     E     D     W
 constexpr BiomeProfile kProfiles[] = {
-    {BiomeId::Snow,       vec(0.05f, 0.50f, 0.50f, 0.50f, 0.0f, 0.50f),
-                          vec(1.00f, 0.20f, 0.00f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Tundra,     vec(0.20f, 0.25f, 0.50f, 0.50f, 0.0f, 0.50f),
-                          vec(1.00f, 0.80f, 0.00f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Taiga,      vec(0.25f, 0.75f, 0.50f, 0.50f, 0.0f, 0.50f),
-                          vec(1.00f, 0.80f, 0.00f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Rock,       vec(0.35f, 0.15f, 0.50f, 0.15f, 0.0f, 0.80f),
-                          vec(0.40f, 0.60f, 0.00f, 0.80f, 0.0f, 0.30f)},
-    {BiomeId::Desert,     vec(0.85f, 0.12f, 0.85f, 0.50f, 0.0f, 0.50f),
-                          vec(1.00f, 1.00f, 0.40f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Savanna,    vec(0.80f, 0.45f, 0.60f, 0.50f, 0.0f, 0.50f),
-                          vec(1.00f, 0.90f, 0.20f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Snow,       vec(0.05f, 0.50f, 0.50f, 0.50f, 0.0f, 0.50f), vec(1.00f, 0.20f, 0.00f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Tundra,     vec(0.20f, 0.25f, 0.50f, 0.50f, 0.0f, 0.50f), vec(1.00f, 0.80f, 0.00f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Taiga,      vec(0.25f, 0.75f, 0.50f, 0.50f, 0.0f, 0.50f), vec(1.00f, 0.80f, 0.00f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Rock,       vec(0.35f, 0.15f, 0.50f, 0.15f, 0.0f, 0.80f), vec(0.40f, 0.60f, 0.00f, 0.80f, 0.0f, 0.30f)},
+    {BiomeId::Desert,     vec(0.85f, 0.12f, 0.85f, 0.50f, 0.0f, 0.50f), vec(1.00f, 1.00f, 0.40f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Savanna,    vec(0.80f, 0.45f, 0.60f, 0.50f, 0.0f, 0.50f), vec(1.00f, 0.90f, 0.20f, 0.00f, 0.0f, 0.00f)},
     // Grassland's moisture weight is deliberately the lowest of the temperate
     // band. It is the corridor biome: without a profile that spans a WIDE
     // moisture range at middling temperature, a dry cell warming from tundra to
     // desert has nothing to pass through, and the map grows a seam where a
     // steppe belongs.
-    {BiomeId::Grassland,  vec(0.50f, 0.40f, 0.50f, 0.50f, 0.0f, 0.50f),
-                          vec(0.90f, 0.55f, 0.00f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Forest,     vec(0.50f, 0.75f, 0.50f, 0.50f, 0.0f, 0.50f),
-                          vec(0.90f, 1.00f, 0.00f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Rainforest, vec(0.90f, 0.88f, 0.25f, 0.50f, 0.0f, 0.50f),
-                          vec(1.00f, 1.00f, 0.30f, 0.00f, 0.0f, 0.00f)},
-    {BiomeId::Marsh,      vec(0.55f, 0.95f, 0.30f, 0.85f, 0.0f, 0.75f),
-                          vec(0.30f, 1.20f, 0.00f, 0.60f, 0.0f, 0.35f)},
+    {BiomeId::Grassland,  vec(0.50f, 0.40f, 0.50f, 0.50f, 0.0f, 0.50f), vec(0.90f, 0.55f, 0.00f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Forest,     vec(0.50f, 0.75f, 0.50f, 0.50f, 0.0f, 0.50f), vec(0.90f, 1.00f, 0.00f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Rainforest, vec(0.90f, 0.88f, 0.25f, 0.50f, 0.0f, 0.50f), vec(1.00f, 1.00f, 0.30f, 0.00f, 0.0f, 0.00f)},
+    {BiomeId::Marsh,      vec(0.55f, 0.95f, 0.30f, 0.85f, 0.0f, 0.75f), vec(0.30f, 1.20f, 0.00f, 0.60f, 0.0f, 0.35f)},
 };
 
 constexpr core::u32 kProfileCount = static_cast<core::u32>(sizeof(kProfiles) / sizeof(kProfiles[0]));

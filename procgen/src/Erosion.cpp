@@ -217,9 +217,9 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
                     const math::Fixed32 fraction = drops[n] / totalDrop;
                     const math::Fixed32 movedWater = movable * fraction;
                     // Sediment travels with the water that carries it.
-                    const math::Fixed32 movedSediment =
-                        water.at(x, z).raw() != 0 ? sediment.at(x, z) * (movedWater / water.at(x, z))
-                                                  : math::Fixed32::zero();
+                    const math::Fixed32 movedSediment = water.at(x, z).raw() != 0 ?
+                                                            sediment.at(x, z) * (movedWater / water.at(x, z)) :
+                                                            math::Fixed32::zero();
 
                     waterDelta.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) =
                         waterDelta.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) + movedWater;

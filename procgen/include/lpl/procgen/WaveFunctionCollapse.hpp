@@ -66,9 +66,9 @@ inline constexpr core::u8 kNoTile = 0xFFu;
  * `tile`". Directions follow @ref kNeighbor4X / @ref kNeighbor4Z order.
  */
 struct TileSet {
-    core::u32 tileCount{0u};              ///< Number of tiles, <= kMaxTiles.
-    lpl::pmr::vector<core::u64> allowed;  ///< tileCount * 4 adjacency masks.
-    lpl::pmr::vector<core::u32> weight;   ///< Relative frequency per tile (0 disables it).
+    core::u32 tileCount{0u};             ///< Number of tiles, <= kMaxTiles.
+    lpl::pmr::vector<core::u64> allowed; ///< tileCount * 4 adjacency masks.
+    lpl::pmr::vector<core::u32> weight;  ///< Relative frequency per tile (0 disables it).
 
     /**
      * @brief Allocates a set of @p count tiles with no adjacency permitted yet.
@@ -105,11 +105,11 @@ struct TileSet {
  * @brief Grid size, seed, and how hard to try.
  */
 struct WfcParams {
-    core::u32 width{32u};      ///< Cells along X.
-    core::u32 depth{32u};      ///< Cells along Z.
-    core::u32 seed{1337u};     ///< Determinism anchor.
-    core::u32 maxAttempts{8u}; ///< Full restarts allowed after a contradiction.
-    core::u32 localRepairRadius{3u}; ///< Cells cleared around a contradiction before restarting (0 disables).
+    core::u32 width{32u};             ///< Cells along X.
+    core::u32 depth{32u};             ///< Cells along Z.
+    core::u32 seed{1337u};            ///< Determinism anchor.
+    core::u32 maxAttempts{8u};        ///< Full restarts allowed after a contradiction.
+    core::u32 localRepairRadius{3u};  ///< Cells cleared around a contradiction before restarting (0 disables).
     core::u32 localRepairBudget{32u}; ///< Local repairs allowed per attempt.
 };
 
@@ -165,7 +165,13 @@ struct WfcResult {
 [[nodiscard]] TileSet makeTerrainTileSet();
 
 /// Tile indices of @ref makeTerrainTileSet.
-enum class TerrainTile : core::u8 { Water = 0, Sand, Grass, Forest, Rock };
+enum class TerrainTile : core::u8 {
+    Water = 0,
+    Sand,
+    Grass,
+    Forest,
+    Rock
+};
 
 } // namespace lpl::procgen
 

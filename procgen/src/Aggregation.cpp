@@ -39,8 +39,7 @@ bool touchesCluster(const DungeonMap &map, core::i32 x, core::i32 z)
     {
         const core::i32 nx = x + kNeighbor4X[n];
         const core::i32 nz = z + kNeighbor4Z[n];
-        if (map.contains(nx, nz) &&
-            map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) != DungeonCell::Wall)
+        if (map.contains(nx, nz) && map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) != DungeonCell::Wall)
             return true;
     }
     return false;
@@ -93,8 +92,7 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
     // extent: releasing from the far edge of a large map would spend nearly the
     // whole budget crossing empty rock before the cluster is even reachable.
     const core::u32 border = 1u;
-    const core::u32 maxRadius =
-        (params.width < params.depth ? params.width : params.depth) / 2u - border - 1u;
+    const core::u32 maxRadius = (params.width < params.depth ? params.width : params.depth) / 2u - border - 1u;
 
     for (core::u32 particle = 0u; particle < params.particles; ++particle)
     {
@@ -106,16 +104,27 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
 
         // Spawn on the ring at spawnRadius: pick a side, then a position along it.
         const core::u32 side = random.below(4u);
-        const core::i32 along =
-            random.range(-static_cast<core::i32>(spawnRadius), static_cast<core::i32>(spawnRadius));
+        const core::i32 along = random.range(-static_cast<core::i32>(spawnRadius), static_cast<core::i32>(spawnRadius));
         core::i32 x = centerX;
         core::i32 z = centerZ;
         switch (side)
         {
-        case 0u: x = centerX + static_cast<core::i32>(spawnRadius); z = centerZ + along; break;
-        case 1u: x = centerX - static_cast<core::i32>(spawnRadius); z = centerZ + along; break;
-        case 2u: x = centerX + along; z = centerZ + static_cast<core::i32>(spawnRadius); break;
-        default: x = centerX + along; z = centerZ - static_cast<core::i32>(spawnRadius); break;
+        case 0u:
+            x = centerX + static_cast<core::i32>(spawnRadius);
+            z = centerZ + along;
+            break;
+        case 1u:
+            x = centerX - static_cast<core::i32>(spawnRadius);
+            z = centerZ + along;
+            break;
+        case 2u:
+            x = centerX + along;
+            z = centerZ + static_cast<core::i32>(spawnRadius);
+            break;
+        default:
+            x = centerX + along;
+            z = centerZ - static_cast<core::i32>(spawnRadius);
+            break;
         }
 
         bool landed = false;
@@ -142,8 +151,7 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
             const core::u32 leash = spawnRadius + params.spawnMargin + 2u;
             if (nx < static_cast<core::i32>(border) || nz < static_cast<core::i32>(border) ||
                 nx >= static_cast<core::i32>(params.width - border) ||
-                nz >= static_cast<core::i32>(params.depth - border) ||
-                chebyshev(nx, nz, centerX, centerZ) > leash)
+                nz >= static_cast<core::i32>(params.depth - border) || chebyshev(nx, nz, centerX, centerZ) > leash)
                 continue;
 
             x = nx;

@@ -46,10 +46,10 @@ namespace lpl::ai {
 struct BoidParams {
     math::Fixed32 separationRadius{math::Fixed32::fromRaw(2 << 16)}; ///< Below this, push apart.
     math::Fixed32 neighbourRadius{math::Fixed32::fromRaw(6 << 16)};  ///< Beyond this, ignore.
-    core::f32 separationWeight{1.5f}; ///< Avoiding overlap. The strongest, deliberately.
-    core::f32 alignmentWeight{0.6f};  ///< Matching the local heading.
-    core::f32 cohesionWeight{0.3f};   ///< Drifting toward the local centre.
-    core::f32 maxSpeed{1.0f};         ///< Speed cap, so the flock cannot accelerate forever.
+    core::f32 separationWeight{1.5f};                                ///< Avoiding overlap. The strongest, deliberately.
+    core::f32 alignmentWeight{0.6f};                                 ///< Matching the local heading.
+    core::f32 cohesionWeight{0.3f};                                  ///< Drifting toward the local centre.
+    core::f32 maxSpeed{1.0f}; ///< Speed cap, so the flock cannot accelerate forever.
 };
 
 /**
@@ -108,7 +108,7 @@ struct AntParams {
     core::u32 explore16{2u};
 
     math::Fixed32 depositQuality{math::Fixed32::fromRaw(64 << 16)}; ///< @f$Q@f$ in @f$Q/L@f$.
-    core::u32 channel{0u}; ///< Which stigmergy channel carries the trail.
+    core::u32 channel{0u};                                          ///< Which stigmergy channel carries the trail.
 };
 
 /**

@@ -60,10 +60,10 @@ using DungeonMap = Grid<DungeonCell>;
  * @brief An axis-aligned rectangle carved out of the rock.
  */
 struct Room {
-    core::u32 x{0u};      ///< Left edge.
-    core::u32 z{0u};      ///< Top edge.
-    core::u32 width{0u};  ///< Extent along X.
-    core::u32 depth{0u};  ///< Extent along Z.
+    core::u32 x{0u};     ///< Left edge.
+    core::u32 z{0u};     ///< Top edge.
+    core::u32 width{0u}; ///< Extent along X.
+    core::u32 depth{0u}; ///< Extent along Z.
 
     /// @return Centre column (rounded down).
     [[nodiscard]] core::u32 centerX() const noexcept { return x + width / 2u; }
@@ -90,14 +90,14 @@ struct BspDungeonParams {
  * @brief Cellular-automaton cave carving (the 4-5 rule).
  */
 struct CaveParams {
-    core::u32 width{64u};          ///< Map width.
-    core::u32 depth{64u};          ///< Map depth.
-    core::u32 seed{1337u};         ///< Determinism anchor.
+    core::u32 width{64u};             ///< Map width.
+    core::u32 depth{64u};             ///< Map depth.
+    core::u32 seed{1337u};            ///< Determinism anchor.
     core::f32 fillProbability{0.45f}; ///< Chance a cell starts as rock.
-    core::u32 steps{5u};           ///< Automaton iterations.
-    core::u32 birthLimit{5u};      ///< Rock neighbours that turn floor to rock.
-    core::u32 survivalLimit{4u};   ///< Rock neighbours a rock cell needs to stay rock.
-    core::u32 minRegionSize{24u};  ///< Pockets smaller than this are filled in.
+    core::u32 steps{5u};              ///< Automaton iterations.
+    core::u32 birthLimit{5u};         ///< Rock neighbours that turn floor to rock.
+    core::u32 survivalLimit{4u};      ///< Rock neighbours a rock cell needs to stay rock.
+    core::u32 minRegionSize{24u};     ///< Pockets smaller than this are filled in.
 };
 
 /**
@@ -105,13 +105,13 @@ struct CaveParams {
  * @brief A digger on a confined random walk.
  */
 struct DrunkardParams {
-    core::u32 width{64u};        ///< Map width.
-    core::u32 depth{64u};        ///< Map depth.
-    core::u32 seed{1337u};       ///< Determinism anchor.
-    core::u32 diggers{4u};       ///< Independent walks.
+    core::u32 width{64u};           ///< Map width.
+    core::u32 depth{64u};           ///< Map depth.
+    core::u32 seed{1337u};          ///< Determinism anchor.
+    core::u32 diggers{4u};          ///< Independent walks.
     core::u32 stepsPerDigger{400u}; ///< Steps each walk takes.
-    core::f32 targetFill{0.4f};  ///< Stop early once this share is floor.
-    core::u32 margin{2u};        ///< Rock border the walk may not cross.
+    core::f32 targetFill{0.4f};     ///< Stop early once this share is floor.
+    core::u32 margin{2u};           ///< Rock border the walk may not cross.
 };
 
 /**

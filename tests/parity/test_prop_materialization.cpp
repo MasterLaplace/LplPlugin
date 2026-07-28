@@ -102,8 +102,8 @@ void testScatterLeavesExistingBodiesAlone()
 
     // Bodies first, exactly as a host does: create them once, then let the world be
     // (re)generated around them.
-    const ecs::ComponentId bodyIds[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity,
-                                        ecs::ComponentId::Mass, ecs::ComponentId::AABB};
+    const ecs::ComponentId bodyIds[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity, ecs::ComponentId::Mass,
+                                        ecs::ComponentId::AABB};
     const ecs::Archetype bodyArchetype{bodyIds};
 
     lpl::pmr::vector<ecs::EntityId> bodies;
@@ -174,8 +174,8 @@ void testScatterLeavesExistingBodiesAlone()
         if (positionOf(registry, bodies[i]).y.raw() != altitude.raw())
             ++moved;
     }
-    std::printf("    %u of %u bodies lost their mass, %u were moved\n", stolen,
-                static_cast<core::u32>(bodies.size()), moved);
+    std::printf("    %u of %u bodies lost their mass, %u were moved\n", stolen, static_cast<core::u32>(bodies.size()),
+                moved);
     check(stolen == 0u, "no body had its mass overwritten by a prop");
     check(moved == 0u, "no body was teleported onto a prop's position");
 
@@ -194,8 +194,8 @@ void testRegenerationIsStable()
     std::printf("a body survives many regenerations of the world around it\n");
 
     ecs::Registry registry;
-    const ecs::ComponentId bodyIds[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity,
-                                        ecs::ComponentId::Mass, ecs::ComponentId::AABB};
+    const ecs::ComponentId bodyIds[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity, ecs::ComponentId::Mass,
+                                        ecs::ComponentId::AABB};
     const ecs::Archetype bodyArchetype{bodyIds};
 
     lpl::pmr::vector<ecs::EntityId> bodies;

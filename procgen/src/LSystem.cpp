@@ -25,10 +25,10 @@ namespace {
  *
  * Values are round(cos/sin(k * 2pi/16) * 65536).
  */
-constexpr core::i32 kStepX[kTurtleDirections] = {65536,  60547,  46341,  25080,  0,      -25080, -46341, -60547,
-                                                 -65536, -60547, -46341, -25080, 0,      25080,  46341,  60547};
-constexpr core::i32 kStepZ[kTurtleDirections] = {0,      25080,  46341,  60547,  65536,  60547,  46341,  25080,
-                                                 0,      -25080, -46341, -60547, -65536, -60547, -46341, -25080};
+constexpr core::i32 kStepX[kTurtleDirections] = {65536,  60547,  46341,  25080,  0, -25080, -46341, -60547,
+                                                 -65536, -60547, -46341, -25080, 0, 25080,  46341,  60547};
+constexpr core::i32 kStepZ[kTurtleDirections] = {0, 25080,  46341,  60547,  65536,  60547,  46341,  25080,
+                                                 0, -25080, -46341, -60547, -65536, -60547, -46341, -25080};
 
 /// Turtle state, saved and restored by brackets.
 struct TurtleState {
@@ -113,8 +113,8 @@ bool leavesCanvas(const Grid<core::u8> &canvas, math::Fixed32 x, math::Fixed32 z
 }
 
 /// Draws a straight run between two points, painting every cell it crosses.
-void drawSegment(Grid<core::u8> &canvas, math::Fixed32 fromX, math::Fixed32 fromZ, math::Fixed32 toX,
-                 math::Fixed32 toZ, core::u32 thickness, core::u32 &outDrawn)
+void drawSegment(Grid<core::u8> &canvas, math::Fixed32 fromX, math::Fixed32 fromZ, math::Fixed32 toX, math::Fixed32 toZ,
+                 core::u32 thickness, core::u32 &outDrawn)
 {
     // Step along the longer axis so no cell is skipped — the integer-only
     // equivalent of a DDA, with the division done once.
@@ -232,9 +232,9 @@ HeadingField bakeHeadingField(core::u32 width, core::u32 depth, const lpl::pmr::
                 const core::u32 adz = static_cast<core::u32>(dz < 0 ? -dz : dz);
                 const core::u32 distance = adx > adz ? adx : adz;
 
-                math::Fixed32 weight = math::Fixed32::fromFloat(region.strength) -
-                                       math::Fixed32::fromFloat(region.falloff) *
-                                           math::Fixed32::fromInt(static_cast<core::i32>(distance));
+                math::Fixed32 weight =
+                    math::Fixed32::fromFloat(region.strength) -
+                    math::Fixed32::fromFloat(region.falloff) * math::Fixed32::fromInt(static_cast<core::i32>(distance));
                 if (weight.raw() <= 0)
                     continue;
 
@@ -294,9 +294,7 @@ core::u32 drawTurtle(const lpl::pmr::string &expanded, const TurtleParams &param
             state.z = nextZ;
             break;
         }
-        case '+':
-            state.direction = (state.direction + params.turnAmount) % kTurtleDirections;
-            break;
+        case '+': state.direction = (state.direction + params.turnAmount) % kTurtleDirections; break;
         case '-':
             // Add the complement rather than subtract: the heading is unsigned,
             // and wrapping through zero the other way would land far away.
@@ -318,8 +316,7 @@ core::u32 drawTurtle(const lpl::pmr::string &expanded, const TurtleParams &param
                 saved.pop_back();
             }
             break;
-        default:
-            break; // inert: a rewrite-only variable
+        default: break; // inert: a rewrite-only variable
         }
     }
     return drawn;
@@ -335,7 +332,8 @@ core::u32 drawTurtleInField(const lpl::pmr::string &expanded, const TurtleParams
 
     core::u32 drawn = 0u;
     const math::Fixed32 decay = math::Fixed32::fromFloat(params.stepDecay <= 0.0f ? 1.0f : params.stepDecay);
-    const math::Fixed32 conformity = math::Fixed32::fromFloat(conform < 0.0f ? 0.0f : (conform > 1.0f ? 1.0f : conform));
+    const math::Fixed32 conformity =
+        math::Fixed32::fromFloat(conform < 0.0f ? 0.0f : (conform > 1.0f ? 1.0f : conform));
 
     TurtleState state;
     state.x = math::Fixed32::fromInt(static_cast<core::i32>(params.startX));
@@ -372,11 +370,10 @@ core::u32 drawTurtleInField(const lpl::pmr::string &expanded, const TurtleParams
                 const core::u32 wanted =
                     field.at(static_cast<core::u32>(state.x.toInt()), static_cast<core::u32>(state.z.toInt()));
                 const math::Fixed32 own = math::Fixed32::one() - conformity;
-                heading = nearestHeading(
-                    math::Fixed32::fromRaw(kStepX[state.direction]) * own +
-                        math::Fixed32::fromRaw(kStepX[wanted]) * conformity,
-                    math::Fixed32::fromRaw(kStepZ[state.direction]) * own +
-                        math::Fixed32::fromRaw(kStepZ[wanted]) * conformity);
+                heading = nearestHeading(math::Fixed32::fromRaw(kStepX[state.direction]) * own +
+                                             math::Fixed32::fromRaw(kStepX[wanted]) * conformity,
+                                         math::Fixed32::fromRaw(kStepZ[state.direction]) * own +
+                                             math::Fixed32::fromRaw(kStepZ[wanted]) * conformity);
             }
 
             const math::Fixed32 stepX = math::Fixed32::fromRaw(kStepX[heading]) * state.step;

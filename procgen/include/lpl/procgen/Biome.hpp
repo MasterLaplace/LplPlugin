@@ -47,20 +47,20 @@ namespace lpl::procgen {
  * maps the id to a colour ramp already reads sensibly.
  */
 enum class BiomeId : core::u8 {
-    Ocean = 0,   ///< Below sea level.
-    Beach,       ///< Just above sea level.
-    Snow,        ///< High and cold.
-    Tundra,      ///< High, cold, dry.
-    Taiga,       ///< Cold, wet: conifer forest.
-    Rock,        ///< High and bare.
-    Desert,      ///< Hot and dry.
-    Savanna,     ///< Hot, moderately dry.
-    Grassland,   ///< Temperate, moderate moisture.
-    Forest,      ///< Temperate and wet.
-    Rainforest,  ///< Hot and very wet.
-    Marsh,       ///< Low and saturated.
-    Lake,        ///< Standing fresh water: a basin the drainage could not empty.
-    Count        ///< Number of biomes; never a classification result.
+    Ocean = 0,  ///< Below sea level.
+    Beach,      ///< Just above sea level.
+    Snow,       ///< High and cold.
+    Tundra,     ///< High, cold, dry.
+    Taiga,      ///< Cold, wet: conifer forest.
+    Rock,       ///< High and bare.
+    Desert,     ///< Hot and dry.
+    Savanna,    ///< Hot, moderately dry.
+    Grassland,  ///< Temperate, moderate moisture.
+    Forest,     ///< Temperate and wet.
+    Rainforest, ///< Hot and very wet.
+    Marsh,      ///< Low and saturated.
+    Lake,       ///< Standing fresh water: a basin the drainage could not empty.
+    Count       ///< Number of biomes; never a classification result.
 };
 
 /// Per-cell biome classification.
@@ -132,8 +132,8 @@ struct BiomeProfile {
  * @param lakes   Optional standing-water mask (see @ref lakeMask).
  * @return The biome map (empty when the inputs are empty or mismatched).
  */
-[[nodiscard]] BiomeMap classifyBiomes(const Heightfield &field, const ClimateField &climate,
-                                      const BiomeParams &params, const Grid<core::u8> *lakes = nullptr);
+[[nodiscard]] BiomeMap classifyBiomes(const Heightfield &field, const ClimateField &climate, const BiomeParams &params,
+                                      const Grid<core::u8> *lakes = nullptr);
 
 /**
  * @brief Which profile a single climate vector is nearest to.
@@ -193,8 +193,7 @@ void countBiomes(const BiomeMap &map, core::u32 *outCounts);
  */
 [[nodiscard]] constexpr bool isHabitable(BiomeId biome) noexcept
 {
-    return biome != BiomeId::Ocean && biome != BiomeId::Lake && biome != BiomeId::Rock &&
-           biome != BiomeId::Snow;
+    return biome != BiomeId::Ocean && biome != BiomeId::Lake && biome != BiomeId::Rock && biome != BiomeId::Snow;
 }
 
 /**

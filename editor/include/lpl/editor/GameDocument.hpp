@@ -67,7 +67,15 @@ enum class ResourceScope : core::u8 {
  * @enum ResourceKind
  * @brief What a resource is, for the loader that will eventually fetch it.
  */
-enum class ResourceKind : core::u8 { Other = 0, Texture, Font, Sound, Music, Shader, Data };
+enum class ResourceKind : core::u8 {
+    Other = 0,
+    Texture,
+    Font,
+    Sound,
+    Music,
+    Shader,
+    Data
+};
 
 /**
  * @struct ResourceEntry
@@ -78,10 +86,10 @@ enum class ResourceKind : core::u8 { Other = 0, Texture, Font, Sound, Music, Sha
  * understanding the component that mentions it.
  */
 struct ResourceEntry {
-    std::string name;                            ///< Logical name used by components.
-    std::string path;                            ///< Where the bytes live.
-    ResourceKind kind{ResourceKind::Other};      ///< Asset class.
-    ResourceScope scope{ResourceScope::Shared};  ///< Who loads it.
+    std::string name;                           ///< Logical name used by components.
+    std::string path;                           ///< Where the bytes live.
+    ResourceKind kind{ResourceKind::Other};     ///< Asset class.
+    ResourceScope scope{ResourceScope::Shared}; ///< Who loads it.
 };
 
 /**
@@ -93,11 +101,11 @@ struct SceneDescription {
     std::vector<std::string> systems;     ///< ORDERED list of system names to enable.
     std::vector<ResourceEntry> resources; ///< Named assets this scene uses.
 
-    bool hasRecipe{false};                ///< Does a procedural pass build this scene?
-    procgen::WorldRecipe recipe{};        ///< The pass, when hasRecipe.
+    bool hasRecipe{false};         ///< Does a procedural pass build this scene?
+    procgen::WorldRecipe recipe{}; ///< The pass, when hasRecipe.
 
-    std::string templatesJson;            ///< Prefab table, as JSON text ("{}" when absent).
-    std::string entitiesJson;             ///< Explicit instances, as JSON text ("[]" when absent).
+    std::string templatesJson; ///< Prefab table, as JSON text ("{}" when absent).
+    std::string entitiesJson;  ///< Explicit instances, as JSON text ("[]" when absent).
 };
 
 /**
@@ -105,14 +113,14 @@ struct SceneDescription {
  * @brief The game-level stage: what Flakkari put at the root of config.cfg.
  */
 struct GameMetadata {
-    std::string title;                  ///< Human-readable name.
-    std::string version;                ///< Game version (distinct from the format version).
-    std::string profile;                ///< Netcode preset NAME, e.g. "mmorpg" (see the layering note).
-    std::string startScene;             ///< Scene to load first; empty means the first one.
-    bool online{false};                 ///< Does this game expect a server?
-    core::u32 minPlayers{1u};           ///< Lower player bound.
-    core::u32 maxPlayers{1u};           ///< Upper player bound.
-    core::u32 maxInstances{1u};         ///< How many worlds a server may host of it.
+    std::string title;          ///< Human-readable name.
+    std::string version;        ///< Game version (distinct from the format version).
+    std::string profile;        ///< Netcode preset NAME, e.g. "mmorpg" (see the layering note).
+    std::string startScene;     ///< Scene to load first; empty means the first one.
+    bool online{false};         ///< Does this game expect a server?
+    core::u32 minPlayers{1u};   ///< Lower player bound.
+    core::u32 maxPlayers{1u};   ///< Upper player bound.
+    core::u32 maxInstances{1u}; ///< How many worlds a server may host of it.
 };
 
 /**

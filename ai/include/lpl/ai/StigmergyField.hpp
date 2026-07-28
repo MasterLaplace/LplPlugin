@@ -67,12 +67,12 @@ inline constexpr core::u32 kMaxStigmergyChannels = 8u;
  * naming them is what lets two systems agree about which number means "predator".
  */
 enum class ScentChannel : core::u32 {
-    Plant = 0,     ///< Attracts herbivores.
-    Herbivore,     ///< Attracts carnivores.
-    Carnivore,     ///< Repels herbivores: this is what triggers flight.
-    Terror,        ///< An apex predator's territory. Repels everything.
-    Kin,           ///< Same-species presence. Mildly REPULSIVE, and that is the point.
-    Pheromone      ///< Ant-colony trail strength.
+    Plant = 0, ///< Attracts herbivores.
+    Herbivore, ///< Attracts carnivores.
+    Carnivore, ///< Repels herbivores: this is what triggers flight.
+    Terror,    ///< An apex predator's territory. Repels everything.
+    Kin,       ///< Same-species presence. Mildly REPULSIVE, and that is the point.
+    Pheromone  ///< Ant-colony trail strength.
 };
 
 /**
@@ -93,8 +93,8 @@ struct StigmergyParams {
      *          meant to guide across a room wants @c evaporation near 0.999.
      */
     core::f32 evaporation{0.92f};
-    core::f32 diffusion{0.08f};   ///< Share redistributed to the four neighbours.
-    core::f32 maximum{100.0f};    ///< Saturation, so one source cannot dominate forever.
+    core::f32 diffusion{0.08f}; ///< Share redistributed to the four neighbours.
+    core::f32 maximum{100.0f};  ///< Saturation, so one source cannot dominate forever.
 
     /**
      * @brief Below this a cell is cleared to exactly zero.

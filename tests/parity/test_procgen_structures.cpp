@@ -101,8 +101,7 @@ int main()
 
         procgen::VoronoiParams other = params;
         other.seed = 2024u;
-        check(procgen::foldRegionMap(procgen::computeVoronoi(other).regions) !=
-                  procgen::foldRegionMap(diagram.regions),
+        check(procgen::foldRegionMap(procgen::computeVoronoi(other).regions) != procgen::foldRegionMap(diagram.regions),
               "a different seed moves the sites");
 
         const procgen::Grid<core::u8> borders = procgen::regionBorders(diagram);
@@ -140,8 +139,8 @@ int main()
         procgen::DungeonMap twin = procgen::generateDlaCave(params);
         check(procgen::foldDungeon(cluster) == procgen::foldDungeon(twin), "aggregation is reproducible");
 
-        std::printf("    stuck=%u abandoned=%u open=%u extent=%u\n", report.stuck, report.abandoned,
-                    report.openCells, report.extent);
+        std::printf("    stuck=%u abandoned=%u open=%u extent=%u\n", report.stuck, report.abandoned, report.openCells,
+                    report.extent);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -288,8 +287,8 @@ int main()
             }
         check(nothingOnBadGround, "nothing is built on a cliff or under water");
 
-        std::printf("    districts=%u roads=%u plots=%u blocked=%u\n", report.districts, report.roadCells,
-                    report.plots, terrainReport.blockedCells);
+        std::printf("    districts=%u roads=%u plots=%u blocked=%u\n", report.districts, report.roadCells, report.plots,
+                    terrainReport.blockedCells);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -375,8 +374,7 @@ int main()
         // The world function and the chunk must agree cell for cell.
         bool agreesWithWorld = true;
         for (core::u32 i = 0u; i < params.size; ++i)
-            if (origin.at(i, 0u).raw() !=
-                procgen::sampleWorldHeight(params, static_cast<core::i32>(i), 0).raw())
+            if (origin.at(i, 0u).raw() != procgen::sampleWorldHeight(params, static_cast<core::i32>(i), 0).raw())
                 agreesWithWorld = false;
         check(agreesWithWorld, "a chunk equals the world function over its own cells");
 
@@ -567,8 +565,8 @@ int main()
             // The right edge of (1,-2) and the left edge of (2,-2) are the same
             // world cells, asked twice.
             const math::Fixed32 mine = tile.heightfield().at(31u, z);
-            const math::Fixed32 theirs =
-                procgen::sampleWorldHeight(procgen::ChunkParams{32u, 4242u, noise}, 1 * 32 + 31, -2 * 32 + static_cast<core::i32>(z));
+            const math::Fixed32 theirs = procgen::sampleWorldHeight(procgen::ChunkParams{32u, 4242u, noise},
+                                                                    1 * 32 + 31, -2 * 32 + static_cast<core::i32>(z));
             if (mine.raw() != theirs.raw())
             {
                 seamless = false;
@@ -577,8 +575,8 @@ int main()
         }
         check(seamless, "a builder chunk agrees with the world sampler on every shared cell");
 
-        std::printf("    roads=%u townVoxels=%u caveVoxels=%u\n", built.roadCells,
-                    procgen::countSolidVoxels(raised), procgen::countSolidVoxels(cavern));
+        std::printf("    roads=%u townVoxels=%u caveVoxels=%u\n", built.roadCells, procgen::countSolidVoxels(raised),
+                    procgen::countSolidVoxels(cavern));
     }
 
     std::printf("\n%s (%d failures)\n", g_failures == 0 ? "ALL PASS" : "FAILURES", g_failures);

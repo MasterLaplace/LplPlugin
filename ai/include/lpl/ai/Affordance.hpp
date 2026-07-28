@@ -59,10 +59,10 @@ enum class AffordanceKind : core::u16 {
  * @brief One advertisement, at one place.
  */
 struct Affordance {
-    core::u32 cell{0u};     ///< Flat cell index it applies at.
-    core::u16 kinds{0u};    ///< Mask of @ref AffordanceKind.
-    core::u16 radius{1u};   ///< Cells it reaches.
-    math::Fixed32 value{};  ///< How good an offer it is; ordering only.
+    core::u32 cell{0u};    ///< Flat cell index it applies at.
+    core::u16 kinds{0u};   ///< Mask of @ref AffordanceKind.
+    core::u16 radius{1u};  ///< Cells it reaches.
+    math::Fixed32 value{}; ///< How good an offer it is; ordering only.
 
     /**
      * @brief Need below which this offer is ignored.

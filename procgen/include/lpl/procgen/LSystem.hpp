@@ -51,9 +51,9 @@ inline constexpr core::u32 kTurtleDirections = 16u;
  * in four of an intact wall, one each of the two broken ones.
  */
 struct LRule {
-    char symbol{'F'};                ///< Symbol to replace.
-    lpl::pmr::string replacement;    ///< What it becomes.
-    core::u32 weight{1u};            ///< Relative chance among alternatives for this symbol.
+    char symbol{'F'};             ///< Symbol to replace.
+    lpl::pmr::string replacement; ///< What it becomes.
+    core::u32 weight{1u};         ///< Relative chance among alternatives for this symbol.
 };
 
 /**
@@ -68,11 +68,11 @@ struct LRule {
  *  - any other symbol is inert (useful as a rewrite-only variable)
  */
 struct LSystemParams {
-    lpl::pmr::string axiom{"F"};        ///< Starting string.
-    lpl::pmr::vector<LRule> rules;      ///< Rewrite rules.
-    core::u32 iterations{4u};           ///< Rewrite rounds.
-    core::u32 maxLength{16384u};        ///< Cap on the expanded string.
-    core::u32 seed{0x15A5u};            ///< Determinism anchor for weighted alternatives.
+    lpl::pmr::string axiom{"F"};   ///< Starting string.
+    lpl::pmr::vector<LRule> rules; ///< Rewrite rules.
+    core::u32 iterations{4u};      ///< Rewrite rounds.
+    core::u32 maxLength{16384u};   ///< Cap on the expanded string.
+    core::u32 seed{0x15A5u};       ///< Determinism anchor for weighted alternatives.
 };
 
 /**
@@ -80,13 +80,13 @@ struct LSystemParams {
  * @brief How the expanded string is drawn.
  */
 struct TurtleParams {
-    core::u32 startX{32u};       ///< Starting column.
-    core::u32 startZ{60u};       ///< Starting row.
-    core::u32 startDirection{4u};///< Starting heading, in 1/16 turns (4 = north).
-    core::u32 stepLength{4u};    ///< Cells drawn per `F`.
-    core::u32 turnAmount{2u};    ///< Heading steps per `+` or `-`.
-    core::u32 thickness{0u};     ///< Extra radius around each drawn cell.
-    core::f32 stepDecay{1.0f};   ///< Step length multiplier per branch depth, in (0, 1].
+    core::u32 startX{32u};        ///< Starting column.
+    core::u32 startZ{60u};        ///< Starting row.
+    core::u32 startDirection{4u}; ///< Starting heading, in 1/16 turns (4 = north).
+    core::u32 stepLength{4u};     ///< Cells drawn per `F`.
+    core::u32 turnAmount{2u};     ///< Heading steps per `+` or `-`.
+    core::u32 thickness{0u};      ///< Extra radius around each drawn cell.
+    core::f32 stepDecay{1.0f};    ///< Step length multiplier per branch depth, in (0, 1].
 };
 
 /// Which family of field lines a region of a tensor field carries.
@@ -101,11 +101,11 @@ enum class FieldPattern : core::u8 {
  */
 struct FieldRegion {
     FieldPattern pattern{FieldPattern::Grid}; ///< Grid or radial.
-    core::u32 centerX{0u};   ///< Where this influence is anchored.
-    core::u32 centerZ{0u};   ///< Where this influence is anchored.
-    core::u32 bearing{0u};   ///< For Grid: the heading its lines follow, in 1/16 turns.
-    core::f32 strength{1.0f};///< Weight at the centre.
-    core::f32 falloff{0.04f};///< Weight lost per cell of distance from the centre.
+    core::u32 centerX{0u};                    ///< Where this influence is anchored.
+    core::u32 centerZ{0u};                    ///< Where this influence is anchored.
+    core::u32 bearing{0u};                    ///< For Grid: the heading its lines follow, in 1/16 turns.
+    core::f32 strength{1.0f};                 ///< Weight at the centre.
+    core::f32 falloff{0.04f};                 ///< Weight lost per cell of distance from the centre.
 };
 
 /**

@@ -38,10 +38,7 @@ void foldWord(core::u32 &hash, core::u32 word) noexcept
 }
 
 /// Folds a Fixed32 by its RAW Q16.16 word — never by a decimal rendering of it.
-void foldFixed(core::u32 &hash, math::Fixed32 value) noexcept
-{
-    foldWord(hash, static_cast<core::u32>(value.raw()));
-}
+void foldFixed(core::u32 &hash, math::Fixed32 value) noexcept { foldWord(hash, static_cast<core::u32>(value.raw())); }
 
 } // namespace
 
@@ -226,8 +223,8 @@ LivingResult runLiving(const LivingRecipe &recipe)
         result.migrations += abstractWorld.tickAbstract(tick);
 
         // 6. The social layer.
-        const PackEvents events = stepPacks(&members[0], static_cast<core::u32>(members.size()), recipe.packs,
-                                            socialStream);
+        const PackEvents events =
+            stepPacks(&members[0], static_cast<core::u32>(members.size()), recipe.packs, socialStream);
         result.alphaChanges += events.alphaChanges;
     }
 
@@ -278,8 +275,8 @@ LivingResult runLiving(const LivingRecipe &recipe)
         if (web.species[i].population <= web.species[i].params.refuge)
             ++result.extinctions;
 
-    const PopulationStats stats = strengthStats(population.empty() ? nullptr : &population[0],
-                                                static_cast<core::u32>(population.size()));
+    const PopulationStats stats =
+        strengthStats(population.empty() ? nullptr : &population[0], static_cast<core::u32>(population.size()));
     for (core::u32 i = 0u; i < population.size(); ++i)
         if (isAnomaly(population[i], stats, recipe.heredity))
             ++result.anomalies;
@@ -297,9 +294,9 @@ LivingResult runLiving(const LivingRecipe &recipe)
     // outcome. It is the weaker claim that the run actually ran: the field holds
     // a trail, the population survived, and the budget did its job.
     result.ok = (result.trailCells != 0u && !population.empty() && result.realisedRooms != 0u &&
-                 result.realisedRooms <= recipe.budget.maxRealisedRooms)
-                    ? 1u
-                    : 0u;
+                 result.realisedRooms <= recipe.budget.maxRealisedRooms) ?
+                    1u :
+                    0u;
     return result;
 }
 

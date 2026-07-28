@@ -206,8 +206,7 @@ void testPaletteIsReachable()
         else
             std::printf("[MISSING %s] ", procgen::biomeName(static_cast<procgen::BiomeId>(i)));
     }
-    std::printf("%u/%u biomes reached over 8 seeds\n", reached,
-                static_cast<core::u32>(procgen::BiomeId::Count));
+    std::printf("%u/%u biomes reached over 8 seeds\n", reached, static_cast<core::u32>(procgen::BiomeId::Count));
 
     // Not "most of them" — all of them. A profile no world can produce is a lie
     // in the table, and the point of counting is to be told about it.
@@ -304,8 +303,8 @@ void testClimateIsContinuous()
     }
 
     if (worstA != procgen::BiomeId::Count)
-        std::printf("    furthest adjacent pair: %s | %s at squared distance %.3f\n",
-                    procgen::biomeName(worstA), procgen::biomeName(worstB), worst);
+        std::printf("    furthest adjacent pair: %s | %s at squared distance %.3f\n", procgen::biomeName(worstA),
+                    procgen::biomeName(worstB), worst);
 
     // Snow (T=0.05) against desert (T=0.85) would be 0.64 on temperature alone.
     // Anything under half that is a transition, not a discontinuity.

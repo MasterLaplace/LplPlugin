@@ -27,12 +27,12 @@
 #include <sstream>
 #include <string>
 
-#include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl2.h>
+#include <imgui.h>
 
-#include <GLFW/glfw3.h>
 #include <GL/gl.h>
+#include <GLFW/glfw3.h>
 
 #include <lpl/core/Log.hpp>
 #include <lpl/ecs/Component.hpp>
@@ -51,9 +51,8 @@ using FVec3 = lpl::math::Vec3<lpl::math::Fixed32>;
 // Biome names in lpl::procgen::BiomeId order, which is also the spelling
 // lpl::procgen::biomeIdByName accepts — the combo writes the document's own
 // vocabulary rather than an enum index a reordering would silently reinterpret.
-constexpr const char *kBiomeNames[] = {"ocean",  "beach",     "snow",      "tundra",
-                                       "taiga",  "rock",      "desert",    "savanna",
-                                       "grassland", "forest", "rainforest", "marsh"};
+constexpr const char *kBiomeNames[] = {"ocean",  "beach",   "snow",      "tundra", "taiga",      "rock",
+                                       "desert", "savanna", "grassland", "forest", "rainforest", "marsh"};
 
 // ── Editor UI + world state (owned by main, referenced by the panel helpers) ──
 struct EditorUi {
@@ -316,23 +315,35 @@ void drawUnitCube()
 {
     glBegin(GL_QUADS);
     glNormal3f(0.0f, 1.0f, 0.0f); // +Y
-    glVertex3f(-0.5f, 0.5f, -0.5f); glVertex3f(-0.5f, 0.5f, 0.5f);
-    glVertex3f(0.5f, 0.5f, 0.5f);   glVertex3f(0.5f, 0.5f, -0.5f);
+    glVertex3f(-0.5f, 0.5f, -0.5f);
+    glVertex3f(-0.5f, 0.5f, 0.5f);
+    glVertex3f(0.5f, 0.5f, 0.5f);
+    glVertex3f(0.5f, 0.5f, -0.5f);
     glNormal3f(0.0f, -1.0f, 0.0f); // -Y
-    glVertex3f(-0.5f, -0.5f, -0.5f); glVertex3f(0.5f, -0.5f, -0.5f);
-    glVertex3f(0.5f, -0.5f, 0.5f);   glVertex3f(-0.5f, -0.5f, 0.5f);
+    glVertex3f(-0.5f, -0.5f, -0.5f);
+    glVertex3f(0.5f, -0.5f, -0.5f);
+    glVertex3f(0.5f, -0.5f, 0.5f);
+    glVertex3f(-0.5f, -0.5f, 0.5f);
     glNormal3f(1.0f, 0.0f, 0.0f); // +X
-    glVertex3f(0.5f, -0.5f, -0.5f); glVertex3f(0.5f, 0.5f, -0.5f);
-    glVertex3f(0.5f, 0.5f, 0.5f);   glVertex3f(0.5f, -0.5f, 0.5f);
+    glVertex3f(0.5f, -0.5f, -0.5f);
+    glVertex3f(0.5f, 0.5f, -0.5f);
+    glVertex3f(0.5f, 0.5f, 0.5f);
+    glVertex3f(0.5f, -0.5f, 0.5f);
     glNormal3f(-1.0f, 0.0f, 0.0f); // -X
-    glVertex3f(-0.5f, -0.5f, -0.5f); glVertex3f(-0.5f, -0.5f, 0.5f);
-    glVertex3f(-0.5f, 0.5f, 0.5f);   glVertex3f(-0.5f, 0.5f, -0.5f);
+    glVertex3f(-0.5f, -0.5f, -0.5f);
+    glVertex3f(-0.5f, -0.5f, 0.5f);
+    glVertex3f(-0.5f, 0.5f, 0.5f);
+    glVertex3f(-0.5f, 0.5f, -0.5f);
     glNormal3f(0.0f, 0.0f, 1.0f); // +Z
-    glVertex3f(-0.5f, -0.5f, 0.5f); glVertex3f(0.5f, -0.5f, 0.5f);
-    glVertex3f(0.5f, 0.5f, 0.5f);   glVertex3f(-0.5f, 0.5f, 0.5f);
+    glVertex3f(-0.5f, -0.5f, 0.5f);
+    glVertex3f(0.5f, -0.5f, 0.5f);
+    glVertex3f(0.5f, 0.5f, 0.5f);
+    glVertex3f(-0.5f, 0.5f, 0.5f);
     glNormal3f(0.0f, 0.0f, -1.0f); // -Z
-    glVertex3f(-0.5f, -0.5f, -0.5f); glVertex3f(-0.5f, 0.5f, -0.5f);
-    glVertex3f(0.5f, 0.5f, -0.5f);   glVertex3f(0.5f, -0.5f, -0.5f);
+    glVertex3f(-0.5f, -0.5f, -0.5f);
+    glVertex3f(-0.5f, 0.5f, -0.5f);
+    glVertex3f(0.5f, 0.5f, -0.5f);
+    glVertex3f(0.5f, -0.5f, -0.5f);
     glEnd();
 }
 
@@ -368,8 +379,10 @@ void drawGrid(int half, float step)
     {
         const float t = static_cast<float>(i) * step;
         const float e = static_cast<float>(half) * step;
-        glVertex3f(t, 0.0f, -e); glVertex3f(t, 0.0f, e);
-        glVertex3f(-e, 0.0f, t); glVertex3f(e, 0.0f, t);
+        glVertex3f(t, 0.0f, -e);
+        glVertex3f(t, 0.0f, e);
+        glVertex3f(-e, 0.0f, t);
+        glVertex3f(e, 0.0f, t);
     }
     glEnd();
     glEnable(GL_LIGHTING);
@@ -515,9 +528,15 @@ void drawGizmo(const EditorUi &ui)
     glDisable(GL_DEPTH_TEST);
     glLineWidth(2.5f);
     glBegin(GL_LINES);
-    glColor3f(1.0f, 0.2f, 0.2f); glVertex3f(pos[0], pos[1], pos[2]); glVertex3f(pos[0] + len, pos[1], pos[2]);
-    glColor3f(0.2f, 1.0f, 0.2f); glVertex3f(pos[0], pos[1], pos[2]); glVertex3f(pos[0], pos[1] + len, pos[2]);
-    glColor3f(0.3f, 0.5f, 1.0f); glVertex3f(pos[0], pos[1], pos[2]); glVertex3f(pos[0], pos[1], pos[2] + len);
+    glColor3f(1.0f, 0.2f, 0.2f);
+    glVertex3f(pos[0], pos[1], pos[2]);
+    glVertex3f(pos[0] + len, pos[1], pos[2]);
+    glColor3f(0.2f, 1.0f, 0.2f);
+    glVertex3f(pos[0], pos[1], pos[2]);
+    glVertex3f(pos[0], pos[1] + len, pos[2]);
+    glColor3f(0.3f, 0.5f, 1.0f);
+    glVertex3f(pos[0], pos[1], pos[2]);
+    glVertex3f(pos[0], pos[1], pos[2] + len);
     glEnd();
     glLineWidth(1.0f);
     glEnable(GL_DEPTH_TEST);

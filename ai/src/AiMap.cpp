@@ -130,7 +130,9 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
     lpl::pmr::vector<core::u32> cost(states, kNoPath);
     lpl::pmr::vector<core::u32> cameFrom(states, kNoPath);
 
-    const auto stateOf = [width](core::u32 cell, core::u32 incoming) { return cell * (kDirectionCount + 1u) + incoming; };
+    const auto stateOf = [width](core::u32 cell, core::u32 incoming) {
+        return cell * (kDirectionCount + 1u) + incoming;
+    };
     (void) width;
 
     const auto heuristic = [&](core::u32 cell) -> core::u32 {

@@ -57,10 +57,10 @@ using SettlementMap = Grid<SettlementCell>;
  * @brief One footprint, and which district it belongs to.
  */
 struct BuildingPlot {
-    core::u32 x{0u};      ///< Left edge.
-    core::u32 z{0u};      ///< Top edge.
-    core::u32 width{0u};  ///< Extent along X.
-    core::u32 depth{0u};  ///< Extent along Z.
+    core::u32 x{0u};        ///< Left edge.
+    core::u32 z{0u};        ///< Top edge.
+    core::u32 width{0u};    ///< Extent along X.
+    core::u32 depth{0u};    ///< Extent along Z.
     core::u16 district{0u}; ///< Owning region.
 };
 
@@ -87,12 +87,12 @@ struct SettlementParams {
  * @brief What was laid out.
  */
 struct SettlementReport {
-    core::u32 districts{0u};   ///< Voronoi regions covering the area.
-    core::u32 roadCells{0u};   ///< Cells that became street.
-    core::u32 plazaCells{0u};  ///< Cells that became open space.
-    core::u32 plots{0u};       ///< Buildings placed.
-    core::u32 blockedCells{0u};///< Cells refused as unbuildable.
-    bool roadsConnected{false};///< Is the whole street network one piece?
+    core::u32 districts{0u};    ///< Voronoi regions covering the area.
+    core::u32 roadCells{0u};    ///< Cells that became street.
+    core::u32 plazaCells{0u};   ///< Cells that became open space.
+    core::u32 plots{0u};        ///< Buildings placed.
+    core::u32 blockedCells{0u}; ///< Cells refused as unbuildable.
+    bool roadsConnected{false}; ///< Is the whole street network one piece?
 };
 
 /**

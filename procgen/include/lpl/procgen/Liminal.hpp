@@ -82,13 +82,13 @@ struct LiminalParams {
     core::u32 zoneOctaves{2u};   ///< fBm octaves of the zoning field.
     core::u32 zoneSeed{0x5AFEu}; ///< Seed of the zoning field.
 
-    core::u32 bspDepth{4u};       ///< Partition recursion depth.
+    core::u32 bspDepth{4u};           ///< Partition recursion depth.
     core::f32 erosionStrength{0.18f}; ///< Share of boundary cells the automata flip.
     core::f32 mergeStrength{0.22f};   ///< Share of party walls dissolved.
     core::f32 pillarDensity{0.02f};   ///< Share of open cells that become a stray pillar.
 
-    core::u32 hotPathEvents{8u};  ///< Event sites to place along the critical path.
-    core::u32 secretSites{3u};    ///< Reward sites to place in the deepest dead ends.
+    core::u32 hotPathEvents{8u}; ///< Event sites to place along the critical path.
+    core::u32 secretSites{3u};   ///< Reward sites to place in the deepest dead ends.
 };
 
 /**
@@ -96,8 +96,8 @@ struct LiminalParams {
  * @brief Everything one liminal sector is.
  */
 struct LiminalSpace {
-    DungeonMap map;         ///< Walls and floor.
-    LiminalZoneMap zones;   ///< What kind of space each cell belongs to.
+    DungeonMap map;               ///< Walls and floor.
+    LiminalZoneMap zones;         ///< What kind of space each cell belongs to.
     core::u32 openCells{0u};      ///< Walkable cells.
     core::u32 wallsBroken{0u};    ///< Cells the connectivity repair had to open.
     core::u32 wallsDissolved{0u}; ///< Cells the asymmetric merge opened.

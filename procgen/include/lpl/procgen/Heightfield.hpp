@@ -30,9 +30,9 @@ using Heightfield = Grid<math::Fixed32>;
  * @brief Which fractal construction shapes a layer.
  */
 enum class NoiseKind : core::u8 {
-    Fbm = 0,  ///< Symmetric fractal sum: rolling hills.
-    Ridged,   ///< Crests along the noise's zero set: mountain ranges.
-    Billow    ///< Rectified: rounded bulges with creases, for dunes and clouds.
+    Fbm = 0, ///< Symmetric fractal sum: rolling hills.
+    Ridged,  ///< Crests along the noise's zero set: mountain ranges.
+    Billow   ///< Rectified: rounded bulges with creases, for dunes and clouds.
 };
 
 /**
@@ -40,14 +40,14 @@ enum class NoiseKind : core::u8 {
  * @brief How the base terrain is sampled before any pass reshapes it.
  */
 struct NoiseParams {
-    core::u32 seed{1337u};       ///< Determinism anchor.
-    core::f32 frequency{0.05f};  ///< Cells-to-noise scale; smaller is smoother.
-    core::f32 amplitude{16.0f};  ///< Peak-to-trough height.
-    core::u32 octaves{5u};       ///< Octaves summed.
-    core::f32 baseHeight{0.0f};  ///< Constant added to every cell (sea level offset).
-    core::f32 lacunarity{2.0f};  ///< Frequency multiplier per octave.
-    core::f32 persistence{0.5f}; ///< Amplitude multiplier per octave.
-    core::f32 warpStrength{0.0f};///< Domain warp, in cells; 0 leaves the lattice unwarped.
+    core::u32 seed{1337u};          ///< Determinism anchor.
+    core::f32 frequency{0.05f};     ///< Cells-to-noise scale; smaller is smoother.
+    core::f32 amplitude{16.0f};     ///< Peak-to-trough height.
+    core::u32 octaves{5u};          ///< Octaves summed.
+    core::f32 baseHeight{0.0f};     ///< Constant added to every cell (sea level offset).
+    core::f32 lacunarity{2.0f};     ///< Frequency multiplier per octave.
+    core::f32 persistence{0.5f};    ///< Amplitude multiplier per octave.
+    core::f32 warpStrength{0.0f};   ///< Domain warp, in cells; 0 leaves the lattice unwarped.
     NoiseKind kind{NoiseKind::Fbm}; ///< Fractal construction.
 };
 

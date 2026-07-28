@@ -30,8 +30,7 @@ void carveRect(DungeonMap &map, core::u32 x, core::u32 z, core::u32 width, core:
 }
 
 /// Carves an L-shaped corridor: along X first, then along Z.
-void carveCorridor(DungeonMap &map, core::u32 fromX, core::u32 fromZ, core::u32 toX, core::u32 toZ,
-                   core::u32 thickness)
+void carveCorridor(DungeonMap &map, core::u32 fromX, core::u32 fromZ, core::u32 toX, core::u32 toZ, core::u32 thickness)
 {
     const core::u32 width = thickness == 0u ? 1u : thickness;
 
@@ -78,10 +77,8 @@ void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const 
         const core::u32 maxDepth = node.depth - padding * 2u;
         const core::u32 roomWidth = static_cast<core::u32>(random.range(2, static_cast<core::i32>(maxWidth)));
         const core::u32 roomDepth = static_cast<core::u32>(random.range(2, static_cast<core::i32>(maxDepth)));
-        const core::u32 roomX =
-            node.x + padding + static_cast<core::u32>(random.below(maxWidth - roomWidth + 1u));
-        const core::u32 roomZ =
-            node.z + padding + static_cast<core::u32>(random.below(maxDepth - roomDepth + 1u));
+        const core::u32 roomX = node.x + padding + static_cast<core::u32>(random.below(maxWidth - roomWidth + 1u));
+        const core::u32 roomZ = node.z + padding + static_cast<core::u32>(random.below(maxDepth - roomDepth + 1u));
 
         carveRect(map, roomX, roomZ, roomWidth, roomDepth);
         const Room room{roomX, roomZ, roomWidth, roomDepth};
@@ -103,8 +100,8 @@ void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const 
         const core::u32 low = params.minLeafSize;
         const core::u32 high = node.width - params.minLeafSize;
         const core::u32 cut = high > low ? low + random.below(high - low) : node.width / 2u;
-        splitAndCarve(map, BspNode{node.x, node.z, cut, node.depth}, level + 1u, params, random, outRooms,
-                      leftCenterX, leftCenterZ);
+        splitAndCarve(map, BspNode{node.x, node.z, cut, node.depth}, level + 1u, params, random, outRooms, leftCenterX,
+                      leftCenterZ);
         splitAndCarve(map, BspNode{node.x + cut, node.z, node.width - cut, node.depth}, level + 1u, params, random,
                       outRooms, rightCenterX, rightCenterZ);
     }
@@ -113,8 +110,8 @@ void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const 
         const core::u32 low = params.minLeafSize;
         const core::u32 high = node.depth - params.minLeafSize;
         const core::u32 cut = high > low ? low + random.below(high - low) : node.depth / 2u;
-        splitAndCarve(map, BspNode{node.x, node.z, node.width, cut}, level + 1u, params, random, outRooms,
-                      leftCenterX, leftCenterZ);
+        splitAndCarve(map, BspNode{node.x, node.z, node.width, cut}, level + 1u, params, random, outRooms, leftCenterX,
+                      leftCenterZ);
         splitAndCarve(map, BspNode{node.x, node.z + cut, node.width, node.depth - cut}, level + 1u, params, random,
                       outRooms, rightCenterX, rightCenterZ);
     }
@@ -142,7 +139,8 @@ core::u32 rockNeighbours(const DungeonMap &map, core::u32 x, core::u32 z)
         const core::i32 nz = static_cast<core::i32>(z) + kNeighbor8Z[n];
         // Treating the outside as solid keeps caves away from the border,
         // which is what stops them opening onto nothing.
-        if (!map.contains(nx, nz) || map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) == DungeonCell::Wall)
+        if (!map.contains(nx, nz) ||
+            map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) == DungeonCell::Wall)
             ++count;
     }
     return count;
@@ -186,8 +184,7 @@ core::u32 labelRegions(const DungeonMap &map, Grid<core::u32> &outLabels, lpl::p
                 const core::i32 nz = static_cast<core::i32>(z) + kNeighbor4Z[n];
                 if (!map.contains(nx, nz))
                     continue;
-                const core::u32 neighbour =
-                    outLabels.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
+                const core::u32 neighbour = outLabels.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
                 if (!isWalkable(map[neighbour]) || outLabels[neighbour] != kInvalidRegion)
                     continue;
                 outLabels[neighbour] = regionCount;
@@ -221,8 +218,8 @@ core::u32 labelRegions(const DungeonMap &map, Grid<core::u32> &outLabels, lpl::p
  * @param regions  Number of regions.
  * @return Number of tunnels dug.
  */
-core::u32 tunnelToMainRegion(DungeonMap &map, const Grid<core::u32> &labels,
-                             const lpl::pmr::vector<core::u32> &sizes, core::u32 regions)
+core::u32 tunnelToMainRegion(DungeonMap &map, const Grid<core::u32> &labels, const lpl::pmr::vector<core::u32> &sizes,
+                             core::u32 regions)
 {
     // Attach to the biggest cavern rather than to region 0: region 0 is merely the
     // first found in scan order and may be a three-cell alcove, which would make
@@ -369,10 +366,9 @@ DungeonMap generateDrunkardWalk(const DrunkardParams &params)
     if (params.width <= margin * 2u + 1u || params.depth <= margin * 2u + 1u)
         return map;
 
-    const core::u32 target =
-        static_cast<core::u32>((math::Fixed32::fromFloat(params.targetFill) *
-                                math::Fixed32::fromInt(static_cast<core::i32>(map.cellCount())))
-                                   .toInt());
+    const core::u32 target = static_cast<core::u32>(
+        (math::Fixed32::fromFloat(params.targetFill) * math::Fixed32::fromInt(static_cast<core::i32>(map.cellCount())))
+            .toInt());
     core::u32 carved = 0u;
 
     for (core::u32 digger = 0u; digger < params.diggers && carved < target; ++digger)

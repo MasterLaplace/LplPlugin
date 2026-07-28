@@ -196,8 +196,8 @@ int main()
         const double flatMean = flatCells ? flatChange / flatCells : 0.0;
         check(steepMean > flatMean * 1.15,
               "hydraulic erosion attacks steep ground harder than flat (capacity follows slope)");
-        std::printf("    steep mean |delta|=%.4f over %u cells, flat mean=%.4f over %u cells\n", steepMean,
-                    steepCells, flatMean, flatCells);
+        std::printf("    steep mean |delta|=%.4f over %u cells, flat mean=%.4f over %u cells\n", steepMean, steepCells,
+                    flatMean, flatCells);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -207,8 +207,7 @@ int main()
         const procgen::DrainageNetwork network = procgen::computeDrainage(terrain);
 
         check(network.maxAccumulation > 1u, "drainage accumulates flow");
-        check(network.maxAccumulation <= terrain.cellCount(),
-              "no cell drains more than the whole map (conservation)");
+        check(network.maxAccumulation <= terrain.cellCount(), "no cell drains more than the whole map (conservation)");
 
         // The invariant that makes it hydrology and not decoration. Judged on the
         // FILLED surface, which is the one routing was computed over: a cell inside
@@ -409,8 +408,7 @@ int main()
         procgen::ClimateParams flatAxes = axes;
         flatAxes.lapseRate = 0.0f;
         const procgen::ClimateField flatField = procgen::computeClimate(terrain, moisture, network, flatAxes);
-        check(procgen::foldBiomeMap(procgen::classifyBiomes(terrain, flatField, params)) !=
-                  procgen::foldBiomeMap(map),
+        check(procgen::foldBiomeMap(procgen::classifyBiomes(terrain, flatField, params)) != procgen::foldBiomeMap(map),
               "the lapse rate changes the classification");
 
         const procgen::BiomeMap twin = procgen::classifyBiomes(terrain, climateField, params);
@@ -440,8 +438,7 @@ int main()
 
         const procgen::WfcResult a = procgen::solveWfc(tiles, params);
         check(a.solved, "WFC solves the grid");
-        check(procgen::countAdjacencyViolations(a.tiles, tiles) == 0u,
-              "the solution violates no adjacency rule");
+        check(procgen::countAdjacencyViolations(a.tiles, tiles) == 0u, "the solution violates no adjacency rule");
 
         const procgen::WfcResult b = procgen::solveWfc(tiles, params);
         bool identical = a.tiles.cellCount() == b.tiles.cellCount();
@@ -465,7 +462,8 @@ int main()
         check(constrained.solved, "WFC solves around pinned cells");
         bool borderHeld = true;
         for (core::u32 z = 0u; z < params.depth; ++z)
-            borderHeld = borderHeld && constrained.tiles.at(0u, z) == static_cast<core::u8>(procgen::TerrainTile::Water);
+            borderHeld =
+                borderHeld && constrained.tiles.at(0u, z) == static_cast<core::u8>(procgen::TerrainTile::Water);
         check(borderHeld, "pinned cells survive the solve");
         check(procgen::countAdjacencyViolations(constrained.tiles, tiles) == 0u,
               "the constrained solution is still legal");

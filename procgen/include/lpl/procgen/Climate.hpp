@@ -59,13 +59,13 @@ namespace lpl::procgen {
  * else.
  */
 enum class ClimateAxis : core::u8 {
-    Temperature = 0,  ///< Latitude gradient minus the altitude lapse rate.
-    Moisture,         ///< Rainfall, drainage, coast and rain shadow (see @ref computeMoisture).
-    Continentalness,  ///< How far inland: 0 at the shore, 1 in the deep interior.
-    Erosion,          ///< How worn the ground is: 0 for jagged peaks, 1 for a floodplain.
-    Depth,            ///< Vertical position: 0 at the surface, 1 deep underground.
-    Weirdness,        ///< Controlled anomaly — an independent field that shifts rare biomes in.
-    Count             ///< Number of axes; never an index.
+    Temperature = 0, ///< Latitude gradient minus the altitude lapse rate.
+    Moisture,        ///< Rainfall, drainage, coast and rain shadow (see @ref computeMoisture).
+    Continentalness, ///< How far inland: 0 at the shore, 1 in the deep interior.
+    Erosion,         ///< How worn the ground is: 0 for jagged peaks, 1 for a floodplain.
+    Depth,           ///< Vertical position: 0 at the surface, 1 deep underground.
+    Weirdness,       ///< Controlled anomaly — an independent field that shifts rare biomes in.
+    Count            ///< Number of axes; never an index.
 };
 
 /// Number of climate axes, as a plain count for array sizes.
@@ -127,10 +127,10 @@ struct ClimateField {
  * @brief What shapes each axis before a biome is ever named.
  */
 struct ClimateParams {
-    core::f32 coldLatitude{0.2f};  ///< Share of the map at each edge that is fully polar.
-    core::f32 lapseRate{0.45f};    ///< Warmth lost between the lowest and highest ground, in [0, 1].
-    core::f32 seaLevel{-4.0f};     ///< Height at or below which a cell is sea.
-    core::f32 coastReach{0.25f};   ///< Share of the long axis over which continentalness saturates.
+    core::f32 coldLatitude{0.2f};      ///< Share of the map at each edge that is fully polar.
+    core::f32 lapseRate{0.45f};        ///< Warmth lost between the lowest and highest ground, in [0, 1].
+    core::f32 seaLevel{-4.0f};         ///< Height at or below which a cell is sea.
+    core::f32 coastReach{0.25f};       ///< Share of the long axis over which continentalness saturates.
     core::u32 weirdnessSeed{0x7E12Du}; ///< Seed of the weirdness field.
     core::f32 weirdnessBelts{1.5f};    ///< Weirdness features across the map's longer axis.
     core::u32 weirdnessOctaves{2u};    ///< fBm octaves of the weirdness field.

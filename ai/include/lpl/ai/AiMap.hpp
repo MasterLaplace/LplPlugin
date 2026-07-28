@@ -65,8 +65,8 @@ inline constexpr core::u32 kNoIncoming = 8u;
  * @brief What each kind of move costs.
  */
 struct AiMapParams {
-    core::u32 baseCost{16u};      ///< Cost of a cardinal step.
-    core::u32 diagonalCost{23u};  ///< Cost of a diagonal step (16 * sqrt(2), rounded).
+    core::u32 baseCost{16u};     ///< Cost of a cardinal step.
+    core::u32 diagonalCost{23u}; ///< Cost of a diagonal step (16 * sqrt(2), rounded).
 
     /**
      * @brief Extra cost for reversing the direction of arrival.
@@ -78,7 +78,7 @@ struct AiMapParams {
      */
     core::u32 reverseCost{160u};
 
-    core::u32 turnCost{4u};       ///< Small penalty per change of heading, so paths are smooth.
+    core::u32 turnCost{4u}; ///< Small penalty per change of heading, so paths are smooth.
 };
 
 /**

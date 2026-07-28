@@ -56,8 +56,8 @@ struct CaveSystemParams {
     core::u32 depth{64u};  ///< Cells along Z.
     core::u32 seed{1337u}; ///< Determinism anchor.
 
-    core::u32 layers{3u};        ///< Stacked plans; clamped to @ref kMaxCaveLayers.
-    core::u32 levelsPerLayer{2u};///< Voxel levels each layer occupies.
+    core::u32 layers{3u};         ///< Stacked plans; clamped to @ref kMaxCaveLayers.
+    core::u32 levelsPerLayer{2u}; ///< Voxel levels each layer occupies.
 
     /**
      * @brief Fill probability of the shallowest layer.
@@ -68,12 +68,12 @@ struct CaveSystemParams {
      * gives the descent a direction.
      */
     core::f32 topFill{0.46f};
-    core::f32 deepFill{0.38f}; ///< Fill probability of the deepest layer.
-    core::u32 automatonSteps{5u}; ///< Smoothing steps per layer.
-    core::u32 minChamberSize{24u};///< Pockets smaller than this are filled in.
+    core::f32 deepFill{0.38f};     ///< Fill probability of the deepest layer.
+    core::u32 automatonSteps{5u};  ///< Smoothing steps per layer.
+    core::u32 minChamberSize{24u}; ///< Pockets smaller than this are filled in.
 
-    core::u32 shaftsPerPair{3u};  ///< Shafts attempted between each pair of layers.
-    core::u32 entrances{2u};      ///< Shafts attempted through the surface.
+    core::u32 shaftsPerPair{3u};      ///< Shafts attempted between each pair of layers.
+    core::u32 entrances{2u};          ///< Shafts attempted through the surface.
     core::f32 entranceMaxSlope{1.5f}; ///< Steepest ground an entrance may open on.
 };
 
@@ -104,10 +104,7 @@ struct CaveSystem {
     core::u32 repairedCells{0u};        ///< Cells the reachability repair had to open.
 
     /// @return Whether every hollow cell can be reached from an entrance.
-    [[nodiscard]] bool fullyReachable() const noexcept
-    {
-        return hollowCells != 0u && reachableCells == hollowCells;
-    }
+    [[nodiscard]] bool fullyReachable() const noexcept { return hollowCells != 0u && reachableCells == hollowCells; }
 };
 
 /**

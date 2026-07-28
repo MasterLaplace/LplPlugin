@@ -39,7 +39,8 @@ void RelationshipTracker::observe(core::u32 observer, core::u32 subject, core::u
         // glance, which is exactly the memoryless behaviour this exists to avoid.
         if (existing.attitude == attitude)
         {
-            existing.intensity = existing.intensity + (math::Fixed32::one() - existing.intensity) / math::Fixed32::fromInt(4);
+            existing.intensity =
+                existing.intensity + (math::Fixed32::one() - existing.intensity) / math::Fixed32::fromInt(4);
         }
         else
         {

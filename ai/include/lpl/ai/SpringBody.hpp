@@ -64,10 +64,10 @@ struct BodyChunkConnection {
  * @brief Global forces and the integrator's damping.
  */
 struct SpringBodyParams {
-    math::Fixed32 damping{math::Fixed32::fromRaw(0xF333)};   ///< Velocity retained per step (~0.95).
-    math::Fixed32 gravityZ{};                                ///< Constant pull; zero for a top-down world.
-    core::u32 relaxations{4u};                               ///< Constraint iterations per step.
-    math::Fixed32 maxSpeed{math::Fixed32::fromInt(4)};       ///< Clamp, so a stiff spring cannot explode.
+    math::Fixed32 damping{math::Fixed32::fromRaw(0xF333)}; ///< Velocity retained per step (~0.95).
+    math::Fixed32 gravityZ{};                              ///< Constant pull; zero for a top-down world.
+    core::u32 relaxations{4u};                             ///< Constraint iterations per step.
+    math::Fixed32 maxSpeed{math::Fixed32::fromInt(4)};     ///< Clamp, so a stiff spring cannot explode.
 };
 
 /**
@@ -161,8 +161,7 @@ struct TwoBoneSolution {
  * @return The joint position, and whether the target was reachable.
  */
 [[nodiscard]] TwoBoneSolution solveTwoBone(math::Fixed32 rootX, math::Fixed32 rootZ, math::Fixed32 targetX,
-                                           math::Fixed32 targetZ, math::Fixed32 upper, math::Fixed32 lower,
-                                           bool flip);
+                                           math::Fixed32 targetZ, math::Fixed32 upper, math::Fixed32 lower, bool flip);
 
 } // namespace lpl::ai
 

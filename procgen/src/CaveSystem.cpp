@@ -155,10 +155,10 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
     // ── Layers: the same generator, told to open out with depth ─────────────
     for (core::u32 l = 0u; l < system.layerCount; ++l)
     {
-        const math::Fixed32 t = system.layerCount <= 1u
-                                    ? math::Fixed32::zero()
-                                    : math::Fixed32::fromInt(static_cast<core::i32>(l)) /
-                                          math::Fixed32::fromInt(static_cast<core::i32>(system.layerCount - 1u));
+        const math::Fixed32 t = system.layerCount <= 1u ?
+                                    math::Fixed32::zero() :
+                                    math::Fixed32::fromInt(static_cast<core::i32>(l)) /
+                                        math::Fixed32::fromInt(static_cast<core::i32>(system.layerCount - 1u));
         const math::Fixed32 top = math::Fixed32::fromFloat(params.topFill);
         const math::Fixed32 deep = math::Fixed32::fromFloat(params.deepFill);
 

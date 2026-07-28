@@ -187,8 +187,6 @@ JVal parse(std::string_view text, bool *ok)
     return root;
 }
 
-
-
 namespace {
 
 void emitEscaped(std::string &out, std::string_view text)

@@ -238,8 +238,8 @@ VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams
         for (core::u32 z = pad; z + pad < volume.depth; ++z)
             for (core::u32 x = pad; x + pad < volume.width; ++x)
             {
-                const bool onEdge = x == pad || z == pad || x + pad + 1u == volume.width ||
-                                    z + pad + 1u == volume.depth;
+                const bool onEdge =
+                    x == pad || z == pad || x + pad + 1u == volume.width || z + pad + 1u == volume.depth;
                 if (hollow && !onEdge)
                     continue;
                 volume.at(x, level, z) = material;
@@ -259,11 +259,11 @@ VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams
     // treated as a degenerate case.
     for (core::u32 r = 0u; r < roofLevels; ++r, ++level)
     {
-        const core::u32 shrink = roofLevels <= 1u
-                                     ? 0u
-                                     : static_cast<core::u32>((math::Fixed32::fromFloat(params.roofTaper) *
-                                                               math::Fixed32::fromInt(static_cast<core::i32>(r)))
-                                                                  .toInt());
+        const core::u32 shrink = roofLevels <= 1u ?
+                                     0u :
+                                     static_cast<core::u32>((math::Fixed32::fromFloat(params.roofTaper) *
+                                                             math::Fixed32::fromInt(static_cast<core::i32>(r)))
+                                                                .toInt());
         fillLevel(level, shrink, params.roofMaterial, false);
     }
 
@@ -289,9 +289,8 @@ VoxelVolume buildTown(const SettlementMap &settlement, const lpl::pmr::vector<Bu
         // Keyed by the plot's POSITION, not by its index in the list. A plot
         // inserted earlier in the vector must not re-roll every building after
         // it, or adding one house redraws the town.
-        const core::u32 seed = params.seed != 0u
-                                   ? params.seed ^ (plot.x * 73856093u) ^ (plot.z * 19349663u)
-                                   : worldSeed ^ (plot.x * 73856093u) ^ (plot.z * 19349663u);
+        const core::u32 seed = params.seed != 0u ? params.seed ^ (plot.x * 73856093u) ^ (plot.z * 19349663u) :
+                                                   worldSeed ^ (plot.x * 73856093u) ^ (plot.z * 19349663u);
 
         const VoxelVolume building = buildingVolume(plot, params, seed);
         if (building.empty())
@@ -325,8 +324,8 @@ VoxelVolume buildTown(const SettlementMap &settlement, const lpl::pmr::vector<Bu
     return town;
 }
 
-VoxelVolume decoratePath(const Grid<core::u8> &path, const SequenceGrammar &grammar, core::u32 seed,
-                         core::u32 levels, core::u32 &outCount)
+VoxelVolume decoratePath(const Grid<core::u8> &path, const SequenceGrammar &grammar, core::u32 seed, core::u32 levels,
+                         core::u32 &outCount)
 {
     outCount = 0u;
     VoxelVolume volume;

@@ -50,8 +50,7 @@ void testCascadeRule()
 
     check(procgen::checkCascade(schedule, 2u, 0u) == procgen::CascadeViolation::None,
           "a fine pass may read a coarse level");
-    check(procgen::checkCascade(schedule, 1u, 1u) == procgen::CascadeViolation::None,
-          "a pass may read its own level");
+    check(procgen::checkCascade(schedule, 1u, 1u) == procgen::CascadeViolation::None, "a pass may read its own level");
     check(procgen::checkCascade(schedule, 0u, 2u) == procgen::CascadeViolation::ReadsFiner,
           "a coarse pass reading a fine level is the forbidden direction");
     check(procgen::checkCascade(schedule, 0u, 9u) == procgen::CascadeViolation::UnknownLevel,
@@ -132,9 +131,8 @@ void testHysteresis()
         source.x = math::Fixed32::fromFloat((tick % 2u) == 0u ? 0.49f : 0.51f);
         source.z = math::Fixed32::zero();
 
-        const procgen::StreamingPlan plan =
-            procgen::planStreaming(&source, 1u, resident.empty() ? nullptr : &resident[0],
-                                   static_cast<core::u32>(resident.size()), params);
+        const procgen::StreamingPlan plan = procgen::planStreaming(
+            &source, 1u, resident.empty() ? nullptr : &resident[0], static_cast<core::u32>(resident.size()), params);
 
         for (core::u32 i = 0u; i < plan.toRelease.size(); ++i)
             for (core::u32 j = 0u; j < plan.toGenerate.size(); ++j)
@@ -180,8 +178,8 @@ void testDirectionWeightAndBudget()
     core::i32 ahead = 0;
     for (core::u32 i = 0u; i < plan.toGenerate.size(); ++i)
         ahead += plan.toGenerate[i].coord.x;
-    std::printf("    first %u chunks have summed x = %d (heading +X)\n",
-                static_cast<core::u32>(plan.toGenerate.size()), ahead);
+    std::printf("    first %u chunks have summed x = %d (heading +X)\n", static_cast<core::u32>(plan.toGenerate.size()),
+                ahead);
     check(ahead > 0, "the scheduled chunks lie ahead of the source, not behind it");
 
     // No wall clock anywhere: the same inputs give the same plan, always.

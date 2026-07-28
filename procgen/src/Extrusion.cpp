@@ -64,16 +64,15 @@ VoxelVolume extrudeTilePlan(const Grid<core::u8> &plan, const lpl::pmr::vector<c
         for (core::u32 x = 0u; x < plan.width(); ++x)
         {
             const core::u8 tile = plan.at(x, z);
-            const core::u32 height =
-                tile < tileHeight.size() ? static_cast<core::u32>(tileHeight[tile]) : 1u;
+            const core::u32 height = tile < tileHeight.size() ? static_cast<core::u32>(tileHeight[tile]) : 1u;
             if (height == 0u)
                 continue; // this tile is a hole, not a column
 
             // Material carries the tile id, so the volume still knows what each
             // column was made of — a mesher can texture from it without needing
             // the plan alongside.
-            fillColumn(volume, x, z, params.baseLevel, params.baseLevel + height,
-                       static_cast<core::u8>(tile + 1u), params.solidBelow);
+            fillColumn(volume, x, z, params.baseLevel, params.baseLevel + height, static_cast<core::u8>(tile + 1u),
+                       params.solidBelow);
         }
     }
     return volume;
@@ -130,8 +129,8 @@ core::u32 countSurfaceVoxels(const VoxelVolume &volume)
 
                 // Outside the volume counts as empty, so the outer shell is
                 // surface — which is what a mesher emits too.
-                bool exposed = x == 0u || z == 0u || y == 0u || x + 1u == volume.width ||
-                               z + 1u == volume.depth || y + 1u == volume.levels;
+                bool exposed = x == 0u || z == 0u || y == 0u || x + 1u == volume.width || z + 1u == volume.depth ||
+                               y + 1u == volume.levels;
                 if (!exposed)
                     exposed = volume.at(x + 1u, y, z) == 0u || volume.at(x - 1u, y, z) == 0u ||
                               volume.at(x, y + 1u, z) == 0u || volume.at(x, y - 1u, z) == 0u ||

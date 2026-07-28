@@ -88,7 +88,7 @@ struct Fitness {
  * @brief Mutation rates, and when they go wrong on purpose.
  */
 struct HeredityParams {
-    core::u32 mutationChance16{1u};   ///< Per-gene mutation chance, in sixteenths.
+    core::u32 mutationChance16{1u};     ///< Per-gene mutation chance, in sixteenths.
     core::f32 mutationAmplitude{0.12f}; ///< Ordinary mutation: +/- this share.
 
     /**

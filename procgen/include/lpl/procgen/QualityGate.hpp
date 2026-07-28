@@ -45,14 +45,14 @@ inline constexpr core::u32 kUnreachable = 0xFFFFFFFFu;
  * @brief What the gate measured.
  */
 struct LevelQuality {
-    bool goalReachable{false};    ///< Is the exit connected to the entrance?
-    bool fullyConnected{false};   ///< Is every walkable cell reachable from the entrance?
-    core::u32 walkableCells{0u};  ///< Total walkable cells.
-    core::u32 reachableCells{0u}; ///< Cells the entrance can actually reach.
-    core::u32 pathLength{0u};     ///< Steps from entrance to exit.
-    core::u32 deadEnds{0u};       ///< Walkable cells with exactly one walkable neighbour.
-    core::u32 junctions{0u};      ///< Walkable cells with three or more.
-    core::u32 longestDistance{0u};///< Farthest reachable cell, in steps.
+    bool goalReachable{false};     ///< Is the exit connected to the entrance?
+    bool fullyConnected{false};    ///< Is every walkable cell reachable from the entrance?
+    core::u32 walkableCells{0u};   ///< Total walkable cells.
+    core::u32 reachableCells{0u};  ///< Cells the entrance can actually reach.
+    core::u32 pathLength{0u};      ///< Steps from entrance to exit.
+    core::u32 deadEnds{0u};        ///< Walkable cells with exactly one walkable neighbour.
+    core::u32 junctions{0u};       ///< Walkable cells with three or more.
+    core::u32 longestDistance{0u}; ///< Farthest reachable cell, in steps.
 };
 
 /**
@@ -63,11 +63,11 @@ struct LevelQuality {
  * to generate nothing.
  */
 struct GateCriteria {
-    bool requireGoalReachable{true};   ///< The exit must be reachable.
-    bool requireFullyConnected{true};  ///< No isolated pockets.
-    core::u32 minPathLength{8u};       ///< Reject levels where the exit is next to the entrance.
-    core::u32 minWalkableCells{32u};   ///< Reject levels too small to play in.
-    core::u32 maxDeadEndRatio{60u};    ///< Reject mazes: max share of dead ends, in percent.
+    bool requireGoalReachable{true};  ///< The exit must be reachable.
+    bool requireFullyConnected{true}; ///< No isolated pockets.
+    core::u32 minPathLength{8u};      ///< Reject levels where the exit is next to the entrance.
+    core::u32 minWalkableCells{32u};  ///< Reject levels too small to play in.
+    core::u32 maxDeadEndRatio{60u};   ///< Reject mazes: max share of dead ends, in percent.
 };
 
 /**
@@ -149,13 +149,13 @@ struct DesireTerm {
  * @brief What the critical path through a level looks like, and what hangs off it.
  */
 struct HotPathAnalysis {
-    Grid<core::u8> onPath;         ///< 1 for cells on the shortest entrance-to-exit route.
-    DistanceMap detour;            ///< Steps from the nearest path cell.
-    core::u32 pathCells{0u};       ///< Length of the route, in cells.
-    core::u32 deepestDetour{0u};   ///< Farthest any cell lies from the route.
-    core::u32 excessiveCells{0u};  ///< Cells beyond @c detourLimit from the route.
-    core::u32 farthestCell{0u};    ///< Flat index of the deepest cell — where a secret goes.
-    bool valid{false};             ///< False when entrance and exit are not connected.
+    Grid<core::u8> onPath;        ///< 1 for cells on the shortest entrance-to-exit route.
+    DistanceMap detour;           ///< Steps from the nearest path cell.
+    core::u32 pathCells{0u};      ///< Length of the route, in cells.
+    core::u32 deepestDetour{0u};  ///< Farthest any cell lies from the route.
+    core::u32 excessiveCells{0u}; ///< Cells beyond @c detourLimit from the route.
+    core::u32 farthestCell{0u};   ///< Flat index of the deepest cell — where a secret goes.
+    bool valid{false};            ///< False when entrance and exit are not connected.
 };
 
 /**
@@ -182,8 +182,8 @@ struct HotPathAnalysis {
  * @param detourLimit  Detour depth beyond which a cell counts as excessive.
  * @return The analysis; check @c valid first.
  */
-[[nodiscard]] HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u32 startZ,
-                                             core::u32 goalX, core::u32 goalZ, core::u32 detourLimit);
+[[nodiscard]] HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u32 startZ, core::u32 goalX,
+                                             core::u32 goalZ, core::u32 detourLimit);
 
 /**
  * @brief Turns a danger map into one an agent can flee along.
@@ -203,8 +203,7 @@ struct HotPathAnalysis {
  *                     "wherever is furthest from the threat".
  * @return A map to descend to move away from the source.
  */
-[[nodiscard]] DistanceMap computeFleeMap(const DungeonMap &map, const DistanceMap &danger,
-                                         core::u32 safeDistance = 0u);
+[[nodiscard]] DistanceMap computeFleeMap(const DungeonMap &map, const DistanceMap &danger, core::u32 safeDistance = 0u);
 
 /**
  * @brief Measures a level's playability properties.

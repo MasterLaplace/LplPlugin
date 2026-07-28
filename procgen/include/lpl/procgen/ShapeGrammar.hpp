@@ -116,18 +116,18 @@ struct SequenceGrammar {
  * make the grammar a second geometry engine.
  */
 struct BuildingGrammarParams {
-    core::u32 seed{0u};         ///< 0 derives a stream from the world seed.
-    core::u32 minFloors{1u};    ///< Fewest storeys any building gets.
-    core::u32 maxFloors{4u};    ///< Most storeys any building gets.
-    core::u32 baseHeight{1u};   ///< Levels of ground-floor course.
-    core::u32 floorHeight{1u};  ///< Levels per repeated storey.
-    core::u32 roofHeight{1u};   ///< Levels of roof; 0 leaves the top flat.
-    core::u32 inset{0u};        ///< Cells the walls step in from the plot edge.
-    core::f32 roofTaper{0.5f};  ///< Share of the roof that steps inward, in [0, 1].
-    core::u8 baseMaterial{2u};  ///< Material of the base course.
-    core::u8 wallMaterial{1u};  ///< Material of the storeys.
-    core::u8 roofMaterial{3u};  ///< Material of the roof.
-    bool hollow{true};          ///< Leave the interior empty above the base.
+    core::u32 seed{0u};        ///< 0 derives a stream from the world seed.
+    core::u32 minFloors{1u};   ///< Fewest storeys any building gets.
+    core::u32 maxFloors{4u};   ///< Most storeys any building gets.
+    core::u32 baseHeight{1u};  ///< Levels of ground-floor course.
+    core::u32 floorHeight{1u}; ///< Levels per repeated storey.
+    core::u32 roofHeight{1u};  ///< Levels of roof; 0 leaves the top flat.
+    core::u32 inset{0u};       ///< Cells the walls step in from the plot edge.
+    core::f32 roofTaper{0.5f}; ///< Share of the roof that steps inward, in [0, 1].
+    core::u8 baseMaterial{2u}; ///< Material of the base course.
+    core::u8 wallMaterial{1u}; ///< Material of the storeys.
+    core::u8 roofMaterial{3u}; ///< Material of the roof.
+    bool hollow{true};         ///< Leave the interior empty above the base.
 };
 
 /**
@@ -180,8 +180,7 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
  * @param seed   Stream for this plot's choices.
  * @return The building's volume.
  */
-[[nodiscard]] VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams &params,
-                                         core::u32 seed);
+[[nodiscard]] VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams &params, core::u32 seed);
 
 /**
  * @brief Raises every plot of a settlement into one volume.

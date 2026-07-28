@@ -51,8 +51,8 @@ namespace lpl::procgen {
  * @brief Talus-angle relaxation.
  */
 struct ThermalErosionParams {
-    core::u32 iterations{16u};   ///< Relaxation passes.
-    core::f32 talus{0.6f};       ///< Height difference per cell a slope holds before sliding.
+    core::u32 iterations{16u};     ///< Relaxation passes.
+    core::f32 talus{0.6f};         ///< Height difference per cell a slope holds before sliding.
     core::f32 carryFraction{0.5f}; ///< Share of the excess moved per pass, in [0, 1].
 };
 
@@ -61,13 +61,13 @@ struct ThermalErosionParams {
  * @brief Rain, dissolve, transport, evaporate.
  */
 struct HydraulicErosionParams {
-    core::u32 iterations{24u};     ///< Rain/flow/evaporate cycles.
-    core::f32 rainAmount{0.02f};   ///< Water added per cell per cycle.
-    core::f32 solubility{0.35f};   ///< Share of the capacity deficit dissolved per cycle.
-    core::f32 evaporation{0.35f};  ///< Share of water lost per cycle, in [0, 1].
+    core::u32 iterations{24u};        ///< Rain/flow/evaporate cycles.
+    core::f32 rainAmount{0.02f};      ///< Water added per cell per cycle.
+    core::f32 solubility{0.35f};      ///< Share of the capacity deficit dissolved per cycle.
+    core::f32 evaporation{0.35f};     ///< Share of water lost per cycle, in [0, 1].
     core::f32 sedimentCapacity{6.0f}; ///< Sediment a unit of water holds per unit of slope.
-    core::f32 deposition{0.3f};    ///< Share of the excess deposited per cycle, in [0, 1].
-    core::f32 minSlope{0.02f};     ///< Slope floor, so still water still carries a little.
+    core::f32 deposition{0.3f};       ///< Share of the excess deposited per cycle, in [0, 1].
+    core::f32 minSlope{0.02f};        ///< Slope floor, so still water still carries a little.
 };
 
 /**

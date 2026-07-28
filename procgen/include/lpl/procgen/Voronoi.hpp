@@ -51,9 +51,9 @@ inline constexpr core::u16 kNoRegion = 0xFFFFu;
  * @brief One region's centre, in grid coordinates.
  */
 struct VoronoiSite {
-    math::Fixed32 x{};      ///< Column (fractional).
-    math::Fixed32 z{};      ///< Row (fractional).
-    core::u16 region{0u};   ///< Index this site owns.
+    math::Fixed32 x{};    ///< Column (fractional).
+    math::Fixed32 z{};    ///< Row (fractional).
+    core::u16 region{0u}; ///< Index this site owns.
 };
 
 /**
@@ -82,13 +82,13 @@ enum class DistanceMetric : core::u8 {
  * @brief Grid size, region scale, metric and how organic the borders are.
  */
 struct VoronoiParams {
-    core::u32 width{64u};      ///< Cells along X.
-    core::u32 depth{64u};      ///< Cells along Z.
-    core::u32 seed{1337u};     ///< Determinism anchor.
-    core::u32 cellSize{12u};   ///< Coarse cell edge; larger means bigger regions.
-    core::f32 jitter{0.8f};    ///< How far a site may stray inside its coarse cell, in [0, 1].
+    core::u32 width{64u};                             ///< Cells along X.
+    core::u32 depth{64u};                             ///< Cells along Z.
+    core::u32 seed{1337u};                            ///< Determinism anchor.
+    core::u32 cellSize{12u};                          ///< Coarse cell edge; larger means bigger regions.
+    core::f32 jitter{0.8f};                           ///< How far a site may stray inside its coarse cell, in [0, 1].
     DistanceMetric metric{DistanceMetric::Euclidean}; ///< Which distance decides ownership.
-    core::f32 warpStrength{0.0f}; ///< Domain warp in cells; 0 leaves borders polygonal.
+    core::f32 warpStrength{0.0f};                     ///< Domain warp in cells; 0 leaves borders polygonal.
 };
 
 /**
@@ -96,9 +96,9 @@ struct VoronoiParams {
  * @brief The computed partition.
  */
 struct VoronoiDiagram {
-    RegionMap regions;                     ///< Region index per cell.
-    lpl::pmr::vector<VoronoiSite> sites;   ///< Region centres, indexed by region.
-    core::u32 regionCount{0u};             ///< Number of regions.
+    RegionMap regions;                   ///< Region index per cell.
+    lpl::pmr::vector<VoronoiSite> sites; ///< Region centres, indexed by region.
+    core::u32 regionCount{0u};           ///< Number of regions.
 };
 
 /**

@@ -67,12 +67,12 @@ enum class TrophicLevel : core::u8 {
 struct SpeciesParams {
     TrophicLevel level{TrophicLevel::Primary};
 
-    math::Fixed32 growth{math::Fixed32::fromRaw(0x0CCC)};   ///< @f$\alpha@f$: intrinsic growth per step.
-    math::Fixed32 mortality{math::Fixed32::fromRaw(0x0666)};///< @f$\gamma@f$: death rate with no food.
-    math::Fixed32 predation{math::Fixed32::fromRaw(0x0199)};///< @f$\beta@f$: how hard it hits its prey.
-    math::Fixed32 conversion{math::Fixed32::fromRaw(0x1999)};///< @f$\delta@f$: prey eaten to offspring.
+    math::Fixed32 growth{math::Fixed32::fromRaw(0x0CCC)};     ///< @f$\alpha@f$: intrinsic growth per step.
+    math::Fixed32 mortality{math::Fixed32::fromRaw(0x0666)};  ///< @f$\gamma@f$: death rate with no food.
+    math::Fixed32 predation{math::Fixed32::fromRaw(0x0199)};  ///< @f$\beta@f$: how hard it hits its prey.
+    math::Fixed32 conversion{math::Fixed32::fromRaw(0x1999)}; ///< @f$\delta@f$: prey eaten to offspring.
 
-    math::Fixed32 capacity{math::Fixed32::fromInt(1000)};   ///< @f$K@f$: what the habitat supports.
+    math::Fixed32 capacity{math::Fixed32::fromInt(1000)}; ///< @f$K@f$: what the habitat supports.
 
     /**
      * @brief Population that predation cannot reach.

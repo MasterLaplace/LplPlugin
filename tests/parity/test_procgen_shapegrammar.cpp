@@ -56,16 +56,16 @@ void testParser()
     // Every one of these is a plausible typo, and every one must be refused
     // rather than parsed as far as it goes.
     const char *malformed[] = {
-        "",                       // nothing
-        "{[A]}",                  // no repeat operator
-        "{[A]*",                  // unclosed block
-        "[A]*",                   // no block
-        "{[A]:0}*",               // a zero weight is not a weight
-        "{[A]:}*",                // a colon with no number
-        "{[]}*",                  // an empty module
-        "{[A]}*,",                // a comma promising a terminator that is not there
-        "{[A]}* junk",            // trailing garbage
-        "{[A],}*",                // a dangling separator
+        "",            // nothing
+        "{[A]}",       // no repeat operator
+        "{[A]*",       // unclosed block
+        "[A]*",        // no block
+        "{[A]:0}*",    // a zero weight is not a weight
+        "{[A]:}*",     // a colon with no number
+        "{[]}*",       // an empty module
+        "{[A]}*,",     // a comma promising a terminator that is not there
+        "{[A]}* junk", // trailing garbage
+        "{[A],}*",     // a dangling separator
     };
     for (const char *text : malformed)
     {

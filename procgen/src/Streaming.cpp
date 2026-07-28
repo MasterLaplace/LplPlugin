@@ -60,9 +60,9 @@ constexpr core::i32 kPriorityScale = 256;
         if (magnitude.raw() != 0)
         {
             const math::Fixed32 aligned = dot / magnitude;
-            const core::i32 bonus =
-                (aligned * math::Fixed32::fromInt(static_cast<core::i32>(params.directionWeight16) * kPriorityScale /
-                                                  16)).toInt();
+            const core::i32 bonus = (aligned * math::Fixed32::fromInt(static_cast<core::i32>(params.directionWeight16) *
+                                                                      kPriorityScale / 16))
+                                        .toInt();
             priority -= bonus;
         }
     }
@@ -145,10 +145,10 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
         while (j > 0u)
         {
             const StreamingRequest &prev = plan.toGenerate[j - 1u];
-            const bool after = prev.priority < key.priority ||
-                               (prev.priority == key.priority &&
-                                (prev.coord.z < key.coord.z ||
-                                 (prev.coord.z == key.coord.z && prev.coord.x <= key.coord.x)));
+            const bool after =
+                prev.priority < key.priority ||
+                (prev.priority == key.priority &&
+                 (prev.coord.z < key.coord.z || (prev.coord.z == key.coord.z && prev.coord.x <= key.coord.x)));
             if (after)
                 break;
             plan.toGenerate[j] = prev;
@@ -163,8 +163,7 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
     // source oscillating across a boundary otherwise generates and releases the
     // same chunk on alternate ticks forever, and the manager spends its whole
     // budget standing still.
-    const core::i32 releaseRadius =
-        static_cast<core::i32>((params.generateRadius * params.releaseRatio16 + 15u) / 16u);
+    const core::i32 releaseRadius = static_cast<core::i32>((params.generateRadius * params.releaseRatio16 + 15u) / 16u);
 
     for (core::u32 i = 0u; i < residentCount; ++i)
     {

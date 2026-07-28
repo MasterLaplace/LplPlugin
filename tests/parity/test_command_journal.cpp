@@ -95,7 +95,8 @@ int main()
     check(!contains(*queryBox, "\"matched\":0,"), "the box filter still matches entities near the origin");
 
     const auto badFilter = journal.execute(R"({"cmd":"query_entities","with":"NotAComponent"})");
-    check(badFilter.has_value() && contains(*badFilter, "\"ok\":false"), "an unknown component is refused, not ignored");
+    check(badFilter.has_value() && contains(*badFilter, "\"ok\":false"),
+          "an unknown component is refused, not ignored");
 
     // ── Undo is a rebuild, not an inverse ───────────────────────────────────
     check(journal.undo(), "undo reports success");

@@ -17,8 +17,8 @@
 #include <lpl/editor/GamePackBaker.hpp>
 #include <lpl/editor/Json.hpp>
 #include <lpl/editor/SceneSerializer.hpp>
-#include <lpl/procgen/WorldRecipe.hpp>
 #include <lpl/math/Vec3.hpp>
+#include <lpl/procgen/WorldRecipe.hpp>
 
 #include <cstdio>
 #include <string>
@@ -99,12 +99,18 @@ WorldStats collectWorldStats(const ecs::Registry &registry)
                     seeded = true;
                     continue;
                 }
-                if (pos[i].x < stats.minX) stats.minX = pos[i].x;
-                if (pos[i].x > stats.maxX) stats.maxX = pos[i].x;
-                if (pos[i].y < stats.minY) stats.minY = pos[i].y;
-                if (pos[i].y > stats.maxY) stats.maxY = pos[i].y;
-                if (pos[i].z < stats.minZ) stats.minZ = pos[i].z;
-                if (pos[i].z > stats.maxZ) stats.maxZ = pos[i].z;
+                if (pos[i].x < stats.minX)
+                    stats.minX = pos[i].x;
+                if (pos[i].x > stats.maxX)
+                    stats.maxX = pos[i].x;
+                if (pos[i].y < stats.minY)
+                    stats.minY = pos[i].y;
+                if (pos[i].y > stats.maxY)
+                    stats.maxY = pos[i].y;
+                if (pos[i].z < stats.minZ)
+                    stats.minZ = pos[i].z;
+                if (pos[i].z > stats.maxZ)
+                    stats.maxZ = pos[i].z;
             }
         }
     }
@@ -252,10 +258,10 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         {
             // Bounds in raw Q16.16: the wire stays integral, so a reader
             // reconstructs the exact same box the engine measured.
-            out += ",\"boundsMinRaw\":{\"x\":" + std::to_string(stats.minX.raw()) + ",\"y\":" +
-                   std::to_string(stats.minY.raw()) + ",\"z\":" + std::to_string(stats.minZ.raw()) + "}";
-            out += ",\"boundsMaxRaw\":{\"x\":" + std::to_string(stats.maxX.raw()) + ",\"y\":" +
-                   std::to_string(stats.maxY.raw()) + ",\"z\":" + std::to_string(stats.maxZ.raw()) + "}";
+            out += ",\"boundsMinRaw\":{\"x\":" + std::to_string(stats.minX.raw()) +
+                   ",\"y\":" + std::to_string(stats.minY.raw()) + ",\"z\":" + std::to_string(stats.minZ.raw()) + "}";
+            out += ",\"boundsMaxRaw\":{\"x\":" + std::to_string(stats.maxX.raw()) +
+                   ",\"y\":" + std::to_string(stats.maxY.raw()) + ",\"z\":" + std::to_string(stats.maxZ.raw()) + "}";
         }
         out += ",\"components\":{";
         bool first = true;

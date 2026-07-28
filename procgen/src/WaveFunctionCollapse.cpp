@@ -151,8 +151,8 @@ public:
           _options(params.width, params.depth, 0u), _stack()
     {
         const core::usize cells = static_cast<core::usize>(params.width) * params.depth;
-        const core::u64 all = _tiles.tileCount >= 64u ? ~core::u64{0}
-                                                      : ((core::u64{1} << _tiles.tileCount) - core::u64{1});
+        const core::u64 all =
+            _tiles.tileCount >= 64u ? ~core::u64{0} : ((core::u64{1} << _tiles.tileCount) - core::u64{1});
         _possible.fill(all);
         _options.fill(_tiles.tileCount);
         _stack.reserve(cells);
@@ -348,8 +348,8 @@ private:
      */
     bool repairAround(core::u32 x, core::u32 z)
     {
-        const core::u64 all = _tiles.tileCount >= 64u ? ~core::u64{0}
-                                                      : ((core::u64{1} << _tiles.tileCount) - core::u64{1});
+        const core::u64 all =
+            _tiles.tileCount >= 64u ? ~core::u64{0} : ((core::u64{1} << _tiles.tileCount) - core::u64{1});
         const core::i32 radius = static_cast<core::i32>(_params.localRepairRadius);
 
         _stack.clear();
@@ -508,11 +508,10 @@ TileSet makeTerrainTileSet()
 
     // A gradient: each step may touch itself and its immediate neighbours in the
     // sequence, so water never abuts grass without sand between them.
-    constexpr core::u32 kSequence[] = {static_cast<core::u32>(TerrainTile::Water),
-                                       static_cast<core::u32>(TerrainTile::Sand),
-                                       static_cast<core::u32>(TerrainTile::Grass),
-                                       static_cast<core::u32>(TerrainTile::Forest),
-                                       static_cast<core::u32>(TerrainTile::Rock)};
+    constexpr core::u32 kSequence[] = {
+        static_cast<core::u32>(TerrainTile::Water), static_cast<core::u32>(TerrainTile::Sand),
+        static_cast<core::u32>(TerrainTile::Grass), static_cast<core::u32>(TerrainTile::Forest),
+        static_cast<core::u32>(TerrainTile::Rock)};
     for (core::u32 i = 0u; i < 5u; ++i)
     {
         set.allowAnywhere(kSequence[i], kSequence[i]);

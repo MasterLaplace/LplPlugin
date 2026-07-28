@@ -197,10 +197,9 @@ math::Fixed32 slopeAt(const Heightfield &field, core::u32 x, core::u32 z)
     math::Fixed32 steepest = math::Fixed32::zero();
     for (core::u32 n = 0u; n < 4u; ++n)
     {
-        const math::Fixed32 drop =
-            (here - field.clamped(static_cast<core::i32>(x) + kNeighbor4X[n],
-                                  static_cast<core::i32>(z) + kNeighbor4Z[n]))
-                .abs();
+        const math::Fixed32 drop = (here - field.clamped(static_cast<core::i32>(x) + kNeighbor4X[n],
+                                                         static_cast<core::i32>(z) + kNeighbor4Z[n]))
+                                       .abs();
         if (drop > steepest)
             steepest = drop;
     }

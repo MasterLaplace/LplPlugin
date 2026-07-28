@@ -65,13 +65,13 @@ enum class SectionType : core::u32 {
  * @brief Fixed 32-byte prologue of every pack.
  */
 struct Header {
-    char magic[kMagicSize];   ///< "LPLPAK\0\0", never NUL-terminated as a string.
-    core::u32 formatVersion;  ///< @ref kFormatVersion when written.
-    core::u32 totalSize;      ///< Size of the whole image, header included.
-    core::u32 sectionCount;   ///< Entries in the section table that follows.
-    core::u32 contentHash;    ///< FNV-1a over every byte after this header.
-    core::u32 reserved0;      ///< Must be 0.
-    core::u32 reserved1;      ///< Must be 0.
+    char magic[kMagicSize];  ///< "LPLPAK\0\0", never NUL-terminated as a string.
+    core::u32 formatVersion; ///< @ref kFormatVersion when written.
+    core::u32 totalSize;     ///< Size of the whole image, header included.
+    core::u32 sectionCount;  ///< Entries in the section table that follows.
+    core::u32 contentHash;   ///< FNV-1a over every byte after this header.
+    core::u32 reserved0;     ///< Must be 0.
+    core::u32 reserved1;     ///< Must be 0.
 };
 static_assert(sizeof(Header) == 32u, "GamePack header layout is wire format");
 

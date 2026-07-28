@@ -44,6 +44,11 @@
  * @copyright MIT License
  */
 
+#include <lpl/ai/Personality.hpp>
+#include <lpl/ai/StigmergyField.hpp>
+#include <lpl/ai/Swarm.hpp>
+#include <lpl/ecology/Genome.hpp>
+#include <lpl/ecology/Populations.hpp>
 #include <lpl/ecs/Archetype.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Entity.hpp>
@@ -56,22 +61,17 @@
 #include <lpl/engine/World.hpp>
 #include <lpl/image/Font8x16.hpp>
 #include <lpl/math/Vec3.hpp>
-#include <lpl/ai/Personality.hpp>
-#include <lpl/ai/StigmergyField.hpp>
-#include <lpl/ai/Swarm.hpp>
-#include <lpl/ecology/Genome.hpp>
-#include <lpl/ecology/Populations.hpp>
 #include <lpl/procgen/Biome.hpp>
 #include <lpl/procgen/CaveSystem.hpp>
 #include <lpl/procgen/Climate.hpp>
 #include <lpl/procgen/Dungeon.hpp>
-#include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/Extrusion.hpp>
 #include <lpl/procgen/FixedMath.hpp>
+#include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/Hydrology.hpp>
 #include <lpl/procgen/Liminal.hpp>
-#include <lpl/procgen/ShapeGrammar.hpp>
 #include <lpl/procgen/Settlement.hpp>
+#include <lpl/procgen/ShapeGrammar.hpp>
 #include <lpl/procgen/Streaming.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 #include <lpl/procgen/Voronoi.hpp>
@@ -105,7 +105,16 @@ using namespace lpl;
 /// @c Climate is one mode rather than six, and the axis it shows is a separate
 /// option: the six axes are the same kind of quantity, and cycling shading
 /// through six near-identical entries would bury the five modes that are not.
-enum class Shading : int { Biome = 0, Height, Moisture, Drainage, Region, Slope, Climate, Count };
+enum class Shading : int {
+    Biome = 0,
+    Height,
+    Moisture,
+    Drainage,
+    Region,
+    Slope,
+    Climate,
+    Count
+};
 
 /// Which grid is on screen.
 ///
@@ -117,7 +126,13 @@ enum class Shading : int { Biome = 0, Height, Moisture, Drainage, Region, Slope,
 /// module whose whole point is how it *feels* to stand in. A fold cannot report
 /// that, and the pipeline order that produces it (zone, split, erode, repair,
 /// dress) is only obviously right once you can walk the result.
-enum class View : int { Surface = 0, Cutaway, Underground, Liminal, Count };
+enum class View : int {
+    Surface = 0,
+    Cutaway,
+    Underground,
+    Liminal,
+    Count
+};
 
 struct Options {
     core::u32 seed{1337u};
@@ -136,11 +151,11 @@ struct Options {
     procgen::DistanceMetric metric{procgen::DistanceMetric::Euclidean};
     Shading shading{Shading::Biome};
     View view{View::Surface};
-    core::u32 caveKind{3u};    ///< 0 cellular, 1 BSP, 2 DLA, 3 layered system.
-    core::u32 climateAxis{0u}; ///< Which of the six axes @c Shading::Climate shows.
-    bool grammarBuildings{true};///< Raise the town with the shape grammar rather than as prisms.
-    bool living{true};          ///< Run the ai/ecology layer on top of the world.
-    bool chunkOverlay{false};   ///< Draw the streaming plan around the camera.
+    core::u32 caveKind{3u};      ///< 0 cellular, 1 BSP, 2 DLA, 3 layered system.
+    core::u32 climateAxis{0u};   ///< Which of the six axes @c Shading::Climate shows.
+    bool grammarBuildings{true}; ///< Raise the town with the shape grammar rather than as prisms.
+    bool living{true};           ///< Run the ai/ecology layer on top of the world.
+    bool chunkOverlay{false};    ///< Draw the streaming plan around the camera.
 };
 
 /// Everything the generator produced, plus the timing it took.
@@ -683,9 +698,11 @@ std::vector<Vertex> buildSurfaceMesh(const TerrainData &world, const Options &op
         for (core::u32 x = 0u; x < width; ++x)
         {
             const float left = world.height.clamped(static_cast<core::i32>(x) - 1, static_cast<core::i32>(z)).toFloat();
-            const float right = world.height.clamped(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)).toFloat();
+            const float right =
+                world.height.clamped(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)).toFloat();
             const float back = world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z) - 1).toFloat();
-            const float front = world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1).toFloat();
+            const float front =
+                world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1).toFloat();
 
             float nx = left - right;
             float ny = 2.0f;
@@ -720,9 +737,13 @@ std::vector<Vertex> buildSurfaceMesh(const TerrainData &world, const Options &op
             if (options.roads && !world.roads.empty() && world.roads.at(x, z) != 0u)
                 colour = {0.24f, 0.22f, 0.20f};
 
-            grid[world.height.index(x, z)] =
-                Vertex{static_cast<float>(x) - halfW, world.height.at(x, z).toFloat(), static_cast<float>(z) - halfD,
-                       nx, ny, nz, colour};
+            grid[world.height.index(x, z)] = Vertex{static_cast<float>(x) - halfW,
+                                                    world.height.at(x, z).toFloat(),
+                                                    static_cast<float>(z) - halfD,
+                                                    nx,
+                                                    ny,
+                                                    nz,
+                                                    colour};
         }
     }
 
@@ -784,8 +805,8 @@ std::vector<Vertex> buildDungeonMesh(const TerrainData &world, float depthBelow)
     };
 
     const auto quad = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                 float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                 const Rgb &colour) {
+                                  float cz, float dx, float dy, float dz, float nx, float ny, float nz,
+                                  const Rgb &colour) {
         const Vertex a{ax, ay, az, nx, ny, nz, colour};
         const Vertex b{bx, by, bz, nx, ny, nz, colour};
         const Vertex c{cx, cy, cz, nx, ny, nz, colour};
@@ -807,10 +828,10 @@ std::vector<Vertex> buildDungeonMesh(const TerrainData &world, float depthBelow)
 
             // The cave hangs a fixed distance below the ground above it, so it follows
             // the terrain instead of lying on a flat plane the surface never touches.
-            const float ground = world.height.empty()
-                                     ? 0.0f
-                                     : world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z))
-                                           .toFloat();
+            const float ground =
+                world.height.empty() ?
+                    0.0f :
+                    world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
             const float floorY = ground - depthBelow;
             const float ceilY = floorY + wallHeight;
 
@@ -862,10 +883,10 @@ std::vector<Vertex> buildTownMesh(const TerrainData &world, const lpl::pmr::vect
     const float halfD = static_cast<float>(world.height.depth()) * 0.5f;
 
     const auto box = [&vertices](float x0, float x1, float y0, float y1, float z0, float z1, const Rgb &wall,
-                                const Rgb &roof) {
+                                 const Rgb &roof) {
         const auto face = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                     float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                     const Rgb &colour) {
+                                      float cz, float dx, float dy, float dz, float nx, float ny, float nz,
+                                      const Rgb &colour) {
             const Vertex a{ax, ay, az, nx, ny, nz, colour};
             const Vertex b{bx, by, bz, nx, ny, nz, colour};
             const Vertex c{cx, cy, cz, nx, ny, nz, colour};
@@ -904,8 +925,8 @@ std::vector<Vertex> buildTownMesh(const TerrainData &world, const lpl::pmr::vect
         // Height from the footprint's area and its district, hashed: a big plot on a
         // busy district gets a tall building, and the variation is reproducible.
         const core::u32 area = plot.width * plot.depth;
-        const core::u32 h = procgen::ValueNoise2D::hash2(static_cast<core::i32>(plot.x),
-                                                        static_cast<core::i32>(plot.z), static_cast<core::u32>(plot.district) + 1u);
+        const core::u32 h = procgen::ValueNoise2D::hash2(static_cast<core::i32>(plot.x), static_cast<core::i32>(plot.z),
+                                                         static_cast<core::u32>(plot.district) + 1u);
         const float storeys = 1.0f + static_cast<float>(area) * 0.28f + static_cast<float>(h & 0x7u) * 0.55f;
 
         const float x0 = static_cast<float>(plot.x) - halfW + 0.12f;
@@ -1101,12 +1122,10 @@ std::vector<Vertex> buildCaveSystemMesh(const TerrainData &world, float topDepth
         const procgen::CaveShaft &shaft = system.shafts[i];
         const float ground =
             world.height.clamped(static_cast<core::i32>(shaft.x), static_cast<core::i32>(shaft.z)).toFloat();
-        const float upper = shaft.surface
-                                ? ground + 0.4f
-                                : ground - topDepth - static_cast<float>(shaft.upperLayer) * layerSpacing;
-        const float lower = ground - topDepth - static_cast<float>(shaft.surface ? shaft.upperLayer
-                                                                                 : shaft.lowerLayer) *
-                                                    layerSpacing;
+        const float upper =
+            shaft.surface ? ground + 0.4f : ground - topDepth - static_cast<float>(shaft.upperLayer) * layerSpacing;
+        const float lower =
+            ground - topDepth - static_cast<float>(shaft.surface ? shaft.upperLayer : shaft.lowerLayer) * layerSpacing;
         const Rgb colour = shaft.surface ? Rgb{0.95f, 0.62f, 0.14f} : Rgb{0.40f, 0.34f, 0.30f};
 
         const float x0 = static_cast<float>(shaft.x) - halfW + 0.25f;
@@ -1435,7 +1454,7 @@ public:
         ai::Boid body{};
         ecology::Genome genome{};
         core::u32 id{0u};
-        core::u32 species{0u}; ///< 0 herbivore, 1 predator.
+        core::u32 species{0u};                       ///< 0 herbivore, 1 predator.
         math::Fixed32 heading{math::Fixed32::one()}; ///< Unit facing, X.
         math::Fixed32 headingZ{};                    ///< Unit facing, Z.
         bool alive{true};
@@ -1721,10 +1740,8 @@ public:
             // and looking, from inside the counter, like a herd in constant collision.
             if (!walkable(creature.body.x, creature.body.z, halfW, halfD))
             {
-                const math::Fixed32 towardX = creature.body.x.raw() > 0 ? -math::Fixed32::one()
-                                                                        : math::Fixed32::one();
-                const math::Fixed32 towardZ = creature.body.z.raw() > 0 ? -math::Fixed32::one()
-                                                                        : math::Fixed32::one();
+                const math::Fixed32 towardX = creature.body.x.raw() > 0 ? -math::Fixed32::one() : math::Fixed32::one();
+                const math::Fixed32 towardZ = creature.body.z.raw() > 0 ? -math::Fixed32::one() : math::Fixed32::one();
                 creature.body.x = creature.body.x + towardX;
                 creature.body.z = creature.body.z + towardZ;
                 creature.heading = towardX;
@@ -1757,13 +1774,12 @@ public:
                 const core::u32 direction = _field.gradientDirection(1u, x, z, true);
                 if (direction != ai::StigmergyField::kNoDirection)
                 {
-                    const math::Fixed32 pull =
-                        math::Fixed32::fromFloat(creature.species == 1u ? 0.07f : 0.05f) *
-                        (math::Fixed32::half() + traits.energy);
-                    creature.body.vx = creature.body.vx +
-                                       math::Fixed32::fromInt(procgen::kNeighbor8X[direction]) * pull;
-                    creature.body.vz = creature.body.vz +
-                                       math::Fixed32::fromInt(procgen::kNeighbor8Z[direction]) * pull;
+                    const math::Fixed32 pull = math::Fixed32::fromFloat(creature.species == 1u ? 0.07f : 0.05f) *
+                                               (math::Fixed32::half() + traits.energy);
+                    creature.body.vx =
+                        creature.body.vx + math::Fixed32::fromInt(procgen::kNeighbor8X[direction]) * pull;
+                    creature.body.vz =
+                        creature.body.vz + math::Fixed32::fromInt(procgen::kNeighbor8Z[direction]) * pull;
                 }
 
                 // A herbivore leaves its own scent where it grazes; that is what a
@@ -1793,8 +1809,8 @@ public:
             // the scenery. What the vector carries is a HEADING; the speed is the
             // genome's. Normalising separates the two, which is the only reading
             // under which "maxSpeed" is a property of the animal at all.
-            const math::Fixed32 lengthSquared = creature.body.vx * creature.body.vx +
-                                                creature.body.vz * creature.body.vz;
+            const math::Fixed32 lengthSquared =
+                creature.body.vx * creature.body.vx + creature.body.vz * creature.body.vz;
             math::Fixed32 headingX = creature.body.vx;
             math::Fixed32 headingZ = creature.body.vz;
             const math::Fixed32 length = procgen::fixedSqrt(lengthSquared);
@@ -2181,9 +2197,8 @@ public:
         for (core::u32 i = 0u; i < _creatures.size(); ++i)
             if (_creatures[i].alive && _creatures[i].species == 0u)
                 _statScratch.push_back(_creatures[i].genome);
-        const ecology::PopulationStats stats =
-            ecology::strengthStats(_statScratch.empty() ? nullptr : &_statScratch[0],
-                                   static_cast<core::u32>(_statScratch.size()));
+        const ecology::PopulationStats stats = ecology::strengthStats(_statScratch.empty() ? nullptr : &_statScratch[0],
+                                                                      static_cast<core::u32>(_statScratch.size()));
         ecology::HeredityParams heredity;
 
         glBegin(GL_QUADS);
@@ -2197,8 +2212,7 @@ public:
             const core::i32 gz = static_cast<core::i32>(creature.body.z.toFloat() + halfD);
             if (!world.height.contains(gx, gz))
                 continue;
-            const float ground =
-                world.height.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)).toFloat();
+            const float ground = world.height.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)).toFloat();
 
             const ai::PersonalityTraits traits = ai::personalityOf(creature.id, creature.species);
             const float half = 0.22f * creature.genome.size.toFloat();
@@ -2207,8 +2221,7 @@ public:
             // Temperament is visible, faintly: an aggressive animal runs hot.
             colour.r += 0.18f * traits.aggression.toFloat();
             colour.b += 0.12f * traits.nervousness.toFloat();
-            if (creature.species == 0u && stats.count > 4u &&
-                ecology::isAnomaly(creature.genome, stats, heredity))
+            if (creature.species == 0u && stats.count > 4u && ecology::isAnomaly(creature.genome, stats, heredity))
                 colour = {0.98f, 0.94f, 0.86f};
 
             const float cx = creature.body.x.toFloat();
@@ -2222,13 +2235,28 @@ public:
             const float z1 = cz + half;
 
             glColor3f(colour.r, colour.g, colour.b);
-            glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
+            glVertex3f(x0, y1, z0);
+            glVertex3f(x1, y1, z0);
+            glVertex3f(x1, y1, z1);
+            glVertex3f(x0, y1, z1);
             glColor3f(colour.r * 0.7f, colour.g * 0.7f, colour.b * 0.7f);
-            glVertex3f(x0, y0, z1); glVertex3f(x0, y1, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y0, z1);
-            glVertex3f(x1, y0, z0); glVertex3f(x1, y1, z0); glVertex3f(x0, y1, z0); glVertex3f(x0, y0, z0);
+            glVertex3f(x0, y0, z1);
+            glVertex3f(x0, y1, z1);
+            glVertex3f(x1, y1, z1);
+            glVertex3f(x1, y0, z1);
+            glVertex3f(x1, y0, z0);
+            glVertex3f(x1, y1, z0);
+            glVertex3f(x0, y1, z0);
+            glVertex3f(x0, y0, z0);
             glColor3f(colour.r * 0.55f, colour.g * 0.55f, colour.b * 0.55f);
-            glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y1, z0); glVertex3f(x1, y0, z0);
-            glVertex3f(x0, y0, z0); glVertex3f(x0, y1, z0); glVertex3f(x0, y1, z1); glVertex3f(x0, y0, z1);
+            glVertex3f(x1, y0, z1);
+            glVertex3f(x1, y1, z1);
+            glVertex3f(x1, y1, z0);
+            glVertex3f(x1, y0, z0);
+            glVertex3f(x0, y0, z0);
+            glVertex3f(x0, y1, z0);
+            glVertex3f(x0, y1, z1);
+            glVertex3f(x0, y0, z1);
         }
         glEnd();
     }
@@ -2507,7 +2535,6 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
     glMatrixMode(GL_MODELVIEW);
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Presentation: the X11 window and its GL context
 //
@@ -2538,12 +2565,12 @@ public:
         Window root = DefaultRootWindow(_display);
         XSetWindowAttributes windowAttributes{};
         windowAttributes.colormap = XCreateColormap(_display, root, _visual->visual, AllocNone);
-        windowAttributes.event_mask = ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask |
-                                      PointerMotionMask | StructureNotifyMask;
+        windowAttributes.event_mask =
+            ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask;
 
-        _window = XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(_width), static_cast<unsigned>(_height), 0,
-                                _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask,
-                                &windowAttributes);
+        _window =
+            XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(_width), static_cast<unsigned>(_height), 0,
+                          _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask, &windowAttributes);
         XMapWindow(_display, _window);
         XStoreName(_display, _window, "lpl-mapview — solo client");
 
@@ -2716,10 +2743,10 @@ public:
 
                     const core::f32 slide = 0.55f;
                     const core::f32 friction = 0.86f;
-                    velocities[i].x = math::Fixed32::fromFloat(velocities[i].x.toFloat() * friction +
-                                                               (left - right) * slide);
-                    velocities[i].z = math::Fixed32::fromFloat(velocities[i].z.toFloat() * friction +
-                                                               (back - front) * slide);
+                    velocities[i].x =
+                        math::Fixed32::fromFloat(velocities[i].x.toFloat() * friction + (left - right) * slide);
+                    velocities[i].z =
+                        math::Fixed32::fromFloat(velocities[i].z.toFloat() * friction + (back - front) * slide);
                 }
             }
         }
@@ -2731,7 +2758,7 @@ private:
     static constexpr ecs::ComponentAccess kAccesses[] = {
         {ecs::ComponentId::Position, ecs::AccessMode::ReadWrite},
         {ecs::ComponentId::Velocity, ecs::AccessMode::ReadWrite},
-        {ecs::ComponentId::AABB, ecs::AccessMode::ReadOnly},
+        {ecs::ComponentId::AABB,     ecs::AccessMode::ReadOnly },
     };
 
 public:
@@ -2765,8 +2792,7 @@ private:
  */
 class MapviewWorld final : public engine::World {
 public:
-    explicit MapviewWorld(Viewport &viewport, const Options &options) noexcept
-        : _viewport(viewport), _options(options)
+    explicit MapviewWorld(Viewport &viewport, const Options &options) noexcept : _viewport(viewport), _options(options)
     {
     }
 
@@ -2777,7 +2803,8 @@ public:
         // this scheduler. The engine's physics is registered before onInit runs.
         auto collision = lpl::pmr::make_unique<TerrainCollisionSystem>(registry(), _terrain.height, 1.0f);
         _collision = collision.get();
-        auto registered = scheduler().registerSystem(static_cast<lpl::pmr::unique_ptr<ecs::ISystem>>(std::move(collision)));
+        auto registered =
+            scheduler().registerSystem(static_cast<lpl::pmr::unique_ptr<ecs::ISystem>>(std::move(collision)));
         if (!registered)
         {
             _collision = nullptr;
@@ -2941,15 +2968,15 @@ public:
             if (_options.living)
                 std::printf("  herd %u grazers / %u hunters | %.2f cells/s | %u refused | trail %u cells | "
                             "%u strays | plants %u/%u | web %d/%d/%d\n",
-                            _living.aliveCount(0u), _living.aliveCount(1u), _living.meanSpeed(),
-                            _living.refusals(), _living.trailCells(), _living.strays(), _living.standingPlants(),
-                            _living.plantCount(), _living.web().species.size() > 0u ? _living.web().species[0].population.toInt() : 0,
+                            _living.aliveCount(0u), _living.aliveCount(1u), _living.meanSpeed(), _living.refusals(),
+                            _living.trailCells(), _living.strays(), _living.standingPlants(), _living.plantCount(),
+                            _living.web().species.size() > 0u ? _living.web().species[0].population.toInt() : 0,
                             _living.web().species.size() > 1u ? _living.web().species[1].population.toInt() : 0,
                             _living.web().species.size() > 2u ? _living.web().species[2].population.toInt() : 0);
             std::printf("%.0f fps | frame %.1f ms | tick %.2f ms | view %s | resting %u/%u\n",
                         elapsed > 0.0 ? static_cast<double>(_frames) / elapsed : 0.0, _frameMilliseconds,
-                        _tickMilliseconds, viewName(_options.view),
-                        _collision != nullptr ? _collision->resting() : 0u, _boulderCount);
+                        _tickMilliseconds, viewName(_options.view), _collision != nullptr ? _collision->resting() : 0u,
+                        _boulderCount);
             std::fflush(stdout);
         }
         (void) context;
@@ -2980,18 +3007,20 @@ private:
         // The layered system replaces the flat plan entirely rather than being drawn
         // beside it: they are two answers to the same question, and showing both at
         // once would say nothing about either.
-        _undergroundMesh = _options.caveKind % 4u == 3u ? buildCaveSystemMesh(_terrain, kCaveDepth, kCaveLayerSpacing)
-                                                        : buildDungeonMesh(_terrain, kCaveDepth);
+        _undergroundMesh = _options.caveKind % 4u == 3u ? buildCaveSystemMesh(_terrain, kCaveDepth, kCaveLayerSpacing) :
+                                                          buildDungeonMesh(_terrain, kCaveDepth);
 
         // The grammar's own volume when there is one, the box heuristic otherwise.
         // What is on screen is then what the generator produced, not the viewer's
         // guess at what it might have meant.
         if (_options.settlement && _options.grammarBuildings && !_terrain.townVolume.empty())
         {
-            const Rgb palette[4] = {{0.0f, 0.0f, 0.0f},
-                                    {0.66f, 0.56f, 0.44f},  // walls
-                                    {0.44f, 0.40f, 0.36f},  // base course
-                                    {0.42f, 0.24f, 0.20f}}; // roof
+            const Rgb palette[4] = {
+                {0.0f,  0.0f,  0.0f },
+                {0.66f, 0.56f, 0.44f}, // walls
+                {0.44f, 0.40f, 0.36f}, // base course
+                {0.42f, 0.24f, 0.20f}
+            }; // roof
             _townMesh = buildVoxelMesh(_terrain.townVolume, _terrain, -0.4f, palette, 4u);
         }
         else
@@ -3001,10 +3030,12 @@ private:
 
         if (_options.roads && _options.grammarBuildings && !_terrain.roadsideVolume.empty())
         {
-            const Rgb palette[4] = {{0.0f, 0.0f, 0.0f},
-                                    {0.35f, 0.28f, 0.20f},  // fence
-                                    {0.30f, 0.26f, 0.22f},
-                                    {0.95f, 0.80f, 0.35f}}; // lamp
+            const Rgb palette[4] = {
+                {0.0f,  0.0f,  0.0f },
+                {0.35f, 0.28f, 0.20f}, // fence
+                {0.30f, 0.26f, 0.22f},
+                {0.95f, 0.80f, 0.35f}
+            }; // lamp
             _roadsideMesh = buildVoxelMesh(_terrain.roadsideVolume, _terrain, 0.0f, palette, 4u);
         }
         else
@@ -3057,18 +3088,18 @@ private:
         std::printf("seed %u %ux%u noise=%s warp=%d erode=%d rivers=%d(%u) wind=%s metric=%s cave=%s "
                     "build=%.1fms tris=%zu flora=%zu boulders=%u plots=%zu townTris=%zu caveTris=%zu\n",
                     _options.seed, _options.size, _options.size, noiseName(_options.noise), int(_options.warp),
-                    int(_options.erosion), int(_options.rivers), _terrain.riverCells,
-                    windName(_options.windDirection), metricName(_options.metric), caveName(_options.caveKind),
-                    _terrain.buildMilliseconds, _surfaceMesh.size() / 3u, _propIds.size(), _boulderCount,
-                    _terrain.plots.size(), _townMesh.size() / 3u, _undergroundMesh.size() / 3u);
+                    int(_options.erosion), int(_options.rivers), _terrain.riverCells, windName(_options.windDirection),
+                    metricName(_options.metric), caveName(_options.caveKind), _terrain.buildMilliseconds,
+                    _surfaceMesh.size() / 3u, _propIds.size(), _boulderCount, _terrain.plots.size(),
+                    _townMesh.size() / 3u, _undergroundMesh.size() / 3u);
         std::fflush(stdout);
     }
 
     /// Creates the dynamic bodies, once, so the simulation has something to do.
     void createBoulders()
     {
-        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity,
-                                        ecs::ComponentId::Mass, ecs::ComponentId::AABB};
+        const ecs::ComponentId ids[] = {ecs::ComponentId::Position, ecs::ComponentId::Velocity, ecs::ComponentId::Mass,
+                                        ecs::ComponentId::AABB};
         const ecs::Archetype archetype{ids};
         _boulderIds.clear();
         for (core::u32 i = 0u; i < kBoulders; ++i)
@@ -3300,8 +3331,8 @@ private:
 
         const Rgb bark{0.33f, 0.23f, 0.15f};
         const auto quad = [&mesh](float ax, float ay, float az, float bx, float by, float bz, float cx2, float cy2,
-                                 float cz2, float dx, float dy, float dz, float nx, float ny, float nz,
-                                 const Rgb &colour) {
+                                  float cz2, float dx, float dy, float dz, float nx, float ny, float nz,
+                                  const Rgb &colour) {
             const Vertex a{ax, ay, az, nx, ny, nz, colour};
             const Vertex b{bx, by, bz, nx, ny, nz, colour};
             const Vertex c{cx2, cy2, cz2, nx, ny, nz, colour};
@@ -3314,15 +3345,15 @@ private:
             mesh.push_back(d);
         };
         const auto tri = [&mesh](float ax, float ay, float az, float bx, float by, float bz, float cx2, float cy2,
-                                float cz2, float nx, float ny, float nz, const Rgb &colour) {
+                                 float cz2, float nx, float ny, float nz, const Rgb &colour) {
             mesh.push_back(Vertex{ax, ay, az, nx, ny, nz, colour});
             mesh.push_back(Vertex{bx, by, bz, nx, ny, nz, colour});
             mesh.push_back(Vertex{cx2, cy2, cz2, nx, ny, nz, colour});
         };
 
         // Trunk: two crossed faces are enough silhouette at this scale.
-        quad(cx - trunkHalf, base, cz, cx - trunkHalf, trunkTop, cz, cx + trunkHalf, trunkTop, cz, cx + trunkHalf,
-             base, cz, 0.0f, 0.0f, 1.0f, bark);
+        quad(cx - trunkHalf, base, cz, cx - trunkHalf, trunkTop, cz, cx + trunkHalf, trunkTop, cz, cx + trunkHalf, base,
+             cz, 0.0f, 0.0f, 1.0f, bark);
         quad(cx, base, cz - trunkHalf, cx, trunkTop, cz - trunkHalf, cx, trunkTop, cz + trunkHalf, cx, base,
              cz + trunkHalf, 1.0f, 0.0f, 0.0f, bark);
 
@@ -3351,17 +3382,35 @@ private:
         const core::f32 z1 = cz + half;
 
         glColor3f(0.93f, 0.62f, 0.18f);
-        glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
+        glVertex3f(x0, y1, z0);
+        glVertex3f(x1, y1, z0);
+        glVertex3f(x1, y1, z1);
+        glVertex3f(x0, y1, z1);
         glColor3f(0.55f, 0.35f, 0.10f);
-        glVertex3f(x0, y0, z0); glVertex3f(x0, y0, z1); glVertex3f(x1, y0, z1); glVertex3f(x1, y0, z0);
+        glVertex3f(x0, y0, z0);
+        glVertex3f(x0, y0, z1);
+        glVertex3f(x1, y0, z1);
+        glVertex3f(x1, y0, z0);
         glColor3f(0.80f, 0.50f, 0.14f);
-        glVertex3f(x0, y0, z1); glVertex3f(x0, y1, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y0, z1);
+        glVertex3f(x0, y0, z1);
+        glVertex3f(x0, y1, z1);
+        glVertex3f(x1, y1, z1);
+        glVertex3f(x1, y0, z1);
         glColor3f(0.68f, 0.43f, 0.12f);
-        glVertex3f(x1, y0, z0); glVertex3f(x1, y1, z0); glVertex3f(x0, y1, z0); glVertex3f(x0, y0, z0);
+        glVertex3f(x1, y0, z0);
+        glVertex3f(x1, y1, z0);
+        glVertex3f(x0, y1, z0);
+        glVertex3f(x0, y0, z0);
         glColor3f(0.74f, 0.47f, 0.13f);
-        glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y1, z0); glVertex3f(x1, y0, z0);
+        glVertex3f(x1, y0, z1);
+        glVertex3f(x1, y1, z1);
+        glVertex3f(x1, y1, z0);
+        glVertex3f(x1, y0, z0);
         glColor3f(0.62f, 0.39f, 0.11f);
-        glVertex3f(x0, y0, z0); glVertex3f(x0, y1, z0); glVertex3f(x0, y1, z1); glVertex3f(x0, y0, z1);
+        glVertex3f(x0, y0, z0);
+        glVertex3f(x0, y1, z0);
+        glVertex3f(x0, y1, z1);
+        glVertex3f(x0, y0, z1);
     }
 
     /**
@@ -3405,10 +3454,14 @@ private:
             const float z0 = static_cast<float>(plan.toGenerate[i].coord.z) * chunk;
             const float x1 = x0 + chunk;
             const float z1 = z0 + chunk;
-            glVertex3f(x0, y, z0); glVertex3f(x1, y, z0);
-            glVertex3f(x1, y, z0); glVertex3f(x1, y, z1);
-            glVertex3f(x1, y, z1); glVertex3f(x0, y, z1);
-            glVertex3f(x0, y, z1); glVertex3f(x0, y, z0);
+            glVertex3f(x0, y, z0);
+            glVertex3f(x1, y, z0);
+            glVertex3f(x1, y, z0);
+            glVertex3f(x1, y, z1);
+            glVertex3f(x1, y, z1);
+            glVertex3f(x0, y, z1);
+            glVertex3f(x0, y, z1);
+            glVertex3f(x0, y, z0);
         }
         glEnd();
         glEnable(GL_DEPTH_TEST);
@@ -3495,23 +3548,53 @@ private:
                     break;
                 case XK_s:
                     _options.shading = static_cast<Shading>((static_cast<int>(_options.shading) + 1) %
-                                                           static_cast<int>(Shading::Count));
+                                                            static_cast<int>(Shading::Count));
                     remesh = true;
                     break;
-                case XK_1: _options.noise = procgen::NoiseKind::Fbm; rebuild = true; break;
-                case XK_2: _options.noise = procgen::NoiseKind::Ridged; rebuild = true; break;
-                case XK_3: _options.noise = procgen::NoiseKind::Billow; rebuild = true; break;
-                case XK_e: _options.erosion = !_options.erosion; rebuild = true; break;
-                case XK_r: _options.rivers = !_options.rivers; rebuild = true; break;
-                case XK_w: _options.warp = !_options.warp; rebuild = true; break;
-                case XK_t: _options.terraces = !_options.terraces; rebuild = true; break;
-                case XK_g: _options.settlement = !_options.settlement; rebuild = true; break;
-                case XK_h: _options.roads = !_options.roads; rebuild = true; break;
+                case XK_1:
+                    _options.noise = procgen::NoiseKind::Fbm;
+                    rebuild = true;
+                    break;
+                case XK_2:
+                    _options.noise = procgen::NoiseKind::Ridged;
+                    rebuild = true;
+                    break;
+                case XK_3:
+                    _options.noise = procgen::NoiseKind::Billow;
+                    rebuild = true;
+                    break;
+                case XK_e:
+                    _options.erosion = !_options.erosion;
+                    rebuild = true;
+                    break;
+                case XK_r:
+                    _options.rivers = !_options.rivers;
+                    rebuild = true;
+                    break;
+                case XK_w:
+                    _options.warp = !_options.warp;
+                    rebuild = true;
+                    break;
+                case XK_t:
+                    _options.terraces = !_options.terraces;
+                    rebuild = true;
+                    break;
+                case XK_g:
+                    _options.settlement = !_options.settlement;
+                    rebuild = true;
+                    break;
+                case XK_h:
+                    _options.roads = !_options.roads;
+                    rebuild = true;
+                    break;
                 case XK_m:
                     _options.metric = static_cast<procgen::DistanceMetric>((static_cast<int>(_options.metric) + 1) % 3);
                     rebuild = true;
                     break;
-                case XK_k: _options.windDirection = (_options.windDirection + 1u) % 4u; rebuild = true; break;
+                case XK_k:
+                    _options.windDirection = (_options.windDirection + 1u) % 4u;
+                    rebuild = true;
+                    break;
                 case XK_c:
                     _options.caveKind = (_options.caveKind + 1u) % 4u;
                     // Look at what just changed. Cycling the underground while the
@@ -3526,7 +3609,10 @@ private:
                     _options.shading = Shading::Climate;
                     remesh = true;
                     break;
-                case XK_u: _options.grammarBuildings = !_options.grammarBuildings; rebuild = true; break;
+                case XK_u:
+                    _options.grammarBuildings = !_options.grammarBuildings;
+                    rebuild = true;
+                    break;
                 case XK_l: _options.living = !_options.living; break;
                 case XK_j: _options.chunkOverlay = !_options.chunkOverlay; break;
                 case XK_v:

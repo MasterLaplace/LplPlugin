@@ -203,8 +203,7 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
     return events;
 }
 
-PackEvents killMember(PackMember *members, core::u32 count, core::u32 id, const PackParams &params,
-                      core::u32 &stream)
+PackEvents killMember(PackMember *members, core::u32 count, core::u32 id, const PackParams &params, core::u32 &stream)
 {
     PackEvents events;
     if (members == nullptr || count == 0u)
@@ -256,8 +255,8 @@ Genome applyIslandRule(const Genome &genome, math::Fixed32 ancestralSize, bool i
     // inverted. Isolation drives lineages apart; it cannot do that if the rule
     // forgets which lineage it is looking at.
     const math::Fixed32 small = math::Fixed32::fromFloat(params.smallThreshold);
-    const math::Fixed32 target = ancestralSize < small ? math::Fixed32::fromFloat(params.giantTarget)
-                                                       : math::Fixed32::fromFloat(params.dwarfTarget);
+    const math::Fixed32 target = ancestralSize < small ? math::Fixed32::fromFloat(params.giantTarget) :
+                                                         math::Fixed32::fromFloat(params.dwarfTarget);
     const math::Fixed32 pressure = math::Fixed32::fromFloat(params.pressure);
 
     Genome pushed = genome;
@@ -339,8 +338,7 @@ void seedInvasion(const Genome &ancestor, core::u32 count, core::f32 spread, cor
         // effect: numerically dangerous, genetically almost uniform — and
         // therefore vulnerable to anything that works on one of them.
         const auto jitter = [&](math::Fixed32 gene) {
-            const math::Fixed32 unit =
-                math::Fixed32::fromRaw(static_cast<core::i32>(nextRandom(stream) & 0xFFFFu));
+            const math::Fixed32 unit = math::Fixed32::fromRaw(static_cast<core::i32>(nextRandom(stream) & 0xFFFFu));
             const math::Fixed32 delta = (unit * math::Fixed32::fromInt(2) - math::Fixed32::one()) * swing;
             return gene * (math::Fixed32::one() + delta);
         };

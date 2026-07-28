@@ -84,8 +84,10 @@ public:
      */
     [[nodiscard]] const T &clamped(core::i32 x, core::i32 z) const noexcept
     {
-        const core::u32 cx = x < 0 ? 0u : (static_cast<core::u32>(x) >= _width ? _width - 1u : static_cast<core::u32>(x));
-        const core::u32 cz = z < 0 ? 0u : (static_cast<core::u32>(z) >= _depth ? _depth - 1u : static_cast<core::u32>(z));
+        const core::u32 cx =
+            x < 0 ? 0u : (static_cast<core::u32>(x) >= _width ? _width - 1u : static_cast<core::u32>(x));
+        const core::u32 cz =
+            z < 0 ? 0u : (static_cast<core::u32>(z) >= _depth ? _depth - 1u : static_cast<core::u32>(z));
         return _cells[index(cx, cz)];
     }
 

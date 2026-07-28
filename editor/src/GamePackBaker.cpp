@@ -165,8 +165,7 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         recipe.hydraulic.minSlope = readF32(*erosion, "minSlope", recipe.hydraulic.minSlope);
     }
 
-    if (const detail::JVal *rivers = procedural->find("rivers");
-        rivers != nullptr && rivers->t == detail::JVal::T::Obj)
+    if (const detail::JVal *rivers = procedural->find("rivers"); rivers != nullptr && rivers->t == detail::JVal::T::Obj)
     {
         recipe.carveRivers = readBool(*rivers, "enabled", recipe.carveRivers);
         recipe.rivers.density = readF32(*rivers, "density", recipe.rivers.density);
@@ -192,8 +191,7 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         recipe.climate.rainfallOctaves = readU32(*climate, "rainfallOctaves", recipe.climate.rainfallOctaves);
     }
 
-    if (const detail::JVal *biomes = procedural->find("biomes");
-        biomes != nullptr && biomes->t == detail::JVal::T::Obj)
+    if (const detail::JVal *biomes = procedural->find("biomes"); biomes != nullptr && biomes->t == detail::JVal::T::Obj)
     {
         recipe.biomes.seaLevel = readF32(*biomes, "seaLevel", recipe.biomes.seaLevel);
         recipe.biomes.beachHeight = readF32(*biomes, "beachHeight", recipe.biomes.beachHeight);
@@ -202,8 +200,7 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         recipe.biomes.snowlineWarmth = readF32(*biomes, "snowlineWarmth", recipe.biomes.snowlineWarmth);
     }
 
-    if (const detail::JVal *axes = procedural->find("climateAxes");
-        axes != nullptr && axes->t == detail::JVal::T::Obj)
+    if (const detail::JVal *axes = procedural->find("climateAxes"); axes != nullptr && axes->t == detail::JVal::T::Obj)
     {
         recipe.axes.coldLatitude = readF32(*axes, "coldLatitude", recipe.axes.coldLatitude);
         recipe.axes.lapseRate = readF32(*axes, "lapseRate", recipe.axes.lapseRate);

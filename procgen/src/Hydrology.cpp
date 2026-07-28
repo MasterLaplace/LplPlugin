@@ -325,9 +325,8 @@ Grid<core::u8> riverMask(const DrainageNetwork &network, core::f32 density)
     // integer bounded by the cell count, so a histogram walked from the top is
     // O(cells) and has no comparison order to get wrong.
     const core::u32 cells = mask.cellCount();
-    core::u32 target = static_cast<core::u32>((static_cast<core::i64>(math::Fixed32::fromFloat(density).raw()) *
-                                               static_cast<core::i64>(cells)) >>
-                                              16);
+    core::u32 target = static_cast<core::u32>(
+        (static_cast<core::i64>(math::Fixed32::fromFloat(density).raw()) * static_cast<core::i64>(cells)) >> 16);
     if (target == 0u)
         return mask; // a density of zero is a world without visible water
 
@@ -390,8 +389,8 @@ core::u32 carveRivers(Heightfield &field, const DrainageNetwork &network, const 
         if (!field.contains(nx, nz))
             continue;
 
-        math::Fixed32 drop = network.filled[i] - network.filled.at(static_cast<core::u32>(nx),
-                                                                  static_cast<core::u32>(nz));
+        math::Fixed32 drop =
+            network.filled[i] - network.filled.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
         if (drop.raw() <= 0)
             continue;
         if (direction >= 4u)
@@ -539,57 +538,57 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
     const math::Fixed32 maxFlowLog = fixedLog2(network.maxAccumulation);
 
     for (core::u32 z = 0u; z < field.depth(); ++z)
-    for (core::u32 x = 0u; x < field.width(); ++x)
-    {
-        const core::u32 i = field.index(x, z);
-
-        // Baseline rainfall: where it happens to rain, independently of the
-        // ground. Mapped from the noise's [-1, 1] into [0, 1].
-        const math::Fixed32 rainfallTerm =
-            (ValueNoise2D::fbm(math::Fixed32::fromInt(static_cast<core::i32>(x)) * rainfallFrequency,
-                               math::Fixed32::fromInt(static_cast<core::i32>(z)) * rainfallFrequency,
-                               params.rainfallOctaves, params.rainfallSeed) +
-             math::Fixed32::one()) *
-            math::Fixed32::half();
-
-        // Upstream drainage on a logarithmic scale. A square root is not enough
-        // compression: accumulation spans four orders of magnitude and its root
-        // still spans two, so all but the trunk cells land near zero. A logarithm
-        // is what the topographic wetness index uses, and it is what makes a
-        // modest stream read as wet instead of only the river mouth.
-        math::Fixed32 flowTerm = math::Fixed32::zero();
-        if (maxFlowLog.raw() > 0)
-            flowTerm = fixedLog2(network.accumulation[i]) / maxFlowLog;
-
-        const math::Fixed32 altitudeTerm =
-            span.raw() != 0 ? math::Fixed32::one() - (field[i] - lowest) / span : math::Fixed32::half();
-
-        math::Fixed32 coastTerm = math::Fixed32::zero();
-        if (coastRange.raw() > 0 && seaDistance[i] != unreachedDistance)
+        for (core::u32 x = 0u; x < field.width(); ++x)
         {
-            const math::Fixed32 distance = math::Fixed32::fromInt(static_cast<core::i32>(seaDistance[i]));
-            if (distance < coastRange)
-                coastTerm = math::Fixed32::one() - distance / coastRange;
+            const core::u32 i = field.index(x, z);
+
+            // Baseline rainfall: where it happens to rain, independently of the
+            // ground. Mapped from the noise's [-1, 1] into [0, 1].
+            const math::Fixed32 rainfallTerm =
+                (ValueNoise2D::fbm(math::Fixed32::fromInt(static_cast<core::i32>(x)) * rainfallFrequency,
+                                   math::Fixed32::fromInt(static_cast<core::i32>(z)) * rainfallFrequency,
+                                   params.rainfallOctaves, params.rainfallSeed) +
+                 math::Fixed32::one()) *
+                math::Fixed32::half();
+
+            // Upstream drainage on a logarithmic scale. A square root is not enough
+            // compression: accumulation spans four orders of magnitude and its root
+            // still spans two, so all but the trunk cells land near zero. A logarithm
+            // is what the topographic wetness index uses, and it is what makes a
+            // modest stream read as wet instead of only the river mouth.
+            math::Fixed32 flowTerm = math::Fixed32::zero();
+            if (maxFlowLog.raw() > 0)
+                flowTerm = fixedLog2(network.accumulation[i]) / maxFlowLog;
+
+            const math::Fixed32 altitudeTerm =
+                span.raw() != 0 ? math::Fixed32::one() - (field[i] - lowest) / span : math::Fixed32::half();
+
+            math::Fixed32 coastTerm = math::Fixed32::zero();
+            if (coastRange.raw() > 0 && seaDistance[i] != unreachedDistance)
+            {
+                const math::Fixed32 distance = math::Fixed32::fromInt(static_cast<core::i32>(seaDistance[i]));
+                if (distance < coastRange)
+                    coastTerm = math::Fixed32::one() - distance / coastRange;
+            }
+
+            math::Fixed32 wet = rainfallTerm * rainfallWeight + flowTerm * flowWeight + altitudeTerm * altitudeWeight +
+                                coastTerm * coastWeight;
+
+            // The shadow subtracts: land behind a high ridge gets what the air had
+            // left after climbing it.
+            if (shadowStrength.raw() > 0 && span.raw() != 0)
+            {
+                const math::Fixed32 barrier = (shadow[i] - field[i]) / span;
+                if (barrier.raw() > 0)
+                    wet = wet - wet * (barrier * shadowStrength);
+            }
+
+            if (wet > math::Fixed32::one())
+                wet = math::Fixed32::one();
+            if (wet < math::Fixed32::zero())
+                wet = math::Fixed32::zero();
+            moisture[i] = wet;
         }
-
-        math::Fixed32 wet = rainfallTerm * rainfallWeight + flowTerm * flowWeight +
-                            altitudeTerm * altitudeWeight + coastTerm * coastWeight;
-
-        // The shadow subtracts: land behind a high ridge gets what the air had
-        // left after climbing it.
-        if (shadowStrength.raw() > 0 && span.raw() != 0)
-        {
-            const math::Fixed32 barrier = (shadow[i] - field[i]) / span;
-            if (barrier.raw() > 0)
-                wet = wet - wet * (barrier * shadowStrength);
-        }
-
-        if (wet > math::Fixed32::one())
-            wet = math::Fixed32::one();
-        if (wet < math::Fixed32::zero())
-            wet = math::Fixed32::zero();
-        moisture[i] = wet;
-    }
 
     // Diffusion widens a channel's influence into its valley: vegetation does
     // not stop at the water's edge.

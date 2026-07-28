@@ -59,9 +59,9 @@ struct ChunkCoord {
  * @brief Chunk size and the world seed every chunk derives from.
  */
 struct ChunkParams {
-    core::u32 size{32u};      ///< Cells per chunk edge.
+    core::u32 size{32u};        ///< Cells per chunk edge.
     core::u32 worldSeed{1337u}; ///< The one seed the whole world comes from.
-    NoiseParams noise{};      ///< Terrain sampling; its own seed is ignored.
+    NoiseParams noise{};        ///< Terrain sampling; its own seed is ignored.
 };
 
 /**

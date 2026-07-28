@@ -51,8 +51,8 @@ inline constexpr core::u32 kUnboundedLevel = 0xFFFFFFFFu;
  * @brief One resolution in the hierarchy.
  */
 struct GridLevel {
-    core::u32 cellSize{1u};   ///< World cells per level cell; larger is coarser.
-    bool unbounded{false};    ///< Runs once for the whole domain rather than per cell.
+    core::u32 cellSize{1u}; ///< World cells per level cell; larger is coarser.
+    bool unbounded{false};  ///< Runs once for the whole domain rather than per cell.
 };
 
 /**
@@ -83,9 +83,9 @@ struct HiGenSchedule {
  * @brief What is wrong with a pass's declared dependencies.
  */
 enum class CascadeViolation : core::u8 {
-    None = 0,       ///< The dependency is legal.
-    ReadsFiner,     ///< A pass reads a level finer than its own — the forbidden direction.
-    UnknownLevel    ///< A level index outside the schedule.
+    None = 0,    ///< The dependency is legal.
+    ReadsFiner,  ///< A pass reads a level finer than its own — the forbidden direction.
+    UnknownLevel ///< A level index outside the schedule.
 };
 
 /**

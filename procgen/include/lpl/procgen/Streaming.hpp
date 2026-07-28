@@ -55,10 +55,10 @@ namespace lpl::procgen {
  * direction — normalised or not, only its sign structure matters.
  */
 struct GenerationSource {
-    math::Fixed32 x{};       ///< Position along X, in chunks.
-    math::Fixed32 z{};       ///< Position along Z, in chunks.
-    math::Fixed32 headingX{};///< Facing along X; zero means "no preference".
-    math::Fixed32 headingZ{};///< Facing along Z.
+    math::Fixed32 x{};        ///< Position along X, in chunks.
+    math::Fixed32 z{};        ///< Position along Z, in chunks.
+    math::Fixed32 headingX{}; ///< Facing along X; zero means "no preference".
+    math::Fixed32 headingZ{}; ///< Facing along Z.
 };
 
 /**
@@ -95,8 +95,8 @@ struct StreamingParams {
  * @brief One chunk the plan wants built, and how badly.
  */
 struct StreamingRequest {
-    ChunkCoord coord{};      ///< Which chunk.
-    core::u32 priority{0u};  ///< Lower is more urgent.
+    ChunkCoord coord{};     ///< Which chunk.
+    core::u32 priority{0u}; ///< Lower is more urgent.
 };
 
 /**
@@ -106,8 +106,8 @@ struct StreamingRequest {
 struct StreamingPlan {
     lpl::pmr::vector<StreamingRequest> toGenerate; ///< Most urgent first.
     lpl::pmr::vector<ChunkCoord> toRelease;        ///< Furthest first.
-    core::u32 wanted{0u};   ///< Chunks that should exist, before the budget applied.
-    core::u32 resident{0u}; ///< Chunks that already exist.
+    core::u32 wanted{0u};                          ///< Chunks that should exist, before the budget applied.
+    core::u32 resident{0u};                        ///< Chunks that already exist.
 };
 
 /**

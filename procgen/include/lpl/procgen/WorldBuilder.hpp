@@ -42,18 +42,18 @@
 #    define LPL_PROCGEN_WORLDBUILDER_HPP
 
 #    include <lpl/core/Types.hpp>
+#    include <lpl/procgen/Aggregation.hpp>
 #    include <lpl/procgen/Biome.hpp>
 #    include <lpl/procgen/CaveSystem.hpp>
 #    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/Dungeon.hpp>
 #    include <lpl/procgen/Erosion.hpp>
 #    include <lpl/procgen/Extrusion.hpp>
+#    include <lpl/procgen/FixedMath.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
 #    include <lpl/procgen/Hydrology.hpp>
 #    include <lpl/procgen/LSystem.hpp>
 #    include <lpl/procgen/QualityGate.hpp>
-#    include <lpl/procgen/Aggregation.hpp>
-#    include <lpl/procgen/FixedMath.hpp>
 #    include <lpl/procgen/Random.hpp>
 #    include <lpl/procgen/Routing.hpp>
 #    include <lpl/procgen/Settlement.hpp>
@@ -182,27 +182,27 @@ struct RoadParams {
  * @brief A summary of what was built.
  */
 struct BuiltWorldStats {
-    core::u32 terrainCells{0u};   ///< Heightfield cells.
-    core::u32 terrainEntities{0u};///< Entities created for the ground.
-    core::u32 propEntities{0u};   ///< Entities created by scatter rules.
-    core::u32 riverCells{0u};     ///< Cells carved as river.
-    core::u32 dungeonFloor{0u};   ///< Walkable dungeon cells, when one was generated.
-    bool dungeonConnected{false}; ///< Whether that dungeon is fully navigable.
-    core::u32 regionCount{0u};    ///< Surface regions, when partitioned.
-    core::u32 settlementPlots{0u};///< Buildings laid out, when a settlement was placed.
+    core::u32 terrainCells{0u};      ///< Heightfield cells.
+    core::u32 terrainEntities{0u};   ///< Entities created for the ground.
+    core::u32 propEntities{0u};      ///< Entities created by scatter rules.
+    core::u32 riverCells{0u};        ///< Cells carved as river.
+    core::u32 dungeonFloor{0u};      ///< Walkable dungeon cells, when one was generated.
+    bool dungeonConnected{false};    ///< Whether that dungeon is fully navigable.
+    core::u32 regionCount{0u};       ///< Surface regions, when partitioned.
+    core::u32 settlementPlots{0u};   ///< Buildings laid out, when a settlement was placed.
     bool settlementConnected{false}; ///< Whether its streets form one network.
-    core::u32 lakeCells{0u};      ///< Cells holding standing water.
-    core::u32 roadCells{0u};      ///< Cells the road network occupies, when grown.
-    core::u32 townVoxels{0u};     ///< Solid voxels in the raised town, when extruded.
-    core::u32 roadsideModules{0u};///< Modules placed along the roads, when decorated.
+    core::u32 lakeCells{0u};         ///< Cells holding standing water.
+    core::u32 roadCells{0u};         ///< Cells the road network occupies, when grown.
+    core::u32 townVoxels{0u};        ///< Solid voxels in the raised town, when extruded.
+    core::u32 roadsideModules{0u};   ///< Modules placed along the roads, when decorated.
     core::u32 undergroundVoxels{0u}; ///< Solid voxels in the raised underground, when extruded.
     core::u32 caveLayers{0u};        ///< Layers of the cave system, when dug.
     core::u32 caveEntrances{0u};     ///< Shafts that pierce the surface.
     core::u32 caveHollow{0u};        ///< Hollow cells across every cave layer.
     core::u32 caveReachable{0u};     ///< Hollow cells reachable from an entrance.
-    core::u32 heightSignature{0u};///< Fold of the final heightfield.
-    core::u32 biomeSignature{0u}; ///< Fold of the biome map.
-    core::u32 climateSignature{0u}; ///< Fold of the six climate axes.
+    core::u32 heightSignature{0u};   ///< Fold of the final heightfield.
+    core::u32 biomeSignature{0u};    ///< Fold of the biome map.
+    core::u32 climateSignature{0u};  ///< Fold of the six climate axes.
 };
 
 /**
@@ -537,8 +537,7 @@ private:
      *                   lives in the partition.
      */
     void fillPlacements(ecs::Registry &registry, const ecs::Archetype &archetype,
-                        const lpl::pmr::vector<Placement> &placements,
-                        const lpl::pmr::vector<ecs::EntityId> &created);
+                        const lpl::pmr::vector<Placement> &placements, const lpl::pmr::vector<ecs::EntityId> &created);
 
     /// Cells a rule's biome, slope and moisture filters admit.
     [[nodiscard]] lpl::pmr::vector<core::u32> eligibleCells(const ScatterRule &rule) const;

@@ -322,8 +322,7 @@ WorldBuilder &WorldBuilder::tiles(const TileSet &tileSet, const WfcParams &param
     // of the world that exists.
     TileGrid preset{seeded.width, seeded.depth, kNoTile};
     bool anyPinned = false;
-    if (_biomesReady && _biomes.width() == seeded.width && _biomes.depth() == seeded.depth &&
-        tileSet.tileCount >= 5u)
+    if (_biomesReady && _biomes.width() == seeded.width && _biomes.depth() == seeded.depth && tileSet.tileCount >= 5u)
     {
         for (core::u32 i = 0u; i < preset.cellCount(); ++i)
         {
@@ -643,7 +642,7 @@ WorldBuilder &WorldBuilder::extrudeUnderground(const ExtrusionParams &params)
         plan[i] = _dungeon[i] == DungeonCell::Wall ? 1u : 0u;
 
     lpl::pmr::vector<core::u8> heights(2u, core::u8{0});
-    heights[0] = 0u;                                  // open cell: nothing above it
+    heights[0] = 0u;                                   // open cell: nothing above it
     heights[1] = static_cast<core::u8>(params.levels); // rock: full height
 
     _undergroundVolume = extrudeTilePlan(plan, heights, params);
@@ -677,8 +676,7 @@ WorldBuilder &WorldBuilder::buildings(const BuildingGrammarParams &params)
     // storey is never silently clipped: a roof that vanished because the volume
     // was one level short is a bug that looks like a design choice.
     const core::u32 levels =
-        params.baseHeight + params.maxFloors * (params.floorHeight == 0u ? 1u : params.floorHeight) +
-        params.roofHeight;
+        params.baseHeight + params.maxFloors * (params.floorHeight == 0u ? 1u : params.floorHeight) + params.roofHeight;
 
     _townVolume = buildTown(_settlement, _plots, params, seed, levels);
     _townVoxels = countSolidVoxels(_townVolume);
@@ -743,8 +741,8 @@ lpl::pmr::vector<core::u32> WorldBuilder::eligibleCells(const ScatterRule &rule)
 
     // ── Hygrometry: distance to running water, only when a rule asks ────────
     Grid<core::u32> riverDistance;
-    const bool haveRiverTest = rule.maxRiverDistance > 0u && _rivers.width() == _height.width() &&
-                               _rivers.depth() == _height.depth();
+    const bool haveRiverTest =
+        rule.maxRiverDistance > 0u && _rivers.width() == _height.width() && _rivers.depth() == _height.depth();
     if (haveRiverTest)
         riverDistance = chamferDistance(_rivers);
 
@@ -1084,8 +1082,8 @@ void WorldBuilder::emit(ecs::Registry &registry, const lpl::pmr::vector<Placemen
         if (group.empty())
             continue;
 
-        const ecs::Archetype archetype{collidable ? std::span<const ecs::ComponentId>{obstacleIds}
-                                                  : std::span<const ecs::ComponentId>{sceneryIds}};
+        const ecs::Archetype archetype{collidable ? std::span<const ecs::ComponentId>{obstacleIds} :
+                                                    std::span<const ecs::ComponentId>{sceneryIds}};
         lpl::pmr::vector<ecs::EntityId> created;
         created.reserve(group.size());
         for (core::u32 i = 0u; i < group.size(); ++i)

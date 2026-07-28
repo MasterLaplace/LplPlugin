@@ -40,8 +40,8 @@ math::Fixed32 latitudeWarmth(core::u32 z, core::u32 depth, math::Fixed32 coldEdg
         return math::Fixed32::one();
 
     // Distance from the equator (mid-map), normalised to [0, 1].
-    const math::Fixed32 position = math::Fixed32::fromInt(static_cast<core::i32>(z)) /
-                                   math::Fixed32::fromInt(static_cast<core::i32>(depth - 1u));
+    const math::Fixed32 position =
+        math::Fixed32::fromInt(static_cast<core::i32>(z)) / math::Fixed32::fromInt(static_cast<core::i32>(depth - 1u));
     const math::Fixed32 fromEquator = (position - math::Fixed32::half()).abs() * math::Fixed32::fromInt(2);
 
     // Beyond the polar edge, warmth is 0; inside, it falls off quadratically.

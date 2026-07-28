@@ -161,8 +161,7 @@ void testChunksAreIndependentAndReproducible()
     index = 9u;
     for (core::i32 z = 1; z >= -1; --z)
         for (core::i32 x = 1; x >= -1; --x)
-            backward[--index] =
-                procgen::foldLiminal(procgen::generateLiminalChunk(params, procgen::ChunkCoord{x, z}));
+            backward[--index] = procgen::foldLiminal(procgen::generateLiminalChunk(params, procgen::ChunkCoord{x, z}));
 
     bool identical = true;
     core::u32 distinct = 0u;
