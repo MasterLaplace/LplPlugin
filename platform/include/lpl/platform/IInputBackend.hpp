@@ -61,6 +61,29 @@ public:
         return false;
     }
 
+    /**
+     * @brief Whether the key that types @p character is held down right now.
+     *
+     * The character stream answers "what was typed", which is the right shape for a
+     * console and the wrong one for a body that walks: holding a direction is a
+     * STATE, and rebuilding it from key repeat inherits the repeat delay as a
+     * stutter at the start of every step.
+     *
+     * Asked by character rather than by scancode so it follows the keyboard layout
+     * — on AZERTY the key above S types 'z', on QWERTY 'w'.
+     *
+     * Not pure: a backend that only has a character stream is legitimate, and the
+     * default is the honest answer rather than a lie about the key being down.
+     */
+    [[nodiscard]] virtual bool isKeyHeld(char character) const noexcept
+    {
+        (void) character;
+        return false;
+    }
+
+    /** @brief Whether this backend can report held keys at all. */
+    [[nodiscard]] virtual bool hasKeyStates() const noexcept { return false; }
+
     /** @brief Whether a pointing device is present at all. */
     [[nodiscard]] virtual bool hasPointer() const noexcept { return false; }
 

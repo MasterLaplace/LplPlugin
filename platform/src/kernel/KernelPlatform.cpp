@@ -114,6 +114,11 @@ bool KernelInputBackend::tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &ou
 
 bool KernelInputBackend::hasPointer() const noexcept { return hardware_abstraction_layer_input_pointer_available(); }
 
+bool KernelInputBackend::isKeyHeld(char character) const noexcept
+{
+    return hardware_abstraction_layer_input_is_key_held(character);
+}
+
 // ---- Memory --------------------------------------------------------------
 
 void *KernelMemoryBackend::reserve(core::usize sizeBytes, core::usize alignment)

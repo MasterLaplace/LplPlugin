@@ -88,6 +88,15 @@ public:
     /** @brief Ground height at a world cell — the resident field first, then the noise. */
     [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ) const;
 
+    /**
+     * @brief The same height, in Fixed32, for a caller whose result is authoritative.
+     *
+     * @ref groundAt rounds to float because shading and projection want float. A
+     * walking body may not: its position is authoritative state, and the contract
+     * says that is Fixed32 and bit-identical on both targets.
+     */
+    [[nodiscard]] math::Fixed32 groundHeightAt(core::i32 worldX, core::i32 worldZ) const;
+
     /** @brief The chunk holding a world cell, or nullptr. */
     [[nodiscard]] const TerrainChunk *chunkAt(core::i32 worldX, core::i32 worldZ) const noexcept
     {

@@ -407,3 +407,13 @@ target("test-view-profile")
     add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-ecology", "lpl-pack", "lpl-editor", "lpl-engine")
     add_files("parity/test_view_profile.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Character controller: gravity, ground, walls, slopes, jump — and determinism
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-character-controller")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-engine")
+    add_files("parity/test_character_controller.cpp")
+target_end()

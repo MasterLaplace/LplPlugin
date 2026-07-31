@@ -183,6 +183,32 @@ public:
         return sampleWorldHeight(_chunkParams, worldX, worldZ).toFloat();
     }
 
+    /**
+     * @brief The same lookup, in Fixed32, for a caller whose result is AUTHORITATIVE.
+     *
+     * Not a convenience overload. @ref groundAt hands back a float because that is
+     * what shading and projection want, and a float is exactly what a walking body
+     * may not derive its position from — the determinism contract says authoritative
+     * state is Fixed32 and bit-identical across targets, and a position that came
+     * from a rounded height would diverge without anything looking wrong.
+     *
+     * The underlying data was Fixed32 all along; only the accessor was lossy.
+     *
+     * @tparam HeightOf Called as @c heightOf(chunk, localX, localZ) -> math::Fixed32.
+     */
+    template <typename HeightOf>
+    [[nodiscard]] math::Fixed32 groundFixedAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const
+    {
+        if (const Chunk *chunk = findByCell(worldX, worldZ); chunk != nullptr)
+        {
+            core::u32 localX = 0u;
+            core::u32 localZ = 0u;
+            localCell(worldX, worldZ, localX, localZ);
+            return heightOf(*chunk, localX, localZ);
+        }
+        return sampleWorldHeight(_chunkParams, worldX, worldZ);
+    }
+
 private:
     ChunkParams _chunkParams{};
     StreamingParams _streamParams{};

@@ -47,6 +47,7 @@
 #    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/ecology/Populations.hpp>
 #    include <lpl/ecology/Vegetation.hpp>
+#    include <lpl/engine/CharacterController.hpp>
 #    include <lpl/engine/Engine.hpp>
 #    include <lpl/engine/LivingLayer.hpp>
 #    include <lpl/engine/PropLibrary.hpp>
@@ -169,6 +170,10 @@ public:
         _maxResident =
             context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling : context.config.maxResidentChunks();
 
+        _hasPointer = context.platform.input().hasPointer();
+        core::Log::info(_hasPointer ? "TerrainWorld: pointing device present — mouse look enabled"
+                                    : "TerrainWorld: no pointing device — look with I/K and the pointer keys");
+
         if (!context.platform.display().querySurface(_surface) || _surface.buffer == nullptr ||
             _surface.bitsPerPixel != 32u || _surface.width < 64u || _surface.height < 64u)
         {
@@ -180,10 +185,29 @@ public:
         else
         {
             _hasSurface = true;
-            core::Log::info("TerrainWorld: WASD=cam Q/E=zoom N=new seed B=shading X=exit");
+            core::Log::info("TerrainWorld: WASD=walk SPACE=jump mouse=look O=map V=detach X=exit");
         }
 
         generate();
+
+        // Boot INTO the world, not above a map of it.
+        //
+        // The viewer opened in the bounded, orbiting map view, and the walking body
+        // only exists in the streamed one — so the demo's first screen showed a
+        // landscape from outside with no walker in it, and getting to the thing this
+        // world is for took two undocumented keystrokes. The map view is still one
+        // press of O away, which is the right way round: the interesting mode is the
+        // default and the diagnostic one is opt-in.
+        //
+        // Headless keeps the bounded world: there is nobody to walk, the streamer
+        // would generate chunks for a camera that draws nothing, and the parity
+        // smokes fold the bounded path.
+        if (_hasSurface)
+        {
+            setInfinite(true);
+            _camera.setFirstPerson(true);
+            _camera.setPitch(kFirstPersonPitch);
+        }
         return {};
     }
 
@@ -201,6 +225,11 @@ public:
 
         if (_infinite)
         {
+            // The body BEFORE the streaming and the field: both follow the walker,
+            // and following last tick's position means the chunk under your feet is
+            // the one requested a tick late — which at a run is a visible seam
+            // opening ahead of you.
+            stepBody(dt);
             recentreField();
             streamChunks();
             // Shadow masks, amortised at the Config's budget: rebuilding every
@@ -303,6 +332,14 @@ private:
      * is most of a full turn, which is where a first-person view wants to be.
      */
     static constexpr core::f32 kLookSensitivity = 0.004f;
+    /// Eye height of the detached camera, which floats rather than stands.
+    static constexpr core::f32 kDetachedEyeHeight = 2.0f;
+    /// How far the spawn search may wander looking for dry, walkable ground.
+    static constexpr core::i32 kSpawnSearchCells = 40;
+    /// Standing in the world, looking very slightly up.
+    static constexpr core::f32 kFirstPersonPitch = 0.05f;
+    /// Orbiting it, looking down at the map.
+    static constexpr core::f32 kOrbitPitch = 0.6f;
     /// One tick of the day: a full cycle takes about four minutes at 60 Hz.
     static constexpr core::f32 kDayStep = 1.0f / 14400.0f;
     /// Cells across the pheromone window that follows the walker.
@@ -545,6 +582,15 @@ private:
         _streamParams.maxReleasePerTick = 4u;
 
         _camera.setFocus(0.0f, 0.0f);
+        // The body stands on the ground rather than at altitude zero: dropping it
+        // from y=0 onto a mountain would spend the first seconds of the demo
+        // underground, and onto a valley, falling.
+        // The body is NOT placed here. Where the ground is depends on erosion and
+        // on the rivers, and neither has run yet — the streamer is empty, so a query
+        // would answer with raw noise. Deferred to @ref ensureBodySpawned, which
+        // waits for terrain that actually exists.
+        _bodySpawned = false;
+        _camera.setEyeHeight(_bodyParams.eyeHeight.toFloat());
 
         // The pheromone window, not a world-sized grid.
         _living.scent().open(kFieldSpan, 2u);
@@ -592,6 +638,38 @@ private:
     {
         (void) _living.scent().follow(static_cast<core::i32>(_camera.focusX()),
                                       static_cast<core::i32>(_camera.focusZ()));
+    }
+
+    /**
+     * @brief One authoritative tick of the player's body.
+     *
+     * Here rather than in @ref drainInput because a body is SIMULATION: it is
+     * Fixed32, it folds, and it has to advance on the fixed step whatever the frame
+     * rate is. Input is sampled on the render side and consumed here — the turn and
+     * the jump are edges, so they are drained rather than read, or a slow frame
+     * would apply the same jump to several ticks.
+     */
+    void stepBody(core::f32 dt)
+    {
+        if (!_embodied)
+            return;
+        ensureBodySpawned();
+
+        engine::CharacterIntent intent = _intent;
+        intent.turn = _pendingTurn;
+        intent.jump = _jumpPressed;
+        _pendingTurn = math::Fixed32{};
+        _jumpPressed = false;
+
+        _body.step(_bodyParams, intent, math::Fixed32::fromFloat(dt), [this](core::i32 x, core::i32 z) {
+            return _streamer.groundHeightAt(x, z);
+        });
+
+        // The camera is told where the body IS; it is not what moves. Reading the
+        // authoritative yaw into the float camera is the allowed direction of that
+        // dependency — simulation feeds presentation, never the reverse.
+        _camera.setFocus(_body.x().toFloat(), _body.z().toFloat());
+        _camera.setYaw(_body.yaw().toFloat());
     }
 
     /// World cell to a cell of the pheromone window, when it is inside it.
@@ -846,6 +924,13 @@ private:
         params.ambient = _view.surface.ambient;
         // The creatures' colours are content too: a world of white hares and one of
         // black wolves are two worlds, and neither is a host budget.
+        // A jumping body is not on the ground, so the eye may not be derived from
+        // the terrain under it.
+        if (_infinite && _embodied)
+        {
+            params.useFocusHeight = true;
+            params.focusHeight = _body.y().toFloat();
+        }
         params.grazerTint = _view.grazerTint;
         params.hunterTint = _view.hunterTint;
         params.bodyScale = _view.bodyScale;
@@ -1007,6 +1092,23 @@ private:
                 .number(_lastTriangles);
             drawShadowedText(pitchPixels, 8u, 44u, line, 0x00A0B4C8u);
 
+            // The body, written out because it is the only way to tell a jump from a
+            // fall from a slide without guessing at the picture.
+            line.clear()
+                .text(_embodied ? "body " : "detached ")
+                .text(_body.isSliding() ? "sliding" : (_body.isGrounded() ? "grounded" : "airborne"))
+                .text("  y ")
+                .decimal(_body.y().toFloat())
+                .text("  speed ")
+                .decimal(_body.groundSpeed().toFloat())
+                .text("  jumps ")
+                .number(_body.jumpCount())
+                .text("  blocked ")
+                .number(_body.blockedCount())
+                .text(_hasPointer ? "  mouse " : "  no mouse ")
+                .number(_pointerPackets);
+            drawShadowedText(pitchPixels, 8u, 62u, line, _body.isGrounded() ? 0x00A0B4C8u : 0x00E0C070u);
+
             line.clear()
                 .text("herd ")
                 .number(countSpecies(0u))
@@ -1014,7 +1116,7 @@ private:
                 .number(countSpecies(1u))
                 .text(" hunters  grazed ")
                 .number(_living.grazedCount());
-            drawShadowedText(pitchPixels, 8u, 62u, line, 0x0060FF80u);
+            drawShadowedText(pitchPixels, 8u, 80u, line, 0x0060FF80u);
 
             line.clear()
                 .text("scent window ")
@@ -1022,7 +1124,7 @@ private:
                 .text(" cells, recentred ")
                 .number(_living.scent().recentres())
                 .text(" times");
-            drawShadowedText(pitchPixels, 8u, 80u, line, 0x00A0B4C8u);
+            drawShadowedText(pitchPixels, 8u, 98u, line, 0x00A0B4C8u);
 
             line.clear()
                 .text("drawn ")
@@ -1044,10 +1146,10 @@ private:
                 .text(_pbrSurface ? "  pbr" : (_perPixelSurface ? "  per-pixel" : "  flat"))
                 .text("  sky/")
                 .number(_skyBlock);
-            drawShadowedText(pitchPixels, 8u, 98u, line, 0x00A0B4C8u);
+            drawShadowedText(pitchPixels, 8u, 116u, line, 0x00A0B4C8u);
 
             image::drawText8x16(_surface.buffer, pitchPixels, 8u, _surface.height - 20u,
-                                "WASD=walk J/L=turn I/K=tilt Q/E=zoom F=view T/Y/R/G=shading O=bounded X=exit",
+                                "WASD=walk SPACE=jump C=sprint mouse=look V=detach F=view I/K=tilt T/Y/R/G=shading O=bounded X=exit",
                                 0x00808890u);
             return;
         }
@@ -1117,6 +1219,7 @@ private:
     void drainInput(engine::WorldContext &context)
     {
         drainPointer(context);
+        sampleHeldKeys(context);
 
         char key;
         while (context.platform.input().tryPopCharacter(key))
@@ -1127,29 +1230,48 @@ private:
             // to; in the bounded one it orbits, because there is not. Forward is
             // where the camera looks, which is the only reading of "forward" a
             // player ever means.
+            // When the body is walking from HELD keys, a typed character must not
+            // also nudge it — the two would stack and every keystroke would add a
+            // lurch on top of the steady walk. The typed form stays as the fallback
+            // for a backend that cannot report key states at all, and keeps driving
+            // the bounded world, which has no body to move.
+            // No AZERTY aliases in the TYPED path: 'q' is already zoom here, and a
+            // key cannot mean two things. The held-key sampler accepts both layouts
+            // and is what actually walks the body; this switch is only the fallback
+            // for a backend with no key states, where a QWERTY binding is the one
+            // that was always there.
             case 'w':
-                if (_infinite)
-                    walk(1.0f);
-                else
+                if (!_infinite)
                     _camera.tilt(0.06f);
+                else if (!bodyDrivesMovement(context))
+                    nudge(1.0f, 0.0f);
                 break;
             case 's':
-                if (_infinite)
-                    walk(-1.0f);
-                else
+                if (!_infinite)
                     _camera.tilt(-0.06f);
+                else if (!bodyDrivesMovement(context))
+                    nudge(-1.0f, 0.0f);
+                break;
+            // Jump. An EDGE, buffered by the controller, so pressing it a few ticks
+            // early still fires on landing instead of being dropped.
+            case ' ':
+                _jumpPressed = true;
+                break;
+            case 'v':
+                _embodied = !_embodied;
+                _camera.setEyeHeight(_embodied ? _bodyParams.eyeHeight.toFloat() : kDetachedEyeHeight);
                 break;
             case 'a':
-                if (_infinite)
-                    strafe(-1.0f);
-                else
+                if (!_infinite)
                     _camera.turn(-0.08f);
+                else if (!bodyDrivesMovement(context))
+                    nudge(0.0f, -1.0f);
                 break;
             case 'd':
-                if (_infinite)
-                    strafe(1.0f);
-                else
+                if (!_infinite)
                     _camera.turn(0.08f);
+                else if (!bodyDrivesMovement(context))
+                    nudge(0.0f, 1.0f);
                 break;
             case 'j': _camera.turn(-0.10f); break;
             case 'l': _camera.turn(0.10f); break;
@@ -1177,7 +1299,7 @@ private:
                 break;
             case 'f':
                 _camera.setFirstPerson(!_camera.isFirstPerson());
-                _camera.setPitch(_camera.isFirstPerson() ? 0.05f : 0.6f);
+                _camera.setPitch(_camera.isFirstPerson() ? kFirstPersonPitch : kOrbitPitch);
                 break;
             case 'q': _camera.zoom(0.88f, 1.6f, 160.0f); break;
             case 'e': _camera.zoom(1.14f, 1.6f, 160.0f); break;
@@ -1233,12 +1355,57 @@ private:
             turnAccumulator += deltaX;
             tiltAccumulator += deltaY;
             _pointerButtons = buttons;
+            ++_pointerPackets;
         }
 
+        // Turning goes to the BODY when there is one, because the heading picks the
+        // walk direction and that makes it authoritative. Tilt stays on the camera:
+        // looking up does not move you, so it is presentation and may be float.
         if (turnAccumulator != 0)
-            _camera.turn(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
+        {
+            if (_embodied && _infinite)
+                _pendingTurn = _pendingTurn - math::Fixed32::fromFloat(static_cast<core::f32>(turnAccumulator) *
+                                                                       kLookSensitivity);
+            else
+                _camera.turn(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
+        }
         if (tiltAccumulator != 0)
             _camera.tilt(static_cast<core::f32>(tiltAccumulator) * kLookSensitivity);
+    }
+
+    /**
+     * @brief Samples the keys that are HELD, which is what walking is made of.
+     *
+     * The character ring says what was typed; a direction being held is a state, and
+     * rebuilding it from key repeat inherits the repeat delay as a stutter at the
+     * start of every step. A backend without key states falls back to the character
+     * stream — see @ref drainInput — so a host that cannot report them still walks,
+     * just less smoothly.
+     *
+     * Asked by CHARACTER so it follows the layout: on AZERTY forward is the key that
+     * types 'z', on QWERTY the one that types 'w', and neither call site has to know
+     * which keyboard is plugged in.
+     */
+    void sampleHeldKeys(engine::WorldContext &context)
+    {
+        const platform::IInputBackend &input = context.platform.input();
+        if (!input.hasKeyStates())
+            return;
+
+        // Two characters per direction: the same PHYSICAL keys type 'w'/'a' on
+        // QWERTY and 'z'/'q' on AZERTY, and a walker should not care which keyboard
+        // is plugged in. Accepting both costs one test and strands nobody.
+        const bool ahead = input.isKeyHeld('w') || input.isKeyHeld('z');
+        const bool back = input.isKeyHeld('s');
+        const bool left = input.isKeyHeld('a') || input.isKeyHeld('q');
+        const bool right = input.isKeyHeld('d');
+
+        // Opposite keys held together cancel. Letting the later one win would make a
+        // player who rolls their fingers across both drift in whichever order the
+        // scancodes happened to arrive.
+        _intent.forward = (ahead == back) ? math::Fixed32{} : (ahead ? math::Fixed32::one() : -math::Fixed32::one());
+        _intent.strafe = (left == right) ? math::Fixed32{} : (right ? math::Fixed32::one() : -math::Fixed32::one());
+        _intent.sprint = input.isKeyHeld('c');
     }
 
     // ── Small helpers ────────────────────────────────────────────────────────
@@ -1249,6 +1416,109 @@ private:
 
     /// Sidesteps: the heading rotated a quarter turn.
     void strafe(core::f32 sign) noexcept { _camera.strafe(sign * kWalkStep); }
+
+    /**
+     * @brief Puts the body down somewhere it can stand — on land, not in a lake.
+     *
+     * Dropping it at the origin was the obvious thing and it was wrong on this seed:
+     * the origin is a lake, so the walker sank to the bed and the demo opened with
+     * the camera underwater looking up through the surface. The physics was right;
+     * the spawn was not.
+     *
+     * The search is a widening ring rather than a random scatter, so the body lands
+     * as close to the requested spot as the terrain allows and the same seed always
+     * spawns in the same place — a random probe would have made the opening view
+     * depend on how many times the allocator had been called.
+     *
+     * Sea level lives here rather than in the controller on purpose: an engine brick
+     * that walks has no business knowing a world has water in it, while THIS world
+     * knows exactly where its shoreline is.
+     */
+    /**
+     * @brief Places the body once there is real terrain to place it on.
+     *
+     * The first attempt did this at world creation and it read the wrong surface:
+     * with no chunk resident, a height query falls through to the raw noise — the
+     * shape BEFORE erosion lowered the ridges and before the rivers were carved. The
+     * noise said the origin was dry ground; the world that gets drawn has a lake
+     * there, so the walker sank to the bed and the demo opened underwater. Exactly
+     * the mistake that once left the herd hanging in the air over lowered ridges.
+     *
+     * Waiting for a three-by-three neighbourhood is what makes the search look at
+     * the terrain the renderer will draw.
+     */
+    void ensureBodySpawned()
+    {
+        if (_bodySpawned || _streamer.size() < 9u)
+            return;
+        spawnBody();
+        _bodySpawned = true;
+    }
+
+    void spawnBody()
+    {
+        const auto ground = [this](core::i32 x, core::i32 z) { return _streamer.groundHeightAt(x, z); };
+        const math::Fixed32 shore = math::Fixed32::fromFloat(kSeaLevel + 0.5f);
+
+        for (core::i32 radius = 0; radius <= kSpawnSearchCells; ++radius)
+        {
+            for (core::i32 offsetZ = -radius; offsetZ <= radius; ++offsetZ)
+                for (core::i32 offsetX = -radius; offsetX <= radius; ++offsetX)
+                {
+                    // Only the RING, not the filled square: the inner cells were
+                    // already rejected at a smaller radius, and re-testing them
+                    // makes the search quadratic in the radius for nothing.
+                    const core::i32 ax = offsetX < 0 ? -offsetX : offsetX;
+                    const core::i32 az = offsetZ < 0 ? -offsetZ : offsetZ;
+                    if (ax != radius && az != radius)
+                        continue;
+
+                    const math::Fixed32 here = ground(offsetX, offsetZ);
+                    if (here < shore)
+                        continue;
+                    // Not on a face it would immediately slide off, either.
+                    const math::Fixed32 slopeX = ground(offsetX + 1, offsetZ) - here;
+                    const math::Fixed32 slopeZ = ground(offsetX, offsetZ + 1) - here;
+                    if (slopeX > _bodyParams.maxSlope || -slopeX > _bodyParams.maxSlope ||
+                        slopeZ > _bodyParams.maxSlope || -slopeZ > _bodyParams.maxSlope)
+                        continue;
+
+                    _body.placeAt(math::Fixed32::fromInt(offsetX), math::Fixed32::fromInt(offsetZ), ground);
+                    _camera.setFocus(static_cast<core::f32>(offsetX), static_cast<core::f32>(offsetZ));
+                    return;
+                }
+        }
+
+        // Nothing dry within the search: an all-ocean seed is a legitimate world, and
+        // starting at the origin is a better answer than refusing to start.
+        _body.placeAt(math::Fixed32{}, math::Fixed32{}, ground);
+    }
+
+    /// Whether the body is what movement keys act on this frame.
+    [[nodiscard]] bool bodyDrivesMovement(const engine::WorldContext &context) const noexcept
+    {
+        return _embodied && context.platform.input().hasKeyStates();
+    }
+
+    /**
+     * @brief The fallback walk: one typed keystroke becomes one tick of intent.
+     *
+     * For a backend with no key states, and for the detached camera. It writes the
+     * INTENT rather than the position even in the embodied case, so the body still
+     * decides — a keystroke that teleported the walker would put it inside a hill
+     * the controller was refusing to enter.
+     */
+    void nudge(core::f32 forward, core::f32 strafeAmount) noexcept
+    {
+        if (!_embodied)
+        {
+            _camera.walk(forward * kWalkStep);
+            _camera.strafe(strafeAmount * kWalkStep);
+            return;
+        }
+        _intent.forward = math::Fixed32::fromFloat(forward);
+        _intent.strafe = math::Fixed32::fromFloat(strafeAmount);
+    }
 
     [[nodiscard]] math::Fixed32 cellToWorldX(core::u32 cell) const noexcept
     {
@@ -1438,6 +1708,44 @@ private:
     core::u32 _frames{0u};
     /// Buttons held at the last pointer report; bit 0 left, 1 right, 2 middle.
     core::u32 _pointerButtons{0u};
+    /**
+     * @brief Whether the host reported a pointing device, and what it has sent.
+     *
+     * On the HUD because "the mouse does not work" has three completely different
+     * causes — no device found at boot, a device found but silent, or motion
+     * arriving and being ignored — and they are indistinguishable from the picture.
+     * A count that climbs while the view stays still says the driver is fine and the
+     * consumer is not; a count stuck at zero says the opposite.
+     */
+    bool _hasPointer{false};
+    core::u32 _pointerPackets{0u};
+
+    /**
+     * @brief The walker's body: authoritative, and subject to the world.
+     *
+     * Not a camera with a position. The camera used to BE the player — it moved by
+     * teleporting its focus a fixed step per keypress, passed through hills, and
+     * never fell. This is an entity like the herd's: pulled down by gravity, standing
+     * on the terrain that is actually drawn, stopped by cliffs, able to jump.
+     */
+    engine::CharacterController _body;
+    engine::CharacterParams _bodyParams{};
+    /// Sampled on the render side, consumed by the authoritative step.
+    engine::CharacterIntent _intent{};
+    /// False until terrain exists to stand on; see @ref ensureBodySpawned.
+    bool _bodySpawned{false};
+    /// Turn accumulated by the pointer since the last authoritative step.
+    math::Fixed32 _pendingTurn{};
+    /// Jump pressed since the last authoritative step; consumed by it.
+    bool _jumpPressed{false};
+    /**
+     * @brief Whether the player is a body or a free camera.
+     *
+     * Both are worth having and they answer different questions: embodied is what
+     * the world FEELS like, detached is how you look at what you built. Toggled with
+     * V, and the body keeps simulating while detached so coming back is seamless.
+     */
+    bool _embodied{true};
 };
 
 inline core::u32 TerrainWorld::_color[TerrainWorld::kRenderWidth * TerrainWorld::kRenderHeight];

@@ -66,6 +66,18 @@ struct TerrainDrawParams {
      * The threshold below is where the hierarchy starts paying, so the flag says
      * "use the tree when it is worth it", not "use the tree".
      */
+    /**
+     * @brief Anchor the view at a stated height instead of at the ground.
+     *
+     * The camera normally sits a fixed height above the terrain under its focus,
+     * which is right for an orbit and wrong for a BODY: a jumping player is not on
+     * the ground, and a view that queried the terrain would stay planted while the
+     * character rose. When this is set the caller supplies the anchor, because only
+     * the caller knows it is simulating something that leaves the floor.
+     */
+    bool useFocusHeight{false};
+    core::f32 focusHeight{0.0f};
+
     bool useSpatialCull{true};
     core::u32 spatialCullThreshold{48u}; ///< Resident chunks below which the linear
                                          ///< pass wins outright.
