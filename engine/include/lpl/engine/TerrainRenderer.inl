@@ -112,12 +112,11 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
 
     // Never below the water: the terrain goes on under a lake, and an eye that
     // followed it there looks up at the underside of the ground sheet.
-    const core::f32 groundAtFocus =
-        params.useFocusHeight
-            ? params.focusHeight
-            : render::OrbitCamera::clamp(
-                  groundAt(static_cast<core::i32>(camera.focusX()), static_cast<core::i32>(camera.focusZ())),
-                  params.seaLevel, 1.0e6f);
+    const core::f32 groundAtFocus = params.useFocusHeight ?
+                                        params.focusHeight :
+                                        render::OrbitCamera::clamp(groundAt(static_cast<core::i32>(camera.focusX()),
+                                                                            static_cast<core::i32>(camera.focusZ())),
+                                                                   params.seaLevel, 1.0e6f);
     render::CameraBasis basis{};
     const auto mvp =
         camera.viewProjection(groundAtFocus, static_cast<core::f32>(rt.width) / static_cast<core::f32>(rt.height),

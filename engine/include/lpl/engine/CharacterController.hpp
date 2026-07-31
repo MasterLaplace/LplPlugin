@@ -70,11 +70,11 @@ struct CharacterParams {
      */
     math::Fixed32 airControl{math::Fixed32::fromFloat(0.34f)};
 
-    math::Fixed32 gravity{math::Fixed32::fromFloat(22.0f)};       ///< Cells per second squared, downward.
-    math::Fixed32 terminalFall{math::Fixed32::fromFloat(55.0f)};  ///< Fastest downward speed.
-    math::Fixed32 jumpSpeed{math::Fixed32::fromFloat(7.4f)};      ///< Upward speed at take-off.
+    math::Fixed32 gravity{math::Fixed32::fromFloat(22.0f)};      ///< Cells per second squared, downward.
+    math::Fixed32 terminalFall{math::Fixed32::fromFloat(55.0f)}; ///< Fastest downward speed.
+    math::Fixed32 jumpSpeed{math::Fixed32::fromFloat(7.4f)};     ///< Upward speed at take-off.
 
-    math::Fixed32 eyeHeight{math::Fixed32::fromFloat(1.7f)};      ///< Eye above the feet.
+    math::Fixed32 eyeHeight{math::Fixed32::fromFloat(1.7f)}; ///< Eye above the feet.
     /**
      * @brief Rise a single step may absorb without being a wall.
      *
@@ -121,10 +121,10 @@ struct CharacterParams {
  * yaw, and the caller's yaw is the float one belonging to a camera.
  */
 struct CharacterIntent {
-    math::Fixed32 forward{};      ///< +1 walks toward the heading, -1 backs away.
-    math::Fixed32 strafe{};       ///< +1 sidesteps right.
-    math::Fixed32 turn{};         ///< Radians added to the heading this tick.
-    bool jump{false};             ///< Jump pressed THIS tick (an edge, not a hold).
+    math::Fixed32 forward{}; ///< +1 walks toward the heading, -1 backs away.
+    math::Fixed32 strafe{};  ///< +1 sidesteps right.
+    math::Fixed32 turn{};    ///< Radians added to the heading this tick.
+    bool jump{false};        ///< Jump pressed THIS tick (an edge, not a hold).
     bool sprint{false};
 };
 
@@ -135,8 +135,7 @@ struct CharacterIntent {
 class CharacterController {
 public:
     /** @brief Places the body, snapped onto whatever ground is under it. */
-    template <typename GroundAt>
-    void placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, GroundAt &&groundAt) noexcept;
+    template <typename GroundAt> void placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, GroundAt &&groundAt) noexcept;
 
     /**
      * @brief One authoritative tick: intent, gravity, ground, slope, jump.
@@ -159,10 +158,7 @@ public:
     [[nodiscard]] math::Fixed32 verticalSpeed() const noexcept { return _vy; }
 
     /** @brief Horizontal speed, for a readout or a walk cycle. */
-    [[nodiscard]] math::Fixed32 groundSpeed() const noexcept
-    {
-        return procgen::fixedSqrt(_vx * _vx + _vz * _vz);
-    }
+    [[nodiscard]] math::Fixed32 groundSpeed() const noexcept { return procgen::fixedSqrt(_vx * _vx + _vz * _vz); }
 
     [[nodiscard]] bool isGrounded() const noexcept { return _grounded; }
     [[nodiscard]] bool isSliding() const noexcept { return _sliding; }

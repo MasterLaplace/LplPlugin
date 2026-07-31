@@ -171,8 +171,8 @@ public:
             context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling : context.config.maxResidentChunks();
 
         _hasPointer = context.platform.input().hasPointer();
-        core::Log::info(_hasPointer ? "TerrainWorld: pointing device present — mouse look enabled"
-                                    : "TerrainWorld: no pointing device — look with I/K and the pointer keys");
+        core::Log::info(_hasPointer ? "TerrainWorld: pointing device present — mouse look enabled" :
+                                      "TerrainWorld: no pointing device — look with I/K and the pointer keys");
 
         if (!context.platform.display().querySurface(_surface) || _surface.buffer == nullptr ||
             _surface.bitsPerPixel != 32u || _surface.width < 64u || _surface.height < 64u)
@@ -661,9 +661,8 @@ private:
         _pendingTurn = math::Fixed32{};
         _jumpPressed = false;
 
-        _body.step(_bodyParams, intent, math::Fixed32::fromFloat(dt), [this](core::i32 x, core::i32 z) {
-            return _streamer.groundHeightAt(x, z);
-        });
+        _body.step(_bodyParams, intent, math::Fixed32::fromFloat(dt),
+                   [this](core::i32 x, core::i32 z) { return _streamer.groundHeightAt(x, z); });
 
         // The camera is told where the body IS; it is not what moves. Reading the
         // authoritative yaw into the float camera is the allowed direction of that
@@ -1148,9 +1147,10 @@ private:
                 .number(_skyBlock);
             drawShadowedText(pitchPixels, 8u, 116u, line, 0x00A0B4C8u);
 
-            image::drawText8x16(_surface.buffer, pitchPixels, 8u, _surface.height - 20u,
-                                "WASD=walk SPACE=jump C=sprint mouse=look V=detach F=view I/K=tilt T/Y/R/G=shading O=bounded X=exit",
-                                0x00808890u);
+            image::drawText8x16(
+                _surface.buffer, pitchPixels, 8u, _surface.height - 20u,
+                "WASD=walk SPACE=jump C=sprint mouse=look V=detach F=view I/K=tilt T/Y/R/G=shading O=bounded X=exit",
+                0x00808890u);
             return;
         }
 
@@ -1254,9 +1254,7 @@ private:
                 break;
             // Jump. An EDGE, buffered by the controller, so pressing it a few ticks
             // early still fires on landing instead of being dropped.
-            case ' ':
-                _jumpPressed = true;
-                break;
+            case ' ': _jumpPressed = true; break;
             case 'v':
                 _embodied = !_embodied;
                 _camera.setEyeHeight(_embodied ? _bodyParams.eyeHeight.toFloat() : kDetachedEyeHeight);
@@ -1364,8 +1362,8 @@ private:
         if (turnAccumulator != 0)
         {
             if (_embodied && _infinite)
-                _pendingTurn = _pendingTurn - math::Fixed32::fromFloat(static_cast<core::f32>(turnAccumulator) *
-                                                                       kLookSensitivity);
+                _pendingTurn =
+                    _pendingTurn - math::Fixed32::fromFloat(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
             else
                 _camera.turn(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
         }
