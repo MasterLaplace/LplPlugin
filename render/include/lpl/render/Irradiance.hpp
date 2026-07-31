@@ -115,12 +115,36 @@ inline void shBasis(core::f32 x, core::f32 y, core::f32 z, core::f32 *out) noexc
                 core::f32 dz = 0.0f;
                 switch (face)
                 {
-                case 0u: dx = 1.0f;  dy = -b; dz = -a; break;
-                case 1u: dx = -1.0f; dy = -b; dz = a;  break;
-                case 2u: dx = a;     dy = 1.0f;  dz = b;  break;
-                case 3u: dx = a;     dy = -1.0f; dz = -b; break;
-                case 4u: dx = a;     dy = -b; dz = 1.0f;  break;
-                default: dx = -a;    dy = -b; dz = -1.0f; break;
+                case 0u:
+                    dx = 1.0f;
+                    dy = -b;
+                    dz = -a;
+                    break;
+                case 1u:
+                    dx = -1.0f;
+                    dy = -b;
+                    dz = a;
+                    break;
+                case 2u:
+                    dx = a;
+                    dy = 1.0f;
+                    dz = b;
+                    break;
+                case 3u:
+                    dx = a;
+                    dy = -1.0f;
+                    dz = -b;
+                    break;
+                case 4u:
+                    dx = a;
+                    dy = -b;
+                    dz = 1.0f;
+                    break;
+                default:
+                    dx = -a;
+                    dy = -b;
+                    dz = -1.0f;
+                    break;
                 }
 
                 // Solid angle of the texel: the Jacobian of the cube-to-sphere map.

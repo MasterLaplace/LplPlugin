@@ -51,7 +51,8 @@ static math::AABB<math::Fixed32> boxAt(float x, float y, float z, float half)
         math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(x - half), math::Fixed32::fromFloat(y - half),
                                   math::Fixed32::fromFloat(z - half)},
         math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(x + half), math::Fixed32::fromFloat(y + half),
-                                  math::Fixed32::fromFloat(z + half)}};
+                                  math::Fixed32::fromFloat(z + half)}
+    };
 }
 
 int main()
@@ -68,16 +69,17 @@ int main()
     std::vector<math::Vec3<float>> centres;
     for (int z = 0; z < kSide; ++z)
         for (int x = 0; x < kSide; ++x)
-            centres.push_back({kOriginX + static_cast<float>(x) * kSpacing, 3.0f,
-                               kOriginZ + static_cast<float>(z) * kSpacing});
+            centres.push_back(
+                {kOriginX + static_cast<float>(x) * kSpacing, 3.0f, kOriginZ + static_cast<float>(z) * kSpacing});
 
     const float spanX = static_cast<float>(kSide) * kSpacing;
     physics::Octree tree{math::AABB<math::Fixed32>{}, 4u};
     tree.setWorldBounds(math::AABB<math::Fixed32>{
         math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(kOriginX - kSpacing), math::Fixed32::fromFloat(-64.0f),
                                   math::Fixed32::fromFloat(kOriginZ - kSpacing)},
-        math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(kOriginX + spanX), math::Fixed32::fromFloat(64.0f),
-                                  math::Fixed32::fromFloat(kOriginZ + spanX)}});
+        math::Vec3<math::Fixed32>{math::Fixed32::fromFloat(kOriginX + spanX),    math::Fixed32::fromFloat(64.0f),
+                                  math::Fixed32::fromFloat(kOriginZ + spanX)   }
+    });
 
     for (std::size_t i = 0; i < centres.size(); ++i)
         tree.insert(static_cast<core::u32>(i), boxAt(centres[i].x, centres[i].y, centres[i].z, kSpacing * 0.5f));
@@ -121,8 +123,7 @@ int main()
     // A region covering everything must return everything: a cull that prunes too
     // eagerly fails here and nowhere else.
     std::vector<core::u32> all;
-    tree.queryVisible([](const math::AABB<math::Fixed32> &) { return true; },
-                      [&](core::u32 id) { all.push_back(id); });
+    tree.queryVisible([](const math::AABB<math::Fixed32> &) { return true; }, [&](core::u32 id) { all.push_back(id); });
     check(all.size() == centres.size(), "an all-accepting test returns the whole set");
 
     std::printf(failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", failures);

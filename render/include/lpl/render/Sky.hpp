@@ -220,9 +220,7 @@ struct SunState {
         blend = 1.0f;
 
     const core::u32 scale = static_cast<core::u32>(blend * 256.0f);
-    const auto mix = [scale](core::u32 from, core::u32 to) {
-        return ((from * (256u - scale)) + (to * scale)) >> 8;
-    };
+    const auto mix = [scale](core::u32 from, core::u32 to) { return ((from * (256u - scale)) + (to * scale)) >> 8; };
     const core::u32 r = mix((colour >> 16) & 0xFFu, (skyTint >> 16) & 0xFFu);
     const core::u32 g = mix((colour >> 8) & 0xFFu, (skyTint >> 8) & 0xFFu);
     const core::u32 b = mix(colour & 0xFFu, skyTint & 0xFFu);

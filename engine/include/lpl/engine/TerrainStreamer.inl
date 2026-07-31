@@ -15,9 +15,10 @@
 
 namespace lpl::engine {
 
-inline void TerrainStreamer::configure(const procgen::ChunkParams &chunkParams, const procgen::EndlessRiverParams &riverParams,
-               const procgen::StreamingParams &streamParams, core::u32 maxResident,
-               const procgen::ChunkTerrainRule &rule)
+inline void TerrainStreamer::configure(const procgen::ChunkParams &chunkParams,
+                                       const procgen::EndlessRiverParams &riverParams,
+                                       const procgen::StreamingParams &streamParams, core::u32 maxResident,
+                                       const procgen::ChunkTerrainRule &rule)
 {
     _chunkParams = chunkParams;
     _riverParams = riverParams;
@@ -47,13 +48,13 @@ inline TerrainChunk TerrainStreamer::buildChunk(procgen::ChunkCoord coord) const
     TerrainChunk chunk;
     chunk.coord = coord;
 
-    const procgen::ChunkTerrain terrain = procgen::generateChunkTerrain(
-        _chunkParams, _riverParams, coord, _rule, [&chunk](core::i32 worldX, core::i32 worldZ) {
-            ecology::PlantCell plant;
-            plant.cellX = worldX;
-            plant.cellZ = worldZ;
-            chunk.plants.push_back(plant);
-        });
+    const procgen::ChunkTerrain terrain = procgen::generateChunkTerrain(_chunkParams, _riverParams, coord, _rule,
+                                                                        [&chunk](core::i32 worldX, core::i32 worldZ) {
+                                                                            ecology::PlantCell plant;
+                                                                            plant.cellX = worldX;
+                                                                            plant.cellZ = worldZ;
+                                                                            chunk.plants.push_back(plant);
+                                                                        });
 
     chunk.height = terrain.height;
     chunk.biomes = terrain.biomes;
@@ -62,7 +63,6 @@ inline TerrainChunk TerrainStreamer::buildChunk(procgen::ChunkCoord coord) const
     chunk.shade = procgen::Grid<core::u8>{_chunkParams.size, _chunkParams.size, 0u};
     return chunk;
 }
-
 
 } // namespace lpl::engine
 

@@ -118,8 +118,8 @@ struct ChunkParams {
  * @param talus      Slope above which material slides.
  * @return The eroded chunk, of size `params.size` squared.
  */
-[[nodiscard]] Heightfield generateErodedChunkTerrain(const ChunkParams &params, ChunkCoord coord,
-                                                     core::u32 iterations, core::f32 talus = 0.6f);
+[[nodiscard]] Heightfield generateErodedChunkTerrain(const ChunkParams &params, ChunkCoord coord, core::u32 iterations,
+                                                     core::f32 talus = 0.6f);
 
 /**
  * @brief Height at one world cell, without generating its chunk.
@@ -151,8 +151,8 @@ struct ChunkParams {
  * this is the level below it, not a replacement for it.
  */
 struct EndlessRiverParams {
-    core::u32 coarseCells{4u};     ///< Fine cells per coarse cell; the river's width scale.
-    core::u32 basinRadius{7u};     ///< Coarse cells searched upstream. Cost is quadratic in it.
+    core::u32 coarseCells{4u}; ///< Fine cells per coarse cell; the river's width scale.
+    core::u32 basinRadius{7u}; ///< Coarse cells searched upstream. Cost is quadratic in it.
     /**
      * @brief Upstream cells that must drain through before it is a river.
      *
@@ -168,7 +168,7 @@ struct EndlessRiverParams {
      * definition. This threshold is calibrated on those.
      */
     core::u32 riverThreshold{6u};
-    core::f32 seaLevel{-1.0f};     ///< Below this the water is already the sea.
+    core::f32 seaLevel{-1.0f}; ///< Below this the water is already the sea.
 
     // ── The trunk: a second, coarser level ──────────────────────────────────
     //
@@ -216,8 +216,8 @@ struct EndlessRiverParams {
      */
     core::f32 trunkFrequencyScale{0.08f};
 
-    core::u32 trunkCells{8u};      ///< Coarse cells per macro cell.
-    core::u32 trunkRadius{10u};    ///< Macro cells searched upstream. This is the reach.
+    core::u32 trunkCells{8u};   ///< Coarse cells per macro cell.
+    core::u32 trunkRadius{10u}; ///< Macro cells searched upstream. This is the reach.
     /**
      * @brief Upstream macro cells before a trunk runs.
      *
@@ -236,8 +236,8 @@ struct EndlessRiverParams {
      */
     core::u32 trunkThreshold{6u};
 
-    core::u32 trunkWidth{1u};      ///< Coarse cells either side of the trunk's line.
-    bool trunks{true};             ///< Whether the coarse level runs at all.
+    core::u32 trunkWidth{1u}; ///< Coarse cells either side of the trunk's line.
+    bool trunks{true};        ///< Whether the coarse level runs at all.
 };
 
 /**

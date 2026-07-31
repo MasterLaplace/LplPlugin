@@ -153,7 +153,6 @@ inline void PropLibrary::buildRocks(core::u32 seed)
     }
 }
 
-
 } // namespace lpl::engine
 
 #endif // LPL_ENGINE_PROP_LIBRARY_INL

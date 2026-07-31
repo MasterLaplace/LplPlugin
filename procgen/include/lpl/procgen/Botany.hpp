@@ -57,16 +57,16 @@ enum class TreeSpecies : core::u8 {
  */
 struct TreeParams {
     TreeSpecies species{TreeSpecies::Conifer};
-    core::u32 seed{0x7A3Eu};                                 ///< Determinism anchor.
-    core::u32 iterations{4u};                                 ///< Rewrite rounds.
-    core::u32 maxSegments{192u};                              ///< Hard cap: a kernel heap is 4 MiB.
-    math::Fixed32 segmentLength{math::Fixed32::fromFloat(0.9f)};  ///< Length of a depth-0 segment.
-    math::Fixed32 lengthDecay{math::Fixed32::fromFloat(0.78f)};   ///< Length multiplier per branch depth.
-    math::Fixed32 radius{math::Fixed32::fromFloat(0.13f)};        ///< Trunk radius at the foot.
-    math::Fixed32 radiusDecay{math::Fixed32::fromFloat(0.68f)};   ///< Radius multiplier per branch depth.
-    math::Fixed32 branchAngle{math::Fixed32::fromFloat(0.42f)};   ///< Pitch away from the parent, radians.
-    math::Fixed32 rollAngle{math::Fixed32::fromFloat(2.39996f)};  ///< Roll between successive branches (golden angle).
-    math::Fixed32 leafSize{math::Fixed32::fromFloat(0.26f)};      ///< Half-extent of a leaf sprite.
+    core::u32 seed{0x7A3Eu};                                     ///< Determinism anchor.
+    core::u32 iterations{4u};                                    ///< Rewrite rounds.
+    core::u32 maxSegments{192u};                                 ///< Hard cap: a kernel heap is 4 MiB.
+    math::Fixed32 segmentLength{math::Fixed32::fromFloat(0.9f)}; ///< Length of a depth-0 segment.
+    math::Fixed32 lengthDecay{math::Fixed32::fromFloat(0.78f)};  ///< Length multiplier per branch depth.
+    math::Fixed32 radius{math::Fixed32::fromFloat(0.13f)};       ///< Trunk radius at the foot.
+    math::Fixed32 radiusDecay{math::Fixed32::fromFloat(0.68f)};  ///< Radius multiplier per branch depth.
+    math::Fixed32 branchAngle{math::Fixed32::fromFloat(0.42f)};  ///< Pitch away from the parent, radians.
+    math::Fixed32 rollAngle{math::Fixed32::fromFloat(2.39996f)}; ///< Roll between successive branches (golden angle).
+    math::Fixed32 leafSize{math::Fixed32::fromFloat(0.26f)};     ///< Half-extent of a leaf sprite.
 };
 
 /**
@@ -98,8 +98,8 @@ struct TreeLeaf {
 struct TreeSkeleton {
     lpl::pmr::vector<TreeBranch> branches;
     lpl::pmr::vector<TreeLeaf> leaves;
-    math::Fixed32 height{};  ///< Highest point reached, for culling and for shadows.
-    math::Fixed32 spread{};  ///< Largest horizontal distance from the trunk.
+    math::Fixed32 height{}; ///< Highest point reached, for culling and for shadows.
+    math::Fixed32 spread{}; ///< Largest horizontal distance from the trunk.
 };
 
 /** @brief The grammar for a species: rewrite rules and how far to run them. */

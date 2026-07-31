@@ -35,7 +35,6 @@ inline bool Herd::removeOne(core::u32 species) noexcept
     return false;
 }
 
-
 } // namespace lpl::ecology
 
 #endif // LPL_ECOLOGY_HERD_INL

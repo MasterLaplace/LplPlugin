@@ -315,7 +315,8 @@ struct Octree::Impl {
     // ────────────────────────────────────────────────────────────────────── //
 
     /// @copydoc Octree::queryVisible
-    void visibleRecurse(core::u32 nodeIdx, const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
+    void visibleRecurse(core::u32 nodeIdx,
+                        const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
                         const lpl::pmr::function<void(core::u32)> &callback, core::u32 *visited,
                         core::u32 *pruned) const
     {

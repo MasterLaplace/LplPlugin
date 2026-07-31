@@ -56,8 +56,7 @@ int main()
         check("species grew wood", segments[s] != 0u);
         check("species grew foliage", leaves[s] != 0u);
         const bool upright = skeleton.height > skeleton.spread;
-        check(s == 2u ? "shrub is wider than tall or nearly so" : "tree is taller than wide",
-              s == 2u ? true : upright);
+        check(s == 2u ? "shrub is wider than tall or nearly so" : "tree is taller than wide", s == 2u ? true : upright);
     }
 
     // Determinism within one target: growing twice gives the same tree. Without

@@ -15,8 +15,7 @@
 
 namespace lpl::engine {
 
-inline void LivingLayer::configure(const LivingLayerParams &params, const ecology::LivingRecipe &recipe,
-                                   core::u32 seed)
+inline void LivingLayer::configure(const LivingLayerParams &params, const ecology::LivingRecipe &recipe, core::u32 seed)
 {
     _params = params;
     _recipe = recipe;
@@ -35,8 +34,8 @@ inline void LivingLayer::seedWeb(core::u32 standingPlants)
     // and a food web whose bottom is empty inverts: three grazers, forty-four
     // hunters, which is what the screen showed.
     _web = ecology::TrophicWeb{};
-    const core::u32 declared = _recipe.speciesCount < ecology::kMaxLivingSpecies ? _recipe.speciesCount
-                                                                                : ecology::kMaxLivingSpecies;
+    const core::u32 declared =
+        _recipe.speciesCount < ecology::kMaxLivingSpecies ? _recipe.speciesCount : ecology::kMaxLivingSpecies;
     for (core::u32 i = 0u; i < declared; ++i)
     {
         ecology::SpeciesParams params = _recipe.species[i].params;
@@ -52,9 +51,8 @@ inline void LivingLayer::seedWeb(core::u32 standingPlants)
 
 inline core::u32 LivingLayer::bodiesFor(core::u32 species) const noexcept
 {
-    const core::u32 counted = _web.species.size() < _params.speciesCount
-                                  ? static_cast<core::u32>(_web.species.size())
-                                  : _params.speciesCount;
+    const core::u32 counted =
+        _web.species.size() < _params.speciesCount ? static_cast<core::u32>(_web.species.size()) : _params.speciesCount;
     if (species >= counted)
         return 0u;
 
@@ -68,7 +66,6 @@ inline core::u32 LivingLayer::bodiesFor(core::u32 species) const noexcept
     const core::f32 wanted = _web.species[species].population.toFloat() * scale;
     return static_cast<core::u32>(wanted < 0.0f ? 0.0f : wanted);
 }
-
 
 } // namespace lpl::engine
 

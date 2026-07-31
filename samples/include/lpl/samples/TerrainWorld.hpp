@@ -80,16 +80,16 @@
 #    include <lpl/render/Lighting.hpp>
 #    include <lpl/render/MipTexture.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
-#    include <lpl/render/Pbr.hpp>
 #    include <lpl/render/Overlay.hpp>
+#    include <lpl/render/Pbr.hpp>
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/Reflection.hpp>
 #    include <lpl/render/Revolve.hpp>
 #    include <lpl/render/Scatter.hpp>
-#    include <lpl/render/Topology.hpp>
 #    include <lpl/render/Sky.hpp>
 #    include <lpl/render/SkyDome.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
+#    include <lpl/render/Topology.hpp>
 #    include <lpl/render/Water.hpp>
 
 namespace lpl::samples {
@@ -166,8 +166,8 @@ public:
         _terrainSurface.configure(context.config, _view.surface, _seed);
         _terrainSurface.applyLook(_view.sky, _view.water, _view.dayFraction);
         _terrainSurface.attachProbe(_probeColor, _probeDepth, kProbeWidth, kProbeHeight);
-        _maxResident = context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling
-                                                               : context.config.maxResidentChunks();
+        _maxResident =
+            context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling : context.config.maxResidentChunks();
 
         if (!context.platform.display().querySurface(_surface) || _surface.buffer == nullptr ||
             _surface.bitsPerPixel != 32u || _surface.width < 64u || _surface.height < 64u)
@@ -240,8 +240,8 @@ public:
 
         render::RenderTarget target{_color, _depth, kRenderWidth, kRenderHeight};
         renderScene(target);
-        render::blitScaled(_surface.buffer, _surface.pitch / 4u, _surface.width, _surface.height, _color,
-                           kRenderWidth, kRenderHeight);
+        render::blitScaled(_surface.buffer, _surface.pitch / 4u, _surface.width, _surface.height, _color, kRenderWidth,
+                           kRenderHeight);
         drawHud();
         context.platform.display().present();
         ++_frames;
@@ -393,8 +393,7 @@ private:
             // passes' intermediate grids the moment the few this game reads have
             // been copied out is procgen::buildSnapshot's.
             const procgen::WorldSnapshot snapshot =
-                procgen::buildSnapshot(recipe, &registry(), &_propIds,
-                                       procgen::WalkabilityRule{kSeaLevel, 2.4f});
+                procgen::buildSnapshot(recipe, &registry(), &_propIds, procgen::WalkabilityRule{kSeaLevel, 2.4f});
 
             _height = snapshot.height;
             _biomes = snapshot.biomes;
@@ -471,7 +470,6 @@ private:
         seedHerd();
 
         _ticks = 0u;
-
 
         // Allocated once, reused every probe pass.
         // The props are grown once per world: an L-system expansion and a swept
@@ -593,7 +591,7 @@ private:
     void recentreField()
     {
         (void) _living.scent().follow(static_cast<core::i32>(_camera.focusX()),
-                             static_cast<core::i32>(_camera.focusZ()));
+                                      static_cast<core::i32>(_camera.focusZ()));
     }
 
     /// World cell to a cell of the pheromone window, when it is inside it.
@@ -621,8 +619,7 @@ private:
 
         const procgen::ChunkParams &params = _streamer.chunkParams();
         _terrainSurface.fillShadowMask(
-            patch,
-            [&params](core::i32 x, core::i32 z) { return procgen::sampleWorldHeight(params, x, z).toFloat(); },
+            patch, [&params](core::i32 x, core::i32 z) { return procgen::sampleWorldHeight(params, x, z).toFloat(); },
             [this, &chunk](auto &&emit) {
                 for (core::u32 i = 0u; i < chunk.plants.size(); ++i)
                 {
@@ -826,8 +823,7 @@ private:
             return groundAt(static_cast<core::i32>(worldX), static_cast<core::i32>(worldZ));
         core::u32 cx = 0u;
         core::u32 cz = 0u;
-        if (_height.empty() ||
-            !worldToCell(math::Fixed32::fromFloat(worldX), math::Fixed32::fromFloat(worldZ), cx, cz))
+        if (_height.empty() || !worldToCell(math::Fixed32::fromFloat(worldX), math::Fixed32::fromFloat(worldZ), cx, cz))
             return kFloor;
         return _height.at(cx, cz).toFloat();
     }
@@ -861,9 +857,9 @@ private:
 
         if (_infinite)
         {
-            _lastTriangles = _renderer.drawStreamed(
-                rt, _camera, _streamer, _terrainSurface, _props, _living.herd(), params, _frames, palette,
-                [this](core::i32 x, core::i32 z) { return groundAt(x, z); });
+            _lastTriangles =
+                _renderer.drawStreamed(rt, _camera, _streamer, _terrainSurface, _props, _living.herd(), params, _frames,
+                                       palette, [this](core::i32 x, core::i32 z) { return groundAt(x, z); });
             return;
         }
 
@@ -1005,7 +1001,9 @@ private:
             line.clear()
                 .text(_camera.isFirstPerson() ? "first person  eye " : "orbit  distance ")
                 .decimal(_camera.isFirstPerson() ? _camera.eyeHeight() : _camera.distance())
-                .text("  LOD rings ").number(_lodRings).text("  tris ")
+                .text("  LOD rings ")
+                .number(_lodRings)
+                .text("  tris ")
                 .number(_lastTriangles);
             drawShadowedText(pitchPixels, 8u, 44u, line, 0x00A0B4C8u);
 
@@ -1049,7 +1047,8 @@ private:
             drawShadowedText(pitchPixels, 8u, 98u, line, 0x00A0B4C8u);
 
             image::drawText8x16(_surface.buffer, pitchPixels, 8u, _surface.height - 20u,
-                                "WASD=walk J/L=turn I/K=tilt Q/E=zoom F=view T/Y/R/G=shading O=bounded X=exit", 0x00808890u);
+                                "WASD=walk J/L=turn I/K=tilt Q/E=zoom F=view T/Y/R/G=shading O=bounded X=exit",
+                                0x00808890u);
             return;
         }
 
@@ -1105,7 +1104,6 @@ private:
         }
         return "shading biome    ";
     }
-
 
     // ── Input ────────────────────────────────────────────────────────────────
 
@@ -1300,8 +1298,7 @@ private:
 
     [[nodiscard]] core::u32 standingPlants() const noexcept
     {
-        return _plants.empty() ? 0u
-                               : ecology::countStanding(&_plants[0], static_cast<core::u32>(_plants.size()));
+        return _plants.empty() ? 0u : ecology::countStanding(&_plants[0], static_cast<core::u32>(_plants.size()));
     }
 
     [[nodiscard]] core::u32 countSpecies(core::u32 species) const noexcept
@@ -1350,8 +1347,6 @@ private:
     /// World cell the endless stigmergy window's corner sits on.
     bool _infinite{false};
 
-
-
     mutable core::u32 _lastTriangles{0u};
     ecology::LivingRecipe _livingRecipe{ecology::parityLivingRecipe()};
     /**
@@ -1381,7 +1376,6 @@ private:
 
     /// The living population: ecology::Herd owns the movement and the census.
     lpl::pmr::vector<Plant> _plants;
-
 
     /// One grown plant per species, and the transforms are the instances.
     static constexpr core::u32 kTreeSpecies = 3u;

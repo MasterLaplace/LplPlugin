@@ -24,8 +24,8 @@
 #ifndef LPL_ENGINE_BOOT_HPP
 #    define LPL_ENGINE_BOOT_HPP
 
-#    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/core/Log.hpp>
+#    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/engine/Config.hpp>
 #    include <lpl/engine/ConfigValidation.hpp>
 #    include <lpl/engine/Engine.hpp>

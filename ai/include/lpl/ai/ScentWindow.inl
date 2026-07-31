@@ -53,8 +53,7 @@ inline bool ScentWindow::toWindow(core::i32 worldX, core::i32 worldZ, core::u32 
 {
     const core::i32 localX = worldX - _originX;
     const core::i32 localZ = worldZ - _originZ;
-    if (localX < 0 || localZ < 0 || localX >= static_cast<core::i32>(_span) ||
-        localZ >= static_cast<core::i32>(_span))
+    if (localX < 0 || localZ < 0 || localX >= static_cast<core::i32>(_span) || localZ >= static_cast<core::i32>(_span))
         return false;
     outX = static_cast<core::u32>(localX);
     outZ = static_cast<core::u32>(localZ);

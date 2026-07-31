@@ -81,8 +81,8 @@ public:
                 OnGenerated &&onGenerated)
     {
         _residency.stream(
-            focusCellX, focusCellZ, headingX, headingZ,
-            [this](procgen::ChunkCoord coord) { return buildChunk(coord); }, onGenerated);
+            focusCellX, focusCellZ, headingX, headingZ, [this](procgen::ChunkCoord coord) { return buildChunk(coord); },
+            onGenerated);
     }
 
     /** @brief Ground height at a world cell — the resident field first, then the noise. */

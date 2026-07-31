@@ -95,8 +95,7 @@ public:
      *                whether an animal may stand there. Twenty-four attempts, then
      *                give up — a world can legitimately have nowhere to put one.
      */
-    template <typename PlaceAt>
-    bool spawn(procgen::Random &random, core::u32 species, PlaceAt &&placeAt)
+    template <typename PlaceAt> bool spawn(procgen::Random &random, core::u32 species, PlaceAt &&placeAt)
     {
         if (_herd.size() >= _params.maxBodies)
             return false;
@@ -139,8 +138,7 @@ public:
     }
 
     /** @brief Brings the bodies in line with the census, keeping the ratio. */
-    template <typename PlaceAt>
-    void reconcile(core::u32 tick, PlaceAt &&placeAt)
+    template <typename PlaceAt> void reconcile(core::u32 tick, PlaceAt &&placeAt)
     {
         procgen::Random stock{_seed ^ (0xB0D533u + tick)};
         _herd.reconcile(

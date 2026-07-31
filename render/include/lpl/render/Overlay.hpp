@@ -33,8 +33,7 @@ namespace lpl::render {
  * forced callers to pass @c 0u and @c "" as padding whenever they had less to
  * say than it expected.
  */
-template <core::u32 Capacity>
-class TextLine {
+template <core::u32 Capacity> class TextLine {
 public:
     TextLine() noexcept { _buffer[0] = '\0'; }
 

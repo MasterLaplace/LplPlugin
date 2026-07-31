@@ -121,14 +121,13 @@ int main()
 
     // 5. The JSON round trip: a document that states a view must re-emit it.
     {
-        const std::string document =
-            R"({"format":"lplscene/1",)"
-            R"("metadata":{"title":"look","startScene":"a"},)"
-            R"("scenes":[{"name":"a","systems":["render"],)"
-            R"("procedural":{"seed":7,"width":24,"depth":24},)"
-            R"("view":{"dayFraction":0.75,"seaLevel":3.5,"sky":{"zenithR":0.5},)"
-            R"("water":{"deep":1122867},"palette":[16711680,65280,255]},)"
-            R"("entities":[]}]})";
+        const std::string document = R"({"format":"lplscene/1",)"
+                                     R"("metadata":{"title":"look","startScene":"a"},)"
+                                     R"("scenes":[{"name":"a","systems":["render"],)"
+                                     R"("procedural":{"seed":7,"width":24,"depth":24},)"
+                                     R"("view":{"dayFraction":0.75,"seaLevel":3.5,"sky":{"zenithR":0.5},)"
+                                     R"("water":{"deep":1122867},"palette":[16711680,65280,255]},)"
+                                     R"("entities":[]}]})";
 
         const auto parsed = editor::parseGameDocument(document);
         check(parsed.has_value(), "the document with a view block parses");
@@ -145,8 +144,7 @@ int main()
                 check(near(scene->view.zenithR, 0.5f) && near(scene->view.zenithB, 0.85f),
                       "a partial sky block overrides only what it names");
                 check(scene->view.waterDeep == 1122867u, "the water tint is read");
-                check(scene->view.biomeColourCount == 3u &&
-                          (scene->view.flags & pack::kViewFlagOverridePalette) != 0u,
+                check(scene->view.biomeColourCount == 3u && (scene->view.flags & pack::kViewFlagOverridePalette) != 0u,
                       "the palette is read and flagged as an override");
 
                 // Re-emit, re-parse: a save that loses a field is a lossy save that

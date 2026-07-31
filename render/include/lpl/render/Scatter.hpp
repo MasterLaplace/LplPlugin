@@ -55,8 +55,8 @@ struct ScatterInstance {
     core::f32 worldZ{0.0f};
     core::f32 scale{1.0f};
     core::f32 yaw{0.0f};
-    core::f32 light{1.0f};  ///< Lighting term including any shadow.
-    core::u32 mesh{0u};     ///< Index into the caller's mesh table; also the material.
+    core::f32 light{1.0f}; ///< Lighting term including any shadow.
+    core::u32 mesh{0u};    ///< Index into the caller's mesh table; also the material.
 };
 
 /**
@@ -101,8 +101,7 @@ public:
         for (core::u32 i = 0u; i < count; ++i)
         {
             const ScatterInstance &instance = _instances[i];
-            const core::f32 distance =
-                approximateLength(instance.worldX - basis.eye.x, instance.worldZ - basis.eye.z);
+            const core::f32 distance = approximateLength(instance.worldX - basis.eye.x, instance.worldZ - basis.eye.z);
             const core::f32 clamped = distance < 0.0f ? 0.0f : (distance > farDistance ? farDistance : distance);
             const core::u32 depth =
                 farDistance > 0.0f ? static_cast<core::u32>((clamped / farDistance) * 65535.0f) : 0u;

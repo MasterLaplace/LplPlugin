@@ -43,10 +43,7 @@ void check(bool condition, const char *what)
 }
 
 /// The canonical parameters, from the one constexpr the kernel smoke also reads.
-[[nodiscard]] procgen::ChunkParams makeParams()
-{
-    return procgen::parityChunkParams();
-}
+[[nodiscard]] procgen::ChunkParams makeParams() { return procgen::parityChunkParams(); }
 
 void testHeightSeamsAreExact()
 {
@@ -302,10 +299,8 @@ void testTrunksCrossChunks()
                 {
                     // Macro cell to chunk: macro span in coarse cells times coarse
                     // cells per fine cell, over the chunk size.
-                    const core::i32 fineX =
-                        mx * static_cast<core::i32>(rivers.trunkCells * rivers.coarseCells);
-                    const core::i32 fineZ =
-                        mz * static_cast<core::i32>(rivers.trunkCells * rivers.coarseCells);
+                    const core::i32 fineX = mx * static_cast<core::i32>(rivers.trunkCells * rivers.coarseCells);
+                    const core::i32 fineZ = mz * static_cast<core::i32>(rivers.trunkCells * rivers.coarseCells);
                     firstTrunk = {fineX / static_cast<core::i32>(params.size),
                                   fineZ / static_cast<core::i32>(params.size)};
                 }
@@ -320,11 +315,13 @@ void testTrunksCrossChunks()
     // Continuity: the chunk holding a trunk and its four neighbours should not all
     // be dry. A trunk that lives inside a single chunk is a puddle with ambition.
     core::u32 wetNeighbours = 0u;
-    const procgen::ChunkCoord around[5] = {firstTrunk,
-                                           {firstTrunk.x + 1, firstTrunk.z},
-                                           {firstTrunk.x - 1, firstTrunk.z},
-                                           {firstTrunk.x, firstTrunk.z + 1},
-                                           {firstTrunk.x, firstTrunk.z - 1}};
+    const procgen::ChunkCoord around[5] = {
+        firstTrunk,
+        {firstTrunk.x + 1, firstTrunk.z    },
+        {firstTrunk.x - 1, firstTrunk.z    },
+        {firstTrunk.x,     firstTrunk.z + 1},
+        {firstTrunk.x,     firstTrunk.z - 1}
+    };
     for (const procgen::ChunkCoord &coord : around)
     {
         const procgen::Grid<core::u8> mask = procgen::markChunkRivers(params, rivers, coord);

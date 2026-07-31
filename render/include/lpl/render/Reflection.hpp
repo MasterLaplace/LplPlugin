@@ -85,9 +85,8 @@ struct ReflectionProbe {
                                        mirrored.eye.z + mirrored.forward.z);
     // Up is flipped, so the handedness of the mirrored view is inverted — which is
     // exactly why the rasterizer's double-sided fills are needed for this pass.
-    const auto view = math::Mat4<core::f32>::lookAt(mirrored.eye, target,
-                                                    math::Vec3<core::f32>(0.0f, mirrored.up.y < 0.0f ? -1.0f : 1.0f,
-                                                                          0.0f));
+    const auto view = math::Mat4<core::f32>::lookAt(
+        mirrored.eye, target, math::Vec3<core::f32>(0.0f, mirrored.up.y < 0.0f ? -1.0f : 1.0f, 0.0f));
     return perspectiveFov(math::Fixed32::fromFloat(lens.fovRadians), aspect, lens.nearPlane, lens.farPlane) * view;
 }
 

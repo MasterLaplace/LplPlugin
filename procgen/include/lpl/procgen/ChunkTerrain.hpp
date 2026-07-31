@@ -53,9 +53,9 @@ namespace lpl::procgen {
 struct ChunkTerrainRule {
     core::u32 erosionIterations{6u}; ///< Thermal passes; also sets the apron.
     core::f32 seaLevel{-1.0f};
-    core::f32 beachBand{0.8f};    ///< Height above the sea that is still shore.
-    core::f32 rockLine{8.0f};     ///< Above this, bare rock.
-    core::f32 snowLine{11.0f};    ///< Above this, snow.
+    core::f32 beachBand{0.8f};        ///< Height above the sea that is still shore.
+    core::f32 rockLine{8.0f};         ///< Above this, bare rock.
+    core::f32 snowLine{11.0f};        ///< Above this, snow.
     core::f32 latitudeScale{0.0016f}; ///< How fast it cools away from z = 0.
     core::f32 baseWarmth{0.72f};
     core::f32 altitudeCooling{0.03f};

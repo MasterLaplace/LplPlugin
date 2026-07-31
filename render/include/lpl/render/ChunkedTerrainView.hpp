@@ -45,12 +45,12 @@ namespace lpl::render {
  */
 struct ChunkedViewParams {
     core::u32 chunkSize{24u};
-    core::u32 lodRings{3u};        ///< Rings of detail; each doubles the stride.
-    core::f32 centreY{8.0f};       ///< Vertical centre of a chunk's cull box.
-    core::f32 halfHeight{72.0f};   ///< Half-extent of it; generous on purpose — a box
-                                   ///< too big only costs a chunk drawn and found
-                                   ///< invisible, one too small costs terrain that
-                                   ///< vanishes.
+    core::u32 lodRings{3u};      ///< Rings of detail; each doubles the stride.
+    core::f32 centreY{8.0f};     ///< Vertical centre of a chunk's cull box.
+    core::f32 halfHeight{72.0f}; ///< Half-extent of it; generous on purpose — a box
+                                 ///< too big only costs a chunk drawn and found
+                                 ///< invisible, one too small costs terrain that
+                                 ///< vanishes.
     core::f32 ambient{0.28f};
     core::f32 skirtDrop{6.0f};
 };
@@ -105,8 +105,8 @@ public:
      * @return true if the chunk survived the frustum test.
      */
     bool consider(const math::Mat4<core::f32> &mvp, const math::Vec3<core::f32> &eye, core::u32 targetWidth,
-                  core::u32 targetHeight, const ChunkedViewParams &params, core::i32 focusChunkX,
-                  core::i32 focusChunkZ, core::u32 index, core::i32 chunkX, core::i32 chunkZ)
+                  core::u32 targetHeight, const ChunkedViewParams &params, core::i32 focusChunkX, core::i32 focusChunkZ,
+                  core::u32 index, core::i32 chunkX, core::i32 chunkZ)
     {
         const core::f32 span = static_cast<core::f32>(params.chunkSize);
         const core::f32 half = span * 0.5f;

@@ -53,8 +53,7 @@ public:
      *                   is what stops each caller from picking a different one.
      * @param outButtons Bit 0 left, bit 1 right, bit 2 middle.
      */
-    [[nodiscard]] virtual bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY,
-                                                   core::u32 &outButtons)
+    [[nodiscard]] virtual bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY, core::u32 &outButtons)
     {
         outDeltaX = 0;
         outDeltaY = 0;

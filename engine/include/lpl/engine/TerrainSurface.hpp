@@ -121,8 +121,8 @@ public:
      * has no natural UV in a streamed world — there is no corner to measure from —
      * and world coordinates make two patches agree along their border for free.
      */
-    [[nodiscard]] core::u32 shade(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
-                                  core::f32 distance, bool rocky) const noexcept;
+    [[nodiscard]] core::u32 shade(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit, core::f32 distance,
+                                  bool rocky) const noexcept;
 
     /**
      * @brief Physically based colour for one point: GGX, sky irradiance, ACES.
@@ -153,20 +153,17 @@ public:
     core::u32 drawWater(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
                         const render::CameraBasis &basis, const core::f32 *quad, BedDepthAt &&bedDepthAt) const
     {
-        return render::fillPolygonShadedClipped(
-            rt, mvp, quad, 4u, [&](core::f32 wx, core::f32 wy, core::f32 wz) {
-                core::u32 colour =
-                    render::waterColour(wx, wy, wz, basis.eye, _sun, _skyParams, _water, bedDepthAt(wx, wz));
-                // The probe carries what the sky cannot: the terrain standing over
-                // the water. Where it has nothing to say — off its edge, behind its
-                // near plane — the sky mirror already answered.
-                core::u32 reflected = 0u;
-                if (_reflection && render::sampleProbe(_probe, _probePixels, wx, wy, wz, reflected))
-                    colour = render::mixColours(colour, reflected, 0.45f);
-                return render::applyAerialPerspective(
-                    colour, _haze, render::approximateLength(wx - basis.eye.x, wz - basis.eye.z),
-                    _params.fogDensity);
-            });
+        return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, [&](core::f32 wx, core::f32 wy, core::f32 wz) {
+            core::u32 colour = render::waterColour(wx, wy, wz, basis.eye, _sun, _skyParams, _water, bedDepthAt(wx, wz));
+            // The probe carries what the sky cannot: the terrain standing over
+            // the water. Where it has nothing to say — off its edge, behind its
+            // near plane — the sky mirror already answered.
+            core::u32 reflected = 0u;
+            if (_reflection && render::sampleProbe(_probe, _probePixels, wx, wy, wz, reflected))
+                colour = render::mixColours(colour, reflected, 0.45f);
+            return render::applyAerialPerspective(
+                colour, _haze, render::approximateLength(wx - basis.eye.x, wz - basis.eye.z), _params.fogDensity);
+        });
     }
 
     /**
@@ -232,9 +229,9 @@ public:
             {
                 const core::i32 worldX = patch.originX + static_cast<core::i32>(x);
                 const core::i32 worldZ = patch.originZ + static_cast<core::i32>(z);
-                const core::f32 occlusion = render::terrainShadow(
-                    [&heightAt](core::i32 sx, core::i32 sz) { return heightAt(sx, sz); }, worldX, worldZ,
-                    heightAt(worldX, worldZ), _sun, _params.shadowSteps);
+                const core::f32 occlusion =
+                    render::terrainShadow([&heightAt](core::i32 sx, core::i32 sz) { return heightAt(sx, sz); }, worldX,
+                                          worldZ, heightAt(worldX, worldZ), _sun, _params.shadowSteps);
                 mask.at(x, z) = static_cast<core::u8>(occlusion * 255.0f);
             }
 

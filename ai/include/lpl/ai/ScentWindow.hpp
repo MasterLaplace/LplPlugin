@@ -67,8 +67,7 @@ public:
     bool follow(core::i32 focusX, core::i32 focusZ);
 
     /** @brief World cell to a cell of the window, when it is inside it. */
-    [[nodiscard]] bool toWindow(core::i32 worldX, core::i32 worldZ, core::u32 &outX,
-                                core::u32 &outZ) const noexcept;
+    [[nodiscard]] bool toWindow(core::i32 worldX, core::i32 worldZ, core::u32 &outX, core::u32 &outZ) const noexcept;
 
 private:
     StigmergyField _field{};

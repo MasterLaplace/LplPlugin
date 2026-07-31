@@ -43,8 +43,8 @@ namespace lpl::procgen {
  * @brief What makes a cell impassable.
  */
 struct WalkabilityRule {
-    core::f32 seaLevel{-1.0f};  ///< Below this, a cell is drowned.
-    core::f32 maxSlope{2.4f};   ///< Above this, a cell is too steep to stand on.
+    core::f32 seaLevel{-1.0f}; ///< Below this, a cell is drowned.
+    core::f32 maxSlope{2.4f};  ///< Above this, a cell is too steep to stand on.
 };
 
 /**

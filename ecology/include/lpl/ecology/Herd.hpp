@@ -106,8 +106,8 @@ public:
      * @param graze     (worldX, worldZ) -> void, called where a grazer stands.
      */
     template <typename ToFieldCell, typename Walkable, typename Graze>
-    void step(const HerdParams &params, const ai::StigmergyField &field, ToFieldCell &&toFieldCell,
-              Walkable &&walkable, Graze &&graze)
+    void step(const HerdParams &params, const ai::StigmergyField &field, ToFieldCell &&toFieldCell, Walkable &&walkable,
+              Graze &&graze)
     {
         if (_members.empty())
             return;
@@ -126,8 +126,7 @@ public:
             boids.separationWeight = hunter ? params.separationHunter : params.separationGrazer;
             boids.alignmentWeight = hunter ? params.alignmentHunter : params.alignmentGrazer;
             boids.cohesionWeight = hunter ? params.cohesionHunter : params.cohesionGrazer;
-            boids.neighbourRadius =
-                math::Fixed32::fromInt(hunter ? params.neighbourHunter : params.neighbourGrazer);
+            boids.neighbourRadius = math::Fixed32::fromInt(hunter ? params.neighbourHunter : params.neighbourGrazer);
 
             // dt is explicit, and the integration the flock performed is thrown away:
             // only the velocities are taken back. See the file comment.
@@ -171,8 +170,7 @@ public:
             // what keeps a chain of scent impulses from accumulating into a bolt:
             // the flock and the scent decide the DIRECTION, the genome decides how
             // fast this animal can possibly travel.
-            const math::Fixed32 lengthSquared =
-                member.body.vx * member.body.vx + member.body.vz * member.body.vz;
+            const math::Fixed32 lengthSquared = member.body.vx * member.body.vx + member.body.vz * member.body.vz;
             const math::Fixed32 length = procgen::fixedSqrt(lengthSquared);
             if (length.raw() > 256)
             {

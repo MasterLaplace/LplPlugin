@@ -42,9 +42,9 @@ namespace lpl::render {
  * @brief How one patch is sampled and lit.
  */
 struct HeightfieldPatchParams {
-    core::u32 size{24u};       ///< Cells along one edge of the patch.
-    core::u32 stride{1u};      ///< Sampling stride: the level of detail.
-    core::i32 originX{0};      ///< World cell of the patch's corner.
+    core::u32 size{24u};  ///< Cells along one edge of the patch.
+    core::u32 stride{1u}; ///< Sampling stride: the level of detail.
+    core::i32 originX{0}; ///< World cell of the patch's corner.
     core::i32 originZ{0};
     core::f32 ambient{0.28f};  ///< What a surface facing away still receives.
     core::f32 maxLight{1.25f}; ///< Ceiling on the lighting term.
@@ -95,18 +95,17 @@ core::u32 drawHeightfieldPatch(const RenderTarget &rt, const math::Mat4<core::f3
 
             const core::f32 occlusion = shadeAt(x, z);
             // The shadow multiplies the DIRECT term only.
-            const core::f32 lit = OrbitCamera::clamp(
-                params.ambient + (1.0f - params.ambient) * ndl * sun.intensity * (1.0f - occlusion), 0.0f,
-                params.maxLight);
+            const core::f32 lit =
+                OrbitCamera::clamp(params.ambient + (1.0f - params.ambient) * ndl * sun.intensity * (1.0f - occlusion),
+                                   0.0f, params.maxLight);
             const core::u32 base = colourAt(x, z);
 
             const core::f32 quad[12] = {x0, y00, z0, x1, y10, z0, x1, y11, z1, x0, y01, z1};
             if (perPixel)
-                triangles += fillPolygonShadedClipped(
-                    rt, mvp, quad, 4u, [&](core::f32 wx, core::f32 wy, core::f32 wz) {
-                        (void) wy;
-                        return shade(wx, wz, base, lit, nx, nz, occlusion);
-                    });
+                triangles += fillPolygonShadedClipped(rt, mvp, quad, 4u, [&](core::f32 wx, core::f32 wy, core::f32 wz) {
+                    (void) wy;
+                    return shade(wx, wz, base, lit, nx, nz, occlusion);
+                });
             else
                 triangles += fillPolygonClipped(rt, mvp, quad, 4u, shade(x0, z0, base, lit, nx, nz, occlusion));
         }
@@ -141,12 +140,12 @@ core::u32 drawPatchSkirts(const RenderTarget &rt, const math::Mat4<core::f32> &m
         const core::f32 z0 = static_cast<core::f32>(params.originZ);
         const core::f32 z1 = static_cast<core::f32>(params.originZ + static_cast<core::i32>(last));
 
-        triangles += drawSkirtQuad(rt, mvp, wx, heightAt(i, 0u), z0, wx + 1.0f, heightAt(i + 1u, 0u), z0, drop,
-                                   cliffAt(i, 0u));
+        triangles +=
+            drawSkirtQuad(rt, mvp, wx, heightAt(i, 0u), z0, wx + 1.0f, heightAt(i + 1u, 0u), z0, drop, cliffAt(i, 0u));
         triangles += drawSkirtQuad(rt, mvp, wx, heightAt(i, last), z1, wx + 1.0f, heightAt(i + 1u, last), z1, drop,
                                    cliffAt(i, last));
-        triangles += drawSkirtQuad(rt, mvp, x0, heightAt(0u, i), wz, x0, heightAt(0u, i + 1u), wz + 1.0f, drop,
-                                   cliffAt(0u, i));
+        triangles +=
+            drawSkirtQuad(rt, mvp, x0, heightAt(0u, i), wz, x0, heightAt(0u, i + 1u), wz + 1.0f, drop, cliffAt(0u, i));
         triangles += drawSkirtQuad(rt, mvp, x1, heightAt(last, i), wz, x1, heightAt(last, i + 1u), wz + 1.0f, drop,
                                    cliffAt(last, i));
     }

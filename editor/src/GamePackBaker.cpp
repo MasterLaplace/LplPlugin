@@ -334,8 +334,7 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     // An ABSENT palette and an EMPTY one are different documents: absent keeps the
     // host's colours, empty would paint the world black. The flag is what carries
     // the difference across the wire, so it is only set when the array is there.
-    if (const detail::JVal *palette = view->find("palette");
-        palette != nullptr && palette->t == detail::JVal::T::Arr)
+    if (const detail::JVal *palette = view->find("palette"); palette != nullptr && palette->t == detail::JVal::T::Arr)
     {
         core::u32 count = 0u;
         for (const detail::JVal &entry : palette->arr)

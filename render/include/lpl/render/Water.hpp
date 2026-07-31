@@ -41,9 +41,9 @@ struct WaterParams {
     core::u32 deep{0x000C1E3Cu};    ///< Body colour where it is not.
     core::f32 rippleScale{0.85f};   ///< Spatial frequency of the ripples.
     core::f32 rippleAmplitude{0.16f};
-    core::f32 phase{0.0f};          ///< Advances with time: the ripples travel.
-    core::f32 glintPower{48.0f};    ///< Tightness of the sun's reflection.
-    core::f32 depthScale{0.22f};    ///< How fast the body colour goes to @c deep.
+    core::f32 phase{0.0f};       ///< Advances with time: the ripples travel.
+    core::f32 glintPower{48.0f}; ///< Tightness of the sun's reflection.
+    core::f32 depthScale{0.22f}; ///< How fast the body colour goes to @c deep.
 };
 
 /**
@@ -55,7 +55,7 @@ struct WaterParams {
  * right angles interfere into a checkerboard, which reads as a tiled floor.
  */
 inline void waterNormal(core::f32 worldX, core::f32 worldZ, const WaterParams &params, core::f32 &outNx,
-                                      core::f32 &outNz) noexcept
+                        core::f32 &outNz) noexcept
 {
     const auto fold = [](core::f32 v) {
         // v mod 2, mapped to a triangle in [-1, 1].

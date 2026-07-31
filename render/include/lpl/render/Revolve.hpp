@@ -127,12 +127,12 @@ inline core::u32 drawRevolved(const RenderTarget &rt, const math::Mat4<core::f32
                 return mesh.positions[(static_cast<core::usize>(r) * mesh.samples + sIndex) * 3u + axis];
             };
             const core::f32 quad[12] = {
-                worldX + at(ring, sample, 0u) * scale,          worldY + at(ring, sample, 1u) * scale,
-                worldZ + at(ring, sample, 2u) * scale,          worldX + at(next, sample, 0u) * scale,
-                worldY + at(next, sample, 1u) * scale,          worldZ + at(next, sample, 2u) * scale,
-                worldX + at(next, sample + 1u, 0u) * scale,     worldY + at(next, sample + 1u, 1u) * scale,
-                worldZ + at(next, sample + 1u, 2u) * scale,     worldX + at(ring, sample + 1u, 0u) * scale,
-                worldY + at(ring, sample + 1u, 1u) * scale,     worldZ + at(ring, sample + 1u, 2u) * scale};
+                worldX + at(ring, sample, 0u) * scale,      worldY + at(ring, sample, 1u) * scale,
+                worldZ + at(ring, sample, 2u) * scale,      worldX + at(next, sample, 0u) * scale,
+                worldY + at(next, sample, 1u) * scale,      worldZ + at(next, sample, 2u) * scale,
+                worldX + at(next, sample + 1u, 0u) * scale, worldY + at(next, sample + 1u, 1u) * scale,
+                worldZ + at(next, sample + 1u, 2u) * scale, worldX + at(ring, sample + 1u, 0u) * scale,
+                worldY + at(ring, sample + 1u, 1u) * scale, worldZ + at(ring, sample + 1u, 2u) * scale};
 
             // Normal from two edges of this quad: cross product, then the Lambert
             // term. No normalisation of the light — it arrives as a unit vector.

@@ -42,8 +42,8 @@ public:
     explicit MipTexture(const Texture &base, core::u32 maxLevels = 6u)
     {
         _levels.push_back(base);
-        while (_levels.size() < maxLevels && (_levels[_levels.size() - 1u].width() > 1u ||
-                                              _levels[_levels.size() - 1u].height() > 1u))
+        while (_levels.size() < maxLevels &&
+               (_levels[_levels.size() - 1u].width() > 1u || _levels[_levels.size() - 1u].height() > 1u))
             _levels.push_back(_levels[_levels.size() - 1u].halved());
     }
 

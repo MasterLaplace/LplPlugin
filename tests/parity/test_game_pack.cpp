@@ -21,8 +21,8 @@
 #include <lpl/editor/GamePackBaker.hpp>
 #include <lpl/pack/GamePack.hpp>
 #include <lpl/pack/ParityPackBlob.hpp>
-#include <lpl/pack/ViewerPackBlob.hpp>
 #include <lpl/pack/RecipeCodec.hpp>
+#include <lpl/pack/ViewerPackBlob.hpp>
 #include <lpl/procgen/WorldRecipe.hpp>
 
 #include <cstdio>
@@ -230,8 +230,7 @@ int main()
     // and looks entirely healthy doing it.
     {
         pack::View viewerView;
-        check(viewerView.open(pack::kViewerPackBytes, pack::kViewerPackSize),
-              "the viewer's built-in cartridge opens");
+        check(viewerView.open(pack::kViewerPackBytes, pack::kViewerPackSize), "the viewer's built-in cartridge opens");
         check(viewerView.sectionCount() == 2u, "and carries a world AND an ecosystem");
 
         pack::RecipeV1 viewerWorld{};

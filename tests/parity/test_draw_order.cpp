@@ -34,8 +34,7 @@ int main()
     // Field packing: material must dominate mesh, and mesh must dominate depth.
     check("material outranks mesh",
           lpl::render::packDrawKey(2u, 0u, 0xFFFFu) > lpl::render::packDrawKey(1u, 0xFFu, 0xFFFFu));
-    check("mesh outranks depth",
-          lpl::render::packDrawKey(1u, 2u, 0u) > lpl::render::packDrawKey(1u, 1u, 0xFFFFu));
+    check("mesh outranks depth", lpl::render::packDrawKey(1u, 2u, 0u) > lpl::render::packDrawKey(1u, 1u, 0xFFFFu));
     check("depth orders within a material and mesh",
           lpl::render::packDrawKey(1u, 1u, 10u) < lpl::render::packDrawKey(1u, 1u, 11u));
 

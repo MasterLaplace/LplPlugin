@@ -145,8 +145,8 @@ void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers
  * coarse level draws is the SEGMENT from a trunk cell's centre to its downstream
  * neighbour's, thickened by trunkWidth.
  */
-[[nodiscard]] bool trunkCoversCoarseCell(const ChunkParams &params, const EndlessRiverParams &rivers,
-                                         core::i32 coarseX, core::i32 coarseZ)
+[[nodiscard]] bool trunkCoversCoarseCell(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 coarseX,
+                                         core::i32 coarseZ)
 {
     if (!rivers.trunks || rivers.trunkCells == 0u)
         return false;
@@ -257,9 +257,7 @@ bool isRiverCoarseCell(const ChunkParams &params, const EndlessRiverParams &rive
                 sampleWorldHeight(params, (coarseX - radius + x) * static_cast<core::i32>(rivers.coarseCells) + half,
                                   (coarseZ - radius + z) * static_cast<core::i32>(rivers.coarseCells) + half);
 
-    const auto heightAt = [&](core::i32 x, core::i32 z) {
-        return heights[static_cast<core::usize>(z) * side + x];
-    };
+    const auto heightAt = [&](core::i32 x, core::i32 z) { return heights[static_cast<core::usize>(z) * side + x]; };
 
     if (heightAt(radius, radius) <= math::Fixed32::fromFloat(rivers.seaLevel))
         return false;
@@ -405,9 +403,9 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
             trunkCoarse[static_cast<core::usize>(z) * coarsePerChunk + x] =
                 trunkCoversCoarseCell(params, rivers,
                                       coord.x * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(x),
-                                      coord.z * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(z))
-                    ? 1u
-                    : 0u;
+                                      coord.z * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(z)) ?
+                    1u :
+                    0u;
 
     const math::Fixed32 sea = math::Fixed32::fromFloat(rivers.seaLevel);
     Grid<core::u8> mask{params.size, params.size, 0u};

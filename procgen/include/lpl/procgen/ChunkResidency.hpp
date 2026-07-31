@@ -52,8 +52,7 @@ namespace lpl::procgen {
  *               else in it belongs to the caller; this class only moves records in
  *               and out and hands them back.
  */
-template <typename Chunk>
-class ChunkResidency {
+template <typename Chunk> class ChunkResidency {
 public:
     /**
      * @brief Sets the world parameters, the streaming policy and the ceiling.

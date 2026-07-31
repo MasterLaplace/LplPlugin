@@ -32,9 +32,9 @@
 #    include <lpl/engine/PropLibrary.hpp>
 #    include <lpl/engine/TerrainStreamer.hpp>
 #    include <lpl/engine/TerrainSurface.hpp>
+#    include <lpl/physics/Octree.hpp>
 #    include <lpl/render/ChunkedTerrainView.hpp>
 #    include <lpl/render/HeightfieldPatch.hpp>
-#    include <lpl/physics/Octree.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
 
 namespace lpl::engine {
@@ -88,10 +88,9 @@ public:
      *                 standing the bodies on the ground that is actually DRAWN.
      */
     template <typename Palette, typename GroundAt>
-    core::u32 drawStreamed(const render::RenderTarget &rt, const render::OrbitCamera &camera,
-                           TerrainStreamer &streamer, TerrainSurface &surface, const PropLibrary &props,
-                           const ecology::Herd &herd, const TerrainDrawParams &params, core::u32 frame,
-                           Palette &&palette, GroundAt &&groundAt);
+    core::u32 drawStreamed(const render::RenderTarget &rt, const render::OrbitCamera &camera, TerrainStreamer &streamer,
+                           TerrainSurface &surface, const PropLibrary &props, const ecology::Herd &herd,
+                           const TerrainDrawParams &params, core::u32 frame, Palette &&palette, GroundAt &&groundAt);
 
     /**
      * @brief Draws the bounded world: one patch, one sea quad, its plants and herd.
@@ -100,10 +99,9 @@ public:
      */
     template <typename Palette, typename HeightAt, typename ColourAt, typename GroundAt>
     core::u32 drawBounded(const render::RenderTarget &rt, const render::OrbitCamera &camera, TerrainSurface &surface,
-                          const PropLibrary &props, const ecology::Herd &herd, core::u32 gridWidth,
-                          core::u32 gridDepth, const ecology::PlantCell *plants, core::u32 plantCount,
-                          const TerrainDrawParams &params, Palette &&palette, HeightAt &&heightAt,
-                          ColourAt &&colourAt, GroundAt &&groundAt);
+                          const PropLibrary &props, const ecology::Herd &herd, core::u32 gridWidth, core::u32 gridDepth,
+                          const ecology::PlantCell *plants, core::u32 plantCount, const TerrainDrawParams &params,
+                          Palette &&palette, HeightAt &&heightAt, ColourAt &&colourAt, GroundAt &&groundAt);
 
 private:
     /** @brief Refreshes the reflection probe from the visible set. */

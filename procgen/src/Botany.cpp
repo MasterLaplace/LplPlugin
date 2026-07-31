@@ -64,27 +64,15 @@ void rotatePair(math::Fixed32 &ax, math::Fixed32 &ay, math::Fixed32 &az, math::F
 }
 
 /// Yaw: heading turns towards left.
-void yaw(Frame &f, math::Fixed32 angle)
-{
-    rotatePair(f.hx, f.hy, f.hz, f.lx, f.ly, f.lz, angle);
-}
+void yaw(Frame &f, math::Fixed32 angle) { rotatePair(f.hx, f.hy, f.hz, f.lx, f.ly, f.lz, angle); }
 
 /// Pitch: heading turns towards up.
-void pitch(Frame &f, math::Fixed32 angle)
-{
-    rotatePair(f.hx, f.hy, f.hz, f.ux, f.uy, f.uz, angle);
-}
+void pitch(Frame &f, math::Fixed32 angle) { rotatePair(f.hx, f.hy, f.hz, f.ux, f.uy, f.uz, angle); }
 
 /// Roll: left and up turn about the heading, which the heading does not feel.
-void roll(Frame &f, math::Fixed32 angle)
-{
-    rotatePair(f.lx, f.ly, f.lz, f.ux, f.uy, f.uz, angle);
-}
+void roll(Frame &f, math::Fixed32 angle) { rotatePair(f.lx, f.ly, f.lz, f.ux, f.uy, f.uz, angle); }
 
-[[nodiscard]] math::Fixed32 absOf(math::Fixed32 value)
-{
-    return value.raw() < 0 ? math::Fixed32{} - value : value;
-}
+[[nodiscard]] math::Fixed32 absOf(math::Fixed32 value) { return value.raw() < 0 ? math::Fixed32{} - value : value; }
 
 } // namespace
 
@@ -152,12 +140,10 @@ TreeSkeleton growTree(const TreeParams &params)
 
         switch (expanded[i])
         {
-        case 'F':
-        {
+        case 'F': {
             // A wobble of up to a twentieth of a radian, per segment. Perfectly
             // straight segments read as a diagram of a tree, not as a tree.
-            const math::Fixed32 wobble =
-                math::Fixed32::fromRaw(static_cast<core::i32>(jitter.below(6554u)) - 3277);
+            const math::Fixed32 wobble = math::Fixed32::fromRaw(static_cast<core::i32>(jitter.below(6554u)) - 3277);
             yaw(state.frame, wobble);
             pitch(state.frame, math::Fixed32::fromRaw(static_cast<core::i32>(jitter.below(6554u)) - 3277));
 
@@ -186,16 +172,15 @@ TreeSkeleton growTree(const TreeParams &params)
             break;
         }
 
-        case 'L':
-        {
+        case 'L': {
             TreeLeaf leaf;
             leaf.x = state.x;
             leaf.y = state.y;
             leaf.z = state.z;
             // Leaves nearer the tips are smaller, which is what gives a crown an
             // edge instead of a wall.
-            leaf.size = params.leafSize * (math::Fixed32::one() - math::Fixed32::fromFloat(0.12f) *
-                                                                     math::Fixed32::fromInt(state.depth));
+            leaf.size = params.leafSize *
+                        (math::Fixed32::one() - math::Fixed32::fromFloat(0.12f) * math::Fixed32::fromInt(state.depth));
             leaf.depth = state.depth;
             if (leaf.size.raw() > 0)
                 skeleton.leaves.push_back(leaf);
@@ -219,8 +204,7 @@ TreeSkeleton growTree(const TreeParams &params)
             state.leafed = false;
             break;
 
-        case ']':
-        {
+        case ']': {
             // The tip of an unleafed branch gets foliage anyway: a grammar that
             // forgot to say "leaf" would grow bare sticks, and a bare stick is
             // not a shape any tree has.

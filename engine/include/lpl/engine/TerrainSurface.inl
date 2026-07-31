@@ -30,8 +30,7 @@ inline void TerrainSurface::configure(const Config &config, const TerrainSurface
     // material painted different colours.
     _grassGrain =
         render::MipTexture{render::Texture::makeNoise(64u, 64u, seed ^ 0x6A55u, 0x00FFFFFFu, 0x00B4C8A0u, 10u)};
-    _rockGrain =
-        render::MipTexture{render::Texture::makeNoise(64u, 64u, seed ^ 0x0C1Fu, 0x00FFFFFFu, 0x00A0A0AAu, 6u)};
+    _rockGrain = render::MipTexture{render::Texture::makeNoise(64u, 64u, seed ^ 0x0C1Fu, 0x00FFFFFFu, 0x00A0A0AAu, 6u)};
 }
 
 inline void TerrainSurface::attachProbe(core::u32 *colour, core::f32 *depth, core::u32 width, core::u32 height)
@@ -98,8 +97,8 @@ inline core::u32 TerrainSurface::shade(core::f32 worldX, core::f32 worldZ, core:
 }
 
 inline core::u32 TerrainSurface::shadePhysical(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 nx,
-                                      core::f32 nz, core::f32 occlusion, core::f32 distance, bool rocky,
-                                      const render::CameraBasis &basis) const noexcept
+                                               core::f32 nz, core::f32 occlusion, core::f32 distance, bool rocky,
+                                               const render::CameraBasis &basis) const noexcept
 {
     render::PbrMaterial material;
     material.albedo = render::Vec3f(static_cast<core::f32>((base >> 16) & 0xFFu) / 255.0f,
@@ -138,8 +137,8 @@ inline core::u32 TerrainSurface::shadePhysical(core::f32 worldX, core::f32 world
 }
 
 inline core::u32 TerrainSurface::shadeSurface(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
-                                     core::f32 nx, core::f32 nz, core::f32 occlusion,
-                                     const render::CameraBasis &basis) const noexcept
+                                              core::f32 nx, core::f32 nz, core::f32 occlusion,
+                                              const render::CameraBasis &basis) const noexcept
 {
     const core::f32 distance = render::approximateLength(worldX - basis.eye.x, worldZ - basis.eye.z);
     const bool rocky = (nx * nx + nz * nz) > 1.2f;
@@ -149,7 +148,6 @@ inline core::u32 TerrainSurface::shadeSurface(core::f32 worldX, core::f32 worldZ
         return shade(worldX, worldZ, base, lit, distance, rocky);
     return render::applyAerialPerspective(render::modulate(base, lit), _haze, distance, _params.fogDensity);
 }
-
 
 } // namespace lpl::engine
 

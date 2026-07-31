@@ -72,8 +72,7 @@ public:
     [[nodiscard]] core::u32 treeSpecies() const noexcept { return _params.treeSpecies; }
 
     /** @brief How tall and wide the plant on a cell is, for its shadow. */
-    void plantExtent(core::i32 cellX, core::i32 cellZ, core::f32 &outHeight,
-                     core::f32 &outSpread) const noexcept;
+    void plantExtent(core::i32 cellX, core::i32 cellZ, core::f32 &outHeight, core::f32 &outSpread) const noexcept;
 
     /** @brief Whether a boulder stands on a cell, and which one. */
     [[nodiscard]] bool rockAt(core::i32 cellX, core::i32 cellZ, core::u32 &outVariant,

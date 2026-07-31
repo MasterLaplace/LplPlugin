@@ -126,12 +126,8 @@ inline core::u32 drawFoliage(const RenderTarget &rt, const math::Mat4<core::f32>
     // Model to world: a rotation about Y and a uniform scale. Written out rather
     // than composed into the MVP because the leaves need the world position on
     // its own, to face the camera from it.
-    const auto toWorldX = [&](core::f32 mx, core::f32 mz) {
-        return instance.x + (mx * cy + mz * sy) * instance.scale;
-    };
-    const auto toWorldZ = [&](core::f32 mx, core::f32 mz) {
-        return instance.z + (mz * cy - mx * sy) * instance.scale;
-    };
+    const auto toWorldX = [&](core::f32 mx, core::f32 mz) { return instance.x + (mx * cy + mz * sy) * instance.scale; };
+    const auto toWorldZ = [&](core::f32 mx, core::f32 mz) { return instance.z + (mz * cy - mx * sy) * instance.scale; };
     const auto toWorldY = [&](core::f32 my) { return instance.y + my * instance.scale; };
 
     const auto fog = [&style](core::u32 colour, core::f32 distance) {
@@ -174,14 +170,12 @@ inline core::u32 drawFoliage(const RenderTarget &rt, const math::Mat4<core::f32>
         const core::f32 shaded = style.light * (1.0f - 0.06f * static_cast<core::f32>(segment.depth));
         const core::u32 colour = fog(modulate(style.bark, shaded < 0.25f ? 0.25f : shaded), distance);
 
-        const core::f32 quad[12] = {ax - wx * r0, ay - wy * r0, az - wz * r0, ax + wx * r0, ay + wy * r0,
-                                    az + wz * r0, bx + wx * r1, by + wy * r1, bz + wz * r1, bx - wx * r1,
-                                    by - wy * r1, bz - wz * r1};
+        const core::f32 quad[12] = {ax - wx * r0, ay - wy * r0, az - wz * r0, ax + wx * r0, ay + wy * r0, az + wz * r0,
+                                    bx + wx * r1, by + wy * r1, bz + wz * r1, bx - wx * r1, by - wy * r1, bz - wz * r1};
         triangles += fillPolygonClipped(rt, mvp, quad, 4u, colour);
     }
 
-    const core::f32 instanceDistance =
-        approximateLength(instance.x - basis.eye.x, instance.z - basis.eye.z);
+    const core::f32 instanceDistance = approximateLength(instance.x - basis.eye.x, instance.z - basis.eye.z);
     for (core::u32 i = 0u; instanceDistance >= style.spriteMinDistance && i < mesh.spriteCount; ++i)
     {
         const FoliageSprite &sprite = mesh.sprites[i];
@@ -204,9 +198,8 @@ inline core::u32 drawFoliage(const RenderTarget &rt, const math::Mat4<core::f32>
         const core::f32 ux = basis.up.x * half;
         const core::f32 uy = basis.up.y * half;
         const core::f32 uz = basis.up.z * half;
-        const core::f32 quad[12] = {px - rx - ux, py - ry - uy, pz - rz - uz, px + rx - ux,
-                                    py + ry - uy, pz + rz - uz, px + rx + ux, py + ry + uy,
-                                    pz + rz + uz, px - rx + ux, py - ry + uy, pz - rz + uz};
+        const core::f32 quad[12] = {px - rx - ux, py - ry - uy, pz - rz - uz, px + rx - ux, py + ry - uy, pz + rz - uz,
+                                    px + rx + ux, py + ry + uy, pz + rz + uz, px - rx + ux, py - ry + uy, pz - rz + uz};
         triangles += fillPolygonClipped(rt, mvp, quad, 4u, colour);
     }
 
