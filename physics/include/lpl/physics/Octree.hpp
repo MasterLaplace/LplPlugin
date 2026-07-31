@@ -32,7 +32,21 @@ public:
      * @brief Constructs an octree covering the given world-space bounds.
      * @param worldBounds Total world AABB.
      */
-    explicit Octree(const math::AABB<math::Fixed32> &worldBounds);
+    /**
+     * @brief Constructs an octree covering the given world-space bounds.
+     *
+     * @param worldBounds  Total world AABB.
+     * @param leafCapacity Objects a node holds before it splits.
+     *
+     * The capacity is a parameter because the right value depends on what the
+     * tree is FOR, and the default (32) is tuned for a broad-phase: pairs within
+     * a leaf are checked directly, so a bigger leaf trades tree work for cheap
+     * pair tests. A frustum cull wants the opposite — every object in a surviving
+     * leaf is tested individually, so a large leaf means the hierarchy prunes
+     * nothing. Measured on the world viewer: at 32, nineteen chunks made ONE node
+     * and the traversal degenerated to the linear scan it was meant to replace.
+     */
+    explicit Octree(const math::AABB<math::Fixed32> &worldBounds, core::u32 leafCapacity = 32u);
     ~Octree() override;
 
     void insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) override;
@@ -60,6 +74,28 @@ public:
      * at its current size so the sort does not have to re-grow it every step.
      */
     void clear() noexcept;
+
+    /**
+     * @brief Visits objects whose enclosing NODE passes a caller's test.
+     *
+     * The generalisation @ref query was missing. A box query answers "what is in
+     * this region", which serves a broad-phase and cannot serve a frustum: a view
+     * volume is not an AABB, and querying its bounding box hands back most of the
+     * world whenever the camera is pitched. What a culler actually needs is to
+     * reject a NODE and skip its whole subtree — which this tree can do, because it
+     * has real node bounds; it simply had no way to expose them.
+     *
+     * @param nodeVisible  Called with a node's bounds; false prunes the subtree.
+     * @param callback     Called with the object id of each survivor.
+     * @param outNodesVisited   Optional: nodes tested.
+     * @param outNodesPruned    Optional: subtrees rejected whole.
+     *
+     * The test is applied to node bounds AND to each object's own bounds, so a
+     * caller gets exactly the objects that pass, not the contents of nodes that do.
+     */
+    void queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
+                      const lpl::pmr::function<void(core::u32)> &callback, core::u32 *outNodesVisited = nullptr,
+                      core::u32 *outNodesPruned = nullptr) const;
 
     [[nodiscard]] core::u32 count() const noexcept override;
 

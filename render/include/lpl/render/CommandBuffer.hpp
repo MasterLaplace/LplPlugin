@@ -133,6 +133,99 @@ struct SubmitResult {
     return out;
 }
 
+/**
+ * @struct DrawKey
+ * @brief A sortable draw: a packed ordering key and the index it refers to.
+ */
+struct DrawKey {
+    core::u32 key{0u};     ///< Packed (material, mesh, depth) — see @ref packDrawKey.
+    core::u32 payload{0u}; ///< Index into whatever list the caller is ordering.
+};
+
+/**
+ * @brief Packs a draw ordering key: material major, mesh next, depth minor.
+ *
+ * The order of the fields IS the policy, and it is the one every renderer
+ * converges on: changing material is the expensive switch, so all draws sharing
+ * one material must be adjacent; within a material, sharing a mesh saves the
+ * vertex work; and within both, near-to-far lets the depth buffer reject a pixel
+ * before it is shaded rather than after.
+ *
+ * @param materialId 0..255.
+ * @param meshId     0..255.
+ * @param depth      0..65535, near to far.
+ */
+[[nodiscard]] inline core::u32 packDrawKey(core::u32 materialId, core::u32 meshId, core::u32 depth) noexcept
+{
+    return ((materialId & 0xFFu) << 24) | ((meshId & 0xFFu) << 16) | (depth & 0xFFFFu);
+}
+
+/**
+ * @brief Stable LSD radix sort of draw keys: four passes of eight bits.
+ *
+ * Chosen over a comparison sort for the reason radix always wins here: the key is
+ * a fixed-width integer, so ordering it needs no comparisons at all — four counting
+ * passes touch each element four times regardless of how unsorted it was. An
+ * insertion sort is better on a nearly-sorted list of thirty; at a thousand draws
+ * that stops being true, and a frame that submits a tree per cell has thousands.
+ *
+ * Stability matters and is not free: with material in the high bits, a stable sort
+ * keeps draws that tie on the whole key in submission order, which is what makes
+ * the resulting stream reproducible — and therefore foldable.
+ *
+ * @param keys    Array to sort in place.
+ * @param scratch Scratch of the same length.
+ * @param count   Elements.
+ */
+inline void radixSortDrawKeys(DrawKey *keys, DrawKey *scratch, core::u32 count) noexcept
+{
+    if (keys == nullptr || scratch == nullptr || count < 2u)
+        return;
+
+    DrawKey *source = keys;
+    DrawKey *destination = scratch;
+
+    for (core::u32 shift = 0u; shift < 32u; shift += 8u)
+    {
+        core::u32 histogram[256] = {};
+        for (core::u32 i = 0u; i < count; ++i)
+            ++histogram[(source[i].key >> shift) & 0xFFu];
+
+        core::u32 running = 0u;
+        for (core::u32 bucket = 0u; bucket < 256u; ++bucket)
+        {
+            const core::u32 here = histogram[bucket];
+            histogram[bucket] = running;
+            running += here;
+        }
+
+        for (core::u32 i = 0u; i < count; ++i)
+            destination[histogram[(source[i].key >> shift) & 0xFFu]++] = source[i];
+
+        DrawKey *swap = source;
+        source = destination;
+        destination = swap;
+    }
+
+    // Four passes is an even number, so the sorted data is back in @p keys. If
+    // that ever changes, this copy is what keeps the contract true.
+    if (source != keys)
+        for (core::u32 i = 0u; i < count; ++i)
+            keys[i] = source[i];
+}
+
+/** @brief FNV-1a fold of an ordered key stream: the order itself is the signature. */
+[[nodiscard]] inline core::u32 foldDrawKeys(const DrawKey *keys, core::u32 count) noexcept
+{
+    core::u32 hash = detail::kFnv1aOffsetBasis;
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        hash = detail::fnv1aStep(hash, keys[i].key);
+        hash = detail::fnv1aStep(hash, keys[i].payload);
+    }
+    return hash;
+}
+
 } // namespace lpl::render
 
 #endif // LPL_RENDER_COMMANDBUFFER_HPP

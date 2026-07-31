@@ -30,7 +30,7 @@
           {"biome": "rainforest", "density": 0.26, "halfExtent": 0.55, "tag": 3, "collidable": true},
           {"biome": "savanna",    "density": 0.07, "halfExtent": 0.3,  "tag": 4}
         ]
-      },r
+      },
       "_living_comment": "What lives on it. Ordered table: \"eats\" is an index into this array, so a species can only eat something declared before it and a cycle is unwritable. The counts the host draws follow from headPerBody — the population is the model's, the bodies are what the map can hold.",
       "living": {
         "seed": 20260728,

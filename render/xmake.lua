@@ -47,7 +47,7 @@ if has_config("renderer") then
 
         add_packages("imgui", "vulkan-hpp", "vulkan-loader", "stb", "tinyobjloader", "glm")
 
-        add_deps("lpl-core", "lpl-math", "lpl-memory")
+        add_deps("lpl-core", "lpl-math", "lpl-memory", "lpl-image")
 
         -- Runtime asset paths: absolute at configure time so the app works
         -- regardless of the working directory when launched via `xmake run`.
@@ -60,6 +60,6 @@ else
         set_kind("headeronly")
         set_group("modules")
         add_includedirs("include", {public = true})
-        add_deps("lpl-core")
+        add_deps("lpl-core", "lpl-image")
     target_end()
 end

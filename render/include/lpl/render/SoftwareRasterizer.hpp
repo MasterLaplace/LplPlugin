@@ -184,7 +184,363 @@ inline void fillTriangleTextured(const RenderTarget &rt, const ScreenVertex &v0,
     }
 }
 
+/**
+ * @brief Fills a triangle whichever way it faces.
+ *
+ * @c fillTriangle culls anything whose screen-space area is negative, which is
+ * exactly right for a closed solid: a cube's far faces are hidden by its near
+ * ones, so drawing them is wasted work. A heightfield is not a solid. It is a
+ * single sheet with no inside, and half of it faces away from any given camera.
+ * Culled, the ground vanishes entirely and only what stands on it survives,
+ * which looks like a broken projection and is in fact a correct rasterizer
+ * being asked the wrong question.
+ *
+ * Swapping two vertices when the area comes out negative costs one edge
+ * function and draws the sheet from both sides.
+ */
+inline void fillTriangleDoubleSided(const RenderTarget &rt, const ScreenVertex &a, const ScreenVertex &b,
+                                    const ScreenVertex &c, core::u32 colour) noexcept
+{
+    if (edge(a, b, c.x, c.y) > 0.0f)
+        fillTriangle(rt, a, b, c, colour);
+    else
+        fillTriangle(rt, a, c, b, colour);
+}
+
+/** @brief Two double-sided triangles over four already-projected corners. */
+inline void fillQuadDoubleSided(const RenderTarget &rt, const ScreenVertex &a, const ScreenVertex &b,
+                                const ScreenVertex &c, const ScreenVertex &d, core::u32 colour) noexcept
+{
+    fillTriangleDoubleSided(rt, a, b, c, colour);
+    fillTriangleDoubleSided(rt, a, c, d, colour);
+}
+
+/** @brief One vertex in clip space, before the divide by w. */
+struct ClipVertex {
+    core::f32 x{0.0f};
+    core::f32 y{0.0f};
+    core::f32 z{0.0f};
+    core::f32 w{0.0f};
+};
+
+/** @brief Transforms a world position into clip space. */
+[[nodiscard]] inline ClipVertex toClip(const math::Mat4<core::f32> &mvp, core::f32 wx, core::f32 wy,
+                                       core::f32 wz) noexcept
+{
+    ClipVertex v{};
+    v.x = mvp(0, 0) * wx + mvp(0, 1) * wy + mvp(0, 2) * wz + mvp(0, 3);
+    v.y = mvp(1, 0) * wx + mvp(1, 1) * wy + mvp(1, 2) * wz + mvp(1, 3);
+    v.z = mvp(2, 0) * wx + mvp(2, 1) * wy + mvp(2, 2) * wz + mvp(2, 3);
+    v.w = mvp(3, 0) * wx + mvp(3, 1) * wy + mvp(3, 2) * wz + mvp(3, 3);
+    return v;
+}
+
+/** @brief Divides by w and maps to pixels. */
+[[nodiscard]] inline ScreenVertex toScreen(const ClipVertex &v, core::u32 width, core::u32 height) noexcept
+{
+    ScreenVertex out{};
+    if (v.w <= 0.0f)
+        return out;
+    const core::f32 invW = 1.0f / v.w;
+    out.x = (v.x * invW * 0.5f + 0.5f) * static_cast<core::f32>(width);
+    out.y = (0.5f - v.y * invW * 0.5f) * static_cast<core::f32>(height);
+    out.z = v.z * invW;
+    out.valid = true;
+    return out;
+}
+
 } // namespace detail
+
+/// Smallest @c w a vertex may have and still be projected.
+inline constexpr core::f32 kNearPlaneEpsilon = 0.05f;
+
+/**
+ * @struct ShadedVertex
+ * @brief A clip-space vertex that also carries the world point it came from.
+ *
+ * The world position is what a per-pixel shader wants: sample a procedural
+ * texture at it, reflect a view ray about it, decide a material from its
+ * altitude. Carrying it alongside the clip position means the clipper can
+ * interpolate both with one parameter, so a clipped edge gets the right world
+ * point and not one guessed from the screen.
+ */
+struct ShadedVertex {
+    detail::ClipVertex clip{};
+    core::f32 wx{0.0f};
+    core::f32 wy{0.0f};
+    core::f32 wz{0.0f};
+};
+
+/**
+ * @brief Fills a triangle by CALLING a shader for every pixel it covers.
+ *
+ * The rasterizer had one fill: a flat colour decided per primitive. Everything
+ * that varies within a surface — a texture, a reflection, a gradient along a
+ * slope — had to be approximated by cutting the surface into more primitives, and
+ * a lake ends up as a thousand flat quads that still cannot reflect anything,
+ * because a reflection depends on the direction to the pixel, not to the quad.
+ *
+ * @c shader receives the interpolated world position and returns a packed colour.
+ * Interpolation is PERSPECTIVE-CORRECT: the barycentric weights are divided
+ * through by w, without which a texture on a surface seen at a grazing angle
+ * swims as the camera turns — the classic artefact of affine interpolation, and
+ * the reason the existing textured fill is only used on cube faces seen head-on.
+ */
+template <typename Shader>
+inline void fillTriangleShaded(const RenderTarget &rt, const ShadedVertex &a, const ShadedVertex &b,
+                               const ShadedVertex &c, Shader &&shader) noexcept
+{
+    const detail::ScreenVertex v0 = detail::toScreen(a.clip, rt.width, rt.height);
+    const detail::ScreenVertex v1 = detail::toScreen(b.clip, rt.width, rt.height);
+    const detail::ScreenVertex v2 = detail::toScreen(c.clip, rt.width, rt.height);
+    if (!v0.valid || !v1.valid || !v2.valid)
+        return;
+
+    core::f32 area = detail::edge(v0, v1, v2.x, v2.y);
+    const detail::ScreenVertex *s0 = &v0;
+    const detail::ScreenVertex *s1 = &v1;
+    const detail::ScreenVertex *s2 = &v2;
+    const ShadedVertex *w0v = &a;
+    const ShadedVertex *w1v = &b;
+    const ShadedVertex *w2v = &c;
+    if (area < 0.0f)
+    {
+        // Double-sided, like the rest of the terrain path: a heightfield is a
+        // sheet, and half of it faces away from any camera.
+        s1 = &v2;
+        s2 = &v1;
+        w1v = &c;
+        w2v = &b;
+        area = -area;
+    }
+    if (area <= 0.0f)
+        return;
+    const core::f32 invArea = 1.0f / area;
+
+    const core::f32 invW0 = 1.0f / w0v->clip.w;
+    const core::f32 invW1 = 1.0f / w1v->clip.w;
+    const core::f32 invW2 = 1.0f / w2v->clip.w;
+
+    core::f32 minXf = s0->x, maxXf = s0->x, minYf = s0->y, maxYf = s0->y;
+    minXf = s1->x < minXf ? s1->x : minXf;
+    minXf = s2->x < minXf ? s2->x : minXf;
+    maxXf = s1->x > maxXf ? s1->x : maxXf;
+    maxXf = s2->x > maxXf ? s2->x : maxXf;
+    minYf = s1->y < minYf ? s1->y : minYf;
+    minYf = s2->y < minYf ? s2->y : minYf;
+    maxYf = s1->y > maxYf ? s1->y : maxYf;
+    maxYf = s2->y > maxYf ? s2->y : maxYf;
+
+    const core::i32 minX = detail::clampInt(static_cast<core::i32>(minXf), 0, static_cast<core::i32>(rt.width) - 1);
+    const core::i32 maxX = detail::clampInt(static_cast<core::i32>(maxXf), 0, static_cast<core::i32>(rt.width) - 1);
+    const core::i32 minY = detail::clampInt(static_cast<core::i32>(minYf), 0, static_cast<core::i32>(rt.height) - 1);
+    const core::i32 maxY = detail::clampInt(static_cast<core::i32>(maxYf), 0, static_cast<core::i32>(rt.height) - 1);
+
+    for (core::i32 y = minY; y <= maxY; ++y)
+    {
+        const core::f32 py = static_cast<core::f32>(y) + 0.5f;
+        for (core::i32 x = minX; x <= maxX; ++x)
+        {
+            const core::f32 px = static_cast<core::f32>(x) + 0.5f;
+            const core::f32 b0 = detail::edge(*s1, *s2, px, py) * invArea;
+            const core::f32 b1 = detail::edge(*s2, *s0, px, py) * invArea;
+            const core::f32 b2 = detail::edge(*s0, *s1, px, py) * invArea;
+            if (b0 < 0.0f || b1 < 0.0f || b2 < 0.0f)
+                continue;
+
+            const core::f32 depth = b0 * s0->z + b1 * s1->z + b2 * s2->z;
+            const core::u32 index = static_cast<core::u32>(y) * rt.width + static_cast<core::u32>(x);
+            if (depth >= rt.depth[index])
+                continue;
+
+            const core::f32 wSum = b0 * invW0 + b1 * invW1 + b2 * invW2;
+            if (wSum <= 0.0f)
+                continue;
+            const core::f32 invSum = 1.0f / wSum;
+            const core::f32 worldX = (b0 * w0v->wx * invW0 + b1 * w1v->wx * invW1 + b2 * w2v->wx * invW2) * invSum;
+            const core::f32 worldY = (b0 * w0v->wy * invW0 + b1 * w1v->wy * invW1 + b2 * w2v->wy * invW2) * invSum;
+            const core::f32 worldZ = (b0 * w0v->wz * invW0 + b1 * w1v->wz * invW1 + b2 * w2v->wz * invW2) * invSum;
+
+            rt.depth[index] = depth;
+            rt.color[index] = shader(worldX, worldY, worldZ);
+        }
+    }
+}
+
+/**
+ * @brief Near-plane-clipped, per-pixel-shaded convex polygon.
+ *
+ * The shaded twin of @ref fillPolygonClipped, and it clips for the same reason:
+ * the polygon under the walker's feet crosses the near plane every frame.
+ */
+template <typename Shader>
+inline core::u32 fillPolygonShadedClipped(const RenderTarget &rt, const math::Mat4<core::f32> &mvp,
+                                          const core::f32 *worldPoints, core::u32 count, Shader &&shader) noexcept
+{
+    if (worldPoints == nullptr || count < 3u || count > 8u)
+        return 0u;
+
+    ShadedVertex input[16];
+    bool anyBehind = false;
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        input[i].wx = worldPoints[i * 3u];
+        input[i].wy = worldPoints[i * 3u + 1u];
+        input[i].wz = worldPoints[i * 3u + 2u];
+        input[i].clip = detail::toClip(mvp, input[i].wx, input[i].wy, input[i].wz);
+        anyBehind = anyBehind || input[i].clip.w < kNearPlaneEpsilon;
+    }
+
+    ShadedVertex polygon[16];
+    core::u32 polygonCount = 0u;
+    if (!anyBehind)
+    {
+        for (core::u32 i = 0u; i < count; ++i)
+            polygon[polygonCount++] = input[i];
+    }
+    else
+    {
+        for (core::u32 i = 0u; i < count; ++i)
+        {
+            const ShadedVertex &current = input[i];
+            const ShadedVertex &next = input[(i + 1u) % count];
+            const bool currentIn = current.clip.w >= kNearPlaneEpsilon;
+            const bool nextIn = next.clip.w >= kNearPlaneEpsilon;
+            if (currentIn)
+                polygon[polygonCount++] = current;
+            if (currentIn != nextIn)
+            {
+                const core::f32 t = (kNearPlaneEpsilon - current.clip.w) / (next.clip.w - current.clip.w);
+                ShadedVertex cut{};
+                cut.clip.x = current.clip.x + (next.clip.x - current.clip.x) * t;
+                cut.clip.y = current.clip.y + (next.clip.y - current.clip.y) * t;
+                cut.clip.z = current.clip.z + (next.clip.z - current.clip.z) * t;
+                cut.clip.w = kNearPlaneEpsilon;
+                cut.wx = current.wx + (next.wx - current.wx) * t;
+                cut.wy = current.wy + (next.wy - current.wy) * t;
+                cut.wz = current.wz + (next.wz - current.wz) * t;
+                polygon[polygonCount++] = cut;
+            }
+            if (polygonCount + 2u >= 16u)
+                break;
+        }
+        if (polygonCount < 3u)
+            return 0u;
+    }
+
+    core::u32 triangles = 0u;
+    for (core::u32 i = 1u; i + 1u < polygonCount; ++i)
+    {
+        fillTriangleShaded(rt, polygon[0], polygon[i], polygon[i + 1u], shader);
+        ++triangles;
+    }
+    return triangles;
+}
+
+/**
+ * @brief Fills a convex polygon, clipping it against the near plane first.
+ *
+ * The reason this exists, and why every large primitive should go through it:
+ * @c projectVertex only rejects vertices with @c w <= 0. A vertex a centimetre in
+ * FRONT of the eye has a tiny positive w, survives that test, and comes out at
+ * screen coordinates in the hundreds of thousands. The triangle it belongs to is
+ * then stretched across the entire frame — on screen, a beam radiating from a
+ * point, or a black wedge where ground should be. Both were blamed on the
+ * geometry that produced them; the geometry was fine, and the projection was
+ * being asked to divide by nearly zero.
+ *
+ * Dropping such a primitive instead is not a fix either: a terrain quad under the
+ * walker's feet always straddles the near plane, so dropping it punches a hole in
+ * the world exactly where the walker is looking. The only correct answer is to cut
+ * the polygon along the plane and draw the part that is in front — Sutherland and
+ * Hodgman in clip space, which is where the plane is a straight comparison rather
+ * than a projection.
+ *
+ * @param worldPoints Vertices, x/y/z triples, convex and in order.
+ * @param count       Number of vertices (3 or 4 in practice).
+ * @return Triangles filled.
+ */
+inline core::u32 fillPolygonClipped(const RenderTarget &rt, const math::Mat4<core::f32> &mvp,
+                                    const core::f32 *worldPoints, core::u32 count, core::u32 colour) noexcept
+{
+    if (worldPoints == nullptr || count < 3u || count > 8u)
+        return 0u;
+
+    detail::ClipVertex input[8];
+    bool anyBehind = false;
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        input[i] = detail::toClip(mvp, worldPoints[i * 3u], worldPoints[i * 3u + 1u], worldPoints[i * 3u + 2u]);
+        anyBehind = anyBehind || input[i].w < kNearPlaneEpsilon;
+    }
+
+    detail::ScreenVertex screen[16];
+    core::u32 screenCount = 0u;
+
+    if (!anyBehind)
+    {
+        // The common case, and it must stay as cheap as it was: nothing crosses
+        // the plane, so there is nothing to clip.
+        for (core::u32 i = 0u; i < count; ++i)
+            screen[screenCount++] = detail::toScreen(input[i], rt.width, rt.height);
+    }
+    else
+    {
+        detail::ClipVertex clipped[16];
+        core::u32 clippedCount = 0u;
+        for (core::u32 i = 0u; i < count; ++i)
+        {
+            const detail::ClipVertex &current = input[i];
+            const detail::ClipVertex &next = input[(i + 1u) % count];
+            const bool currentIn = current.w >= kNearPlaneEpsilon;
+            const bool nextIn = next.w >= kNearPlaneEpsilon;
+
+            if (currentIn)
+                clipped[clippedCount++] = current;
+            if (currentIn != nextIn)
+            {
+                // Where the edge crosses w = epsilon, linearly in clip space.
+                const core::f32 t = (kNearPlaneEpsilon - current.w) / (next.w - current.w);
+                detail::ClipVertex cut{};
+                cut.x = current.x + (next.x - current.x) * t;
+                cut.y = current.y + (next.y - current.y) * t;
+                cut.z = current.z + (next.z - current.z) * t;
+                cut.w = kNearPlaneEpsilon;
+                clipped[clippedCount++] = cut;
+            }
+            if (clippedCount + 2u >= 16u)
+                break;
+        }
+        if (clippedCount < 3u)
+            return 0u; // entirely behind the eye
+        for (core::u32 i = 0u; i < clippedCount; ++i)
+            screen[screenCount++] = detail::toScreen(clipped[i], rt.width, rt.height);
+    }
+
+    core::u32 triangles = 0u;
+    for (core::u32 i = 1u; i + 1u < screenCount; ++i)
+    {
+        detail::fillTriangleDoubleSided(rt, screen[0], screen[i], screen[i + 1u], colour);
+        ++triangles;
+    }
+    return triangles;
+}
+
+/**
+ * @brief A vertical quad hanging from an edge segment: a LOD skirt.
+ *
+ * Adjacent chunks sampled at different strides do not agree along their shared
+ * edge, and the disagreement shows as a crack straight through to the sky.
+ * A curtain dropped from the edge does not make the two agree; it puts opaque
+ * geometry behind the gap, which is all the eye needs.
+ */
+inline core::u32 drawSkirtQuad(const RenderTarget &rt, const math::Mat4<core::f32> &mvp, core::f32 ax, core::f32 ay,
+                               core::f32 az, core::f32 bx, core::f32 by, core::f32 bz, core::f32 drop,
+                               core::u32 colour) noexcept
+{
+    const core::f32 quad[12] = {ax, ay, az, bx, by, bz, bx, by - drop, bz, ax, ay - drop, az};
+    return fillPolygonClipped(rt, mvp, quad, 4u, colour);
+}
 
 /** @brief Clears the render target to a background color and far depth. */
 inline void clearTarget(const RenderTarget &rt, core::u32 background) noexcept
@@ -408,6 +764,27 @@ inline void renderLitCube(const RenderTarget &rt, math::Fixed32 rotationAngle, S
 }
 
 /** @brief Copies a render target's color buffer into a same-size Texture. */
+/**
+ * @brief Copies a render target into an EXISTING texture, allocating nothing.
+ *
+ * @ref targetToTexture returns a fresh texture, which is right for a one-shot fold
+ * and wrong once per frame: at 240x150 that is 144 KiB of allocation and a copy
+ * every time, inside the render path. Measured, it was enough to stall the world's
+ * streaming — the reflection looked correct and the world stopped arriving.
+ *
+ * @return false if the texture's size does not match, so a caller cannot silently
+ *         sample a stale image of the wrong shape.
+ */
+inline bool copyTargetToTexture(const RenderTarget &rt, Texture &out) noexcept
+{
+    if (out.width() != rt.width || out.height() != rt.height || rt.color == nullptr)
+        return false;
+    for (core::u32 y = 0u; y < rt.height; ++y)
+        for (core::u32 x = 0u; x < rt.width; ++x)
+            out.setTexel(x, y, rt.color[y * rt.width + x]);
+    return true;
+}
+
 [[nodiscard]] inline Texture targetToTexture(const RenderTarget &rt)
 {
     Texture tex(rt.width, rt.height);

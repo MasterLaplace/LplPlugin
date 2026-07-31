@@ -55,6 +55,29 @@ public:
         Builder &reliableBaseline(bool enabled) noexcept;
         Builder &sessionTimeoutMs(core::f64 ms) noexcept;
 
+        // ── Presentation and residency budget ───────────────────────────────
+        //
+        // What is NOT here matters as much as what is. The streaming radii, the
+        // release ratio and the per-tick generation budget belong to
+        // procgen::StreamingParams; the terrain's amplitude, its frequency and the
+        // scatter rules belong to procgen::WorldRecipe, which is the thing a
+        // .lplscene already serialises. Restating any of them here would create a
+        // second source of truth for a quantity that has an owner — the exact
+        // failure mode this engine has been bitten by twice (two ground heights,
+        // two camera bases).
+        //
+        // What is left is genuinely the host's business: how much memory the
+        // resident set may take, and how the frame is drawn.
+        Builder &maxResidentChunks(core::u32 chunks) noexcept;
+        Builder &lodRings(core::u32 rings) noexcept;
+        Builder &viewDistance(core::f32 cells) noexcept;
+        Builder &enableTerrainShadows(bool enabled) noexcept;
+        Builder &shadowChunksPerTick(core::u32 chunks) noexcept;
+        Builder &enablePerPixelSurface(bool enabled) noexcept;
+        Builder &enablePbrSurface(bool enabled) noexcept;
+        Builder &enableWaterReflection(bool enabled) noexcept;
+        Builder &skyBlockSize(core::u32 pixels) noexcept;
+
         [[nodiscard]] Config build() const noexcept;
 
     private:
@@ -86,6 +109,15 @@ public:
         bool _enableRealTimeGuard{false};
         pmr::string _serverAddress{"127.0.0.1"};
         core::u16 _serverPort{4242};
+        core::u32 _maxResidentChunks{56};
+        core::u32 _lodRings{3};
+        core::f32 _viewDistance{70.0f};
+        core::u32 _shadowChunksPerTick{1};
+        core::u32 _skyBlockSize{1};
+        bool _enableTerrainShadows{true};
+        bool _enablePerPixelSurface{true};
+        bool _enablePbrSurface{false};
+        bool _enableWaterReflection{true};
     };
 
     [[nodiscard]] core::u32 tickRate() const noexcept { return _tickRate; }
@@ -295,6 +327,40 @@ public:
     [[nodiscard]] const pmr::string &serverAddress() const noexcept { return _serverAddress; }
     [[nodiscard]] core::u16 serverPort() const noexcept { return _serverPort; }
 
+    // ── The streamed world ──────────────────────────────────────────────────
+    /**
+     * @brief Hard ceiling on resident chunks, whatever the radii ask for.
+     *
+     * A memory budget, which is why it is here and not in
+     * procgen::StreamingParams: the radii say what the WORLD wants kept, this says
+     * what the HOST can afford. On a 4 MiB kernel heap the difference matters.
+     */
+    [[nodiscard]] core::u32 maxResidentChunks() const noexcept { return _maxResidentChunks; }
+
+    /** @brief Level-of-detail rings; each ring doubles the sampling stride. */
+    [[nodiscard]] core::u32 lodRings() const noexcept { return _lodRings; }
+
+    /** @brief Furthest a prop is worth drawing, in world cells. */
+    [[nodiscard]] core::f32 viewDistance() const noexcept { return _viewDistance; }
+
+    /** @brief Whether the terrain casts shadows onto itself and its props. */
+    [[nodiscard]] bool enableTerrainShadows() const noexcept { return _enableTerrainShadows; }
+
+    /** @brief Chunks whose shadow mask is refreshed per tick (amortisation). */
+    [[nodiscard]] core::u32 shadowChunksPerTick() const noexcept { return _shadowChunksPerTick; }
+
+    /** @brief Per-pixel surface shading (grain, fog, level of detail). */
+    [[nodiscard]] bool enablePerPixelSurface() const noexcept { return _enablePerPixelSurface; }
+
+    /** @brief Physically based surface shading; implies per-pixel. */
+    [[nodiscard]] bool enablePbrSurface() const noexcept { return _enablePbrSurface; }
+
+    /** @brief Planar reflection probe on water surfaces. */
+    [[nodiscard]] bool enableWaterReflection() const noexcept { return _enableWaterReflection; }
+
+    /** @brief Sky evaluation block: one ray per NxN pixels. 1 is per-pixel. */
+    [[nodiscard]] core::u32 skyBlockSize() const noexcept { return _skyBlockSize; }
+
 private:
     friend class Builder;
 
@@ -324,6 +390,15 @@ private:
     bool _enableNetworking{true};
     bool _enableRendering{true};
     bool _enableRealTimeGuard{false};
+    core::u32 _maxResidentChunks{56};
+    core::u32 _lodRings{3};
+    core::f32 _viewDistance{70.0f};
+    core::u32 _shadowChunksPerTick{1};
+    core::u32 _skyBlockSize{1};
+    bool _enableTerrainShadows{true};
+    bool _enablePerPixelSurface{true};
+    bool _enablePbrSurface{false};
+    bool _enableWaterReflection{true};
     pmr::string _serverAddress{"127.0.0.1"};
     core::u16 _serverPort{4242};
 };

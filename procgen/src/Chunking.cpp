@@ -9,6 +9,8 @@
 
 #include <lpl/procgen/Chunking.hpp>
 
+#include <lpl/procgen/Erosion.hpp>
+
 #include <lpl/procgen/Random.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 
@@ -52,6 +54,417 @@ Heightfield generateChunkTerrain(const ChunkParams &params, ChunkCoord coord)
             field.at(x, z) =
                 sampleWorldHeight(params, originX + static_cast<core::i32>(x), originZ + static_cast<core::i32>(z));
 
+    return field;
+}
+
+namespace {
+
+/// Floor division, so a macro index stays monotonic across the origin. Truncating
+/// division folds the world about its own axis: -1 and +1 land in the same cell.
+[[nodiscard]] core::i32 floorDivide(core::i32 value, core::i32 divisor)
+{
+    const core::i32 quotient = value / divisor;
+    return (value % divisor != 0 && ((value < 0) != (divisor < 0))) ? quotient - 1 : quotient;
+}
+
+/// Height at a macro cell's centre: one sample, at absolute coordinates.
+[[nodiscard]] math::Fixed32 macroHeight(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 macroX,
+                                        core::i32 macroZ)
+{
+    const core::i32 span = static_cast<core::i32>(rivers.trunkCells * rivers.coarseCells);
+    // The smoothed field, not the detailed one read sparsely. See trunkOctaves.
+    NoiseParams layer = params.noise;
+    layer.seed = params.worldSeed;
+    layer.octaves = rivers.trunkOctaves == 0u ? 1u : rivers.trunkOctaves;
+    layer.frequency = params.noise.frequency * rivers.trunkFrequencyScale;
+    return sampleNoiseAt(macroX * span + span / 2, macroZ * span + span / 2, layer);
+}
+
+/**
+ * @brief Fills a window of macro heights centred on (@p centreX, @p centreZ).
+ *
+ * One place rather than three: the trunk verdict, its direction and the batched
+ * chunk pass all need the same window, and three copies of a sampling loop is
+ * three chances for them to disagree about where a macro cell's centre is.
+ */
+void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 centreX, core::i32 centreZ,
+                     core::i32 radius, lpl::pmr::vector<math::Fixed32> &out)
+{
+    // clear() then resize(), never assign(): kstd::vector — the freestanding
+    // vector this compiles against in ring 0 — does not have assign(), and the
+    // host's std::vector does. A call that only the host can compile is a build
+    // that only fails on the target, three build paths later.
+    const core::i32 side = 2 * radius + 1;
+    out.clear();
+    out.resize(static_cast<core::usize>(side) * side, math::Fixed32::zero());
+    for (core::i32 z = 0; z < side; ++z)
+        for (core::i32 x = 0; x < side; ++x)
+            out[static_cast<core::usize>(z) * side + x] =
+                macroHeight(params, rivers, centreX - radius + x, centreZ - radius + z);
+}
+
+/// Steepest-descent neighbour within a square window; ties break on the lowest
+/// neighbour index so a flat shelf routes identically everywhere.
+[[nodiscard]] bool steepestStep(const lpl::pmr::vector<math::Fixed32> &window, core::i32 side, core::i32 &x,
+                                core::i32 &z)
+{
+    const math::Fixed32 here = window[static_cast<core::usize>(z) * side + x];
+    core::i32 bestX = x;
+    core::i32 bestZ = z;
+    math::Fixed32 bestDrop = math::Fixed32::zero();
+    for (core::u32 n = 0u; n < 8u; ++n)
+    {
+        const core::i32 nx = x + kNeighbor8X[n];
+        const core::i32 nz = z + kNeighbor8Z[n];
+        if (nx < 0 || nz < 0 || nx >= side || nz >= side)
+            continue;
+        const math::Fixed32 drop = here - window[static_cast<core::usize>(nz) * side + nx];
+        if (drop > bestDrop)
+        {
+            bestDrop = drop;
+            bestX = nx;
+            bestZ = nz;
+        }
+    }
+    const bool moved = bestX != x || bestZ != z;
+    x = bestX;
+    z = bestZ;
+    return moved;
+}
+
+/**
+ * @brief Does a trunk segment cover this coarse cell?
+ *
+ * The ONE implementation. The batched chunk pass and the per-cell reference both
+ * call it, so they cannot disagree about what a trunk covers — and "they cannot
+ * disagree" is worth more here than any amount of care taken twice, because the
+ * whole property being tested is that the answer does not depend on who asked.
+ *
+ * A macro cell is many coarse cells across, so "this macro cell carries a trunk"
+ * cannot mark the cell: that would be a river as wide as the macro grid. What the
+ * coarse level draws is the SEGMENT from a trunk cell's centre to its downstream
+ * neighbour's, thickened by trunkWidth.
+ */
+[[nodiscard]] bool trunkCoversCoarseCell(const ChunkParams &params, const EndlessRiverParams &rivers,
+                                         core::i32 coarseX, core::i32 coarseZ)
+{
+    if (!rivers.trunks || rivers.trunkCells == 0u)
+        return false;
+
+    const core::i32 macroSpan = static_cast<core::i32>(rivers.trunkCells);
+    const core::i32 homeX = floorDivide(coarseX, macroSpan);
+    const core::i32 homeZ = floorDivide(coarseZ, macroSpan);
+    const core::i32 width = static_cast<core::i32>(rivers.trunkWidth);
+
+    // One macro cell either side: a segment starting next door still crosses this
+    // one, and dropping those breaks every trunk at a macro boundary.
+    for (core::i32 mz = homeZ - 1; mz <= homeZ + 1; ++mz)
+        for (core::i32 mx = homeX - 1; mx <= homeX + 1; ++mx)
+        {
+            if (!isTrunkMacroCell(params, rivers, mx, mz))
+                continue;
+            const core::u32 direction = trunkFlowDirection(params, rivers, mx, mz);
+            if (direction >= 8u)
+                continue;
+
+            const core::i32 fromX = mx * macroSpan + macroSpan / 2;
+            const core::i32 fromZ = mz * macroSpan + macroSpan / 2;
+            const core::i32 toX = (mx + kNeighbor8X[direction]) * macroSpan + macroSpan / 2;
+            const core::i32 toZ = (mz + kNeighbor8Z[direction]) * macroSpan + macroSpan / 2;
+
+            for (core::i32 t = 0; t <= macroSpan; ++t)
+            {
+                const core::i32 px = fromX + ((toX - fromX) * t) / macroSpan;
+                const core::i32 pz = fromZ + ((toZ - fromZ) * t) / macroSpan;
+                const core::i32 dx = px - coarseX < 0 ? coarseX - px : px - coarseX;
+                const core::i32 dz = pz - coarseZ < 0 ? coarseZ - pz : pz - coarseZ;
+                if (dx <= width && dz <= width)
+                    return true;
+            }
+        }
+    return false;
+}
+
+} // namespace
+
+bool isTrunkMacroCell(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 macroX, core::i32 macroZ)
+{
+    if (!rivers.trunks || rivers.trunkCells == 0u || rivers.coarseCells == 0u)
+        return false;
+    if (macroHeight(params, rivers, macroX, macroZ) <= math::Fixed32::fromFloat(rivers.seaLevel))
+        return false;
+
+    const core::i32 radius = static_cast<core::i32>(rivers.trunkRadius);
+    const core::i32 side = 2 * radius + 1;
+    lpl::pmr::vector<math::Fixed32> window;
+    fillMacroWindow(params, rivers, macroX, macroZ, radius, window);
+
+    core::u32 upstream = 0u;
+    for (core::i32 z = 0; z < side; ++z)
+        for (core::i32 x = 0; x < side; ++x)
+        {
+            core::i32 walkX = x;
+            core::i32 walkZ = z;
+            for (core::i32 step = 0; step < 2 * radius + 2; ++step)
+            {
+                if (walkX == radius && walkZ == radius)
+                {
+                    ++upstream;
+                    break;
+                }
+                if (!steepestStep(window, side, walkX, walkZ))
+                    break;
+            }
+        }
+    return upstream >= rivers.trunkThreshold;
+}
+
+core::u32 trunkFlowDirection(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 macroX,
+                             core::i32 macroZ)
+{
+    if (rivers.trunkCells == 0u)
+        return 0xFFFFFFFFu;
+
+    const math::Fixed32 here = macroHeight(params, rivers, macroX, macroZ);
+    core::u32 best = 0xFFFFFFFFu;
+    math::Fixed32 bestDrop = math::Fixed32::zero();
+    for (core::u32 n = 0u; n < 8u; ++n)
+    {
+        const math::Fixed32 drop = here - macroHeight(params, rivers, macroX + kNeighbor8X[n], macroZ + kNeighbor8Z[n]);
+        if (drop > bestDrop)
+        {
+            bestDrop = drop;
+            best = n;
+        }
+    }
+    return best;
+}
+
+bool isRiverCoarseCell(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 coarseX,
+                       core::i32 coarseZ)
+{
+    if (params.size == 0u || rivers.coarseCells == 0u)
+        return false;
+
+    const core::i32 radius = static_cast<core::i32>(rivers.basinRadius);
+    const core::i32 side = 2 * radius + 1;
+    const core::i32 half = static_cast<core::i32>(rivers.coarseCells / 2u);
+
+    lpl::pmr::vector<math::Fixed32> heights(static_cast<core::usize>(side) * side, math::Fixed32::zero());
+    for (core::i32 z = 0; z < side; ++z)
+        for (core::i32 x = 0; x < side; ++x)
+            heights[static_cast<core::usize>(z) * side + x] =
+                sampleWorldHeight(params, (coarseX - radius + x) * static_cast<core::i32>(rivers.coarseCells) + half,
+                                  (coarseZ - radius + z) * static_cast<core::i32>(rivers.coarseCells) + half);
+
+    const auto heightAt = [&](core::i32 x, core::i32 z) {
+        return heights[static_cast<core::usize>(z) * side + x];
+    };
+
+    if (heightAt(radius, radius) <= math::Fixed32::fromFloat(rivers.seaLevel))
+        return false;
+    if (trunkCoversCoarseCell(params, rivers, coarseX, coarseZ))
+        return true;
+
+    core::u32 upstream = 0u;
+    for (core::i32 z = 0; z < side; ++z)
+        for (core::i32 x = 0; x < side; ++x)
+        {
+            core::i32 walkX = x;
+            core::i32 walkZ = z;
+            for (core::i32 step = 0; step < 2 * radius + 2; ++step)
+            {
+                if (walkX == radius && walkZ == radius)
+                {
+                    ++upstream;
+                    break;
+                }
+                const math::Fixed32 here = heightAt(walkX, walkZ);
+                core::i32 bestX = walkX;
+                core::i32 bestZ = walkZ;
+                math::Fixed32 bestDrop = math::Fixed32::zero();
+                for (core::u32 n = 0u; n < 8u; ++n)
+                {
+                    const core::i32 nx = walkX + kNeighbor8X[n];
+                    const core::i32 nz = walkZ + kNeighbor8Z[n];
+                    if (nx < 0 || nz < 0 || nx >= side || nz >= side)
+                        continue;
+                    const math::Fixed32 drop = here - heightAt(nx, nz);
+                    if (drop > bestDrop)
+                    {
+                        bestDrop = drop;
+                        bestX = nx;
+                        bestZ = nz;
+                    }
+                }
+                if (bestX == walkX && bestZ == walkZ)
+                    break;
+                walkX = bestX;
+                walkZ = bestZ;
+            }
+        }
+    return upstream >= rivers.riverThreshold;
+}
+
+Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverParams &rivers, ChunkCoord coord)
+{
+    if (params.size == 0u || rivers.coarseCells == 0u)
+        return Grid<core::u8>{};
+
+    const core::u32 coarsePerChunk = (params.size + rivers.coarseCells - 1u) / rivers.coarseCells;
+    const core::i32 radius = static_cast<core::i32>(rivers.basinRadius);
+    // The window has to hold every cell that could drain into a cell of THIS
+    // chunk, or a coarse cell near the border would be judged on a truncated
+    // basin and the two chunks sharing it would disagree.
+    const core::i32 windowSide = static_cast<core::i32>(coarsePerChunk) + 2 * radius;
+    const core::i32 originCoarseX = coord.x * static_cast<core::i32>(coarsePerChunk) - radius;
+    const core::i32 originCoarseZ = coord.z * static_cast<core::i32>(coarsePerChunk) - radius;
+
+    // Heights first, once. A walk is a handful of comparisons; a height is an
+    // fBm with octaves, and sampling one per step of every walk costs a basin of
+    // noise per cell instead of a window per chunk.
+    lpl::pmr::vector<math::Fixed32> heights(static_cast<core::usize>(windowSide) * windowSide, math::Fixed32::zero());
+    const core::i32 half = static_cast<core::i32>(rivers.coarseCells / 2u);
+    for (core::i32 z = 0; z < windowSide; ++z)
+        for (core::i32 x = 0; x < windowSide; ++x)
+        {
+            const core::i32 coarseX = originCoarseX + x;
+            const core::i32 coarseZ = originCoarseZ + z;
+            heights[static_cast<core::usize>(z) * windowSide + x] =
+                sampleWorldHeight(params, coarseX * static_cast<core::i32>(rivers.coarseCells) + half,
+                                  coarseZ * static_cast<core::i32>(rivers.coarseCells) + half);
+        }
+
+    const auto heightAt = [&](core::i32 x, core::i32 z) {
+        return heights[static_cast<core::usize>(z) * windowSide + x];
+    };
+
+    // Steepest descent, D8. Ties break on the lowest neighbour index, so a flat
+    // shelf routes the same way on every machine and in every chunk that asks.
+    const auto flowStep = [&](core::i32 &x, core::i32 &z) {
+        const math::Fixed32 here = heightAt(x, z);
+        core::i32 bestX = x;
+        core::i32 bestZ = z;
+        math::Fixed32 bestDrop = math::Fixed32::zero();
+        for (core::u32 n = 0u; n < 8u; ++n)
+        {
+            const core::i32 nx = x + kNeighbor8X[n];
+            const core::i32 nz = z + kNeighbor8Z[n];
+            if (nx < 0 || nz < 0 || nx >= windowSide || nz >= windowSide)
+                continue;
+            const math::Fixed32 drop = here - heightAt(nx, nz);
+            if (drop > bestDrop)
+            {
+                bestDrop = drop;
+                bestX = nx;
+                bestZ = nz;
+            }
+        }
+        const bool moved = bestX != x || bestZ != z;
+        x = bestX;
+        z = bestZ;
+        return moved;
+    };
+
+    // Upstream count per coarse cell of the chunk: how many cells of its basin
+    // send their water through it.
+    lpl::pmr::vector<core::u32> upstream(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, 0u);
+    const core::i32 maxSteps = 2 * radius + 2;
+
+    for (core::i32 z = 0; z < windowSide; ++z)
+        for (core::i32 x = 0; x < windowSide; ++x)
+        {
+            core::i32 walkX = x;
+            core::i32 walkZ = z;
+            for (core::i32 step = 0; step < maxSteps; ++step)
+            {
+                // Credit the cell ONLY if this walk started within the basin
+                // radius OF THAT CELL.
+                //
+                // Without the test the count is "walks starting anywhere in the
+                // window", and the window belongs to the chunk — so the same
+                // world cell scores differently depending on which chunk asked,
+                // and a river changes its mind at every border. The bound has to
+                // be centred on the cell being credited, not on the caller.
+                const core::i32 spanX = walkX - x < 0 ? x - walkX : walkX - x;
+                const core::i32 spanZ = walkZ - z < 0 ? z - walkZ : walkZ - z;
+                const core::i32 localX = walkX - radius;
+                const core::i32 localZ = walkZ - radius;
+                if (spanX <= radius && spanZ <= radius && localX >= 0 && localZ >= 0 &&
+                    localX < static_cast<core::i32>(coarsePerChunk) && localZ < static_cast<core::i32>(coarsePerChunk))
+                    ++upstream[static_cast<core::usize>(localZ) * coarsePerChunk + static_cast<core::usize>(localX)];
+                if (!flowStep(walkX, walkZ))
+                    break; // a pit: the water stops here, and so does the walk
+            }
+        }
+
+    // The trunk, from the coarse level down. Same helper the reference uses.
+    lpl::pmr::vector<core::u8> trunkCoarse(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, 0u);
+    for (core::u32 z = 0u; z < coarsePerChunk; ++z)
+        for (core::u32 x = 0u; x < coarsePerChunk; ++x)
+            trunkCoarse[static_cast<core::usize>(z) * coarsePerChunk + x] =
+                trunkCoversCoarseCell(params, rivers,
+                                      coord.x * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(x),
+                                      coord.z * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(z))
+                    ? 1u
+                    : 0u;
+
+    const math::Fixed32 sea = math::Fixed32::fromFloat(rivers.seaLevel);
+    Grid<core::u8> mask{params.size, params.size, 0u};
+    for (core::u32 z = 0u; z < params.size; ++z)
+        for (core::u32 x = 0u; x < params.size; ++x)
+        {
+            const core::u32 coarseX = x / rivers.coarseCells;
+            const core::u32 coarseZ = z / rivers.coarseCells;
+            if (coarseX >= coarsePerChunk || coarseZ >= coarsePerChunk)
+                continue;
+            const core::usize slot = static_cast<core::usize>(coarseZ) * coarsePerChunk + coarseX;
+            const core::u32 count = upstream[slot];
+            if (count < rivers.riverThreshold && trunkCoarse[slot] == 0u)
+                continue;
+            // Already the sea is not a river. Without this every coastal cell
+            // qualifies, since the whole basin drains through it.
+            if (heightAt(static_cast<core::i32>(coarseX) + radius, static_cast<core::i32>(coarseZ) + radius) <= sea)
+                continue;
+            mask.at(x, z) = 1u;
+        }
+    return mask;
+}
+
+Heightfield generateErodedChunkTerrain(const ChunkParams &params, ChunkCoord coord, core::u32 iterations,
+                                       core::f32 talus)
+{
+    if (params.size == 0u)
+        return Heightfield{};
+    if (iterations == 0u)
+        return generateChunkTerrain(params, coord);
+
+    // Iterations PLUS ONE, and the extra cell is not caution — it is the
+    // measurement. Thermal erosion moves material one cell per pass, so N passes
+    // reach N cells; but the apron's own outer ring is itself wrong (it has no
+    // neighbours beyond), and that error marches inward one cell per pass too.
+    // An apron of exactly N left 9 cells of 5184 disagreeing with the unchunked
+    // computation — the corners, where the two fronts meet. N+1 leaves none.
+    const core::u32 apron = iterations + 1u;
+    const core::u32 side = params.size + 2u * apron;
+    const core::i32 originX = coord.x * static_cast<core::i32>(params.size) - static_cast<core::i32>(apron);
+    const core::i32 originZ = coord.z * static_cast<core::i32>(params.size) - static_cast<core::i32>(apron);
+
+    Heightfield wide{side, side, math::Fixed32::zero()};
+    for (core::u32 z = 0u; z < side; ++z)
+        for (core::u32 x = 0u; x < side; ++x)
+            wide.at(x, z) =
+                sampleWorldHeight(params, originX + static_cast<core::i32>(x), originZ + static_cast<core::i32>(z));
+
+    ThermalErosionParams thermal;
+    thermal.iterations = iterations;
+    thermal.talus = talus;
+    (void) thermalErode(wide, thermal);
+
+    Heightfield field{params.size, params.size, math::Fixed32::zero()};
+    for (core::u32 z = 0u; z < params.size; ++z)
+        for (core::u32 x = 0u; x < params.size; ++x)
+            field.at(x, z) = wide.at(x + apron, z + apron);
     return field;
 }
 
@@ -158,6 +571,50 @@ TileGrid borderConstraintsFrom(core::u32 size, const TileGrid &neighbour, core::
         }
     }
     return preset;
+}
+
+EndlessFoldResult foldEndlessPatch(const ChunkParams &params, const EndlessRiverParams &rivers, core::u32 radius)
+{
+    constexpr core::u32 kFnvOffset = 0x811C9DC5u;
+    constexpr core::u32 kFnvPrime = 0x01000193u;
+
+    const auto foldWord = [](core::u32 &hash, core::u32 word) {
+        for (core::u32 byte = 0u; byte < 4u; ++byte)
+        {
+            hash ^= (word >> (byte * 8u)) & 0xFFu;
+            hash *= kFnvPrime;
+        }
+    };
+
+    EndlessFoldResult result{};
+    result.heightSignature = kFnvOffset;
+    result.riverSignature = kFnvOffset;
+
+    const core::i32 reach = static_cast<core::i32>(radius);
+    for (core::i32 cz = -reach; cz <= reach; ++cz)
+        for (core::i32 cx = -reach; cx <= reach; ++cx)
+        {
+            const ChunkCoord coord{cx, cz};
+            const Heightfield height = generateChunkTerrain(params, coord);
+            const Grid<core::u8> water = markChunkRivers(params, rivers, coord);
+
+            // Raw Q16.16 words, never a decimal rendering: the fold must be an
+            // identity on the bits.
+            for (core::u32 i = 0u; i < height.cellCount(); ++i)
+                foldWord(result.heightSignature, static_cast<core::u32>(height[i].raw()));
+            for (core::u32 i = 0u; i < water.cellCount(); ++i)
+            {
+                foldWord(result.riverSignature, water[i]);
+                result.riverCells += water[i] != 0u ? 1u : 0u;
+            }
+
+            if (cx < reach)
+                result.seamMismatches += countSeamMismatches(params, coord, {cx + 1, cz});
+            if (cz < reach)
+                result.seamMismatches += countSeamMismatches(params, coord, {cx, cz + 1});
+            ++result.chunks;
+        }
+    return result;
 }
 
 } // namespace lpl::procgen

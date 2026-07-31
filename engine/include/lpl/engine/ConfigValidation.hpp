@@ -91,6 +91,33 @@ template <typename Emit> core::u32 forEachConfigWarning(const Config &config, Em
              "already guarantee delivery, so periodic keyframes are redundant "
              "bandwidth — raise keyframeInterval or leave the optimistic model.");
 
+    // ── Presentation against the host it runs on ───────────────────────────── //
+    //
+    // These catch the combinations that produce no error and no picture — the kind
+    // that costs an afternoon because everything "works".
+    if (config.headless() && config.enablePerPixelSurface())
+        warn("headless is on together with per-pixel surface shading: there is no "
+             "surface to look at, and the shading still costs a tick.");
+    if (config.headless() && config.enableTerrainShadows())
+        warn("headless is on together with terrain shadows: the shadow masks are "
+             "computed and never drawn.");
+    if (config.enablePbrSurface() && !config.enablePerPixelSurface())
+        warn("enablePbrSurface without enablePerPixelSurface: the physically based "
+             "path IS a per-pixel path, so it cannot run on the flat one.");
+    if (config.enableTerrainShadows() && config.shadowChunksPerTick() == 0)
+        warn("terrain shadows are on but shadowChunksPerTick is 0: no mask is ever "
+             "refreshed, so the shadows freeze at whatever the first tick produced.");
+    if (config.lodRings() == 0)
+        warn("lodRings is 0: no ring is ever drawn, so a streamed world renders "
+             "nothing at all.");
+    if (config.maxResidentChunks() != 0 && config.maxResidentChunks() < 9)
+        warn("maxResidentChunks below 9: a 3x3 neighbourhood is the minimum a "
+             "walker needs, and below it chunks are released as fast as they are "
+             "built.");
+    if (config.skyBlockSize() > 8)
+        warn("skyBlockSize above 8: the sky is evaluated once per block, and past "
+             "8x8 the horizon becomes visible steps rather than a gradient.");
+
     return count;
 }
 

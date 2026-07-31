@@ -180,6 +180,60 @@ Config::Builder &Config::Builder::serverPort(core::u16 port) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::maxResidentChunks(core::u32 chunks) noexcept
+{
+    _maxResidentChunks = chunks;
+    return *this;
+}
+
+Config::Builder &Config::Builder::lodRings(core::u32 rings) noexcept
+{
+    _lodRings = rings;
+    return *this;
+}
+
+Config::Builder &Config::Builder::viewDistance(core::f32 cells) noexcept
+{
+    _viewDistance = cells;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enableTerrainShadows(bool enabled) noexcept
+{
+    _enableTerrainShadows = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::shadowChunksPerTick(core::u32 chunks) noexcept
+{
+    _shadowChunksPerTick = chunks;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enablePerPixelSurface(bool enabled) noexcept
+{
+    _enablePerPixelSurface = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enablePbrSurface(bool enabled) noexcept
+{
+    _enablePbrSurface = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enableWaterReflection(bool enabled) noexcept
+{
+    _enableWaterReflection = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::skyBlockSize(core::u32 pixels) noexcept
+{
+    _skyBlockSize = pixels;
+    return *this;
+}
+
 Config Config::Builder::build() const noexcept
 {
     Config cfg;
@@ -211,6 +265,15 @@ Config Config::Builder::build() const noexcept
     cfg._enableGpu = _enableGpu;
     cfg._serverAddress = _serverAddress;
     cfg._serverPort = _serverPort;
+    cfg._maxResidentChunks = _maxResidentChunks;
+    cfg._lodRings = _lodRings;
+    cfg._viewDistance = _viewDistance;
+    cfg._shadowChunksPerTick = _shadowChunksPerTick;
+    cfg._skyBlockSize = _skyBlockSize;
+    cfg._enableTerrainShadows = _enableTerrainShadows;
+    cfg._enablePerPixelSurface = _enablePerPixelSurface;
+    cfg._enablePbrSurface = _enablePbrSurface;
+    cfg._enableWaterReflection = _enableWaterReflection;
     return cfg;
 }
 

@@ -32,7 +32,7 @@ namespace lpl::physics {
 
 struct Octree::Impl {
     static constexpr core::u8 kMaxDepth = 8;
-    static constexpr core::u32 kLeafCapacity = 32;
+    core::u32 leafCapacity{32u};
 
     /** @brief Flat node (POD, GPU-transferable). */
     struct FlatNode {
@@ -75,7 +75,7 @@ struct Octree::Impl {
 
     static constexpr core::u32 kNoIndex = 0xFFFFFFFFu;
 
-    explicit Impl(const math::AABB<math::Fixed32> &wb) : worldBounds{wb} {}
+    Impl(const math::AABB<math::Fixed32> &wb, core::u32 leaf) : leafCapacity{leaf == 0u ? 1u : leaf}, worldBounds{wb} {}
 
     void setIndex(core::u32 objectId, core::u32 slot)
     {
@@ -188,7 +188,7 @@ struct Octree::Impl {
     {
         const core::u32 entityCount = end - start;
 
-        if (entityCount <= kLeafCapacity || depth >= kMaxDepth)
+        if (entityCount <= leafCapacity || depth >= kMaxDepth)
         {
             auto &node = nodes[nodeIdx];
             node.entityStart = start;
@@ -273,6 +273,40 @@ struct Octree::Impl {
     //  Recursive AABB query                                                  //
     // ────────────────────────────────────────────────────────────────────── //
 
+    /// @copydoc Octree::queryVisible
+    void visibleRecurse(core::u32 nodeIdx, const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
+                        const lpl::pmr::function<void(core::u32)> &callback, core::u32 *visited,
+                        core::u32 *pruned) const
+    {
+        const auto &node = nodes[nodeIdx];
+        if (visited != nullptr)
+            ++(*visited);
+        if (!nodeVisible(node.bound))
+        {
+            if (pruned != nullptr)
+                ++(*pruned);
+            return;
+        }
+
+        for (core::u32 i = 0; i < node.entityCount; ++i)
+        {
+            const auto &entry = sortedEntries[node.entityStart + i];
+            if (nodeVisible(entry.aabb))
+            {
+                callback(entry.objectId);
+            }
+        }
+
+        if (node.firstChild >= 0)
+        {
+            const core::u32 fc = static_cast<core::u32>(node.firstChild);
+            for (core::u32 i = 0; i < 8; ++i)
+            {
+                visibleRecurse(fc + i, nodeVisible, callback, visited, pruned);
+            }
+        }
+    }
+
     void queryRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region,
                       const lpl::pmr::function<void(core::u32)> &callback) const
     {
@@ -310,7 +344,10 @@ struct Octree::Impl {
 //  Public API                                                                //
 // ========================================================================== //
 
-Octree::Octree(const math::AABB<math::Fixed32> &worldBounds) : _impl{lpl::pmr::make_unique<Impl>(worldBounds)} {}
+Octree::Octree(const math::AABB<math::Fixed32> &worldBounds, core::u32 leafCapacity)
+    : _impl{lpl::pmr::make_unique<Impl>(worldBounds, leafCapacity)}
+{
+}
 
 Octree::~Octree() = default;
 
@@ -365,6 +402,28 @@ void Octree::query(const math::AABB<math::Fixed32> &region, const lpl::pmr::func
     }
 
     _impl->queryRecurse(0, region, callback);
+}
+
+void Octree::queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
+                          const lpl::pmr::function<void(core::u32)> &callback, core::u32 *outNodesVisited,
+                          core::u32 *outNodesPruned) const
+{
+    if (outNodesVisited != nullptr)
+        *outNodesVisited = 0u;
+    if (outNodesPruned != nullptr)
+        *outNodesPruned = 0u;
+
+    if (_impl->nodes.empty())
+    {
+        // Same fallback as the box query: before the first rebuild there is no
+        // hierarchy to descend, and a linear pass is still a correct answer.
+        for (const auto &entry : _impl->sortedEntries)
+            if (nodeVisible(entry.aabb))
+                callback(entry.objectId);
+        return;
+    }
+
+    _impl->visibleRecurse(0, nodeVisible, callback, outNodesVisited, outNodesPruned);
 }
 
 void Octree::rebuild()

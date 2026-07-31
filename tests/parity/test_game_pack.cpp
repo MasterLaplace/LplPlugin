@@ -21,6 +21,7 @@
 #include <lpl/editor/GamePackBaker.hpp>
 #include <lpl/pack/GamePack.hpp>
 #include <lpl/pack/ParityPackBlob.hpp>
+#include <lpl/pack/ViewerPackBlob.hpp>
 #include <lpl/pack/RecipeCodec.hpp>
 #include <lpl/procgen/WorldRecipe.hpp>
 
@@ -219,6 +220,32 @@ int main()
 
         std::printf("  two-section image = %zu bytes\n", withLife.size());
         std::printf("  species carried   = %u\n", decoded.speciesCount);
+    }
+
+    // ── The viewer's built-in cartridge is not stale either ────────────────
+    //
+    // Same guard as the parity blob above, for the same reason and a sharper
+    // one: this is what a boot with no cartridge slot actually shows, so a stale
+    // blob does not fail anything — it publishes an old world to a browser demo
+    // and looks entirely healthy doing it.
+    {
+        pack::View viewerView;
+        check(viewerView.open(pack::kViewerPackBytes, pack::kViewerPackSize),
+              "the viewer's built-in cartridge opens");
+        check(viewerView.sectionCount() == 2u, "and carries a world AND an ecosystem");
+
+        pack::RecipeV1 viewerWorld{};
+        check(viewerView.readRecipe(viewerWorld), "its world section reads");
+        // The values worldview.lplscene declares. Hardcoded on purpose: a blob
+        // regenerated from a DIFFERENT scene would still open and still parse,
+        // and only a statement of what it is supposed to contain catches that.
+        check(viewerWorld.width == 64u && viewerWorld.depth == 64u, "it is the 64x64 demo world");
+        check(viewerWorld.seed == 20260728u, "with the seed the document names");
+
+        pack::LivingV1 viewerLife{};
+        check(viewerView.readLiving(viewerLife), "its ecosystem section reads");
+        check(viewerLife.speciesCount == 3u, "and declares the three species the document lists");
+        check(viewerLife.headPerBody == 3u, "with the body ratio it asks for");
     }
 
     std::printf("\n-- pack --\n");

@@ -92,6 +92,43 @@ struct TessellationResult {
  * @param count    Number of control points (>= 4).
  * @param segments Samples emitted per control-point span.
  */
+/**
+ * @brief Tessellates a closed Catmull-Rom loop and EMITS the points.
+ *
+ * The fold-only twin below returns a signature and a count, which is everything a
+ * parity gate needs and nothing a mesh needs. That is why this module could pass
+ * its gate for months without a single triangle in the world coming out of it: the
+ * geometry was computed and thrown away. This variant writes the samples out, so a
+ * caller can revolve or extrude them into something you can look at.
+ *
+ * @param outPoints Destination, at least @c count * @c segments entries.
+ * @param capacity  Entries available; sampling stops when it is full.
+ * @return Points written.
+ */
+inline core::u32 catmullLoopPoints(const math::Fixed32 (*ctrl)[3], core::u32 count, core::u32 segments,
+                                   Vec3fTopo *outPoints, core::u32 capacity) noexcept
+{
+    if (ctrl == nullptr || outPoints == nullptr || count < 4u || segments == 0u)
+        return 0u;
+
+    core::u32 written = 0u;
+    const core::f32 inv = 1.0f / static_cast<core::f32>(segments);
+    for (core::u32 i = 0u; i < count && written < capacity; ++i)
+    {
+        const auto at = [&](core::u32 k) {
+            const core::u32 j = (i + k) % count;
+            return Vec3fTopo(ctrl[j][0].toFloat(), ctrl[j][1].toFloat(), ctrl[j][2].toFloat());
+        };
+        const Vec3fTopo p0 = at(count - 1u);
+        const Vec3fTopo p1 = at(0u);
+        const Vec3fTopo p2 = at(1u);
+        const Vec3fTopo p3 = at(2u);
+        for (core::u32 sample = 0u; sample < segments && written < capacity; ++sample)
+            outPoints[written++] = catmullRom(p0, p1, p2, p3, static_cast<core::f32>(sample) * inv);
+    }
+    return written;
+}
+
 [[nodiscard]] inline TessellationResult tessellateCatmullLoop(const math::Fixed32 (*ctrl)[3], core::u32 count,
                                                               core::u32 segments) noexcept
 {

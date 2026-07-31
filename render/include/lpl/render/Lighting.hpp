@@ -162,6 +162,62 @@ namespace detail {
     return (r << 16) | (g << 8) | b;
 }
 
+/**
+ * @brief Scales a packed colour by a lighting term, SATURATING each channel.
+ *
+ * Masking with 0xFF instead of clamping is the difference between a lit
+ * highlight and a wrap-around: a lighting term reaches past 1.0 on a slope
+ * facing the light, and 0xF0 (snow) times 1.25 is 0x12C, which masked becomes
+ * 0x2C — dark. On screen that is a snowfield covered in black, red and yellow
+ * blocks, each one a channel that overflowed at a different point, and it reads
+ * as corrupt memory rather than as the arithmetic mistake it is.
+ */
+[[nodiscard]] inline core::u32 modulate(core::u32 colour, core::f32 lit) noexcept
+{
+    const core::u32 scale = static_cast<core::u32>((lit < 0.0f ? 0.0f : lit) * 256.0f);
+    const auto channel = [scale](core::u32 value) -> core::u32 {
+        const core::u32 lit8 = (value * scale) >> 8;
+        return lit8 > 255u ? 255u : lit8;
+    };
+    return (channel((colour >> 16) & 0xFFu) << 16) | (channel((colour >> 8) & 0xFFu) << 8) | channel(colour & 0xFFu);
+}
+
+/**
+ * @brief Linear mix of two packed colours, channel by channel.
+ *
+ * Written once here because it was written twice inside the water shader and
+ * would have been written a third time for the reflection probe. Mixing packed
+ * colours by adding them and masking is the tempting shortcut and it is wrong:
+ * two channels that sum past 255 carry into the next one, so a bright blend turns
+ * a red highlight green.
+ */
+[[nodiscard]] inline core::u32 mixColours(core::u32 from, core::u32 to, core::f32 t) noexcept
+{
+    const core::f32 clamped = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    const core::u32 weight = static_cast<core::u32>(clamped * 256.0f);
+    core::u32 out = 0u;
+    for (core::u32 shift = 0u; shift <= 16u; shift += 8u)
+    {
+        const core::u32 a = (from >> shift) & 0xFFu;
+        const core::u32 b = (to >> shift) & 0xFFu;
+        out |= (((a * (256u - weight) + b * weight) >> 8) & 0xFFu) << shift;
+    }
+    return out;
+}
+
+/**
+ * @brief Amber-on-abyss ramp for a scalar field, so a data view reads as
+ *        instrumentation rather than as a picture.
+ */
+[[nodiscard]] inline core::u32 heatRamp(core::f32 t) noexcept
+{
+    t = detail::saturate(t);
+    const core::u32 r = static_cast<core::u32>((0.05f + 0.95f * t) * 255.0f);
+    const core::u32 g = static_cast<core::u32>((0.05f + 0.62f * t * t) * 255.0f);
+    const core::u32 b = static_cast<core::u32>((0.10f + 0.15f * t * t * t) * 255.0f);
+    return (r << 16) | (g << 8) | b;
+}
+
 } // namespace lpl::render
 
 #endif // LPL_RENDER_LIGHTING_HPP

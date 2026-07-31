@@ -19,7 +19,11 @@ target("lpl-engine")
         "lpl-audio",
         "lpl-haptic",
         "lpl-bci",
-        "lpl-serial"
+        "lpl-serial",
+        "lpl-pack",
+        "lpl-procgen",
+        "lpl-ai",
+        "lpl-ecology"
     )
 
     if has_config("renderer") then
