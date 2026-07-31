@@ -144,4 +144,17 @@ bool View::readLiving(LivingV1 &outLiving) const noexcept
     return true;
 }
 
+bool View::readView(ViewV1 &outView) const noexcept
+{
+    const core::u8 *payload = nullptr;
+    core::u32 payloadSize = 0u;
+    if (!findSection(SectionType::ViewProfile, payload, payloadSize))
+        return false;
+    if (payloadSize != sizeof(ViewV1))
+        return false;
+
+    lpl::pmr::memcpy(&outView, payload, sizeof(ViewV1));
+    return true;
+}
+
 } // namespace lpl::pack

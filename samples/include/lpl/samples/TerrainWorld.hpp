@@ -53,6 +53,7 @@
 #    include <lpl/engine/TerrainRenderer.hpp>
 #    include <lpl/engine/TerrainStreamer.hpp>
 #    include <lpl/engine/TerrainSurface.hpp>
+#    include <lpl/engine/ViewProfile.hpp>
 #    include <lpl/engine/World.hpp>
 #    include <lpl/image/Font8x16.hpp>
 #    include <lpl/math/Cordic.hpp>
@@ -123,6 +124,20 @@ public:
     {
     }
 
+    /**
+     * @brief Builds the viewer around a world, its ecosystem, AND its look.
+     *
+     * The third thing a cartridge can now say. Before this the `.lplscene` could
+     * describe a valley and what grazed in it, and every one of them came out under
+     * the same blue midday sky, because the palette and the sun were constants in
+     * this header.
+     */
+    TerrainWorld(const procgen::WorldRecipe &recipe, const ecology::LivingRecipe &living,
+                 const engine::ViewProfile &view) noexcept
+        : _recipe(recipe), _livingRecipe(living), _view(view), _seed(recipe.seed)
+    {
+    }
+
     TerrainWorld() = default;
     [[nodiscard]] core::Expected<void> onInit(engine::WorldContext &context) override
     {
@@ -144,12 +159,12 @@ public:
         // One call hands the whole surface behaviour to the engine: the host's
         // profile decided it, and this world only says what is ITS own — where the
         // sea is, how dense the haze, how much light a shaded face keeps.
-        engine::TerrainSurfaceParams surfaceParams;
-        surfaceParams.seaLevel = kSeaLevel;
-        surfaceParams.fogDensity = kFogDensity;
-        surfaceParams.ambient = kAmbient;
-        surfaceParams.shadowSteps = kShadowSteps;
-        _terrainSurface.configure(context.config, surfaceParams, _seed);
+        // The cartridge's look wins over the constants in this file whenever it said
+        // anything; the CONFIG still owns the budgets. Those are two different
+        // questions and they are answered by two different sources on purpose — see
+        // engine/ViewProfile.hpp for why a cartridge must not carry a budget.
+        _terrainSurface.configure(context.config, _view.surface, _seed);
+        _terrainSurface.applyLook(_view.sky, _view.water, _view.dayFraction);
         _terrainSurface.attachProbe(_probeColor, _probeDepth, kProbeWidth, kProbeHeight);
         _maxResident = context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling
                                                                : context.config.maxResidentChunks();
@@ -280,6 +295,14 @@ private:
     static constexpr core::u32 kMaxResidentCeiling = 56u;
     /// World cells covered by one key press.
     static constexpr core::f32 kWalkStep = 3.0f;
+    /**
+     * @brief Radians of view per unit of pointer motion.
+     *
+     * A PS/2 mouse at its default resolution reports four counts per millimetre,
+     * so a comfortable sweep across a desk is a few hundred counts. At 0.004 that
+     * is most of a full turn, which is where a first-person view wants to be.
+     */
+    static constexpr core::f32 kLookSensitivity = 0.004f;
     /// One tick of the day: a full cycle takes about four minutes at 60 Hz.
     static constexpr core::f32 kDayStep = 1.0f / 14400.0f;
     /// Cells across the pheromone window that follows the walker.
@@ -823,8 +846,13 @@ private:
         engine::TerrainDrawParams params;
         params.chunkSize = kChunkSize;
         params.lodRings = _lodRings;
-        params.seaLevel = kSeaLevel;
-        params.ambient = kAmbient;
+        params.seaLevel = _view.surface.seaLevel;
+        params.ambient = _view.surface.ambient;
+        // The creatures' colours are content too: a world of white hares and one of
+        // black wolves are two worlds, and neither is a host budget.
+        params.grazerTint = _view.grazerTint;
+        params.hunterTint = _view.hunterTint;
+        params.bodyScale = _view.bodyScale;
         params.skirtDrop = kSkirtDrop;
         params.chunkCentreY = kChunkCentreY;
         params.chunkHalfHeight = kChunkHalfHeight;
@@ -858,7 +886,7 @@ private:
      * out subtlety: adjacent biomes have to differ in VALUE, not only in hue, or a
      * coastline turns to mush at that resolution.
      */
-    [[nodiscard]] core::u32 biomeColour(procgen::BiomeId biome) const noexcept
+    [[nodiscard]] static core::u32 builtInBiomeColour(procgen::BiomeId biome) noexcept
     {
         switch (biome)
         {
@@ -880,6 +908,20 @@ private:
         // Magenta on purpose: an unmapped biome must be impossible to mistake for a
         // design choice.
         return 0x00FF00FFu;
+    }
+
+    /**
+     * @brief The colour a biome is drawn in: the cartridge's, or this file's.
+     *
+     * A palette the document did not state is NOT a palette of zeroes — that
+     * distinction is the whole reason the wire struct carries a count and a flag
+     * rather than just sixteen words. Unstated falls through to @ref
+     * builtInBiomeColour, which is what every world looked like before a cartridge
+     * could say otherwise.
+     */
+    [[nodiscard]] core::u32 biomeColour(procgen::BiomeId biome) const noexcept
+    {
+        return _view.colourFor(static_cast<core::u32>(biome), builtInBiomeColour(biome));
     }
 
     /**
@@ -1076,6 +1118,8 @@ private:
      */
     void drainInput(engine::WorldContext &context)
     {
+        drainPointer(context);
+
         char key;
         while (context.platform.input().tryPopCharacter(key))
         {
@@ -1159,6 +1203,44 @@ private:
             default: break;
             }
         }
+    }
+
+    /**
+     * @brief Free look: the pointer turns and tilts the camera.
+     *
+     * Until there was a mouse driver, looking around meant tapping J/L/I/K and the
+     * view moved in fixed steps — which is enough to prove a camera works and not
+     * enough to look at anything. A device that reports motion turns the same two
+     * calls into a continuous one.
+     *
+     * Two details are the difference between this feeling right and feeling broken:
+     *
+     *  - The device reports UP as positive and a pitch control usually reads the
+     *    other way, so the vertical delta is negated once, here, rather than
+     *    argued about at four call sites.
+     *  - Every packet waiting is consumed in one go. A frame that pops a single
+     *    report leaves the rest in the ring, and a fast flick then arrives spread
+     *    over the next second as a slow drift.
+     */
+    void drainPointer(engine::WorldContext &context)
+    {
+        core::i32 deltaX = 0;
+        core::i32 deltaY = 0;
+        core::u32 buttons = 0u;
+        core::i32 turnAccumulator = 0;
+        core::i32 tiltAccumulator = 0;
+
+        while (context.platform.input().tryPopPointerMotion(deltaX, deltaY, buttons))
+        {
+            turnAccumulator += deltaX;
+            tiltAccumulator += deltaY;
+            _pointerButtons = buttons;
+        }
+
+        if (turnAccumulator != 0)
+            _camera.turn(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
+        if (tiltAccumulator != 0)
+            _camera.tilt(static_cast<core::f32>(tiltAccumulator) * kLookSensitivity);
     }
 
     // ── Small helpers ────────────────────────────────────────────────────────
@@ -1272,6 +1354,14 @@ private:
 
     mutable core::u32 _lastTriangles{0u};
     ecology::LivingRecipe _livingRecipe{ecology::parityLivingRecipe()};
+    /**
+     * @brief What the world looks like, as the cartridge stated it.
+     *
+     * Default-constructed it reproduces the constants this file used to hold, field
+     * for field — which is what makes a pack with no view section indistinguishable
+     * from the version before the section existed.
+     */
+    engine::ViewProfile _view{};
     lpl::pmr::vector<ecs::EntityId> _propIds;
     core::u32 _gridWidth{0u};
     core::u32 _gridDepth{0u};
@@ -1352,6 +1442,8 @@ private:
     core::u32 _seed{1337u};
     core::u32 _ticks{0u};
     core::u32 _frames{0u};
+    /// Buttons held at the last pointer report; bit 0 left, 1 right, 2 middle.
+    core::u32 _pointerButtons{0u};
 };
 
 inline core::u32 TerrainWorld::_color[TerrainWorld::kRenderWidth * TerrainWorld::kRenderHeight];

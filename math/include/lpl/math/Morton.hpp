@@ -40,6 +40,21 @@ namespace lpl::math::morton {
 [[nodiscard]] LPL_HD constexpr core::u64 encode3D(core::i32 x, core::i32 y, core::i32 z);
 
 /**
+ * @brief Encode three ALREADY non-negative grid coordinates, applying no bias.
+ *
+ * @ref encode3D exists for world coordinates that straddle the origin: it adds
+ * @c kMortonBias so a negative axis still lands in the unsigned grid. That makes
+ * it the wrong tool for a caller that has already mapped its coordinates into a
+ * bounded grid, because the bias is added a SECOND time and the sum wraps the
+ * 21-bit field — which is exactly what an octree that reads the key's high bits
+ * as an octant path cannot survive. Such a caller wants this overload.
+ *
+ * @param x,y,z Grid coordinates, each clamped by the caller to [0, 2^21).
+ * @return 63-bit Morton key.
+ */
+[[nodiscard]] LPL_HD constexpr core::u64 encode3DGrid(core::u32 x, core::u32 y, core::u32 z);
+
+/**
  * @brief Decode a 2D Morton code back into its coordinate pair.
  * @param code 32-bit Morton key.
  * @param[out] x Decoded first axis.
@@ -121,6 +136,12 @@ LPL_HD constexpr core::u64 encode3D(core::i32 x, core::i32 y, core::i32 z)
     auto uy = static_cast<core::u64>(y + core::kMortonBias);
     auto uz = static_cast<core::u64>(z + core::kMortonBias);
     return detail::part1by2(ux) | (detail::part1by2(uy) << 1) | (detail::part1by2(uz) << 2);
+}
+
+LPL_HD constexpr core::u64 encode3DGrid(core::u32 x, core::u32 y, core::u32 z)
+{
+    return detail::part1by2(static_cast<core::u64>(x)) | (detail::part1by2(static_cast<core::u64>(y)) << 1) |
+           (detail::part1by2(static_cast<core::u64>(z)) << 2);
 }
 
 LPL_HD constexpr void decode2D(core::u32 code, core::i32 &x, core::i32 &y)

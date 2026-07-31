@@ -99,6 +99,21 @@ bool KernelInputBackend::tryPopCharacter(char &outCharacter)
 
 core::u32 KernelInputBackend::pendingCount() const noexcept { return hardware_abstraction_layer_input_pending_count(); }
 
+bool KernelInputBackend::tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY, core::u32 &outButtons)
+{
+    core::i32 deltaX = 0;
+    core::i32 deltaY = 0;
+    core::u32 buttons = 0u;
+    if (!hardware_abstraction_layer_input_try_pop_pointer(&deltaX, &deltaY, &buttons))
+        return false;
+    outDeltaX = deltaX;
+    outDeltaY = deltaY;
+    outButtons = buttons;
+    return true;
+}
+
+bool KernelInputBackend::hasPointer() const noexcept { return hardware_abstraction_layer_input_pointer_available(); }
+
 // ---- Memory --------------------------------------------------------------
 
 void *KernelMemoryBackend::reserve(core::usize sizeBytes, core::usize alignment)

@@ -59,6 +59,7 @@ enum class SectionType : core::u32 {
     Unknown = 0u,
     WorldRecipe = 1u,  ///< A procgen recipe: seed + passes (see RecipeV1).
     LivingRecipe = 2u, ///< What lives on it: food web, herd, stigmergy (see LivingV1).
+    ViewProfile = 3u,  ///< What it LOOKS like: sky, water, palette (see ViewV1).
 };
 
 /**
@@ -369,6 +370,88 @@ struct LivingV1 {
 };
 static_assert(sizeof(LivingV1) == 316u, "GamePack living layout is wire format");
 
+/// Biome colours a wire view profile carries; covers procgen::BiomeId's range.
+inline constexpr core::u32 kWireBiomeColours = 16u;
+
+/// Bits of ViewV1::flags.
+inline constexpr core::u32 kViewFlagOverridePalette = 1u << 0; ///< Use the table below.
+
+/**
+ * @struct ViewV1
+ * @brief Wire form of a view profile: what a world LOOKS like.
+ *
+ * The third section, and the one whose boundary is the interesting part. It would
+ * have been easy to put the whole presentation state here — per-pixel shading,
+ * shadow budgets, resident chunk ceilings — and it would have been wrong, because
+ * those describe a MACHINE. A cartridge that carried them would tell a phone to
+ * render like a workstation, and a browser build to keep fifty-six chunks resident
+ * on a heap that has room for nine.
+ *
+ * What is here is the other half, and it was homeless: the colour of the sky, the
+ * hour of the day, where the sea is, how the water is tinted, what a forest looks
+ * like. Those describe a PLACE. They were compiled into the host, so a `.lplscene`
+ * could specify erosion iteration counts and had no way to say the world was at
+ * dusk — every world the format could express came out the same blue.
+ *
+ * The split is the same one @c TerrainSurfaceParams already draws, promoted to the
+ * document: sea level and fog density are content, whether the fog is computed per
+ * pixel is a budget. engine::HostProfile keeps the budgets.
+ */
+struct ViewV1 {
+    // ── Sky ─────────────────────────────────────────────────────────────────
+    core::f32 zenithR;
+    core::f32 zenithG;
+    core::f32 zenithB;
+    core::f32 horizonR;
+    core::f32 horizonG;
+    core::f32 horizonB;
+    core::f32 duskR;
+    core::f32 duskG;
+    core::f32 duskB;
+    core::f32 groundR;
+    core::f32 groundG;
+    core::f32 groundB;
+    core::f32 sunSize;
+    core::f32 mieStrength;
+    core::f32 mieSharpness;
+    core::f32 nightFloor;
+
+    /// Time of day at load, in [0, 1). Not a sun VECTOR: the vector is derived,
+    /// and storing both invites a pack whose two halves disagree.
+    core::f32 dayFraction;
+
+    // ── Surface ─────────────────────────────────────────────────────────────
+    core::f32 seaLevel;
+    core::f32 fogDensity;
+    core::f32 ambient;
+    core::f32 grainTiles;
+    core::u32 shadowSteps;
+
+    // ── Water ───────────────────────────────────────────────────────────────
+    core::u32 waterShallow; ///< Packed 0x00RRGGBB, as everything else here.
+    core::u32 waterDeep;
+    core::f32 rippleScale;
+    core::f32 rippleAmplitude;
+    core::f32 glintPower;
+    core::f32 depthScale;
+
+    // ── Creatures ───────────────────────────────────────────────────────────
+    core::u32 grazerTint;
+    core::u32 hunterTint;
+    core::f32 bodyScale;
+
+    // ── Biome palette ───────────────────────────────────────────────────────
+    //
+    // Indexed by procgen::BiomeId. Only consulted when kViewFlagOverridePalette
+    // is set, so a pack that likes the built-in colours costs sixty-four zero
+    // bytes and says nothing, rather than accidentally painting the world black.
+    core::u32 biomeColour[kWireBiomeColours];
+    core::u32 biomeColourCount;
+
+    core::u32 flags; ///< kViewFlag* bits.
+};
+static_assert(sizeof(ViewV1) == 196u, "GamePack view profile layout is wire format");
+
 /**
  * @brief FNV-1a over a byte range — the pack's integrity check.
  * @param bytes Start of the range (may be null when @p size is 0).
@@ -431,6 +514,15 @@ public:
      * @return true when the section is present and exactly the right size.
      */
     [[nodiscard]] bool readLiving(LivingV1 &outLiving) const noexcept;
+
+    /**
+     * @brief Reads the view profile, when the pack carries one.
+     *
+     * Absent is legitimate, exactly as for the living section: a pack that says
+     * nothing about how the world looks gets the host's own defaults. Only a
+     * wrong-sized section is a fault.
+     */
+    [[nodiscard]] bool readView(ViewV1 &outView) const noexcept;
 
 private:
     const core::u8 *_bytes{nullptr};

@@ -69,6 +69,9 @@ class KernelInputBackend final : public IInputBackend {
 public:
     [[nodiscard]] bool tryPopCharacter(char &outCharacter) override;
     [[nodiscard]] core::u32 pendingCount() const noexcept override;
+    [[nodiscard]] bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY,
+                                           core::u32 &outButtons) override;
+    [[nodiscard]] bool hasPointer() const noexcept override;
     [[nodiscard]] const char *name() const noexcept override { return "KernelInput(PS/2)"; }
 };
 

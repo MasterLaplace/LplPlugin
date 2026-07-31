@@ -76,6 +76,20 @@ public:
     void clear() noexcept;
 
     /**
+     * @brief Moves the volume the tree subdivides.
+     *
+     * A broad-phase has one world and never needs this. A CULLER does: the resident
+     * set of a streamed world slides with the camera, and an index whose bounds
+     * stayed at the origin would spend its whole key range on space that holds
+     * nothing. Because the Morton key is now normalised to these bounds, changing
+     * them invalidates every key — so this only takes effect on the next @ref
+     * rebuild, and callers set it while the tree is empty.
+     */
+    void setWorldBounds(const math::AABB<math::Fixed32> &worldBounds) noexcept;
+
+    [[nodiscard]] const math::AABB<math::Fixed32> &worldBounds() const noexcept;
+
+    /**
      * @brief Visits objects whose enclosing NODE passes a caller's test.
      *
      * The generalisation @ref query was missing. A box query answers "what is in

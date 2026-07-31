@@ -28,6 +28,7 @@
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecology/LivingRecipe.hpp>
 #    include <lpl/editor/Json.hpp>
+#    include <lpl/pack/GamePack.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
 #    include <string>
@@ -91,6 +92,41 @@ namespace lpl::editor {
  * @return Its "living" object, every field written out.
  */
 [[nodiscard]] std::string emitSceneLiving(const ecology::LivingRecipe &living);
+
+/**
+ * @brief Bakes a world, what lives on it, AND what it looks like.
+ *
+ * Three sections, two, or one — a null argument omits its section entirely, and a
+ * one-section image is byte-for-byte what this produced before either extension
+ * existed. That is the property that makes sections, rather than a grown recipe
+ * struct, the way this format grows.
+ *
+ * @param recipe The world.
+ * @param living The ecosystem, or nullptr.
+ * @param view   The look, or nullptr for a world that keeps the host's.
+ * @return The packed image.
+ */
+[[nodiscard]] std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe,
+                                                 const ecology::LivingRecipe *living, const pack::ViewV1 *view);
+
+/**
+ * @brief Reads the optional "view" block of a scene object.
+ *
+ * Wire form rather than engine form on purpose: translating a sky needs render
+ * types, and this module bakes bytes. engine::toEngineView does that half.
+ *
+ * @param scene   Parsed scene (or document root, for the flat form).
+ * @param outView Receives the profile when the block is present.
+ * @return true when the document declared one.
+ */
+[[nodiscard]] bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView);
+
+/**
+ * @brief Emits a view profile as the JSON a `.lplscene` carries.
+ * @param view The wire profile.
+ * @return Its "view" object, every field written out.
+ */
+[[nodiscard]] std::string emitSceneView(const pack::ViewV1 &view);
 
 /**
  * @brief Convenience: parse a `.lplscene` document and bake it in one step.

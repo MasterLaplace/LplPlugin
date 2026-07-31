@@ -113,15 +113,63 @@ public:
         radixSortDrawKeys(&_keys[0], &_scratch[0], count);
         _orderFold = foldDrawKeys(&_keys[0], count);
 
-        core::u32 triangles = 0u;
+        // The sorted order becomes a RECORDING, and the recording is what gets drawn.
+        //
+        // This is the seam the engine is built around and it was, until now, a header
+        // with no caller: packets that name a material and a pose SLOT, and a pose
+        // buffer read at submit time rather than baked into the packet. Writing the
+        // draw list this way costs nothing here — the loop below reads the packet
+        // instead of the instance — and it is what lets the same list be handed to
+        // something that is not this rasterizer, because a packet says what to draw
+        // without saying how.
+        //
+        // The pose is Fixed32 on purpose: a prop's position is authoritative (two
+        // machines must agree on where a tree stands), while its yaw and its light
+        // are presentation and stay float.
+        _poses.clear();
+        _poses.resize(count);
+        _recording.reset();
         for (core::u32 i = 0u; i < count; ++i)
         {
-            const ScatterInstance &instance = _instances[_keys[i].payload];
-            if (instance.mesh >= meshCount)
+            const core::u32 slot = _keys[i].payload;
+            const ScatterInstance &instance = _instances[slot];
+            _poses[slot].x = math::Fixed32::fromFloat(instance.worldX);
+            _poses[slot].y = math::Fixed32::fromFloat(instance.worldY);
+            _poses[slot].z = math::Fixed32::fromFloat(instance.worldZ);
+            _poses[slot].scale = math::Fixed32::fromFloat(instance.scale);
+
+            DrawCommand packet;
+            packet.materialId = instance.mesh;
+            packet.poseSlot = slot;
+            packet.instanceCount = 1u;
+            // A software mesh has no GPU allocation, so the handle is the identity of
+            // the mesh it replays. That is exactly what a stable VA IS to a consumer:
+            // a name that does not move between frames.
+            packet.vertexBufferVA = static_cast<core::u64>(instance.mesh) + 1u;
+            packet.indexCount = 0u;
+            _recording.record(packet);
+        }
+        _recording.finalize();
+        _latched = submitLateLatched(_recording, _poses.empty() ? nullptr : &_poses[0], count);
+
+        core::u32 triangles = 0u;
+        for (core::u32 i = 0u; i < _recording.count(); ++i)
+        {
+            const DrawCommand &packet = _recording.at(i);
+            const ScatterInstance &instance = _instances[packet.poseSlot];
+            if (packet.materialId >= meshCount)
                 continue;
 
-            const core::f32 distance =
-                approximateLength(instance.worldX - basis.eye.x, instance.worldZ - basis.eye.z);
+            // LATE LATCH: the transform comes from the pose buffer, read now, not
+            // from what was queued. On this single-threaded path the two agree; the
+            // point is that the packet does not carry the transform, so a sim step
+            // between recording and submission moves the draw without re-recording.
+            const Pose &pose = _poses[packet.poseSlot];
+            const core::f32 poseX = pose.x.toFloat();
+            const core::f32 poseY = pose.y.toFloat();
+            const core::f32 poseZ = pose.z.toFloat();
+
+            const core::f32 distance = approximateLength(poseX - basis.eye.x, poseZ - basis.eye.z);
 
             FoliageStyle resolved = style;
             resolved.light = instance.light;
@@ -131,12 +179,12 @@ public:
             resolved.maxDepth = distance < nearFullDetail ? 255u : (distance < midDetail ? 2u : 1u);
 
             FoliageInstance transform;
-            transform.x = instance.worldX;
-            transform.y = instance.worldY;
-            transform.z = instance.worldZ;
-            transform.scale = instance.scale;
+            transform.x = poseX;
+            transform.y = poseY;
+            transform.z = poseZ;
+            transform.scale = pose.scale.toFloat();
             transform.yaw = instance.yaw;
-            triangles += drawFoliage(rt, mvp, basis, meshes[instance.mesh], transform, resolved);
+            triangles += drawFoliage(rt, mvp, basis, meshes[packet.materialId], transform, resolved);
         }
         return triangles;
     }
@@ -144,10 +192,19 @@ public:
     /** @brief Fold of the ordered key stream: the order is reproducible, so it folds. */
     [[nodiscard]] core::u32 orderFold() const noexcept { return _orderFold; }
 
+    /** @brief Fold of the submitted packet stream WITH its late-latched poses. */
+    [[nodiscard]] core::u32 latchedFold() const noexcept { return _latched.latched_signature; }
+
+    /** @brief Packets the last flush actually submitted. */
+    [[nodiscard]] core::u32 submittedDraws() const noexcept { return _latched.draws; }
+
 private:
     pmr::vector<ScatterInstance> _instances;
     pmr::vector<DrawKey> _keys;
     pmr::vector<DrawKey> _scratch;
+    pmr::vector<Pose> _poses;
+    CommandBuffer _recording;
+    SubmitResult _latched{};
     core::u32 _orderFold{0u};
 };
 

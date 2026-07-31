@@ -65,6 +65,22 @@ public:
     }
 
     void finalize() noexcept { _sealed = true; }
+
+    /**
+     * @brief Unseals and empties the buffer, keeping every byte of its capacity.
+     *
+     * The header was written for a recording that outlives the frame, and that is
+     * still the case it is best at. A scatter pass is the other case: WHAT is on
+     * screen changes every frame, so the packet list is rebuilt — but rebuilt into
+     * the same storage, so the recording path costs no allocation once warm and the
+     * real-time contract survives it. Without this the only way to re-record was a
+     * fresh buffer per frame, which is an allocation per frame.
+     */
+    void reset() noexcept
+    {
+        _commands.clear();
+        _sealed = false;
+    }
     [[nodiscard]] bool sealed() const noexcept { return _sealed; }
     [[nodiscard]] core::u32 count() const noexcept { return static_cast<core::u32>(_commands.size()); }
     [[nodiscard]] const DrawCommand &at(core::u32 i) const { return _commands[i]; }

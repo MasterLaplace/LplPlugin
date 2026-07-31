@@ -31,6 +31,7 @@
 
 #    include <lpl/engine/Config.hpp>
 #    include <lpl/render/HeightfieldPatch.hpp>
+#    include <lpl/render/Irradiance.hpp>
 #    include <lpl/render/Lighting.hpp>
 #    include <lpl/render/MipTexture.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
@@ -70,6 +71,29 @@ public:
     /** @brief Reads the host's presentation choices and builds the grain textures. */
     void configure(const Config &config, const TerrainSurfaceParams &params, core::u32 seed);
 
+    /**
+     * @brief Adopts the look a cartridge asked for: sky, water, time of day.
+     *
+     * Separate from @ref configure because the two answer different questions and
+     * arrive from different places. configure() reads the HOST (what this machine
+     * can afford); this reads the DOCUMENT (what the world looks like). Folding
+     * them into one call would have made the caller choose which of the two owns
+     * the sea level, and the answer is that they own different fields of it.
+     */
+    void applyLook(const render::SkyParams &sky, const render::WaterParams &water, core::f32 dayFraction) noexcept
+    {
+        _skyParams = sky;
+        // The phase is where the ripples HAPPEN to be — state, not content. Keeping
+        // ours means a cartridge load does not jerk the swell back to zero.
+        const core::f32 phase = _water.phase;
+        _water = water;
+        _water.phase = phase;
+        _dayFraction = dayFraction;
+        _sun = render::sunAt(_dayFraction);
+        // The integrated sky is now stale by construction; force one re-projection.
+        _irradianceElevation = -1.0e9f;
+    }
+
     /** @brief Allocates the reflection probe's target once, out of the render path. */
     void attachProbe(core::u32 *colour, core::f32 *depth, core::u32 width, core::u32 height);
 
@@ -85,6 +109,7 @@ public:
     [[nodiscard]] core::u32 shadowChunksPerTick() const noexcept { return _shadowChunksPerTick; }
     [[nodiscard]] core::u32 haze() const noexcept { return _haze; }
     [[nodiscard]] const TerrainSurfaceParams &params() const noexcept { return _params; }
+    [[nodiscard]] const render::IrradianceProbe &irradiance() const noexcept { return _irradiance; }
 
     /** @brief Paints the sky and remembers the haze the terrain fades into. */
     void beginFrame(const render::RenderTarget &rt, const render::CameraBasis &basis) noexcept;
@@ -245,6 +270,16 @@ private:
     TerrainSurfaceParams _params{};
     render::SunState _sun{render::sunAt(0.32f)};
     render::SkyParams _skyParams{};
+    /**
+     * @brief The sky, integrated: refreshed when the sun has actually moved.
+     *
+     * Three hundred and eighty-four sky evaluations is nothing next to a frame, but
+     * it is not nothing next to zero, and the sky only changes when the sun does.
+     * The threshold is what makes this a once-in-a-while cost instead of a per-frame
+     * one, without a flag for the caller to forget to set.
+     */
+    render::IrradianceProbe _irradiance{};
+    core::f32 _irradianceElevation{-1.0e9f};
     render::WaterParams _water{};
     render::MipTexture _grassGrain{};
     render::MipTexture _rockGrain{};

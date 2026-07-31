@@ -34,6 +34,7 @@
 #    include <lpl/engine/TerrainSurface.hpp>
 #    include <lpl/render/ChunkedTerrainView.hpp>
 #    include <lpl/render/HeightfieldPatch.hpp>
+#    include <lpl/physics/Octree.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
 
 namespace lpl::engine {
@@ -56,6 +57,18 @@ struct TerrainDrawParams {
     core::u32 grazerTint{0x00D0A852u};
     core::u32 hunterTint{0x00C03028u};
     core::f32 bodyScale{0.35f}; ///< World units per unit of genome size.
+
+    /**
+     * @brief Cull the resident set through a spatial hierarchy rather than linearly.
+     *
+     * Off is not a fallback, it is the right answer for a small set: below a few
+     * dozen chunks the tree costs a rebuild to save a handful of box projections.
+     * The threshold below is where the hierarchy starts paying, so the flag says
+     * "use the tree when it is worth it", not "use the tree".
+     */
+    bool useSpatialCull{true};
+    core::u32 spatialCullThreshold{48u}; ///< Resident chunks below which the linear
+                                         ///< pass wins outright.
 };
 
 /**
@@ -103,7 +116,27 @@ private:
     core::u32 drawHerd(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp, const ecology::Herd &herd,
                        const TerrainDrawParams &params, GroundAt &&groundAt) const;
 
+    /**
+     * @brief Chooses the visible chunks, through the hierarchy or linearly.
+     *
+     * The two paths drive the SAME @c consider / @c endSelect, so the frustum test,
+     * the ring rule and the ordering exist once. What the tree changes is only which
+     * chunks get tested at all.
+     */
+    void selectChunks(const math::Mat4<core::f32> &mvp, const render::CameraBasis &basis, core::u32 targetWidth,
+                      core::u32 targetHeight, const render::ChunkedViewParams &view, const TerrainDrawParams &params,
+                      core::i32 focusChunkX, core::i32 focusChunkZ, TerrainStreamer &streamer);
+
     render::ChunkedTerrainView _view;
+    /**
+     * @brief The resident chunks, indexed for culling.
+     *
+     * Built with a leaf capacity of FOUR, not the broad-phase default of thirty-two:
+     * a culler tests every object in a surviving leaf individually, so a large leaf
+     * means the hierarchy prunes nothing. At thirty-two, nineteen chunks made one
+     * node and the traversal was the linear scan it was meant to replace.
+     */
+    physics::Octree _chunkIndex{math::AABB<math::Fixed32>{}, 4u};
     core::u32 _triangles{0u};
 };
 

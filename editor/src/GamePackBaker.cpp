@@ -247,6 +247,199 @@ bool parseSceneLiving(const detail::JVal &scene, ecology::LivingRecipe &outLivin
     return true;
 }
 
+bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
+{
+    const detail::JVal *view = scene.find("view");
+    if (view == nullptr || view->t != detail::JVal::T::Obj)
+        return false;
+
+    // The defaults are the ENGINE's, restated here as literals rather than read
+    // from render::SkyParams — this module is the host-side baker and must not
+    // drag in anything that draws, which is the same rule that keeps pack/
+    // readable from ring 0. The numbers are pinned by test-game-pack: a default
+    // that moves on one side and not the other fails there, loudly.
+    pack::ViewV1 wire{};
+    wire.zenithR = 0.20f;
+    wire.zenithG = 0.40f;
+    wire.zenithB = 0.85f;
+    wire.horizonR = 0.70f;
+    wire.horizonG = 0.80f;
+    wire.horizonB = 0.95f;
+    wire.duskR = 1.00f;
+    wire.duskG = 0.45f;
+    wire.duskB = 0.18f;
+    wire.groundR = 0.16f;
+    wire.groundG = 0.17f;
+    wire.groundB = 0.20f;
+    wire.sunSize = 0.9985f;
+    wire.mieStrength = 0.55f;
+    wire.mieSharpness = 8.0f;
+    wire.nightFloor = 0.05f;
+    wire.dayFraction = 0.32f;
+    wire.seaLevel = -1.0f;
+    wire.fogDensity = 0.010f;
+    wire.ambient = 0.28f;
+    wire.grainTiles = 0.25f;
+    wire.shadowSteps = 24u;
+    wire.waterShallow = 0x00246E8Cu;
+    wire.waterDeep = 0x000C1E3Cu;
+    wire.rippleScale = 0.85f;
+    wire.rippleAmplitude = 0.16f;
+    wire.glintPower = 48.0f;
+    wire.depthScale = 0.22f;
+    wire.grazerTint = 0x00D0A852u;
+    wire.hunterTint = 0x00C03028u;
+    wire.bodyScale = 0.35f;
+
+    wire.dayFraction = readF32(*view, "dayFraction", wire.dayFraction);
+    wire.seaLevel = readF32(*view, "seaLevel", wire.seaLevel);
+    wire.fogDensity = readF32(*view, "fogDensity", wire.fogDensity);
+    wire.ambient = readF32(*view, "ambient", wire.ambient);
+    wire.grainTiles = readF32(*view, "grainTiles", wire.grainTiles);
+    wire.shadowSteps = readU32(*view, "shadowSteps", wire.shadowSteps);
+    wire.grazerTint = readU32(*view, "grazerTint", wire.grazerTint);
+    wire.hunterTint = readU32(*view, "hunterTint", wire.hunterTint);
+    wire.bodyScale = readF32(*view, "bodyScale", wire.bodyScale);
+
+    if (const detail::JVal *sky = view->find("sky"); sky != nullptr && sky->t == detail::JVal::T::Obj)
+    {
+        wire.zenithR = readF32(*sky, "zenithR", wire.zenithR);
+        wire.zenithG = readF32(*sky, "zenithG", wire.zenithG);
+        wire.zenithB = readF32(*sky, "zenithB", wire.zenithB);
+        wire.horizonR = readF32(*sky, "horizonR", wire.horizonR);
+        wire.horizonG = readF32(*sky, "horizonG", wire.horizonG);
+        wire.horizonB = readF32(*sky, "horizonB", wire.horizonB);
+        wire.duskR = readF32(*sky, "duskR", wire.duskR);
+        wire.duskG = readF32(*sky, "duskG", wire.duskG);
+        wire.duskB = readF32(*sky, "duskB", wire.duskB);
+        wire.groundR = readF32(*sky, "groundR", wire.groundR);
+        wire.groundG = readF32(*sky, "groundG", wire.groundG);
+        wire.groundB = readF32(*sky, "groundB", wire.groundB);
+        wire.sunSize = readF32(*sky, "sunSize", wire.sunSize);
+        wire.mieStrength = readF32(*sky, "mieStrength", wire.mieStrength);
+        wire.mieSharpness = readF32(*sky, "mieSharpness", wire.mieSharpness);
+        wire.nightFloor = readF32(*sky, "nightFloor", wire.nightFloor);
+    }
+
+    if (const detail::JVal *water = view->find("water"); water != nullptr && water->t == detail::JVal::T::Obj)
+    {
+        wire.waterShallow = readU32(*water, "shallow", wire.waterShallow);
+        wire.waterDeep = readU32(*water, "deep", wire.waterDeep);
+        wire.rippleScale = readF32(*water, "rippleScale", wire.rippleScale);
+        wire.rippleAmplitude = readF32(*water, "rippleAmplitude", wire.rippleAmplitude);
+        wire.glintPower = readF32(*water, "glintPower", wire.glintPower);
+        wire.depthScale = readF32(*water, "depthScale", wire.depthScale);
+    }
+
+    // An ABSENT palette and an EMPTY one are different documents: absent keeps the
+    // host's colours, empty would paint the world black. The flag is what carries
+    // the difference across the wire, so it is only set when the array is there.
+    if (const detail::JVal *palette = view->find("palette");
+        palette != nullptr && palette->t == detail::JVal::T::Arr)
+    {
+        core::u32 count = 0u;
+        for (const detail::JVal &entry : palette->arr)
+        {
+            if (count >= pack::kWireBiomeColours || entry.t != detail::JVal::T::Num)
+                break;
+            wire.biomeColour[count] = static_cast<core::u32>(entry.num);
+            ++count;
+        }
+        wire.biomeColourCount = count;
+        wire.flags |= pack::kViewFlagOverridePalette;
+    }
+
+    outView = wire;
+    return true;
+}
+
+std::string emitSceneView(const pack::ViewV1 &view)
+{
+    std::string out = "{";
+    appendF32(out, "dayFraction", view.dayFraction);
+    out += ',';
+    appendF32(out, "seaLevel", view.seaLevel);
+    out += ',';
+    appendF32(out, "fogDensity", view.fogDensity);
+    out += ',';
+    appendF32(out, "ambient", view.ambient);
+    out += ',';
+    appendF32(out, "grainTiles", view.grainTiles);
+    out += ',';
+    appendU32(out, "shadowSteps", view.shadowSteps);
+    out += ',';
+    appendU32(out, "grazerTint", view.grazerTint);
+    out += ',';
+    appendU32(out, "hunterTint", view.hunterTint);
+    out += ',';
+    appendF32(out, "bodyScale", view.bodyScale);
+
+    out += ",\"sky\":{";
+    appendF32(out, "zenithR", view.zenithR);
+    out += ',';
+    appendF32(out, "zenithG", view.zenithG);
+    out += ',';
+    appendF32(out, "zenithB", view.zenithB);
+    out += ',';
+    appendF32(out, "horizonR", view.horizonR);
+    out += ',';
+    appendF32(out, "horizonG", view.horizonG);
+    out += ',';
+    appendF32(out, "horizonB", view.horizonB);
+    out += ',';
+    appendF32(out, "duskR", view.duskR);
+    out += ',';
+    appendF32(out, "duskG", view.duskG);
+    out += ',';
+    appendF32(out, "duskB", view.duskB);
+    out += ',';
+    appendF32(out, "groundR", view.groundR);
+    out += ',';
+    appendF32(out, "groundG", view.groundG);
+    out += ',';
+    appendF32(out, "groundB", view.groundB);
+    out += ',';
+    appendF32(out, "sunSize", view.sunSize);
+    out += ',';
+    appendF32(out, "mieStrength", view.mieStrength);
+    out += ',';
+    appendF32(out, "mieSharpness", view.mieSharpness);
+    out += ',';
+    appendF32(out, "nightFloor", view.nightFloor);
+    out += '}';
+
+    out += ",\"water\":{";
+    appendU32(out, "shallow", view.waterShallow);
+    out += ',';
+    appendU32(out, "deep", view.waterDeep);
+    out += ',';
+    appendF32(out, "rippleScale", view.rippleScale);
+    out += ',';
+    appendF32(out, "rippleAmplitude", view.rippleAmplitude);
+    out += ',';
+    appendF32(out, "glintPower", view.glintPower);
+    out += ',';
+    appendF32(out, "depthScale", view.depthScale);
+    out += '}';
+
+    if ((view.flags & pack::kViewFlagOverridePalette) != 0u)
+    {
+        out += ",\"palette\":[";
+        const core::u32 count =
+            view.biomeColourCount > pack::kWireBiomeColours ? pack::kWireBiomeColours : view.biomeColourCount;
+        for (core::u32 i = 0u; i < count; ++i)
+        {
+            if (i != 0u)
+                out += ',';
+            out += std::to_string(view.biomeColour[i]);
+        }
+        out += ']';
+    }
+
+    out += '}';
+    return out;
+}
+
 core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRecipe &outRecipe)
 {
     detail::Parser parser{document, 0, true};
@@ -812,19 +1005,27 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe) { return 
 
 std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const ecology::LivingRecipe *living)
 {
+    return bakeGamePack(recipe, living, nullptr);
+}
+
+std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const ecology::LivingRecipe *living,
+                                   const pack::ViewV1 *view)
+{
     const pack::RecipeV1 wire = pack::toWireRecipe(recipe);
 
-    // One section or two. A world with nothing declared living on it stays a
-    // one-section pack, byte for byte what it was before this existed — which is
-    // what keeps every cartridge baked so far valid, and the parity gate's own
-    // image unchanged.
-    const core::u32 sectionCount = living != nullptr ? 2u : 1u;
+    // One, two or three sections. A world with nothing declared living on it and no
+    // stated look stays a one-section pack, byte for byte what this function
+    // produced before either existed — which is what keeps every cartridge baked so
+    // far valid, and the parity gate's own image unchanged. That property is why
+    // sections are the extension mechanism and a grown RecipeV1 is not.
+    const core::u32 sectionCount = 1u + (living != nullptr ? 1u : 0u) + (view != nullptr ? 1u : 0u);
     constexpr core::u32 kHeaderBytes = static_cast<core::u32>(sizeof(pack::Header));
     const core::u32 tableBytes = sectionCount * static_cast<core::u32>(sizeof(pack::SectionEntry));
     const core::u32 recipeOffset = kHeaderBytes + tableBytes;
     const core::u32 livingOffset = recipeOffset + static_cast<core::u32>(sizeof(pack::RecipeV1));
-    const core::u32 totalSize =
+    const core::u32 viewOffset =
         livingOffset + (living != nullptr ? static_cast<core::u32>(sizeof(pack::LivingV1)) : 0u);
+    const core::u32 totalSize = viewOffset + (view != nullptr ? static_cast<core::u32>(sizeof(pack::ViewV1)) : 0u);
 
     // Build the content first: the header carries a hash over everything that
     // follows it, so it can only be finalised once the content exists.
@@ -848,10 +1049,22 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
         appendPod(content, livingEntry);
     }
 
+    if (view != nullptr)
+    {
+        pack::SectionEntry viewEntry{};
+        viewEntry.type = static_cast<core::u32>(pack::SectionType::ViewProfile);
+        viewEntry.offset = viewOffset;
+        viewEntry.size = static_cast<core::u32>(sizeof(pack::ViewV1));
+        viewEntry.reserved = 0u;
+        appendPod(content, viewEntry);
+    }
+
     // Payloads in table order, so an offset is always ahead of the entry naming it.
     appendPod(content, wire);
     if (living != nullptr)
         appendPod(content, pack::toWireLiving(*living));
+    if (view != nullptr)
+        appendPod(content, *view);
 
     pack::Header header{};
     std::memcpy(header.magic, "LPLPAK\0\0", pack::kMagicSize);
@@ -878,7 +1091,8 @@ core::Expected<std::vector<core::u8>> bakeSceneDocument(std::string_view documen
     {
         const SceneDescription *scene = game->startScene();
         if (scene != nullptr && scene->hasRecipe)
-            return bakeGamePack(scene->recipe, scene->hasLiving ? &scene->living : nullptr);
+            return bakeGamePack(scene->recipe, scene->hasLiving ? &scene->living : nullptr,
+                                scene->hasView ? &scene->view : nullptr);
     }
 
     procgen::WorldRecipe recipe{};

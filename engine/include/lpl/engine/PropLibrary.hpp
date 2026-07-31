@@ -130,6 +130,10 @@ public:
 
     [[nodiscard]] const PropLibraryParams &params() const noexcept { return _params; }
 
+    /** @brief Packets the last flush submitted, and the fold of that stream. */
+    [[nodiscard]] core::u32 submittedDraws() const noexcept { return _queue.submittedDraws(); }
+    [[nodiscard]] core::u32 latchedFold() const noexcept { return _queue.latchedFold(); }
+
 private:
     static constexpr core::u32 kMaxSpecies = 4u;
     static constexpr core::u32 kMaxVariants = 4u;

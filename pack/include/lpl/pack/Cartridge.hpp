@@ -48,6 +48,17 @@ struct Cartridge {
     CartridgeSource source{CartridgeSource::Defaults};
     bool livingFromPack{false}; ///< False when the pack declared no ecosystem.
     bool failed{false};         ///< A pack was offered and did not validate.
+
+    /**
+     * @brief The view profile, still in wire form.
+     *
+     * Left undecoded here on purpose. Translating it needs render::SkyParams and
+     * render::WaterParams, and this module is read by ring 0 precisely because it
+     * depends on nothing that draws. engine::toEngineView does the translation, on
+     * the side of the fence that already knows what a sky is.
+     */
+    ViewV1 view{};
+    bool viewFromPack{false}; ///< False when the pack said nothing about looks.
 };
 
 /**
@@ -99,6 +110,13 @@ struct Cartridge {
     {
         out.living = toEngineLiving(livingWire);
         out.livingFromPack = true;
+    }
+
+    ViewV1 viewWire{};
+    if (view.readView(viewWire))
+    {
+        out.view = viewWire;
+        out.viewFromPack = true;
     }
     return out;
 }

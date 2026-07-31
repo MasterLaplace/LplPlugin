@@ -377,3 +377,33 @@ target("test-procgen-chunking")
     add_deps("lpl-core", "lpl-math", "lpl-procgen")
     add_files("parity/test_procgen_chunking.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Octree: the hierarchy must agree with its own node bounds (cull invariant)
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-octree-cull")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-physics")
+    add_files("parity/test_octree_cull.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Diffuse image-based lighting: the ambient term must depend on the normal
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-irradiance")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-render")
+    add_files("parity/test_irradiance.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- View profile: a world's look as content, document -> pack -> engine
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-view-profile")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-ecology", "lpl-pack", "lpl-editor", "lpl-engine")
+    add_files("parity/test_view_profile.cpp")
+target_end()

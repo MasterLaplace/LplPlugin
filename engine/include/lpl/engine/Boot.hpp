@@ -30,6 +30,7 @@
 #    include <lpl/engine/ConfigValidation.hpp>
 #    include <lpl/engine/Engine.hpp>
 #    include <lpl/engine/HostProfile.hpp>
+#    include <lpl/engine/ViewProfile.hpp>
 #    include <lpl/engine/World.hpp>
 #    include <lpl/pack/Cartridge.hpp>
 #    include <lpl/platform/IPlatform.hpp>
@@ -64,6 +65,7 @@ struct BootResult {
     pack::CartridgeSource source{pack::CartridgeSource::Defaults};
     bool packFailed{false};
     core::u32 configWarnings{0u}; ///< Inconsistencies the config check reported.
+    bool viewFromPack{false};     ///< The pack said what the world looks like.
 };
 
 /**
@@ -71,7 +73,10 @@ struct BootResult {
  *
  * @param request  What kind of host this is and where the game bytes are.
  * @param platform The platform seam (kernel HAL, Linux, …), moved in.
- * @param makeWorld Factory: given the decoded recipes, returns the World to run.
+ * @param makeWorld Factory: (WorldRecipe, LivingRecipe, ViewProfile) -> World. The
+ *                 view profile is passed even when the pack declared none, holding
+ *                 the engine's defaults — a factory that had to test a flag would
+ *                 have every game re-implement the same fallback.
  * @param tune     Optional last word on the Config, applied after the profile —
  *                 so a host can override one budget without restating forty.
  */
@@ -97,6 +102,18 @@ BootResult bootGame(const BootRequest &request, pmr::unique_ptr<platform::IPlatf
     if (cartridge.livingFromPack)
         core::Log::info("Boot: ecosystem decoded from the pack");
 
+    // The look is the third thing a document can carry, and the only one that has
+    // to be TRANSLATED here rather than in pack/: turning it into a sky needs
+    // render types, and pack/ is read by ring 0 precisely because it depends on
+    // nothing that draws.
+    ViewProfile view{};
+    if (cartridge.viewFromPack)
+    {
+        view = toEngineView(cartridge.view);
+        result.viewFromPack = true;
+        core::Log::info("Boot: view profile decoded from the pack");
+    }
+
     Config::Builder builder;
     builder.tickRate(request.tickRate);
     applyHostProfile(builder, request.host);
@@ -110,7 +127,7 @@ BootResult bootGame(const BootRequest &request, pmr::unique_ptr<platform::IPlatf
     // only place the check cannot be forgotten.
     result.configWarnings = forEachConfigWarning(config, [](const char *message) { core::Log::warn(message); });
 
-    Engine engine{config, std::move(platform), makeWorld(cartridge.recipe, cartridge.living)};
+    Engine engine{config, std::move(platform), makeWorld(cartridge.recipe, cartridge.living, view)};
 
     if (auto initialised = engine.init(); !initialised)
     {

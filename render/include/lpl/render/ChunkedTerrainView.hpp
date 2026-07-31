@@ -68,6 +68,8 @@ struct ChunkedViewStats {
     core::u32 drawn{0u};
     core::u32 culled{0u};
     core::u32 triangles{0u};
+    core::u32 nodesVisited{0u}; ///< Hierarchy nodes tested; 0 on a linear pass.
+    core::u32 nodesPruned{0u};  ///< Subtrees rejected whole; the point of the tree.
 };
 
 /**
@@ -83,49 +85,57 @@ public:
     [[nodiscard]] const ChunkedViewStats &stats() const noexcept { return _stats; }
 
     /**
-     * @brief Selects the chunks worth drawing and orders them nearest first.
+     * @brief Opens a selection pass. Empties the list, keeps its capacity.
      *
-     * @param count   Chunks in the resident set.
-     * @param coordOf (index, outChunkX, outChunkZ) -> void.
+     * The pass is split into three calls rather than one loop because WHICH chunks
+     * are worth testing is not this class's business: a resident set of a few dozen
+     * is best walked linearly, and a large one is best walked through a spatial
+     * hierarchy that rejects whole subtrees. Both drive the same @ref consider and
+     * the same @ref endSelect, so the cull test, the ring rule and the ordering
+     * exist once whichever way the candidates arrive.
      */
-    template <typename CoordOf>
-    void select(const math::Mat4<core::f32> &mvp, const math::Vec3<core::f32> &eye, core::u32 targetWidth,
-                core::u32 targetHeight, const ChunkedViewParams &params, core::i32 focusChunkX, core::i32 focusChunkZ,
-                core::u32 count, CoordOf &&coordOf)
+    void beginSelect() noexcept
     {
         _visible.clear();
         _stats = ChunkedViewStats{};
+    }
+
+    /**
+     * @brief Tests one candidate chunk and keeps it if it is on screen.
+     * @return true if the chunk survived the frustum test.
+     */
+    bool consider(const math::Mat4<core::f32> &mvp, const math::Vec3<core::f32> &eye, core::u32 targetWidth,
+                  core::u32 targetHeight, const ChunkedViewParams &params, core::i32 focusChunkX,
+                  core::i32 focusChunkZ, core::u32 index, core::i32 chunkX, core::i32 chunkZ)
+    {
         const core::f32 span = static_cast<core::f32>(params.chunkSize);
         const core::f32 half = span * 0.5f;
+        const core::f32 centreX = static_cast<core::f32>(chunkX) * span + half;
+        const core::f32 centreZ = static_cast<core::f32>(chunkZ) * span + half;
+        ++_stats.considered;
 
-        for (core::u32 index = 0u; index < count; ++index)
+        if (boxOutsideFrustum(mvp, centreX, params.centreY, centreZ, half, params.halfHeight, half, targetWidth,
+                              targetHeight))
         {
-            core::i32 chunkX = 0;
-            core::i32 chunkZ = 0;
-            coordOf(index, chunkX, chunkZ);
-
-            const core::f32 centreX = static_cast<core::f32>(chunkX) * span + half;
-            const core::f32 centreZ = static_cast<core::f32>(chunkZ) * span + half;
-            ++_stats.considered;
-
-            if (boxOutsideFrustum(mvp, centreX, params.centreY, centreZ, half, params.halfHeight, half, targetWidth,
-                                  targetHeight))
-            {
-                ++_stats.culled;
-                continue;
-            }
-
-            const core::i32 dx = chunkX - focusChunkX;
-            const core::i32 dz = chunkZ - focusChunkZ;
-            const core::i32 ax = dx < 0 ? -dx : dx;
-            const core::i32 az = dz < 0 ? -dz : dz;
-            VisibleChunkRef ref;
-            ref.index = index;
-            ref.distance = approximateLength(centreX - eye.x, centreZ - eye.z);
-            ref.ring = ax > az ? ax : az;
-            _visible.push_back(ref);
+            ++_stats.culled;
+            return false;
         }
 
+        const core::i32 dx = chunkX - focusChunkX;
+        const core::i32 dz = chunkZ - focusChunkZ;
+        const core::i32 ax = dx < 0 ? -dx : dx;
+        const core::i32 az = dz < 0 ? -dz : dz;
+        VisibleChunkRef ref;
+        ref.index = index;
+        ref.distance = approximateLength(centreX - eye.x, centreZ - eye.z);
+        ref.ring = ax > az ? ax : az;
+        _visible.push_back(ref);
+        return true;
+    }
+
+    /** @brief Closes the pass: orders the survivors nearest first. */
+    void endSelect() noexcept
+    {
         for (core::u32 i = 1u; i < _visible.size(); ++i)
         {
             const VisibleChunkRef key = _visible[i];
@@ -138,6 +148,37 @@ public:
             _visible[j] = key;
         }
         _stats.drawn = static_cast<core::u32>(_visible.size());
+    }
+
+    /** @brief Records how the hierarchy did, for a caller that used one. */
+    void noteHierarchy(core::u32 nodesVisited, core::u32 nodesPruned) noexcept
+    {
+        _stats.nodesVisited = nodesVisited;
+        _stats.nodesPruned = nodesPruned;
+    }
+
+    /**
+     * @brief Selects the chunks worth drawing and orders them nearest first.
+     *
+     * The linear pass: every resident chunk is a candidate.
+     *
+     * @param count   Chunks in the resident set.
+     * @param coordOf (index, outChunkX, outChunkZ) -> void.
+     */
+    template <typename CoordOf>
+    void select(const math::Mat4<core::f32> &mvp, const math::Vec3<core::f32> &eye, core::u32 targetWidth,
+                core::u32 targetHeight, const ChunkedViewParams &params, core::i32 focusChunkX, core::i32 focusChunkZ,
+                core::u32 count, CoordOf &&coordOf)
+    {
+        beginSelect();
+        for (core::u32 index = 0u; index < count; ++index)
+        {
+            core::i32 chunkX = 0;
+            core::i32 chunkZ = 0;
+            coordOf(index, chunkX, chunkZ);
+            consider(mvp, eye, targetWidth, targetHeight, params, focusChunkX, focusChunkZ, index, chunkX, chunkZ);
+        }
+        endSelect();
     }
 
     /** @brief Sampling stride for a ring, capped by the host's ring count. */

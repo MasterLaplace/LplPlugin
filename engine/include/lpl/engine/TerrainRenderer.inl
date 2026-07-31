@@ -15,6 +15,89 @@
 
 namespace lpl::engine {
 
+inline void TerrainRenderer::selectChunks(const math::Mat4<core::f32> &mvp, const render::CameraBasis &basis,
+                                          core::u32 targetWidth, core::u32 targetHeight,
+                                          const render::ChunkedViewParams &view, const TerrainDrawParams &params,
+                                          core::i32 focusChunkX, core::i32 focusChunkZ, TerrainStreamer &streamer)
+{
+    const core::u32 count = streamer.size();
+    const core::f32 span = static_cast<core::f32>(view.chunkSize);
+
+    if (!params.useSpatialCull || count < params.spatialCullThreshold)
+    {
+        _view.select(mvp, basis.eye, targetWidth, targetHeight, view, focusChunkX, focusChunkZ, count,
+                     [&streamer](core::u32 index, core::i32 &outX, core::i32 &outZ) {
+                         outX = streamer.at(index).coord.x;
+                         outZ = streamer.at(index).coord.z;
+                     });
+        return;
+    }
+
+    // The tree's bounds are the resident set's own extent, recomputed each frame:
+    // a streamed world slides, and bounds pinned at the origin would spend the whole
+    // key range on space that holds nothing.
+    core::i32 minChunkX = streamer.at(0u).coord.x;
+    core::i32 maxChunkX = minChunkX;
+    core::i32 minChunkZ = streamer.at(0u).coord.z;
+    core::i32 maxChunkZ = minChunkZ;
+    for (core::u32 i = 1u; i < count; ++i)
+    {
+        const auto &coord = streamer.at(i).coord;
+        minChunkX = coord.x < minChunkX ? coord.x : minChunkX;
+        maxChunkX = coord.x > maxChunkX ? coord.x : maxChunkX;
+        minChunkZ = coord.z < minChunkZ ? coord.z : minChunkZ;
+        maxChunkZ = coord.z > maxChunkZ ? coord.z : maxChunkZ;
+    }
+
+    const auto worldFixed = [](core::f32 v) { return math::Fixed32::fromFloat(v); };
+    const core::f32 lowY = params.chunkCentreY - params.chunkHalfHeight;
+    const core::f32 highY = params.chunkCentreY + params.chunkHalfHeight;
+    _chunkIndex.clear();
+    _chunkIndex.setWorldBounds(math::AABB<math::Fixed32>{
+        math::Vec3<math::Fixed32>{worldFixed(static_cast<core::f32>(minChunkX) * span), worldFixed(lowY),
+                                  worldFixed(static_cast<core::f32>(minChunkZ) * span)},
+        math::Vec3<math::Fixed32>{worldFixed(static_cast<core::f32>(maxChunkX + 1) * span), worldFixed(highY),
+                                  worldFixed(static_cast<core::f32>(maxChunkZ + 1) * span)}});
+
+    for (core::u32 i = 0u; i < count; ++i)
+    {
+        const auto &coord = streamer.at(i).coord;
+        const core::f32 x0 = static_cast<core::f32>(coord.x) * span;
+        const core::f32 z0 = static_cast<core::f32>(coord.z) * span;
+        _chunkIndex.insert(i, math::AABB<math::Fixed32>{
+                                  math::Vec3<math::Fixed32>{worldFixed(x0), worldFixed(lowY), worldFixed(z0)},
+                                  math::Vec3<math::Fixed32>{worldFixed(x0 + span), worldFixed(highY),
+                                                            worldFixed(z0 + span)}});
+    }
+    _chunkIndex.rebuild();
+
+    // The node test is the SAME projection the chunks use, applied to a node's box.
+    // A view volume is not an AABB, so querying its bounding box would hand back most
+    // of the world whenever the camera is pitched; rejecting a node instead prunes a
+    // whole subtree, which is the only thing a hierarchy is worth having for.
+    core::u32 nodesVisited = 0u;
+    core::u32 nodesPruned = 0u;
+    _view.beginSelect();
+    _chunkIndex.queryVisible(
+        [&](const math::AABB<math::Fixed32> &bound) {
+            const core::f32 cx = (bound.min.x.toFloat() + bound.max.x.toFloat()) * 0.5f;
+            const core::f32 cy = (bound.min.y.toFloat() + bound.max.y.toFloat()) * 0.5f;
+            const core::f32 cz = (bound.min.z.toFloat() + bound.max.z.toFloat()) * 0.5f;
+            const core::f32 hx = (bound.max.x.toFloat() - bound.min.x.toFloat()) * 0.5f;
+            const core::f32 hy = (bound.max.y.toFloat() - bound.min.y.toFloat()) * 0.5f;
+            const core::f32 hz = (bound.max.z.toFloat() - bound.min.z.toFloat()) * 0.5f;
+            return !render::boxOutsideFrustum(mvp, cx, cy, cz, hx, hy, hz, targetWidth, targetHeight);
+        },
+        [&](core::u32 index) {
+            const auto &coord = streamer.at(index).coord;
+            _view.consider(mvp, basis.eye, targetWidth, targetHeight, view, focusChunkX, focusChunkZ, index, coord.x,
+                           coord.z);
+        },
+        &nodesVisited, &nodesPruned);
+    _view.endSelect();
+    _view.noteHierarchy(nodesVisited, nodesPruned);
+}
+
 template <typename Palette, typename GroundAt>
 core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const render::OrbitCamera &camera,
                                         TerrainStreamer &streamer, TerrainSurface &surface, const PropLibrary &props,
@@ -52,11 +135,7 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
     viewParams.skirtDrop = params.skirtDrop;
 
     props.beginFrame();
-    _view.select(mvp, basis.eye, rt.width, rt.height, viewParams, focusChunkX, focusChunkZ, streamer.size(),
-                 [&streamer](core::u32 index, core::i32 &outX, core::i32 &outZ) {
-                     outX = streamer.at(index).coord.x;
-                     outZ = streamer.at(index).coord.z;
-                 });
+    selectChunks(mvp, basis, rt.width, rt.height, viewParams, params, focusChunkX, focusChunkZ, streamer);
 
     // ONCE per frame, after the visible set is known and before the ground is drawn.
     // It was called twice for a while, which rendered the mirrored world for nothing

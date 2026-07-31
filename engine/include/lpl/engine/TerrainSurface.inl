@@ -58,6 +58,19 @@ inline void TerrainSurface::beginFrame(const render::RenderTarget &rt, const ren
 {
     render::drawSky(rt, basis, _sun, _skyParams, 0.5773502692f, _skyBlock);
     _haze = render::hazeTint(basis, _sun, _skyParams);
+
+    // Re-integrate the sky only when the sun has moved enough to change it. A day
+    // that advances by a thousandth per frame would otherwise pay for a projection
+    // to get back a probe indistinguishable from the last one.
+    if (_physicallyBased)
+    {
+        const core::f32 drift = _sun.elevation - _irradianceElevation;
+        if (drift > 0.01f || drift < -0.01f)
+        {
+            _irradiance = render::projectSky(_sun, _skyParams);
+            _irradianceElevation = _sun.elevation;
+        }
+    }
 }
 
 inline core::u32 TerrainSurface::shade(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
@@ -102,17 +115,22 @@ inline core::u32 TerrainSurface::shadePhysical(core::f32 worldX, core::f32 world
     sun.color = render::Vec3f(1.0f, 0.96f, 0.89f);
     sun.intensity = 2.6f * _sun.intensity * (1.0f - occlusion);
 
-    // The environment term carries the whole shaded side of the world, so it
-    // cannot be a token value: at 0.35 the slopes facing away came out black,
-    // because ACES maps a small radiance to a smaller one.
-    const core::u32 zenith = render::skyColour(0.0f, 1.0f, 0.0f, _sun, _skyParams);
-    constexpr core::f32 kSkyIrradiance = 1.15f;
-    const render::Vec3f ambient(static_cast<core::f32>((zenith >> 16) & 0xFFu) / 255.0f * kSkyIrradiance,
-                                static_cast<core::f32>((zenith >> 8) & 0xFFu) / 255.0f * kSkyIrradiance,
-                                static_cast<core::f32>(zenith & 0xFFu) / 255.0f * kSkyIrradiance);
-
     const core::f32 inverse = render::inverseSqrtNewton(nx * nx + 1.0f + nz * nz);
     const render::Vec3f normal(nx * inverse, inverse, nz * inverse);
+
+    // The environment term carries the whole shaded side of the world, so it cannot
+    // be a token value: at 0.35 the slopes facing away came out black, because ACES
+    // maps a small radiance to a smaller one.
+    //
+    // It used to be the sky read STRAIGHT UP — one colour for every normal, which
+    // made a slope facing the sunset and a slope facing away from it receive the
+    // same ambient. Now it is the sky integrated over the hemisphere the normal
+    // actually sees, so the two differ by exactly what the sky differs by.
+    constexpr core::f32 kSkyIrradiance = 1.15f;
+    render::Vec3f ambient = render::evaluateIrradiance(_irradiance, normal.x, normal.y, normal.z);
+    ambient.x *= kSkyIrradiance;
+    ambient.y *= kSkyIrradiance;
+    ambient.z *= kSkyIrradiance;
     const render::Vec3f fragment(worldX, _params.seaLevel, worldZ);
     const core::u32 shaded =
         render::pbrShadeToRgb(material, &sun, 1u, normal, fragment, basis.eye, ambient, render::ToneMap::Aces);

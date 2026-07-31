@@ -39,6 +39,7 @@
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/ecology/LivingRecipe.hpp>
+#    include <lpl/pack/GamePack.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
 #    include <string>
@@ -107,6 +108,10 @@ struct SceneDescription {
 
     bool hasLiving{false};          ///< Does the scene declare an ecosystem?
     ecology::LivingRecipe living{}; ///< Food web, herd and stigmergy, when hasLiving.
+
+    bool hasView{false};  ///< Does the scene say what it LOOKS like?
+    pack::ViewV1 view{};  ///< Sky, water, palette and time of day, when hasView.
+                          ///< Wire form: engine::toEngineView turns it into a sky.
 
     std::string templatesJson; ///< Prefab table, as JSON text ("{}" when absent).
     std::string entitiesJson;  ///< Explicit instances, as JSON text ("[]" when absent).

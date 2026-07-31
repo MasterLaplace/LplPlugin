@@ -93,13 +93,46 @@ struct Octree::Impl {
     //  Morton computation                                                    //
     // ────────────────────────────────────────────────────────────────────── //
 
+    /** @brief Grid resolution of the key: 21 bits per axis, as part1by2 allows. */
+    static constexpr core::u32 kGridBits = 21u;
+    static constexpr core::u64 kGridSize = 1ull << kGridBits;
+
+    /**
+     * @brief The centre of an AABB, as a Morton key over THIS TREE'S bounds.
+     *
+     * Two defects lived here, and they compounded. The key was built with
+     * @c encode3D, which adds @c kMortonBias itself, on top of a bias this
+     * function had already added — the sum wrapped the 21-bit field, so the key's
+     * high bits were noise. And even unwrapped, the grid was absolute world units
+     * biased around the origin, whereas @ref recurseBuild reads bit (20 - depth)
+     * as the octant of a node that subdivides @c worldBounds. The two disagreed
+     * unless the world happened to be the 2^21-unit cube centred on the origin,
+     * which no caller's is. An entity therefore landed in a node whose bounds did
+     * not contain it, and a frustum cull that trusted node bounds returned
+     * thirty-one payloads for eighteen visible chunks.
+     *
+     * The key is now the position NORMALISED to the tree's own bounds, so bit
+     * (20 - depth) of the key is, by construction, the octant of the node at that
+     * depth. Integer arithmetic throughout — the ratio is a u64 divide of Q16.16
+     * raws, identical on the host and on i686, so the sorted order (and every
+     * signature that depends on collision order) is reproducible.
+     */
     [[nodiscard]] core::u64 computeMorton(const math::AABB<math::Fixed32> &aabb) const
     {
         const auto c = aabb.center();
-        const auto toGrid = [](math::Fixed32 v) -> core::i32 {
-            return v.toInt() + static_cast<core::i32>(core::kMortonBias);
+        const auto axis = [](math::Fixed32 v, math::Fixed32 lo, math::Fixed32 hi) -> core::u32 {
+            const core::i64 extent = static_cast<core::i64>(hi.raw()) - static_cast<core::i64>(lo.raw());
+            if (extent <= 0)
+                return 0u;
+            const core::i64 delta = static_cast<core::i64>(v.raw()) - static_cast<core::i64>(lo.raw());
+            if (delta <= 0)
+                return 0u;
+            const core::u64 scaled = (static_cast<core::u64>(delta) * kGridSize) / static_cast<core::u64>(extent);
+            return static_cast<core::u32>(scaled >= kGridSize ? kGridSize - 1u : scaled);
         };
-        return math::morton::encode3D(toGrid(c.x), toGrid(c.y), toGrid(c.z));
+        return math::morton::encode3DGrid(axis(c.x, worldBounds.min.x, worldBounds.max.x),
+                                          axis(c.y, worldBounds.min.y, worldBounds.max.y),
+                                          axis(c.z, worldBounds.min.z, worldBounds.max.z));
     }
 
     // ────────────────────────────────────────────────────────────────────── //
@@ -200,6 +233,14 @@ struct Octree::Impl {
         const core::u32 firstChildIdx = static_cast<core::u32>(nodes.size());
         nodes.resize(firstChildIdx + 8);
         nodes[nodeIdx].firstChild = static_cast<core::i32>(firstChildIdx);
+        // An interior node holds NOTHING: its objects now live in its children. The
+        // root was seeded with the whole set before this walk, and leaving that count
+        // in place made every traversal visit each object twice — once at the root
+        // and once in its leaf. Harmless-looking in a broad-phase, where a duplicate
+        // pair is merely redundant work; fatal to a cull, which returns the payload
+        // to the caller and doubled the visible set.
+        nodes[nodeIdx].entityStart = start;
+        nodes[nodeIdx].entityCount = 0u;
 
         const auto &parentBound = nodes[nodeIdx].bound;
         const auto center = parentBound.center();
@@ -482,6 +523,14 @@ void Octree::clear() noexcept
         slot = Impl::kNoIndex;
     _impl->dirty = false;
 }
+
+void Octree::setWorldBounds(const math::AABB<math::Fixed32> &worldBounds) noexcept
+{
+    _impl->worldBounds = worldBounds;
+    _impl->dirty = true;
+}
+
+const math::AABB<math::Fixed32> &Octree::worldBounds() const noexcept { return _impl->worldBounds; }
 
 core::u32 Octree::count() const noexcept { return static_cast<core::u32>(_impl->sortedEntries.size()); }
 

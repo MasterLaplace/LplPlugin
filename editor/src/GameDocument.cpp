@@ -191,6 +191,8 @@ SceneDescription parseScene(const detail::JVal &object, std::string defaultName)
     // whole document.
     if (parseSceneLiving(object, scene.living))
         scene.hasLiving = true;
+    if (parseSceneView(object, scene.view))
+        scene.hasView = true;
 
     scene.templatesJson = subDocumentOr(object, "templates", "{}");
     scene.entitiesJson = subDocumentOr(object, "entities", "[]");
@@ -342,6 +344,8 @@ std::string emitGameDocument(const GameDocument &document)
             out += ",\"procedural\":" + emitSceneRecipe(scene.recipe);
         if (scene.hasLiving)
             out += ",\"living\":" + emitSceneLiving(scene.living);
+        if (scene.hasView)
+            out += ",\"view\":" + emitSceneView(scene.view);
 
         out += ",\"templates\":" + scene.templatesJson;
         out += ",\"entities\":" + scene.entitiesJson;
