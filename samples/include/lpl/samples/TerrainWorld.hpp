@@ -1522,9 +1522,9 @@ private:
         }
         else if (_pointerPackets == 0u && _frames == 240u)
         {
-            core::Log::info(context.platform.input().pointerInterruptCount() != 0u
-                                ? "pointer: interrupts arrive but no packet is assembled"
-                                : "pointer: no interrupt from the device at all");
+            core::Log::info(context.platform.input().pointerInterruptCount() != 0u ?
+                                "pointer: interrupts arrive but no packet is assembled" :
+                                "pointer: no interrupt from the device at all");
         }
 
         // Turning goes to the BODY when there is one, because the heading picks the

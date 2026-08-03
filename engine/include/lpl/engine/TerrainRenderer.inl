@@ -189,8 +189,8 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
             core::u32 triangles = render::drawHeightfieldPatch(
                 target, matrix, patch, sun, heightAt, shadeAt,
                 [&chunk, &palette, patchSize](core::u32 x, core::u32 z) {
-                    return palette(chunk.biomes.at(x < patchSize ? x : patchSize - 1u,
-                                                   z < patchSize ? z : patchSize - 1u));
+                    return palette(
+                        chunk.biomes.at(x < patchSize ? x : patchSize - 1u, z < patchSize ? z : patchSize - 1u));
                 },
                 [&](core::f32 wx, core::f32 wz, core::u32 base, core::f32 lit, core::f32 nx, core::f32 nz,
                     core::f32 occlusion) { return surface.shadeSurface(wx, wz, base, lit, nx, nz, occlusion, basis); },

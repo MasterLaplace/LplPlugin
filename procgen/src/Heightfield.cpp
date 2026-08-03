@@ -79,19 +79,19 @@ math::Fixed32 sampleNoiseAt(core::i32 worldX, core::i32 worldZ, const NoiseParam
     case NoiseKind::Ridged:
         // Ridged and billow both return [0, 1); recentre them so a layer's mean
         // stays near zero and layering one over another does not drift upward.
-        return base + shapeTerrainValue((ValueNoise2D::ridged(nx, nz, params.octaves, params.seed, lacunarity,
-                                                              persistence) -
-                                         math::Fixed32::half()) *
-                                            math::Fixed32::fromInt(2),
-                                        params) *
-                          amplitude;
+        return base +
+               shapeTerrainValue((ValueNoise2D::ridged(nx, nz, params.octaves, params.seed, lacunarity, persistence) -
+                                  math::Fixed32::half()) *
+                                     math::Fixed32::fromInt(2),
+                                 params) *
+                   amplitude;
     case NoiseKind::Billow:
-        return base + shapeTerrainValue((ValueNoise2D::billow(nx, nz, params.octaves, params.seed, lacunarity,
-                                                              persistence) -
-                                         math::Fixed32::half()) *
-                                            math::Fixed32::fromInt(2),
-                                        params) *
-                          amplitude;
+        return base +
+               shapeTerrainValue((ValueNoise2D::billow(nx, nz, params.octaves, params.seed, lacunarity, persistence) -
+                                  math::Fixed32::half()) *
+                                     math::Fixed32::fromInt(2),
+                                 params) *
+                   amplitude;
     case NoiseKind::Fbm: break;
     }
     return base +
