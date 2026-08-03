@@ -33,6 +33,7 @@
 #    include <lpl/engine/TerrainStreamer.hpp>
 #    include <lpl/engine/TerrainSurface.hpp>
 #    include <lpl/physics/Octree.hpp>
+#    include <lpl/platform/IClockBackend.hpp>
 #    include <lpl/render/ChunkedTerrainView.hpp>
 #    include <lpl/render/HeightfieldPatch.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
@@ -93,6 +94,32 @@ public:
     [[nodiscard]] core::u32 lastTriangles() const noexcept { return _triangles; }
 
     /**
+     * @brief Gives the pass a clock, so it can say WHERE a frame goes.
+     *
+     * Optional: with no clock every counter stays at zero and the pass is unchanged.
+     * It exists because "the scene costs seventy-five percent of the frame" is not
+     * an actionable statement — sky, ground, water, props and bodies are five
+     * different fixes, and guessing which one dominates is how an afternoon goes
+     * into the wrong one. Measured twice already on this project, wrong twice.
+     */
+    void setClock(platform::IClockBackend *clock) noexcept { _clock = clock; }
+
+    [[nodiscard]] core::u64 skyCycles() const noexcept { return _skyCycles; }
+    [[nodiscard]] core::u64 groundCycles() const noexcept { return _groundCycles; }
+    [[nodiscard]] core::u64 waterCycles() const noexcept { return _waterCycles; }
+    [[nodiscard]] core::u64 propCycles() const noexcept { return _propCycles; }
+    [[nodiscard]] core::u64 herdCycles() const noexcept { return _herdCycles; }
+
+    void resetPhaseCounters() noexcept
+    {
+        _skyCycles = 0u;
+        _groundCycles = 0u;
+        _waterCycles = 0u;
+        _propCycles = 0u;
+        _herdCycles = 0u;
+    }
+
+    /**
      * @brief Draws the streamed world around the camera.
      *
      * @param palette (BiomeId) -> packed colour.
@@ -136,6 +163,16 @@ private:
     void selectChunks(const math::Mat4<core::f32> &mvp, const render::CameraBasis &basis, core::u32 targetWidth,
                       core::u32 targetHeight, const render::ChunkedViewParams &view, const TerrainDrawParams &params,
                       core::i32 focusChunkX, core::i32 focusChunkZ, TerrainStreamer &streamer);
+
+    /// The cycle counter, or zero when no clock was given.
+    [[nodiscard]] core::u64 now() const noexcept { return _clock != nullptr ? _clock->timestampCounter() : 0u; }
+
+    platform::IClockBackend *_clock{nullptr};
+    core::u64 _skyCycles{0u};
+    core::u64 _groundCycles{0u};
+    core::u64 _waterCycles{0u};
+    core::u64 _propCycles{0u};
+    core::u64 _herdCycles{0u};
 
     render::ChunkedTerrainView _view;
     /**

@@ -49,7 +49,74 @@ struct NoiseParams {
     core::f32 persistence{0.5f};    ///< Amplitude multiplier per octave.
     core::f32 warpStrength{0.0f};   ///< Domain warp, in cells; 0 leaves the lattice unwarped.
     NoiseKind kind{NoiseKind::Fbm}; ///< Fractal construction.
+
+    /**
+     * @brief Flattens the middle of the range into plains. 0 leaves noise as noise.
+     *
+     * Raw fractal noise makes terrain nobody wants to walk on. Its values are
+     * distributed around the mean, so MOST of the world sits on a slope — and with
+     * an amplitude big enough for real mountains, most of the world is a slope you
+     * cannot climb. What comes out is exactly what this world came out as: a ridge,
+     * a drowned valley, another ridge, and no ground between them. Raising the
+     * amplitude makes the mountains right and the rest worse; lowering it makes the
+     * walking right and flattens the mountains. There is no amplitude that gives
+     * both, because the problem is the DISTRIBUTION, not the scale.
+     *
+     * So the noise is reshaped before it becomes a height: the middle of the range
+     * is compressed towards a plain, and only the top of it is allowed to rise. That
+     * is the trick every open-world terrain uses (Minecraft calls the input
+     * continentalness and the curve a spline); the parameters here are the smallest
+     * set that expresses it.
+     *
+     * At 1 the mid band is dead flat, which reads as a table. Around 0.8 leaves
+     * enough undulation to be a landscape and still be walkable.
+     */
+    core::f32 plainsFlatten{0.0f};
+    /**
+     * @brief Share of the noise range treated as lowland, in [0, 1).
+     *
+     * Wide is the point: at 0.55 more than half of everything generated is ground a
+     * player can walk across, which is what "an open world" means as a measurable
+     * property rather than an impression.
+     */
+    core::f32 plainsWidth{0.55f};
+    /**
+     * @brief Where mountains begin, as a share of the range above the plains.
+     *
+     * Rare, because a mountain that is everywhere is not a mountain, it is the
+     * ground. Everything between the plains and here is foothill.
+     */
+    core::f32 mountainThreshold{0.62f};
+    /**
+     * @brief How much taller a mountain is than the raw amplitude would make it.
+     *
+     * This is what buys real SCALE without ruining the rest: the flattened band and
+     * the raised peaks are two ends of the same curve, so the mountains can be four
+     * times the amplitude while the plains get calmer rather than steeper. Walking
+     * at eye height, that is the difference between a lawn with bumps and a valley
+     * with a mountain at the end of it.
+     */
+    core::f32 mountainGain{1.0f};
 };
+
+/**
+ * @brief Reshapes a normalised noise value into a terrain profile.
+ *
+ * Input and output are both roughly [-1, 1]; what changes is how the range is SPENT.
+ * Three bands, and the boundaries are continuous so no seam appears where one ends:
+ *
+ *  - below the plains band: ocean, left proportional so a coast still shelves.
+ *  - the plains band: compressed towards its own middle by @c plainsFlatten.
+ *  - above the mountain threshold: expanded by @c mountainGain.
+ *
+ * Pure Fixed32, no transcendentals, and a function of the value alone — so it is
+ * seamless by construction, and a chunk boundary cannot see it.
+ *
+ * @param value Normalised noise, nominally [-1, 1].
+ * @param params The layer whose shaping parameters apply.
+ * @return The reshaped value.
+ */
+[[nodiscard]] math::Fixed32 shapeTerrainValue(math::Fixed32 value, const NoiseParams &params);
 
 /**
  * @brief What @p params says the elevation is at one world coordinate.

@@ -122,7 +122,9 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
         camera.viewProjection(groundAtFocus, static_cast<core::f32>(rt.width) / static_cast<core::f32>(rt.height),
                               render::CameraLens{params.fovRadians, params.nearPlane, params.farPlane}, basis);
 
+    const core::u64 skyBegan = now();
     surface.beginFrame(rt, basis);
+    _skyCycles += now() - skyBegan;
     const core::u32 haze = surface.haze();
 
     const core::i32 span = static_cast<core::i32>(params.chunkSize);
@@ -159,23 +161,52 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
             patch.originX = originX;
             patch.originZ = originZ;
 
-            const auto heightAt = [&chunk](core::u32 x, core::u32 z) { return chunk.height.at(x, z).toFloat(); };
-            const auto shadeAt = [&chunk](core::u32 x, core::u32 z) {
-                return chunk.shade.empty() ? 0.0f : static_cast<core::f32>(chunk.shade.at(x, z)) * (1.0f / 255.0f);
+            // Index == size is legitimate and expected: it is the shared edge with
+            // the next chunk, and drawing it is what closes the one-cell gap that
+            // used to run around every chunk. The neighbour answers, through the
+            // same world height function both chunks were generated from — so the
+            // two agree on that column exactly, which is the whole reason a
+            // world-absolute sampler was chosen in the first place.
+            const core::u32 patchSize = view.chunkSize;
+            const auto heightAt = [&chunk, patchSize, originX, originZ, &groundAt](core::u32 x, core::u32 z) {
+                if (x < patchSize && z < patchSize)
+                    return chunk.height.at(x, z).toFloat();
+                return groundAt(originX + static_cast<core::i32>(x), originZ + static_cast<core::i32>(z));
+            };
+            // Shade and colour are CLAMPED rather than fetched from the neighbour.
+            // A seam column lit or tinted by its own chunk is invisible; a seam
+            // column that is not drawn at all is a slit to the horizon. The two
+            // are not the same kind of wrong.
+            const auto shadeAt = [&chunk, patchSize](core::u32 x, core::u32 z) {
+                if (chunk.shade.empty())
+                    return 0.0f;
+                const core::u32 cx = x < patchSize ? x : patchSize - 1u;
+                const core::u32 cz = z < patchSize ? z : patchSize - 1u;
+                return static_cast<core::f32>(chunk.shade.at(cx, cz)) * (1.0f / 255.0f);
             };
 
+            const core::u64 groundBegan = now();
             core::u32 triangles = render::drawHeightfieldPatch(
                 target, matrix, patch, sun, heightAt, shadeAt,
-                [&chunk, &palette](core::u32 x, core::u32 z) { return palette(chunk.biomes.at(x, z)); },
+                [&chunk, &palette, patchSize](core::u32 x, core::u32 z) {
+                    return palette(chunk.biomes.at(x < patchSize ? x : patchSize - 1u,
+                                                   z < patchSize ? z : patchSize - 1u));
+                },
                 [&](core::f32 wx, core::f32 wz, core::u32 base, core::f32 lit, core::f32 nx, core::f32 nz,
                     core::f32 occlusion) { return surface.shadeSurface(wx, wz, base, lit, nx, nz, occlusion, basis); },
                 surface.perPixel());
 
             triangles += render::drawPatchSkirts(target, matrix, patch, view.skirtDrop, heightAt,
-                                                 [&chunk, &palette](core::u32 cx, core::u32 cz) {
-                                                     return render::modulate(palette(chunk.biomes.at(cx, cz)), 0.45f);
+                                                 [&chunk, &palette, patchSize](core::u32 cx, core::u32 cz) {
+                                                     return render::modulate(
+                                                         palette(chunk.biomes.at(cx < patchSize ? cx : patchSize - 1u,
+                                                                                 cz < patchSize ? cz : patchSize - 1u)),
+                                                         0.45f);
                                                  });
 
+            _groundCycles += now() - groundBegan;
+
+            const core::u64 waterBegan = now();
             // The sea, per chunk: one flat quad rather than a world-sized plane,
             // because an endless world has no width to span — and only where
             // there IS water, or a chunk whose bed never drops below sea level
@@ -193,6 +224,9 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                 });
             }
 
+            _waterCycles += now() - waterBegan;
+
+            const core::u64 propBegan = now();
             // Props AFTER the ground of their own chunk: a boulder then tests
             // against a depth buffer that already holds the hill it stands on.
             if (ref.ring <= 1)
@@ -211,12 +245,18 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                                          1.0f :
                                          1.0f - 0.55f * (static_cast<core::f32>(chunk.shade.at(lx, lz)) / 255.0f));
                 }
+            _propCycles += now() - propBegan;
             return triangles;
         });
 
     _triangles = _view.stats().triangles;
+    const core::u64 flushBegan = now();
     _triangles += props.flushPlants(rt, mvp, basis, haze);
+    _propCycles += now() - flushBegan;
+
+    const core::u64 herdBegan = now();
     _triangles += drawHerd(rt, mvp, herd, params, groundAt);
+    _herdCycles += now() - herdBegan;
     return _triangles;
 }
 

@@ -71,6 +71,7 @@ public:
     [[nodiscard]] core::u32 pendingCount() const noexcept override;
     [[nodiscard]] bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY, core::u32 &outButtons) override;
     [[nodiscard]] bool hasPointer() const noexcept override;
+    [[nodiscard]] core::u32 pointerInterruptCount() const noexcept override;
     [[nodiscard]] bool isKeyHeld(char character) const noexcept override;
     [[nodiscard]] bool hasKeyStates() const noexcept override { return true; }
     [[nodiscard]] const char *name() const noexcept override { return "KernelInput(PS/2)"; }

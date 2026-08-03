@@ -71,9 +71,19 @@ core::u32 drawHeightfieldPatch(const RenderTarget &rt, const math::Mat4<core::f3
     const core::f32 strideF = static_cast<core::f32>(stride);
     core::u32 triangles = 0u;
 
-    for (core::u32 z = 0u; z + stride < params.size; z += stride)
+    // <=, not <. With size 24 the strict test stopped at 22, so the quad between
+    // cell 23 and cell 24 was never drawn — a gap one cell wide around EVERY chunk,
+    // on all four sides. From above it is invisible; standing in it, it is a bright
+    // slit running away to the horizon, because what shows through is the skirt.
+    //
+    // The consequence is that @p heightAt is now asked for index == size, one cell
+    // PAST the patch. That is deliberate and it is the only way two patches can
+    // share an edge: the caller answers from the neighbouring chunk (or from the
+    // world height function, which is defined everywhere), and because both chunks
+    // sample the same absolute world coordinate they agree on it by construction.
+    for (core::u32 z = 0u; z + stride <= params.size; z += stride)
     {
-        for (core::u32 x = 0u; x + stride < params.size; x += stride)
+        for (core::u32 x = 0u; x + stride <= params.size; x += stride)
         {
             const core::f32 y00 = heightAt(x, z);
             const core::f32 y10 = heightAt(x + stride, z);

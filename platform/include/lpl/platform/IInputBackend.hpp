@@ -87,6 +87,16 @@ public:
     /** @brief Whether a pointing device is present at all. */
     [[nodiscard]] virtual bool hasPointer() const noexcept { return false; }
 
+    /**
+     * @brief Pointer interrupts the platform has serviced since boot.
+     *
+     * Diagnostic. "The mouse does not work" has three causes that are identical from
+     * here — no device, a device whose interrupt never arrives, and interrupts that
+     * arrive while the packets are thrown away — and a consumer that cannot tell them
+     * apart debugs the wrong one.
+     */
+    [[nodiscard]] virtual core::u32 pointerInterruptCount() const noexcept { return 0u; }
+
     /** @brief Returns a human-readable name. */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };

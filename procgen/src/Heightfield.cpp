@@ -20,6 +20,41 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
 } // namespace
 
+math::Fixed32 shapeTerrainValue(math::Fixed32 value, const NoiseParams &params)
+{
+    // Off by default: a shaping of zero must leave every existing world, every
+    // parity signature and every baked cartridge exactly as they were.
+    if (params.plainsFlatten <= 0.0f)
+        return value;
+
+    const math::Fixed32 flatten = math::Fixed32::fromFloat(params.plainsFlatten > 1.0f ? 1.0f : params.plainsFlatten);
+    const math::Fixed32 plains = math::Fixed32::fromFloat(params.plainsWidth);
+    const math::Fixed32 peak = math::Fixed32::fromFloat(params.mountainThreshold);
+    const math::Fixed32 gain = math::Fixed32::fromFloat(params.mountainGain);
+    const math::Fixed32 kept = math::Fixed32::one() - flatten;
+
+    // Three bands, and EVERY join is continuous. That is not tidiness: a curve that
+    // stepped at a band boundary would draw a terrace at exactly that height right
+    // around the world, on every coast and every hillside at once. The first version
+    // of this function did precisely that on the ocean side — it returned the raw
+    // value below the lowland band while the band itself was compressed, so every
+    // shoreline in the world got the same cliff. Each band below therefore starts
+    // from where the previous one ENDED rather than from the raw value.
+
+    // The lowland band, compressed towards its own centre: the majority of the
+    // range becomes ground that can be walked across.
+    if (value >= -plains && value < peak)
+        return value * kept;
+
+    // Below it: the sea floor, continuing at the noise's own slope from where the
+    // lowland ended. Shelving rather than dropping, so a coast reads as a beach.
+    if (value < -plains)
+        return (-plains * kept) + (value + plains);
+
+    // Above it: mountains, expanded from where the lowland ended.
+    return (peak * kept) + (value - peak) * gain;
+}
+
 math::Fixed32 sampleNoiseAt(core::i32 worldX, core::i32 worldZ, const NoiseParams &params)
 {
     const math::Fixed32 frequency = math::Fixed32::fromFloat(params.frequency);
@@ -38,19 +73,30 @@ math::Fixed32 sampleNoiseAt(core::i32 worldX, core::i32 worldZ, const NoiseParam
 
     switch (params.kind)
     {
+    // Shaped BEFORE the amplitude is applied, on the normalised value. Reshaping
+    // metres instead would make every parameter depend on how tall the world
+    // happens to be, and a recipe tuned at one amplitude would be wrong at another.
     case NoiseKind::Ridged:
         // Ridged and billow both return [0, 1); recentre them so a layer's mean
         // stays near zero and layering one over another does not drift upward.
-        return base + (ValueNoise2D::ridged(nx, nz, params.octaves, params.seed, lacunarity, persistence) -
-                       math::Fixed32::half()) *
-                          math::Fixed32::fromInt(2) * amplitude;
+        return base + shapeTerrainValue((ValueNoise2D::ridged(nx, nz, params.octaves, params.seed, lacunarity,
+                                                              persistence) -
+                                         math::Fixed32::half()) *
+                                            math::Fixed32::fromInt(2),
+                                        params) *
+                          amplitude;
     case NoiseKind::Billow:
-        return base + (ValueNoise2D::billow(nx, nz, params.octaves, params.seed, lacunarity, persistence) -
-                       math::Fixed32::half()) *
-                          math::Fixed32::fromInt(2) * amplitude;
+        return base + shapeTerrainValue((ValueNoise2D::billow(nx, nz, params.octaves, params.seed, lacunarity,
+                                                              persistence) -
+                                         math::Fixed32::half()) *
+                                            math::Fixed32::fromInt(2),
+                                        params) *
+                          amplitude;
     case NoiseKind::Fbm: break;
     }
-    return base + ValueNoise2D::fbm(nx, nz, params.octaves, params.seed, lacunarity, persistence) * amplitude;
+    return base +
+           shapeTerrainValue(ValueNoise2D::fbm(nx, nz, params.octaves, params.seed, lacunarity, persistence), params) *
+               amplitude;
 }
 
 Heightfield generateNoiseHeightfield(core::u32 width, core::u32 depth, const NoiseParams &params)

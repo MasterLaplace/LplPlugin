@@ -170,6 +170,8 @@ public:
         _maxResident =
             context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling : context.config.maxResidentChunks();
 
+        _platform = &context.platform;
+        _renderer.setClock(&context.platform.clock());
         _hasPointer = context.platform.input().hasPointer();
         core::Log::info(_hasPointer ? "TerrainWorld: pointing device present — mouse look enabled" :
                                       "TerrainWorld: no pointing device — look with I/K and the pointer keys");
@@ -214,6 +216,7 @@ public:
     /// Authoritative: the herd walks, the vegetation regrows, the web steps.
     void onFixedStep(core::f32 dt) override
     {
+        const core::u64 stepBegan = timestamp();
         engine::World::onFixedStep(dt);
         ++_ticks;
         // A day every four minutes at 60 Hz: long enough that the light reads as
@@ -250,6 +253,7 @@ public:
                 _living.web().step(1u);
                 reconcile();
             }
+            _simCycles += timestamp() - stepBegan;
             return;
         }
         stepHerd();
@@ -258,6 +262,13 @@ public:
             _living.web().step(1u);
             reconcile();
         }
+        _simCycles += timestamp() - stepBegan;
+    }
+
+    /// The cycle counter, or zero when the host has no clock to ask.
+    [[nodiscard]] core::u64 timestamp() const noexcept
+    {
+        return _platform != nullptr ? _platform->clock().timestampCounter() : 0u;
     }
 
     /// Non-authoritative: input, camera, rasterize, scale, HUD, present.
@@ -268,13 +279,63 @@ public:
             return;
 
         render::RenderTarget target{_color, _depth, kRenderWidth, kRenderHeight};
+
+        // Four phases timed separately, because "the frame is slow" is not an
+        // actionable statement and each of these is a different fix: the scene is
+        // triangles and shading, the blit is memory bandwidth to a bigger buffer,
+        // the HUD is text, and present is whatever the display costs.
+        const core::u64 sceneBegan = timestamp();
         renderScene(target);
+        const core::u64 blitBegan = timestamp();
         render::blitScaled(_surface.buffer, _surface.pitch / 4u, _surface.width, _surface.height, _color, kRenderWidth,
                            kRenderHeight);
+        const core::u64 hudBegan = timestamp();
         drawHud();
+        const core::u64 presentBegan = timestamp();
         context.platform.display().present();
+        const core::u64 frameEnded = timestamp();
+
+        _sceneCycles += blitBegan - sceneBegan;
+        _blitCycles += hudBegan - blitBegan;
+        _hudCycles += presentBegan - hudBegan;
+        _presentCycles += frameEnded - presentBegan;
         ++_frames;
         ++_windowFrames;
+        refreshProfile();
+    }
+
+    /**
+     * @brief Turns the accumulated cycles into shares, once per window.
+     *
+     * SHARES, not milliseconds. A share needs no clock frequency — which the kernel
+     * would have to calibrate and which differs between a machine and an emulator —
+     * and it answers the only question that decides what to optimise: which phase
+     * owns the frame. Milliseconds would look more precise and say less.
+     */
+    void refreshProfile() noexcept
+    {
+        if (++_profileWindow < 24u)
+            return;
+        _profileWindow = 0u;
+
+        const core::u64 total = _simCycles + _sceneCycles + _blitCycles + _hudCycles + _presentCycles;
+        if (total != 0u)
+        {
+            _simShare = static_cast<core::u32>((_simCycles * 100u) / total);
+            _sceneShare = static_cast<core::u32>((_sceneCycles * 100u) / total);
+            _skyShare = static_cast<core::u32>((_renderer.skyCycles() * 100u) / total);
+            _groundShare = static_cast<core::u32>((_renderer.groundCycles() * 100u) / total);
+            _waterShare = static_cast<core::u32>((_renderer.waterCycles() * 100u) / total);
+            _propShare = static_cast<core::u32>((_renderer.propCycles() * 100u) / total);
+            _blitShare = static_cast<core::u32>((_blitCycles * 100u) / total);
+            _presentShare = static_cast<core::u32>((_presentCycles * 100u) / total);
+        }
+        _simCycles = 0u;
+        _sceneCycles = 0u;
+        _blitCycles = 0u;
+        _hudCycles = 0u;
+        _presentCycles = 0u;
+        _renderer.resetPhaseCounters();
     }
 
     /// Starts a fresh measurement window: the rate is only about what follows.
@@ -373,6 +434,13 @@ private:
     static constexpr core::u32 kGrazerTint = 0x00D0A852u;
     static constexpr core::u32 kHunterTint = 0x00C03028u;
     static constexpr core::f32 kPlantNearDistance = 5.0f;
+    /**
+     * @brief Furthest a plant is worth drawing, when the host states no budget.
+     *
+     * A FALLBACK only: Config::viewDistance overrides it on every real profile, so
+     * editing this constant alone changes nothing — measured the hard way, with a
+     * frame that came back byte-identical.
+     */
     static constexpr core::f32 kPlantFarDistance = 70.0f;
     /// Nearer than this the walker is under the canopy: wood only, no leaves.
     static constexpr core::f32 kPlantCanopyDistance = 11.0f;
@@ -380,8 +448,50 @@ private:
     static constexpr core::f32 kChunkHalfHeight = 72.0f;
     /// Relief, in metres rather than in map units: see where this is applied.
     static constexpr core::f32 kReliefScale = 2.8f;
-    /// Lower frequency with the taller amplitude, or the world becomes a rasp.
-    static constexpr core::f32 kReliefFrequency = 0.55f;
+    /**
+     * @brief Feature width. LOWER is wider, and wider is what an open world is.
+     *
+     * A quarter of the map's frequency, not half. At 0.55 the world alternated
+     * ridge, drowned valley, ridge about every twenty metres — walkable only along
+     * a crest or through water, which is precisely what it looked like. Halving it
+     * again doubles the distance between features, so a plain has room to be a
+     * plain before the next hill starts.
+     */
+    static constexpr core::f32 kReliefFrequency = 0.26f;
+
+    // ── Terrain shape ────────────────────────────────────────────────────────
+    //
+    // Raw fractal noise puts most of the world on a slope, and at an amplitude big
+    // enough for real mountains, most of the world is a slope you cannot climb.
+    // No amplitude fixes that — the problem is the distribution. So the range is
+    // redistributed: a wide flattened band that is walkable ground, and a narrow
+    // top band that is allowed to become tall. See NoiseParams::plainsFlatten.
+    static constexpr core::f32 kPlainsFlatten = 0.80f;
+    static constexpr core::f32 kPlainsWidth = 0.55f;
+    static constexpr core::f32 kMountainThreshold = 0.58f;
+    /**
+     * @brief Mountains rise five times faster than the flattened ground.
+     *
+     * This is what buys real SCALE at eye height. The flattening divides the
+     * everyday relief by five, so without this the world would be a plate; with it,
+     * the same amplitude that makes a walkable plain also makes a peak that reads
+     * as a mountain when you stand at its foot.
+     */
+    static constexpr core::f32 kMountainGain = 5.0f;
+    /**
+     * @brief Metres the shaped land is lifted above the sea.
+     *
+     * Flattening compresses the everyday range towards ZERO, and the sea sits at
+     * -1 — so without a lift roughly half of the new, walkable world came out under
+     * water, which the first screenshot showed as an ocean with a strip of beach.
+     * Raising the land by four metres puts the plains band clear of the waterline
+     * and leaves only the genuinely low ground to flood, which is what makes a lake
+     * a lake instead of the default state of the world.
+     */
+    static constexpr core::f32 kLandLift = 4.0f;
+    /// Above this the ground is bare rock; above the next, snow. Metres.
+    static constexpr core::f32 kRockLine = 42.0f;
+    static constexpr core::f32 kSnowLine = 62.0f;
 
     /// How the surface is coloured.
     enum class Shading : core::u32 {
@@ -570,6 +680,14 @@ private:
         // does not move because the viewer changed how tall its hills are.
         _chunkParams.noise.amplitude = _recipe.terrain.amplitude * kReliefScale;
         _chunkParams.noise.frequency = _recipe.terrain.frequency * kReliefFrequency;
+        // The shaping is the STREAMED world's, not the recipe's: the bounded map is
+        // a map, seen from above, where raw noise reads correctly. It is walking
+        // through it at eye height that needs plains.
+        _chunkParams.noise.baseHeight = _recipe.terrain.baseHeight + kLandLift;
+        _chunkParams.noise.plainsFlatten = kPlainsFlatten;
+        _chunkParams.noise.plainsWidth = kPlainsWidth;
+        _chunkParams.noise.mountainThreshold = kMountainThreshold;
+        _chunkParams.noise.mountainGain = kMountainGain;
 
         _streamParams.generateRadius = kStreamRadius;
         // 1.5x: the hysteresis that stops a camera sitting on a boundary from
@@ -615,7 +733,22 @@ private:
         procgen::ChunkTerrainRule rule;
         rule.erosionIterations = kEndlessErosion;
         rule.seaLevel = kSeaLevel;
-        rule.vegetationOneIn = 3u;
+        // ONE cell in fourteen, not one in three.
+        //
+        // This is what actually decides how many trees exist — not the recipe's
+        // scatter densities, which govern a different pass. One in three was tuned
+        // on the old terrain, where most ground was rock, water or a slope too steep
+        // to plant on, so it only ever applied to a fraction of the world.
+        // Flattening made nearly all of it plantable at once and the same rule
+        // became a wall of trunks: a hundred and twelve thousand triangles, props at
+        // forty-seven percent of the frame.
+        rule.vegetationOneIn = 14u;
+        // The rock and snow lines are in METRES, so they have to follow the relief
+        // they describe. Mountains now rise five times faster than the everyday
+        // ground: at the old eight and eleven metres, every gentle plain came out
+        // bare rock under snow.
+        rule.rockLine = kRockLine;
+        rule.snowLine = kSnowLine;
         _streamer.configure(_chunkParams, _riverParams, _streamParams, _maxResident, rule);
 
         seedHerd();
@@ -1103,9 +1236,7 @@ private:
                 .text("  jumps ")
                 .number(_body.jumpCount())
                 .text("  blocked ")
-                .number(_body.blockedCount())
-                .text(_hasPointer ? "  mouse " : "  no mouse ")
-                .number(_pointerPackets);
+                .number(_body.blockedCount());
             drawShadowedText(pitchPixels, 8u, 62u, line, _body.isGrounded() ? 0x00A0B4C8u : 0x00E0C070u);
 
             line.clear()
@@ -1118,12 +1249,31 @@ private:
             drawShadowedText(pitchPixels, 8u, 80u, line, 0x0060FF80u);
 
             line.clear()
+                .text("cost% sim ")
+                .number(_simShare)
+                .text("  scene ")
+                .number(_sceneShare)
+                .text("  blit ")
+                .number(_blitShare)
+                .text("  present ")
+                .number(_presentShare)
+                .text("  | sky ")
+                .number(_skyShare)
+                .text(" gnd ")
+                .number(_groundShare)
+                .text(" wat ")
+                .number(_waterShare)
+                .text(" prop ")
+                .number(_propShare);
+            drawShadowedText(pitchPixels, 8u, 98u, line, 0x00FFAA22u);
+
+            line.clear()
                 .text("scent window ")
                 .number(kFieldSpan)
                 .text(" cells, recentred ")
                 .number(_living.scent().recentres())
                 .text(" times");
-            drawShadowedText(pitchPixels, 8u, 98u, line, 0x00A0B4C8u);
+            drawShadowedText(pitchPixels, 8u, 116u, line, 0x00A0B4C8u);
 
             line.clear()
                 .text("drawn ")
@@ -1145,7 +1295,7 @@ private:
                 .text(_pbrSurface ? "  pbr" : (_perPixelSurface ? "  per-pixel" : "  flat"))
                 .text("  sky/")
                 .number(_skyBlock);
-            drawShadowedText(pitchPixels, 8u, 116u, line, 0x00A0B4C8u);
+            drawShadowedText(pitchPixels, 8u, 134u, line, 0x00A0B4C8u);
 
             image::drawText8x16(
                 _surface.buffer, pitchPixels, 8u, _surface.height - 20u,
@@ -1354,6 +1504,27 @@ private:
             tiltAccumulator += deltaY;
             _pointerButtons = buttons;
             ++_pointerPackets;
+        }
+
+        // Reported on the serial console rather than the HUD: the body line is
+        // already at the width the overlay can hold, and a counter that is silently
+        // truncated reads as a missing field rather than as a zero.
+        //
+        // Three DISTINCT sentences rather than two counters, because they are three
+        // distinct diagnoses and the logger takes a string, not a format. No
+        // interrupt at all is a wiring problem; interrupts without packets is a
+        // decoding one; packets arriving while the view stays still is a consumer
+        // one. Told apart here, they each point at one file.
+        if (_pointerPackets != 0u && _pointerReported == 0u)
+        {
+            _pointerReported = _pointerPackets;
+            core::Log::info("pointer: motion received — the device and the driver are fine");
+        }
+        else if (_pointerPackets == 0u && _frames == 240u)
+        {
+            core::Log::info(context.platform.input().pointerInterruptCount() != 0u
+                                ? "pointer: interrupts arrive but no packet is assembled"
+                                : "pointer: no interrupt from the device at all");
         }
 
         // Turning goes to the BODY when there is one, because the heading picks the
@@ -1715,8 +1886,31 @@ private:
      * A count that climbs while the view stays still says the driver is fine and the
      * consumer is not; a count stuck at zero says the opposite.
      */
+    /**
+     * @brief The platform, kept so the AUTHORITATIVE step can read the clock.
+     *
+     * onFixedStep receives no context — deliberately, it is simulation and must not
+     * reach for a display. A timestamp is not a display, and measuring where a frame
+     * goes is the only way to know which half to make faster.
+     */
+    platform::IPlatform *_platform{nullptr};
+    core::u64 _simCycles{0u};
+    core::u64 _sceneCycles{0u};
+    core::u64 _blitCycles{0u};
+    core::u64 _hudCycles{0u};
+    core::u64 _presentCycles{0u};
+    core::u32 _profileWindow{0u};
+    core::u32 _simShare{0u};
+    core::u32 _sceneShare{0u};
+    core::u32 _blitShare{0u};
+    core::u32 _presentShare{0u};
+    core::u32 _skyShare{0u};
+    core::u32 _groundShare{0u};
+    core::u32 _waterShare{0u};
+    core::u32 _propShare{0u};
     bool _hasPointer{false};
     core::u32 _pointerPackets{0u};
+    core::u32 _pointerReported{0u};
 
     /**
      * @brief The walker's body: authoritative, and subject to the world.
