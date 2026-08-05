@@ -146,7 +146,8 @@ math::Vec3<math::Fixed32> positionOf(ecs::Registry &registry, ecs::EntityId id)
         const auto entities = chunk.entities();
         if (ref.value().localIndex >= entities.size() || entities[ref.value().localIndex] != id)
             continue;
-        const auto *p = static_cast<const math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
+        const auto *p =
+            static_cast<const math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
         return p != nullptr ? p[ref.value().localIndex] : math::Vec3<math::Fixed32>{};
     }
     return {};
@@ -262,8 +263,7 @@ double hunt(float kinWeight, core::u32 ticks, core::u32 *outQuadrants = nullptr)
     {
         // The prey stands still and smells of prey. Keeping it fixed isolates the
         // pack's geometry from the chase.
-        field.deposit(static_cast<core::u32>(ai::ScentChannel::Herbivore), kPreyX, kPreyZ,
-                      math::Fixed32::fromInt(40));
+        field.deposit(static_cast<core::u32>(ai::ScentChannel::Herbivore), kPreyX, kPreyZ, math::Fixed32::fromInt(40));
         // The whole tick, as systems, in the order the scheduler derives: mark,
         // forget, steer, flock, walk. Nothing about an animal is left in a
         // container's loop, and no buffer swap is needed — every creature system

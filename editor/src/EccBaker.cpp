@@ -44,9 +44,9 @@ std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPol
 
     const core::u32 dataShards = policy.dataShards == 0u ? 1u : policy.dataShards;
     const core::u32 parityShards =
-        policy.parityShards == 0u ? 1u
-                                  : (policy.parityShards > codec::kMaxParitySymbols ? codec::kMaxParitySymbols
-                                                                                    : policy.parityShards);
+        policy.parityShards == 0u ?
+            1u :
+            (policy.parityShards > codec::kMaxParitySymbols ? codec::kMaxParitySymbols : policy.parityShards);
     if (dataShards + parityShards > codec::kMaxCodewordSymbols)
         return image;
 

@@ -52,11 +52,11 @@ static_assert(sizeof(EccV1) == 20u, "GamePack ecc layout is wire format");
  * @brief What a repair attempt found.
  */
 struct EccRepairReport {
-    bool present{false};           ///< The pack carried a parity section.
-    bool repaired{false};          ///< Every damaged codeword was corrected.
-    core::u32 codewords{0u};       ///< Codewords examined.
+    bool present{false};            ///< The pack carried a parity section.
+    bool repaired{false};           ///< Every damaged codeword was corrected.
+    core::u32 codewords{0u};        ///< Codewords examined.
     core::u32 damagedCodewords{0u}; ///< Codewords that were not already clean.
-    core::u32 correctedBytes{0u};  ///< Symbols actually changed.
+    core::u32 correctedBytes{0u};   ///< Symbols actually changed.
 };
 
 /**

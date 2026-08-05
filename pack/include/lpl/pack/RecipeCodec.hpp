@@ -160,9 +160,9 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     recipe.terraceSteps = wire.terraceSteps;
     // Clamped rather than trusted: a byte from disk naming a fifth generator would
     // otherwise index a switch that has four.
-    recipe.caveKind = wire.caveKind <= static_cast<core::u32>(procgen::CaveKind::Layered)
-                          ? static_cast<procgen::CaveKind>(wire.caveKind)
-                          : procgen::CaveKind::Cellular;
+    recipe.caveKind = wire.caveKind <= static_cast<core::u32>(procgen::CaveKind::Layered) ?
+                          static_cast<procgen::CaveKind>(wire.caveKind) :
+                          procgen::CaveKind::Cellular;
 
     recipe.rooms.width = wire.roomsWidth;
     recipe.rooms.depth = wire.roomsDepth;

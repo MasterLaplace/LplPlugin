@@ -56,16 +56,16 @@ void buildParityProgram(lpl::pmr::vector<core::u8> &out)
     };
 
     // r0 = index, r1 = limit, r2 = scratch, r3 = key, r4 = one
-    emit(Opcode::Set, 0u, 0u, 0u);   // 0: index = 0
-    emit(Opcode::Set, 1u, 0u, 16u);  // 1: limit = 16
+    emit(Opcode::Set, 0u, 0u, 0u);    // 0: index = 0
+    emit(Opcode::Set, 1u, 0u, 16u);   // 1: limit = 16
     emit(Opcode::Set, 3u, 0u, 0x5Au); // 2: key = 0x5A
-    emit(Opcode::Set, 4u, 0u, 1u);   // 3: one = 1
-    emit(Opcode::Load, 2u, 0u, 0u);  // 4: scratch = memory[index]
-    emit(Opcode::Xor, 2u, 2u, 3u);   // 5: scratch ^= key
-    emit(Opcode::Store, 2u, 0u, 0u); // 6: memory[index] = scratch
-    emit(Opcode::Add, 3u, 3u, 4u);   // 7: key += 1  (rolling)
-    emit(Opcode::Add, 0u, 0u, 4u);   // 8: ++index
-    emit(Opcode::Sub, 5u, 0u, 1u);   // 9: r5 = index - limit
+    emit(Opcode::Set, 4u, 0u, 1u);    // 3: one = 1
+    emit(Opcode::Load, 2u, 0u, 0u);   // 4: scratch = memory[index]
+    emit(Opcode::Xor, 2u, 2u, 3u);    // 5: scratch ^= key
+    emit(Opcode::Store, 2u, 0u, 0u);  // 6: memory[index] = scratch
+    emit(Opcode::Add, 3u, 3u, 4u);    // 7: key += 1  (rolling)
+    emit(Opcode::Add, 0u, 0u, 4u);    // 8: ++index
+    emit(Opcode::Sub, 5u, 0u, 1u);    // 9: r5 = index - limit
     // 12, not 11. Aiming the exit at 11 lands on the JUMP that closes the loop, so
     // the program runs until its budget rather than halting — and it does so while
     // producing exactly the right memory, because the loop is idempotent past the

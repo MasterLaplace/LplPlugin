@@ -19,12 +19,12 @@
  */
 
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/math/Random.hpp>
 #include <lpl/procgen/Biome.hpp>
 #include <lpl/procgen/Dungeon.hpp>
 #include <lpl/procgen/Erosion.hpp>
 #include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/Hydrology.hpp>
-#include <lpl/math/Random.hpp>
 #include <lpl/procgen/WaveFunctionCollapse.hpp>
 #include <lpl/procgen/WorldBuilder.hpp>
 

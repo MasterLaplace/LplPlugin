@@ -80,8 +80,8 @@ bool decodeErasure(const lpl::pmr::vector<Droplet> &droplets, const ErasureShape
     if (!decodeDroplets(droplets, table, shape.blockCount, shape.blockBytes, blocks, outReport))
         return false;
 
-    const core::u32 length = shape.originalBytes <= blocks.size() ? shape.originalBytes
-                                                                  : static_cast<core::u32>(blocks.size());
+    const core::u32 length =
+        shape.originalBytes <= blocks.size() ? shape.originalBytes : static_cast<core::u32>(blocks.size());
     outBytes.resize(length, core::u8{0});
     for (core::u32 i = 0u; i < length; ++i)
         outBytes[i] = blocks[i];

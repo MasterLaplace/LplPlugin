@@ -49,6 +49,7 @@
 #    include <lpl/ecology/Vegetation.hpp>
 #    include <lpl/engine/CharacterController.hpp>
 #    include <lpl/engine/Engine.hpp>
+#    include <lpl/engine/ITerrainQuery.hpp>
 #    include <lpl/engine/LivingLayer.hpp>
 #    include <lpl/engine/PropLibrary.hpp>
 #    include <lpl/engine/TerrainRenderer.hpp>
@@ -56,20 +57,21 @@
 #    include <lpl/engine/TerrainSurface.hpp>
 #    include <lpl/engine/ViewProfile.hpp>
 #    include <lpl/engine/World.hpp>
+#    include <lpl/engine/systems/CreatureSystems.hpp>
 #    include <lpl/image/Font8x16.hpp>
 #    include <lpl/math/Cordic.hpp>
+#    include <lpl/math/FixedMath.hpp>
+#    include <lpl/math/Random.hpp>
 #    include <lpl/platform/IPlatform.hpp>
 #    include <lpl/procgen/Biome.hpp>
 #    include <lpl/procgen/Botany.hpp>
 #    include <lpl/procgen/ChunkResidency.hpp>
 #    include <lpl/procgen/ChunkTerrain.hpp>
-#    include <lpl/procgen/EndlessPlan.hpp>
 #    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/Climate.hpp>
-#    include <lpl/math/FixedMath.hpp>
+#    include <lpl/procgen/EndlessPlan.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
 #    include <lpl/procgen/Hydrology.hpp>
-#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Streaming.hpp>
 #    include <lpl/procgen/ValueNoise.hpp>
 #    include <lpl/procgen/WorldBuilder.hpp>
@@ -84,7 +86,6 @@
 #    include <lpl/render/OrbitCamera.hpp>
 #    include <lpl/render/Overlay.hpp>
 #    include <lpl/render/Pbr.hpp>
-#    include <lpl/engine/systems/CreatureSystems.hpp>
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/Reflection.hpp>
 #    include <lpl/render/Revolve.hpp>
@@ -93,7 +94,6 @@
 #    include <lpl/render/SkyDome.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
 #    include <lpl/render/Topology.hpp>
-#    include <lpl/engine/ITerrainQuery.hpp>
 #    include <lpl/render/Water.hpp>
 
 namespace lpl::samples {
@@ -290,8 +290,8 @@ public:
     /// @copydoc engine::ITerrainQuery::consumePlantAt
     bool consumePlantAt(core::i32 worldX, core::i32 worldZ) override
     {
-        const bool ate = _infinite ? grazeEndless(worldX, worldZ)
-                                   : grazeBounded(math::Fixed32::fromInt(worldX), math::Fixed32::fromInt(worldZ));
+        const bool ate = _infinite ? grazeEndless(worldX, worldZ) :
+                                     grazeBounded(math::Fixed32::fromInt(worldX), math::Fixed32::fromInt(worldZ));
         if (ate)
             _living.countGrazed();
         return ate;
@@ -575,8 +575,8 @@ private:
             // Building a world from a seed is procgen's business, and freeing the
             // passes' intermediate grids the moment the few this game reads have
             // been copied out is procgen::buildSnapshot's.
-            const procgen::WorldSnapshot snapshot =
-                procgen::buildSnapshot(recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f});
+            const procgen::WorldSnapshot snapshot = procgen::buildSnapshot(
+                recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f});
 
             _height = snapshot.height;
             _biomes = snapshot.biomes;

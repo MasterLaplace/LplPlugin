@@ -151,8 +151,7 @@ int main()
         };
 
         core::u32 openFor[3] = {0u, 0u, 0u};
-        const procgen::CaveKind kinds[3] = {procgen::CaveKind::Bsp, procgen::CaveKind::Dla,
-                                           procgen::CaveKind::Layered};
+        const procgen::CaveKind kinds[3] = {procgen::CaveKind::Bsp, procgen::CaveKind::Dla, procgen::CaveKind::Layered};
         for (core::u32 i = 0u; i < 3u; ++i)
         {
             const procgen::WorldAtlas atlas = atlasFor(kinds[i]);

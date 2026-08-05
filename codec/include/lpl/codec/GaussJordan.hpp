@@ -31,7 +31,7 @@ inline constexpr core::u32 kNoPivot = 0xFFFFFFFFu;
  * @brief What the elimination found.
  */
 struct EliminationResult {
-    core::u32 rank{0u};                            ///< Independent rows.
+    core::u32 rank{0u};                             ///< Independent rows.
     lpl::pmr::vector<core::u32> pivotColumnOfRow{}; ///< Pivot column per row, @ref kNoPivot when none.
     lpl::pmr::vector<core::u32> rowOfPivotColumn{}; ///< Row holding each column's pivot, or @ref kNoPivot.
 

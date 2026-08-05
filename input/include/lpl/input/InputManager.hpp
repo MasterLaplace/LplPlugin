@@ -179,9 +179,9 @@ public:
      * @param speed     Base movement speed (default 50).
      * @return Modified velocity vector.
      */
-    [[nodiscard]] math::Vec3<math::Fixed32> computeMovementVelocity(
-        core::u32 entityId, math::Vec3<math::Fixed32> currentVel,
-        math::Fixed32 speed = math::Fixed32::fromInt(50));
+    [[nodiscard]] math::Vec3<math::Fixed32> computeMovementVelocity(core::u32 entityId,
+                                                                    math::Vec3<math::Fixed32> currentVel,
+                                                                    math::Fixed32 speed = math::Fixed32::fromInt(50));
 
     // --------------------------------------------------------------------- //
     //  Global state                                                           //

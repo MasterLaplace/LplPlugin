@@ -20,14 +20,14 @@
  */
 
 #include <lpl/agent/Dispatcher.hpp>
-#include <lpl/agent/Observation.hpp>
-#include <lpl/agent/Vision.hpp>
 #include <lpl/agent/Grammar.hpp>
+#include <lpl/agent/Observation.hpp>
 #include <lpl/agent/Parity.hpp>
 #include <lpl/agent/Schema.hpp>
 #include <lpl/agent/Tool.hpp>
 #include <lpl/agent/ToolCall.hpp>
 #include <lpl/agent/ToolRegistry.hpp>
+#include <lpl/agent/Vision.hpp>
 #include <lpl/ecs/ComponentReflection.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/editor/CommandJournal.hpp>
@@ -93,8 +93,8 @@ int main()
     check(onEmpty.state().entityCount == 0u, "an empty world reports no entities");
     check(onFull.state().entityCount != 0u,
           "a generated world reports " + std::to_string(onFull.state().entityCount) + " entities");
-    check(onEmpty.size() < onFull.size(), "fewer tools on an empty world (" + std::to_string(onEmpty.size()) +
-                                              " < " + std::to_string(onFull.size()) + ")");
+    check(onEmpty.size() < onFull.size(), "fewer tools on an empty world (" + std::to_string(onEmpty.size()) + " < " +
+                                              std::to_string(onFull.size()) + ")");
     check(!onEmpty.offers("spawn_from_template"), "spawn_from_template is NOT offered before a world exists");
     check(onFull.offers("spawn_from_template"), "spawn_from_template IS offered once one does");
     check(onEmpty.offers("generate_world"), "generate_world is always offered");
@@ -166,14 +166,14 @@ int main()
             const char *json;
         };
         const Case cases[] = {
-            {"unknown tool", R"({"tool":"summon_dragon","args":{}})"},
-            {"tool not offered in this state", R"({"tool":"clear_world","args":{}})"},
-            {"missing required parameter", R"({"tool":"load_scene","args":{}})"},
-            {"value out of declared bounds", R"({"tool":"query_entities","args":{"limit":999999}})"},
-            {"wrong JSON type", R"({"tool":"load_scene","args":{"scene":42}})"},
-            {"undeclared parameter", R"({"tool":"count","args":{"colour":"blue"}})"},
-            {"value outside a closed set", R"({"tool":"query_entities","args":{"with":"Sparkle"}})"},
-            {"malformed JSON", R"({"tool":)"},
+            {"unknown tool",                   R"({"tool":"summon_dragon","args":{}})"                 },
+            {"tool not offered in this state", R"({"tool":"clear_world","args":{}})"                   },
+            {"missing required parameter",     R"({"tool":"load_scene","args":{}})"                    },
+            {"value out of declared bounds",   R"({"tool":"query_entities","args":{"limit":999999}})"  },
+            {"wrong JSON type",                R"({"tool":"load_scene","args":{"scene":42}})"          },
+            {"undeclared parameter",           R"({"tool":"count","args":{"colour":"blue"}})"          },
+            {"value outside a closed set",     R"({"tool":"query_entities","args":{"with":"Sparkle"}})"},
+            {"malformed JSON",                 R"({"tool":)"                                           },
         };
         // Gated on the EMPTY registry so that "clear_world" is genuinely not
         // offered — the case only means something if the state really forbids it.
@@ -185,8 +185,7 @@ int main()
 
         // And a well-formed call is accepted, or the eight above would prove
         // nothing but that the validator says no to everything.
-        const auto accepted =
-            agent::parseToolCall(R"({"thought":"look first","tool":"count","args":{}})", onEmpty);
+        const auto accepted = agent::parseToolCall(R"({"thought":"look first","tool":"count","args":{}})", onEmpty);
         check(accepted.has_value(), "a well-formed call is accepted");
         if (accepted.has_value())
             check(accepted.value().thought == "look first", "the thought travels with the act");
@@ -200,8 +199,8 @@ int main()
         agent::Dispatcher dispatcher{journal, world};
 
         const agent::ToolRegistry gate = agent::ToolRegistry::forWorld(world);
-        const auto report = dispatcher.dispatchJson(
-            R"({"tool":"generate_world","args":{"seed":42,"width":32,"depth":32}})", gate);
+        const auto report =
+            dispatcher.dispatchJson(R"({"tool":"generate_world","args":{"seed":42,"width":32,"depth":32}})", gate);
         check(report.has_value(), "the agent generated a world");
         const core::u32 afterGenerate = editor::entityCount(world);
         check(afterGenerate != 0u, "the world has " + std::to_string(afterGenerate) + " entities");
@@ -234,8 +233,8 @@ int main()
         // it holds exactly as long as no tool is gated on the world being EMPTY.
         // The day one is, this line fails and asks to be re-read.
         const agent::ToolRegistry every = agent::ToolRegistry::ungated();
-        check(every.size() == agent::kToolCount, "the ungated surface offers all " +
-                                                     std::to_string(agent::kToolCount) + " capabilities");
+        check(every.size() == agent::kToolCount,
+              "the ungated surface offers all " + std::to_string(agent::kToolCount) + " capabilities");
         check(agent::foldToolSurface(every) == a, "no capability is gated on an empty world today");
         check(agent::foldToolSurface(every) != agent::foldToolSurface(onEmpty), "and the empty world sees fewer");
     }
@@ -343,14 +342,12 @@ int main()
         const char *docA = R"({\"format\":\"lplscene/1\",\"procedural\":{\"seed\":1,\"terrain\":{\"octaves\":4}}})";
         const char *docB = R"({\"format\":\"lplscene/1\",\"procedural\":{\"seed\":2,\"terrain\":{\"octaves\":4}}})";
 
-        const std::string same =
-            std::string{R"({"cmd":"diff_scenes","a":")"} + docA + R"(","b":")" + docA + R"("})";
+        const std::string same = std::string{R"({"cmd":"diff_scenes","a":")"} + docA + R"(","b":")" + docA + R"("})";
         const auto identical = processor.execute(same);
         check(identical.has_value() && identical.value().find("\"identical\":true") != std::string::npos,
               "two identical documents differ in nothing");
 
-        const std::string changed =
-            std::string{R"({"cmd":"diff_scenes","a":")"} + docA + R"(","b":")" + docB + R"("})";
+        const std::string changed = std::string{R"({"cmd":"diff_scenes","a":")"} + docA + R"(","b":")" + docB + R"("})";
         const auto diff = processor.execute(changed);
         check(diff.has_value() && diff.value().find("\"differences\":1") != std::string::npos,
               "one changed field is exactly one difference");

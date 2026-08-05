@@ -233,8 +233,9 @@ int main()
 
         bool allValid = true;
         for (core::usize i = 0u; i < valid.size(); ++i)
-            allValid = allValid && codec::satisfiesBiologicalLimits(
-                                       valid[i].payload.data(), static_cast<core::u32>(valid[i].payload.size()), limits);
+            allValid =
+                allValid && codec::satisfiesBiologicalLimits(valid[i].payload.data(),
+                                                             static_cast<core::u32>(valid[i].payload.size()), limits);
         check(allValid, "and every one it kept really does satisfy the limits");
     }
 

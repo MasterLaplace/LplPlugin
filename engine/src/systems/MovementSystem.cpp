@@ -111,8 +111,7 @@ void MovementSystem::execute(core::f32 /*dt*/)
                 // state — passed through a float on one link of the chain; the one
                 // measurement that really comes from outside is quantised inside
                 // computeMovementVelocity, at the boundary, exactly once.
-                const math::Vec3<math::Fixed32> vel =
-                    _impl->inputManager.computeMovementVelocity(eid, velocities[i]);
+                const math::Vec3<math::Fixed32> vel = _impl->inputManager.computeMovementVelocity(eid, velocities[i]);
                 velocities[i] = vel;
 
                 // Wake entity if velocity is non-zero and it was sleeping

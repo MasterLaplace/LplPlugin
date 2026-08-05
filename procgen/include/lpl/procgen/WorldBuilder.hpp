@@ -42,6 +42,8 @@
 #    define LPL_PROCGEN_WORLDBUILDER_HPP
 
 #    include <lpl/core/Types.hpp>
+#    include <lpl/math/FixedMath.hpp>
+#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Aggregation.hpp>
 #    include <lpl/procgen/Biome.hpp>
 #    include <lpl/procgen/CaveSystem.hpp>
@@ -49,12 +51,10 @@
 #    include <lpl/procgen/Dungeon.hpp>
 #    include <lpl/procgen/Erosion.hpp>
 #    include <lpl/procgen/Extrusion.hpp>
-#    include <lpl/math/FixedMath.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
 #    include <lpl/procgen/Hydrology.hpp>
 #    include <lpl/procgen/LSystem.hpp>
 #    include <lpl/procgen/QualityGate.hpp>
-#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Routing.hpp>
 #    include <lpl/procgen/Settlement.hpp>
 #    include <lpl/procgen/ShapeGrammar.hpp>

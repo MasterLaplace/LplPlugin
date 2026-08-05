@@ -43,11 +43,11 @@ namespace {
 {
     switch (kind)
     {
-    case SourceKind::Notarial: return math::Fixed32::fromRaw(60293);      // 0.92
-    case SourceKind::Archaeology: return math::Fixed32::fromRaw(57672);   // 0.88
+    case SourceKind::Notarial: return math::Fixed32::fromRaw(60293);       // 0.92
+    case SourceKind::Archaeology: return math::Fixed32::fromRaw(57672);    // 0.88
     case SourceKind::Administrative: return math::Fixed32::fromRaw(52429); // 0.80
-    case SourceKind::Chronicle: return math::Fixed32::fromRaw(36044);     // 0.55
-    case SourceKind::Panegyric: return math::Fixed32::fromRaw(13107);     // 0.20
+    case SourceKind::Chronicle: return math::Fixed32::fromRaw(36044);      // 0.55
+    case SourceKind::Panegyric: return math::Fixed32::fromRaw(13107);      // 0.20
     case SourceKind::Count: break;
     }
     return math::Fixed32::half();

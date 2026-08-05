@@ -58,8 +58,7 @@ namespace {
 
         lpl::pmr::memcpy(&outEcc, bytes + offset, sizeof(EccV1));
 
-        const core::u64 parityBytes =
-            static_cast<core::u64>(outEcc.parityShards) * outEcc.rowBytes;
+        const core::u64 parityBytes = static_cast<core::u64>(outEcc.parityShards) * outEcc.rowBytes;
         if (sizeof(EccV1) + parityBytes != sectionSize)
             return false;
         if (static_cast<core::u64>(outEcc.protectedOffset) + outEcc.protectedBytes > header.totalSize)

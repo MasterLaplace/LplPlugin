@@ -97,9 +97,9 @@ int main()
     history::foldHistoryState(folded);
 
     std::printf("    consensus says he died of: %s\n",
-                folded.consensusObject == history::kObjectDysentery
-                    ? "dysentery (the bones)"
-                    : (folded.consensusObject == history::kObjectBattle ? "battle (the chronicler)" : "?"));
+                folded.consensusObject == history::kObjectDysentery ?
+                    "dysentery (the bones)" :
+                    (folded.consensusObject == history::kObjectBattle ? "battle (the chronicler)" : "?"));
     std::printf("    contradictions=%u demoted=%u constraints=%u\n", folded.contradictions, folded.demoted,
                 folded.constraints);
 

@@ -175,8 +175,8 @@ Observations inspectWorld(const ecs::Registry &registry, core::u32 limit)
             const auto *positions =
                 static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::Position));
             const auto *extents =
-                hasAabb ? static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB))
-                        : nullptr;
+                hasAabb ? static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB)) :
+                          nullptr;
             if (positions == nullptr)
                 continue;
 
@@ -251,8 +251,7 @@ Observations reviewGeneration(std::string_view recipeJson, std::string_view repo
     bool reportOk = false;
     const editor::detail::JVal recipe = editor::detail::parse(recipeJson, &recipeOk);
     const editor::detail::JVal answer = editor::detail::parse(reportJson, &reportOk);
-    if (!recipeOk || !reportOk || recipe.t != editor::detail::JVal::T::Obj ||
-        answer.t != editor::detail::JVal::T::Obj)
+    if (!recipeOk || !reportOk || recipe.t != editor::detail::JVal::T::Obj || answer.t != editor::detail::JVal::T::Obj)
     {
         record(out, limit, Severity::Warning, "unreadable-report",
                "The recipe or the generation report did not parse, so nothing can be judged from them.");

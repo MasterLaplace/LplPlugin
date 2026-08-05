@@ -85,9 +85,9 @@ core::Expected<ToolCall> parseToolCall(std::string_view json, const ToolRegistry
         // Two different refusals, because they teach different things: a tool
         // that does not exist is a hallucination, a tool that exists but is not
         // offered is a precondition the caller has not met yet.
-        std::string message = findTool(name->str) != nullptr
-                                  ? "tool \"" + name->str + "\" is not available in this world state"
-                                  : "unknown tool \"" + name->str + "\"";
+        std::string message = findTool(name->str) != nullptr ?
+                                  "tool \"" + name->str + "\" is not available in this world state" :
+                                  "unknown tool \"" + name->str + "\"";
         return std::unexpected(refuse(core::ErrorCode::kNotFound, message));
     }
 
@@ -107,9 +107,9 @@ core::Expected<ToolCall> parseToolCall(std::string_view json, const ToolRegistry
                        "\"" + std::string{tool->name} + "\" requires \"" + std::string{param.name} + "\""));
         }
         if (!matches(param.kind, *value))
-            return std::unexpected(refuse(core::ErrorCode::kInvalidArgument,
-                                          "\"" + std::string{param.name} + "\" must be a " +
-                                              std::string{jsonTypeName(param.kind)}));
+            return std::unexpected(
+                refuse(core::ErrorCode::kInvalidArgument,
+                       "\"" + std::string{param.name} + "\" must be a " + std::string{jsonTypeName(param.kind)}));
         if (param.hasBounds && (value->num < param.minValue || value->num > param.maxValue))
         {
             char range[128];
@@ -131,9 +131,9 @@ core::Expected<ToolCall> parseToolCall(std::string_view json, const ToolRegistry
         for (const ToolParam &param : tool->params)
             declared = declared || param.name == member.first;
         if (!declared)
-            return std::unexpected(refuse(core::ErrorCode::kInvalidArgument,
-                                          "\"" + std::string{tool->name} + "\" has no parameter \"" + member.first +
-                                              "\""));
+            return std::unexpected(
+                refuse(core::ErrorCode::kInvalidArgument,
+                       "\"" + std::string{tool->name} + "\" has no parameter \"" + member.first + "\""));
     }
 
     ToolCall call;

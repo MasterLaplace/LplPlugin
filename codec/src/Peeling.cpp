@@ -192,9 +192,8 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
         const core::u32 column = unknownColumn[b];
         if (column == kNoPivot)
             continue;
-        const core::u32 pivotRow = column < elimination.rowOfPivotColumn.size()
-                                       ? elimination.rowOfPivotColumn[column]
-                                       : kNoPivot;
+        const core::u32 pivotRow =
+            column < elimination.rowOfPivotColumn.size() ? elimination.rowOfPivotColumn[column] : kNoPivot;
         if (pivotRow == kNoPivot)
             return false;
 

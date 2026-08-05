@@ -63,7 +63,7 @@ public:
      * @param cellSize World units per cell.
      */
     HeightfieldCollisionSystem(ecs::Registry &registry, const procgen::Heightfield &terrain,
-                              core::f32 cellSize) noexcept;
+                               core::f32 cellSize) noexcept;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override { return _descriptor; }
 

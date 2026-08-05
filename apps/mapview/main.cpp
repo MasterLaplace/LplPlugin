@@ -44,9 +44,9 @@
  * @copyright MIT License
  */
 
+#include <lpl/ai/AntColony.hpp>
 #include <lpl/ai/Personality.hpp>
 #include <lpl/ai/StigmergyField.hpp>
-#include <lpl/ai/AntColony.hpp>
 #include <lpl/ai/Swarm.hpp>
 #include <lpl/ecology/Genome.hpp>
 #include <lpl/ecology/Herd.hpp>
@@ -62,29 +62,29 @@
 #include <lpl/engine/Config.hpp>
 #include <lpl/engine/Engine.hpp>
 #include <lpl/engine/GridTerrain.hpp>
-#include <lpl/engine/systems/HeightfieldCollisionSystem.hpp>
 #include <lpl/engine/ITerrainQuery.hpp>
 #include <lpl/engine/LivingLayer.hpp>
-#include <lpl/engine/systems/CreatureSystems.hpp>
 #include <lpl/engine/World.hpp>
+#include <lpl/engine/systems/CreatureSystems.hpp>
+#include <lpl/engine/systems/HeightfieldCollisionSystem.hpp>
 #include <lpl/image/Font8x16.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/math/Vec3.hpp>
 #include <lpl/procgen/Biome.hpp>
 #include <lpl/procgen/CaveSystem.hpp>
 #include <lpl/procgen/Climate.hpp>
 #include <lpl/procgen/Dungeon.hpp>
 #include <lpl/procgen/Extrusion.hpp>
-#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/Hydrology.hpp>
 #include <lpl/procgen/Liminal.hpp>
+#include <lpl/procgen/MapMesh.hpp>
+#include <lpl/procgen/MapShading.hpp>
 #include <lpl/procgen/Settlement.hpp>
 #include <lpl/procgen/ShapeGrammar.hpp>
 #include <lpl/procgen/Streaming.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 #include <lpl/procgen/Voronoi.hpp>
-#include <lpl/procgen/MapMesh.hpp>
-#include <lpl/procgen/MapShading.hpp>
 #include <lpl/procgen/WorldBuilder.hpp>
 
 #include <GL/gl.h>
@@ -381,12 +381,12 @@ double nowMilliseconds()
             bool collidable;
         };
         static constexpr Species kSpecies[] = {
-            {procgen::BiomeId::Taiga, 0.16f, 0.42f, 1.6f, true},
-            {procgen::BiomeId::Forest, 0.18f, 0.5f, 1.6f, true},
-            {procgen::BiomeId::Rainforest, 0.22f, 0.55f, 1.8f, true},
-            {procgen::BiomeId::Savanna, 0.05f, 0.3f, 0.0f, false},
-            {procgen::BiomeId::Desert, 0.03f, 0.22f, 0.0f, false},
-            {procgen::BiomeId::Marsh, 0.2f, 0.25f, 0.0f, false},
+            {procgen::BiomeId::Taiga,      0.16f, 0.42f, 1.6f, true },
+            {procgen::BiomeId::Forest,     0.18f, 0.5f,  1.6f, true },
+            {procgen::BiomeId::Rainforest, 0.22f, 0.55f, 1.8f, true },
+            {procgen::BiomeId::Savanna,    0.05f, 0.3f,  0.0f, false},
+            {procgen::BiomeId::Desert,     0.03f, 0.22f, 0.0f, false},
+            {procgen::BiomeId::Marsh,      0.2f,  0.25f, 0.0f, false},
         };
         static_assert(sizeof(kSpecies) / sizeof(kSpecies[0]) <= procgen::kMaxScatterRules,
                       "one scatter rule per plant, and the recipe has to hold them all");
@@ -421,8 +421,8 @@ TerrainData generateTerrain(const Options &options, ecs::Registry *registry,
     // clearance actually applied, which is only knowable after erosion has run.
     procgen::WorldRecipe recipe = recipeFor(options);
     TerrainData world;
-    static_cast<procgen::WorldAtlas &>(world) = procgen::buildAtlas(
-        recipe, registry, outPropIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.2f});
+    static_cast<procgen::WorldAtlas &>(world) =
+        procgen::buildAtlas(recipe, registry, outPropIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.2f});
     world.buildMilliseconds = nowMilliseconds() - started;
     return world;
 }
@@ -435,7 +435,6 @@ TerrainData generateTerrain(const Options &options, ecs::Registry *registry,
 // one definition, two tools. They were about to be written a second time for the
 // editor, which is the pattern this repository has paid for eight times.
 using Rgb = procgen::Rgb;
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Text, drawn from the engine's console font as GL quads
@@ -824,7 +823,8 @@ public:
         {
             (void) halfWidthGrid;
             (void) halfDepthGrid;
-            _terrain.addPlant(static_cast<core::i32>(props[i].x.toFloat()), static_cast<core::i32>(props[i].z.toFloat()));
+            _terrain.addPlant(static_cast<core::i32>(props[i].x.toFloat()),
+                              static_cast<core::i32>(props[i].z.toFloat()));
         }
         // The producer level is COUNTED, not integrated: it is the standing
         // vegetation this seed actually grew.
@@ -1064,68 +1064,68 @@ public:
         // The species mean, recomputed here rather than cached: it moves as the
         // herd breeds, and a stale mean would mark the wrong animals.
         _statScratch.clear();
-        forEachBody([this](core::u32 species, core::u32, const ecology::Genome &genome,
-                           const math::Vec3<math::Fixed32> &) {
-            if (species == 0u)
-                _statScratch.push_back(genome);
-        });
+        forEachBody(
+            [this](core::u32 species, core::u32, const ecology::Genome &genome, const math::Vec3<math::Fixed32> &) {
+                if (species == 0u)
+                    _statScratch.push_back(genome);
+            });
         const ecology::PopulationStats stats = ecology::strengthStats(_statScratch.empty() ? nullptr : &_statScratch[0],
-                                                                     static_cast<core::u32>(_statScratch.size()));
+                                                                      static_cast<core::u32>(_statScratch.size()));
         ecology::HeredityParams heredity;
 
         glBegin(GL_QUADS);
-        forEachBody([&](core::u32 species, core::u32 id, const ecology::Genome &genome,
-                        const math::Vec3<math::Fixed32> &at) {
-            const core::i32 gx = static_cast<core::i32>(at.x.toFloat() + halfW);
-            const core::i32 gz = static_cast<core::i32>(at.z.toFloat() + halfD);
-            if (!world.height.contains(gx, gz))
-                return;
-            const float ground = world.height.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)).toFloat();
+        forEachBody(
+            [&](core::u32 species, core::u32 id, const ecology::Genome &genome, const math::Vec3<math::Fixed32> &at) {
+                const core::i32 gx = static_cast<core::i32>(at.x.toFloat() + halfW);
+                const core::i32 gz = static_cast<core::i32>(at.z.toFloat() + halfD);
+                if (!world.height.contains(gx, gz))
+                    return;
+                const float ground = world.height.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)).toFloat();
 
-            const ai::PersonalityTraits traits = ai::personalityOf(id, species);
-            const float half = 0.22f * genome.size.toFloat();
+                const ai::PersonalityTraits traits = ai::personalityOf(id, species);
+                const float half = 0.22f * genome.size.toFloat();
 
-            Rgb colour = species == 1u ? Rgb{0.72f, 0.20f, 0.18f} : Rgb{0.80f, 0.66f, 0.36f};
-            // Temperament is visible, faintly: an aggressive animal runs hot.
-            colour.r += 0.18f * traits.aggression.toFloat();
-            colour.b += 0.12f * traits.nervousness.toFloat();
-            if (species == 0u && stats.count > 4u && ecology::isAnomaly(genome, stats, heredity))
-                colour = {0.98f, 0.94f, 0.86f};
+                Rgb colour = species == 1u ? Rgb{0.72f, 0.20f, 0.18f} : Rgb{0.80f, 0.66f, 0.36f};
+                // Temperament is visible, faintly: an aggressive animal runs hot.
+                colour.r += 0.18f * traits.aggression.toFloat();
+                colour.b += 0.12f * traits.nervousness.toFloat();
+                if (species == 0u && stats.count > 4u && ecology::isAnomaly(genome, stats, heredity))
+                    colour = {0.98f, 0.94f, 0.86f};
 
-            const float cx = at.x.toFloat();
-            const float cz = at.z.toFloat();
-            const float cy = ground + half + 0.1f;
-            const float x0 = cx - half;
-            const float x1 = cx + half;
-            const float y0 = cy - half;
-            const float y1 = cy + half;
-            const float z0 = cz - half;
-            const float z1 = cz + half;
+                const float cx = at.x.toFloat();
+                const float cz = at.z.toFloat();
+                const float cy = ground + half + 0.1f;
+                const float x0 = cx - half;
+                const float x1 = cx + half;
+                const float y0 = cy - half;
+                const float y1 = cy + half;
+                const float z0 = cz - half;
+                const float z1 = cz + half;
 
-            glColor3f(colour.r, colour.g, colour.b);
-            glVertex3f(x0, y1, z0);
-            glVertex3f(x1, y1, z0);
-            glVertex3f(x1, y1, z1);
-            glVertex3f(x0, y1, z1);
-            glColor3f(colour.r * 0.7f, colour.g * 0.7f, colour.b * 0.7f);
-            glVertex3f(x0, y0, z1);
-            glVertex3f(x0, y1, z1);
-            glVertex3f(x1, y1, z1);
-            glVertex3f(x1, y0, z1);
-            glVertex3f(x1, y0, z0);
-            glVertex3f(x1, y1, z0);
-            glVertex3f(x0, y1, z0);
-            glVertex3f(x0, y0, z0);
-            glColor3f(colour.r * 0.55f, colour.g * 0.55f, colour.b * 0.55f);
-            glVertex3f(x1, y0, z1);
-            glVertex3f(x1, y1, z1);
-            glVertex3f(x1, y1, z0);
-            glVertex3f(x1, y0, z0);
-            glVertex3f(x0, y0, z0);
-            glVertex3f(x0, y1, z0);
-            glVertex3f(x0, y1, z1);
-            glVertex3f(x0, y0, z1);
-        });
+                glColor3f(colour.r, colour.g, colour.b);
+                glVertex3f(x0, y1, z0);
+                glVertex3f(x1, y1, z0);
+                glVertex3f(x1, y1, z1);
+                glVertex3f(x0, y1, z1);
+                glColor3f(colour.r * 0.7f, colour.g * 0.7f, colour.b * 0.7f);
+                glVertex3f(x0, y0, z1);
+                glVertex3f(x0, y1, z1);
+                glVertex3f(x1, y1, z1);
+                glVertex3f(x1, y0, z1);
+                glVertex3f(x1, y0, z0);
+                glVertex3f(x1, y1, z0);
+                glVertex3f(x0, y1, z0);
+                glVertex3f(x0, y0, z0);
+                glColor3f(colour.r * 0.55f, colour.g * 0.55f, colour.b * 0.55f);
+                glVertex3f(x1, y0, z1);
+                glVertex3f(x1, y1, z1);
+                glVertex3f(x1, y1, z0);
+                glVertex3f(x1, y0, z0);
+                glVertex3f(x0, y0, z0);
+                glVertex3f(x0, y1, z0);
+                glVertex3f(x0, y1, z1);
+                glVertex3f(x0, y0, z1);
+            });
         glEnd();
     }
 
@@ -1152,11 +1152,20 @@ public:
     [[nodiscard]] core::u32 births() const noexcept { return _births; }
     [[nodiscard]] core::u32 deaths() const noexcept { return _deaths; }
     /// Steps the terrain refused outright on the last tick.
-    [[nodiscard]] core::u32 refusals() const noexcept { return _creatures.locomotion() != nullptr ? _creatures.locomotion()->cornered() : 0u; }
+    [[nodiscard]] core::u32 refusals() const noexcept
+    {
+        return _creatures.locomotion() != nullptr ? _creatures.locomotion()->cornered() : 0u;
+    }
     /// Bodies recovered from somewhere they could not stand.
-    [[nodiscard]] core::u32 strays() const noexcept { return _creatures.locomotion() != nullptr ? _creatures.locomotion()->strays() : 0u; }
+    [[nodiscard]] core::u32 strays() const noexcept
+    {
+        return _creatures.locomotion() != nullptr ? _creatures.locomotion()->strays() : 0u;
+    }
     /// Bodies that steered AROUND an obstacle rather than into it.
-    [[nodiscard]] core::u32 avoided() const noexcept { return _creatures.locomotion() != nullptr ? _creatures.locomotion()->avoided() : 0u; }
+    [[nodiscard]] core::u32 avoided() const noexcept
+    {
+        return _creatures.locomotion() != nullptr ? _creatures.locomotion()->avoided() : 0u;
+    }
     [[nodiscard]] core::u32 standingPlants() const noexcept { return _terrain.standingPlants(); }
     [[nodiscard]] core::u32 plantCount() const noexcept { return _terrain.plantCount(); }
     [[nodiscard]] core::u32 grazed() const noexcept { return _terrain.grazed(); }
@@ -1302,7 +1311,8 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
         // Entrances and reachability, not a floor count: a sealed system and an
         // open one have the same floor area, and only one of them is a cave.
         std::snprintf(line, sizeof(line), "underground layered  %u layers  %u entrances  %u/%u reachable",
-                      world.stats.caveLayers, world.stats.caveEntrances, world.stats.caveReachable, world.stats.caveHollow);
+                      world.stats.caveLayers, world.stats.caveEntrances, world.stats.caveReachable,
+                      world.stats.caveHollow);
     else
         std::snprintf(line, sizeof(line), "underground %s  %u floor  %s", caveName(options.caveKind),
                       world.stats.dungeonFloor, world.stats.dungeonConnected ? "connected" : "SPLIT");
@@ -1772,8 +1782,8 @@ private:
             // standing free of the hillside. The comment claiming otherwise was
             // already there. Moving the mesher into a module is what surfaced it.
             const std::vector<float> &datum = buildPlotDatum();
-            _townMesh = procgen::buildVoxelMesh(_terrain.townVolume, _terrain, -0.4f, palette, 4u, datum.data(),
-                                                datum.size());
+            _townMesh =
+                procgen::buildVoxelMesh(_terrain.townVolume, _terrain, -0.4f, palette, 4u, datum.data(), datum.size());
         }
         else
         {
@@ -1840,10 +1850,10 @@ private:
         std::printf("seed %u %ux%u noise=%s warp=%d erode=%d rivers=%d(%u) wind=%s metric=%s cave=%s "
                     "build=%.1fms tris=%zu flora=%zu boulders=%u plots=%zu townTris=%zu caveTris=%zu\n",
                     _options.seed, _options.size, _options.size, noiseName(_options.noise), int(_options.warp),
-                    int(_options.erosion), int(_options.rivers), _terrain.stats.riverCells, windName(_options.windDirection),
-                    metricName(_options.metric), caveName(_options.caveKind), _terrain.buildMilliseconds,
-                    _surfaceMesh.size() / 3u, _propIds.size(), _boulderCount, _terrain.plots.size(),
-                    _townMesh.size() / 3u, _undergroundMesh.size() / 3u);
+                    int(_options.erosion), int(_options.rivers), _terrain.stats.riverCells,
+                    windName(_options.windDirection), metricName(_options.metric), caveName(_options.caveKind),
+                    _terrain.buildMilliseconds, _surfaceMesh.size() / 3u, _propIds.size(), _boulderCount,
+                    _terrain.plots.size(), _townMesh.size() / 3u, _undergroundMesh.size() / 3u);
         std::fflush(stdout);
     }
 

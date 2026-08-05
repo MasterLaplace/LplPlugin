@@ -21,9 +21,9 @@
  */
 
 #include <lpl/ai/AbstractWorld.hpp>
-#include <lpl/ai/AntColony.hpp>
 #include <lpl/ai/Affordance.hpp>
 #include <lpl/ai/AiMap.hpp>
+#include <lpl/ai/AntColony.hpp>
 #include <lpl/ai/Personality.hpp>
 #include <lpl/ai/Social.hpp>
 #include <lpl/ai/SpringBody.hpp>
@@ -347,8 +347,7 @@ void testTheColonyClosesItsTrail()
     // the same cells, so a trail exists. Left to diffuse outward it spreads its
     // deposits over the whole map and nothing stands out — a field rather than a
     // route, which is the distinction the rule exists for.
-    check(math::integerSqrt(loose.furthest) > math::integerSqrt(held.furthest),
-          "and its agents do wander further");
+    check(math::integerSqrt(loose.furthest) > math::integerSqrt(held.furthest), "and its agents do wander further");
     check(held.strongCells < loose.strongCells,
           "a homing colony concentrates its trail; an unbounded one spreads it thin");
 

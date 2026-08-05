@@ -61,8 +61,8 @@ struct DecodeReport {
  * @return true when every block was recovered.
  */
 [[nodiscard]] bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTable &table,
-                                  core::u32 blockCount, core::u32 blockBytes,
-                                  lpl::pmr::vector<core::u8> &outBlocks, DecodeReport &outReport);
+                                  core::u32 blockCount, core::u32 blockBytes, lpl::pmr::vector<core::u8> &outBlocks,
+                                  DecodeReport &outReport);
 
 } // namespace lpl::codec
 

@@ -75,8 +75,7 @@ int main()
     // ── 1. The surface is a grid of quads ────────────────────────────────────
     std::printf("-- the surface is one quad per cell --\n");
     const procgen::MapMesh surface = procgen::buildSurfaceMesh(atlas, procgen::MapSurfaceStyle{});
-    check(surface.size() == static_cast<core::usize>(kW - 1u) * (kD - 1u) * 6u,
-          "(w-1)(d-1) cells, two triangles each");
+    check(surface.size() == static_cast<core::usize>(kW - 1u) * (kD - 1u) * 6u, "(w-1)(d-1) cells, two triangles each");
     procgen::WorldAtlas empty;
     check(procgen::buildSurfaceMesh(empty, procgen::MapSurfaceStyle{}).empty(), "an empty world meshes to nothing");
 
@@ -124,7 +123,8 @@ int main()
     procgen::WorldAtlas edge = slopedAtlas(kW, kD);
     edge.dungeon = procgen::DungeonMap{kW, kD, procgen::DungeonCell::Wall};
     edge.dungeon.at(0u, 0u) = procgen::DungeonCell::Floor;
-    check(procgen::buildDungeonMesh(edge, 4.0f).size() == 6u * 6u, "a corner cell is still walled in on all four sides");
+    check(procgen::buildDungeonMesh(edge, 4.0f).size() == 6u * 6u,
+          "a corner cell is still walled in on all four sides");
 
     // ── 4. Voxels: interior faces are skipped ────────────────────────────────
     std::printf("\n-- a solid block shows only its outside --\n");
@@ -143,8 +143,7 @@ int main()
     // ── 5. One datum per footprint, not per column ───────────────────────────
     std::printf("\n-- a plan sits on one datum --\n");
     lpl::pmr::vector<float> flat(static_cast<core::usize>(kW) * kD, 0.0f);
-    const procgen::MapMesh onDatum =
-        procgen::buildVoxelMesh(block, atlas, 0.0f, palette, 2u, flat.data(), flat.size());
+    const procgen::MapMesh onDatum = procgen::buildVoxelMesh(block, atlas, 0.0f, palette, 2u, flat.data(), flat.size());
     check(procgen::foldMapMesh(onDatum) != procgen::foldMapMesh(cube),
           "a footprint datum moves the volume off the per-column ground");
     // And it is the FLAT one that is flat: every base vertex at the same height.

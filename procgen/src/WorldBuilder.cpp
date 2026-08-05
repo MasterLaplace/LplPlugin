@@ -13,8 +13,8 @@
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
-#include <lpl/math/Vec3.hpp>
 #include <lpl/math/Random.hpp>
+#include <lpl/math/Vec3.hpp>
 
 namespace lpl::procgen {
 
@@ -791,7 +791,8 @@ lpl::pmr::vector<core::u32> WorldBuilder::eligibleCells(const ScatterRule &rule)
     return cells;
 }
 
-void WorldBuilder::selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<core::u32> &cells, math::Random random) const
+void WorldBuilder::selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<core::u32> &cells,
+                                   math::Random random) const
 {
     if (cells.empty())
         return;

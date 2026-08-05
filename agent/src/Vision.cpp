@@ -87,8 +87,8 @@ std::vector<Box> collectBoxes(const ecs::Registry &registry)
             if (positions == nullptr || !part->archetype().has(ecs::ComponentId::Position))
                 continue;
             const auto *extents =
-                hasAabb ? static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB))
-                        : nullptr;
+                hasAabb ? static_cast<const math::Vec3<math::Fixed32> *>(chunk->readComponent(ecs::ComponentId::AABB)) :
+                          nullptr;
 
             const core::u32 count = chunk->count();
             for (core::u32 i = 0u; i < count; ++i)
@@ -191,8 +191,8 @@ Screenshot renderWorld(const ecs::Registry &registry, core::u32 width, core::u32
         // The far plane follows the framing, or a world larger than the default
         // 600 units would be clipped away by the camera meant to photograph it.
         const core::f32 farPlane = camera.distance() * 4.0f + span * 2.0f + 10.0f;
-        const math::Mat4<core::f32> mvp = camera.viewProjection(
-            (minY + maxY) * 0.5f, aspect, render::CameraLens{1.04719755f, 0.4f, farPlane}, basis);
+        const math::Mat4<core::f32> mvp =
+            camera.viewProjection((minY + maxY) * 0.5f, aspect, render::CameraLens{1.04719755f, 0.4f, farPlane}, basis);
 
         for (const Box &box : boxes)
             shot.triangles += drawBox(target, mvp, box);

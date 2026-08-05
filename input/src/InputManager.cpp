@@ -145,9 +145,8 @@ void InputManager::updateGroundedState(core::u32 entityId, float currentVelY, fl
     state->isGrounded = pmr::fabs(currentVelY) < threshold;
 }
 
-math::Vec3<math::Fixed32> InputManager::computeMovementVelocity(core::u32 entityId,
-                                                                 math::Vec3<math::Fixed32> currentVel,
-                                                                 math::Fixed32 speed)
+math::Vec3<math::Fixed32>
+InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<math::Fixed32> currentVel, math::Fixed32 speed)
 {
     auto *state = getStateMut(entityId);
     if (!state)

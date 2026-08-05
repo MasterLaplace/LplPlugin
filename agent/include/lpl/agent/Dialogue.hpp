@@ -39,7 +39,7 @@ namespace lpl::agent {
  * @brief One thing the sovereign asked for, in their own words.
  */
 struct Intent {
-    std::string text;      ///< "make a world with rivers and a village"
+    std::string text;       ///< "make a world with rivers and a village"
     core::u32 sequence{0u}; ///< Order received, so a reply can name what it answers.
 };
 

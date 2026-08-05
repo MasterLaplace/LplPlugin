@@ -31,9 +31,9 @@ namespace lpl::rosetta {
  * @brief What running a program did, in numbers a test can compare.
  */
 struct ExecutionReport {
-    bool halted{false};        ///< Reached a HALT rather than the budget.
-    core::u32 steps{0u};       ///< Instructions retired.
-    core::u32 traceSignature{0u}; ///< FNV-1a over every retired instruction and its result.
+    bool halted{false};                    ///< Reached a HALT rather than the budget.
+    core::u32 steps{0u};                   ///< Instructions retired.
+    core::u32 traceSignature{0u};          ///< FNV-1a over every retired instruction and its result.
     core::u32 registers[kRegisterCount]{}; ///< Final register file.
 };
 

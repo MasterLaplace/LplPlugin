@@ -86,10 +86,7 @@ inline constexpr Gf256Tables kGf256 = makeGf256Tables();
 /**
  * @brief GF(256) addition is still XOR: the characteristic is two whatever the extension.
  */
-[[nodiscard]] constexpr core::u8 gf256Add(core::u8 a, core::u8 b) noexcept
-{
-    return static_cast<core::u8>(a ^ b);
-}
+[[nodiscard]] constexpr core::u8 gf256Add(core::u8 a, core::u8 b) noexcept { return static_cast<core::u8>(a ^ b); }
 
 /**
  * @brief GF(256) multiplication by logarithms.

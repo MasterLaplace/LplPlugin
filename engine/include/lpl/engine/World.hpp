@@ -134,8 +134,7 @@ public:
      * @param recipe  The ecosystem: food web, genome drift, stigmergy physics.
      * @param seed    Master seed for the layer's own streams.
      */
-    LivingLayer &enableLivingLayer(const LivingLayerParams &params, const ecology::LivingRecipe &recipe,
-                                   core::u32 seed)
+    LivingLayer &enableLivingLayer(const LivingLayerParams &params, const ecology::LivingRecipe &recipe, core::u32 seed)
     {
         if (!_living)
         {

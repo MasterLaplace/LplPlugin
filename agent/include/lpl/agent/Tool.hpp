@@ -179,8 +179,8 @@ struct ToolParam {
  * and then refused. Refusals cost a turn; absence costs nothing.
  */
 enum class ToolGate : core::u8 {
-    Always = 0,       ///< Offered unconditionally.
-    RequiresWorld,    ///< Offered once the world holds at least one entity.
+    Always = 0,        ///< Offered unconditionally.
+    RequiresWorld,     ///< Offered once the world holds at least one entity.
     RequiresEmptyWorld ///< Offered only while nothing has been generated yet.
 };
 
@@ -229,40 +229,43 @@ namespace detail {
 // Deriving these from a reflection table over WorldRecipe (the way components are
 // derived) is a real improvement and a chantier of its own; no such table exists.
 inline constexpr ToolParam kGenerateWorldParams[] = {
-    {"seed", ParamKind::Integer, false, true, 0.0, 4294967295.0, DynamicEnum::None, "Master seed; same seed, same world."},
-    {"width", ParamKind::Integer, false, true, 4.0, 1024.0, DynamicEnum::None, "Heightfield columns."},
-    {"depth", ParamKind::Integer, false, true, 4.0, 1024.0, DynamicEnum::None, "Heightfield rows."},
-    {"cellSize", ParamKind::Number, false, true, 0.25, 256.0, DynamicEnum::None, "World units per cell."},
-    {"materializeGround", ParamKind::Bool, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Spawn ground entities, not just the field."},
-    {"terrain", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Noise: frequency, octaves, warp, kind."},
-    {"erosion", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Thermal and hydraulic relaxation."},
-    {"rivers", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Drainage: density, carve depth."},
-    {"climate", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Rainfall, wind, sea level, rain shadow."},
-    {"biomes", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Elevation bands and snowline."},
-    {"climateAxes", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "The six-axis climate hypercube."},
-    {"terraceSteps", ParamKind::Integer, false, true, 0.0, 64.0, DynamicEnum::None,
-     "Terrace the field into this many steps; 0 leaves it smooth."},
-    {"provinces", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Voronoi districting of the surface: cellSize, jitter, metric."},
+    {"seed",              ParamKind::Integer, false, true,  0.0,  4294967295.0, DynamicEnum::None,
+     "Master seed; same seed, same world."                                                                                                     },
+    {"width",             ParamKind::Integer, false, true,  4.0,  1024.0,       DynamicEnum::None,     "Heightfield columns."                  },
+    {"depth",             ParamKind::Integer, false, true,  4.0,  1024.0,       DynamicEnum::None,     "Heightfield rows."                     },
+    {"cellSize",          ParamKind::Number,  false, true,  0.25, 256.0,        DynamicEnum::None,     "World units per cell."                 },
+    {"materializeGround", ParamKind::Bool,    false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Spawn ground entities, not just the field."                                                                                              },
+    {"terrain",           ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Noise: frequency, octaves, warp, kind."},
+    {"erosion",           ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Thermal and hydraulic relaxation."     },
+    {"rivers",            ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Drainage: density, carve depth."       },
+    {"climate",           ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Rainfall, wind, sea level, rain shadow."                                                                                                 },
+    {"biomes",            ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Elevation bands and snowline."         },
+    {"climateAxes",       ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "The six-axis climate hypercube."       },
+    {"terraceSteps",      ParamKind::Integer, false, true,  0.0,  64.0,         DynamicEnum::None,
+     "Terrace the field into this many steps; 0 leaves it smooth."                                                                             },
+    {"provinces",         ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Voronoi districting of the surface: cellSize, jitter, metric."                                                                           },
     // The ONE parameter whose legal values are a closed set of words, so they belong
     // in the sampler and not merely in a rejection: DWG-010 to the letter.
-    {"caveKind", ParamKind::String, false, false, 0.0, 0.0, DynamicEnum::CaveKind,
-     "Which underground generator runs. `layered` cannot be judged by the gate."},
-    {"caves", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Cellular-automaton cave carving."},
-    {"rooms", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Underground as a recursive room partition, when caveKind is bsp."},
-    {"aggregation", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Underground as diffusion-limited aggregation, when caveKind is dla."},
-    {"caveSystem", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Underground as a stack of plans joined by shafts, when caveKind is layered."},
-    {"buildings", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Raise the plots with the shape grammar: storeys, roof, materials."},
-    {"roadside", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None,
-     "Decorate the verges from an L-system pattern."},
-    {"settlement", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Roads, plots, shape grammar."},
-    {"gate", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Playability gate: reachability, path length."},
-    {"scatter", ParamKind::Array, false, false, 0.0, 0.0, DynamicEnum::None, "Per-biome prop and vegetation rules."},
+    {"caveKind",          ParamKind::String,  false, false, 0.0,  0.0,          DynamicEnum::CaveKind,
+     "Which underground generator runs. `layered` cannot be judged by the gate."                                                               },
+    {"caves",             ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Cellular-automaton cave carving."      },
+    {"rooms",             ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Underground as a recursive room partition, when caveKind is bsp."                                                                        },
+    {"aggregation",       ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Underground as diffusion-limited aggregation, when caveKind is dla."                                                                     },
+    {"caveSystem",        ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Underground as a stack of plans joined by shafts, when caveKind is layered."                                                             },
+    {"buildings",         ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Raise the plots with the shape grammar: storeys, roof, materials."                                                                       },
+    {"roadside",          ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Decorate the verges from an L-system pattern."                                                                                           },
+    {"settlement",        ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Roads, plots, shape grammar."          },
+    {"gate",              ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
+     "Playability gate: reachability, path length."                                                                                            },
+    {"scatter",           ParamKind::Array,   false, false, 0.0,  0.0,          DynamicEnum::None,     "Per-biome prop and vegetation rules."  },
 };
 
 inline constexpr ToolParam kLoadSceneParams[] = {
@@ -270,42 +273,42 @@ inline constexpr ToolParam kLoadSceneParams[] = {
 };
 
 inline constexpr ToolParam kSpawnFromTemplateParams[] = {
-    {"templates", ParamKind::Object, true, false, 0.0, 0.0, DynamicEnum::None,
-     "Named prefabs; $use chains are resolved."},
-    {"name", ParamKind::String, true, false, 0.0, 0.0, DynamicEnum::None, "Which template to instantiate."},
-    {"count", ParamKind::Integer, false, true, 1.0, 4096.0, DynamicEnum::None, "How many instances."},
-    {"overrides", ParamKind::Object, false, false, 0.0, 0.0, DynamicEnum::None, "Per-instance field overrides."},
+    {"templates", ParamKind::Object,  true,  false, 0.0, 0.0,    DynamicEnum::None,
+     "Named prefabs; $use chains are resolved."                                                                     },
+    {"name",      ParamKind::String,  true,  false, 0.0, 0.0,    DynamicEnum::None, "Which template to instantiate."},
+    {"count",     ParamKind::Integer, false, true,  1.0, 4096.0, DynamicEnum::None, "How many instances."           },
+    {"overrides", ParamKind::Object,  false, false, 0.0, 0.0,    DynamicEnum::None, "Per-instance field overrides." },
 };
 
 inline constexpr ToolParam kQueryEntitiesParams[] = {
-    {"with", ParamKind::String, false, false, 0.0, 0.0, DynamicEnum::ComponentName,
-     "Only entities carrying this component."},
+    {"with",  ParamKind::String,  false, false, 0.0,      0.0,     DynamicEnum::ComponentName,
+     "Only entities carrying this component."                                                                                      },
     // Bounds in HUMAN units, converted with Fixed32::fromFloat by the command.
     // Fixed32 saturates near +-32767, so a range wider than that is not "very
     // large", it is undefined — the same trap as the raw-vs-value constructor.
-    {"minX", ParamKind::Number, false, true, -32767.0, 32767.0, DynamicEnum::None, "Box lower bound on X."},
-    {"maxX", ParamKind::Number, false, true, -32767.0, 32767.0, DynamicEnum::None, "Box upper bound on X."},
-    {"minY", ParamKind::Number, false, true, -32767.0, 32767.0, DynamicEnum::None, "Box lower bound on Y."},
-    {"maxY", ParamKind::Number, false, true, -32767.0, 32767.0, DynamicEnum::None, "Box upper bound on Y."},
-    {"minZ", ParamKind::Number, false, true, -32767.0, 32767.0, DynamicEnum::None, "Box lower bound on Z."},
-    {"maxZ", ParamKind::Number, false, true, -32767.0, 32767.0, DynamicEnum::None, "Box upper bound on Z."},
-    {"limit", ParamKind::Integer, false, true, 1.0, 4096.0, DynamicEnum::None, "How many sample indices to return."},
+    {"minX",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box lower bound on X."             },
+    {"maxX",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box upper bound on X."             },
+    {"minY",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box lower bound on Y."             },
+    {"maxY",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box upper bound on Y."             },
+    {"minZ",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box lower bound on Z."             },
+    {"maxZ",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box upper bound on Z."             },
+    {"limit", ParamKind::Integer, false, true,  1.0,      4096.0,  DynamicEnum::None,          "How many sample indices to return."},
 };
 
 inline constexpr ToolParam kTakeScreenshotParams[] = {
-    {"path", ParamKind::String, true, false, 0.0, 0.0, DynamicEnum::None, "Where to write the binary PPM."},
-    {"width", ParamKind::Integer, false, true, 16.0, 4096.0, DynamicEnum::None, "Image width in pixels."},
-    {"height", ParamKind::Integer, false, true, 16.0, 4096.0, DynamicEnum::None, "Image height in pixels."},
-    {"yawDeg", ParamKind::Number, false, true, -360.0, 360.0, DynamicEnum::None, "Orbit camera yaw, degrees."},
-    {"pitchDeg", ParamKind::Number, false, true, -89.0, 89.0, DynamicEnum::None, "Orbit camera pitch, degrees."},
-    {"distance", ParamKind::Number, false, true, 0.0, 4096.0, DynamicEnum::None,
-     "Orbit radius; 0 frames the whole world."},
+    {"path",     ParamKind::String,  true,  false, 0.0,    0.0,    DynamicEnum::None, "Where to write the binary PPM."},
+    {"width",    ParamKind::Integer, false, true,  16.0,   4096.0, DynamicEnum::None, "Image width in pixels."        },
+    {"height",   ParamKind::Integer, false, true,  16.0,   4096.0, DynamicEnum::None, "Image height in pixels."       },
+    {"yawDeg",   ParamKind::Number,  false, true,  -360.0, 360.0,  DynamicEnum::None, "Orbit camera yaw, degrees."    },
+    {"pitchDeg", ParamKind::Number,  false, true,  -89.0,  89.0,   DynamicEnum::None, "Orbit camera pitch, degrees."  },
+    {"distance", ParamKind::Number,  false, true,  0.0,    4096.0, DynamicEnum::None,
+     "Orbit radius; 0 frames the whole world."                                                                        },
 };
 
 inline constexpr ToolParam kDiffScenesParams[] = {
-    {"a", ParamKind::String, true, false, 0.0, 0.0, DynamicEnum::None, "First .lplscene document."},
-    {"b", ParamKind::String, true, false, 0.0, 0.0, DynamicEnum::None, "Second .lplscene document."},
-    {"limit", ParamKind::Integer, false, true, 1.0, 4096.0, DynamicEnum::None, "How many differences to name."},
+    {"a",     ParamKind::String,  true,  false, 0.0, 0.0,    DynamicEnum::None, "First .lplscene document."    },
+    {"b",     ParamKind::String,  true,  false, 0.0, 0.0,    DynamicEnum::None, "Second .lplscene document."   },
+    {"limit", ParamKind::Integer, false, true,  1.0, 4096.0, DynamicEnum::None, "How many differences to name."},
 };
 
 } // namespace detail
@@ -317,12 +320,12 @@ inline constexpr ToolParam kDiffScenesParams[] = {
  * reordering is a deliberate change that a test reports rather than a silent one.
  */
 inline constexpr ToolDesc kTools[] = {
-    {"generate_world", "Generate a whole world from one recipe: terrain, erosion, rivers, climate, biomes, caves, "
-                       "settlement, props. One call, because a world is one pipeline.",
-     detail::kGenerateWorldParams, ToolGate::Always, true},
+    {"generate_world",
+     "Generate a whole world from one recipe: terrain, erosion, rivers, climate, biomes, caves, "
+     "settlement, props. One call, because a world is one pipeline.", detail::kGenerateWorldParams, ToolGate::Always, true},
     {"load_scene", "Replace the world with a .lplscene document.", detail::kLoadSceneParams, ToolGate::Always, true},
-    {"save_scene", "Return the current world as a .lplscene document.", std::span<const ToolParam>{}, ToolGate::RequiresWorld,
-     false},
+    {"save_scene", "Return the current world as a .lplscene document.", std::span<const ToolParam>{},
+     ToolGate::RequiresWorld, false},
     {"count", "Number of live entities.", std::span<const ToolParam>{}, ToolGate::Always, false},
     {"spawn_from_template", "Place instances of a named prefab.", detail::kSpawnFromTemplateParams,
      ToolGate::RequiresWorld, true},

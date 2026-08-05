@@ -375,8 +375,8 @@ struct MapSurfaceStyle {
  * @param datumCount Entries in @p datum.
  */
 [[nodiscard]] inline MapMesh buildVoxelMesh(const VoxelVolume &volume, const WorldAtlas &atlas, float baseLift,
-                                           const Rgb *palette, core::u32 paletteSize, const float *datum = nullptr,
-                                           core::usize datumCount = 0u)
+                                            const Rgb *palette, core::u32 paletteSize, const float *datum = nullptr,
+                                            core::usize datumCount = 0u)
 {
     MapMesh mesh;
     if (volume.empty() || atlas.height.empty() || palette == nullptr || paletteSize == 0u)
@@ -407,10 +407,10 @@ struct MapSurfaceStyle {
                 // each column at its own ground level shears into a staircase and,
                 // along a ridge, into a long wall standing free of the hillside.
                 const core::usize index = static_cast<core::usize>(z) * volume.width + x;
-                const float ground = datum != nullptr && index < datumCount ?
-                                         datum[index] :
-                                         atlas.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z))
-                                             .toFloat();
+                const float ground =
+                    datum != nullptr && index < datumCount ?
+                        datum[index] :
+                        atlas.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
                 const float y0 = ground + baseLift + static_cast<float>(y) * cell;
                 const float y1 = y0 + cell;
                 const float x0 = static_cast<float>(x) - halfW;

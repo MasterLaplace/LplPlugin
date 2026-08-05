@@ -243,9 +243,9 @@ void testTheGateJudgesTheStack()
     const procgen::CaveSystem system = procgen::generateCaveSystem(params, surface, nullptr);
 
     const procgen::LevelQuality quality = procgen::evaluateCaveSystem(system);
-    std::printf("    walkable=%u reachable=%u deepest=%u longest=%u deadEnds=%u junctions=%u\n",
-                quality.walkableCells, quality.reachableCells, quality.pathLength, quality.longestDistance,
-                quality.deadEnds, quality.junctions);
+    std::printf("    walkable=%u reachable=%u deepest=%u longest=%u deadEnds=%u junctions=%u\n", quality.walkableCells,
+                quality.reachableCells, quality.pathLength, quality.longestDistance, quality.deadEnds,
+                quality.junctions);
 
     check(quality.walkableCells == system.hollowCells, "it counts the same hollow cells the generator did");
     check(quality.reachableCells == system.reachableCells, "and reaches the same ones");
@@ -269,8 +269,8 @@ void testTheGateJudgesTheStack()
     }
 
     const procgen::LevelQuality sealedQuality = procgen::evaluateCaveSystem(sealed);
-    std::printf("    sealed: reachable=%u of %u, goal=%s\n", sealedQuality.reachableCells,
-                sealedQuality.walkableCells, sealedQuality.goalReachable ? "yes" : "no");
+    std::printf("    sealed: reachable=%u of %u, goal=%s\n", sealedQuality.reachableCells, sealedQuality.walkableCells,
+                sealedQuality.goalReachable ? "yes" : "no");
     check(!sealedQuality.goalReachable, "sealing every shaft to the bottom makes the goal unreachable");
     check(!sealedQuality.fullyConnected, "and leaves a whole floor cut off");
     check(!procgen::passesGate(sealedQuality, procgen::GateCriteria{}), "and the gate refuses it");

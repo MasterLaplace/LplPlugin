@@ -80,8 +80,8 @@ struct Finding {
  */
 struct Observations {
     std::vector<Finding> findings;
-    core::u32 total{0u};      ///< How many were found, before the bound.
-    bool truncated{false};    ///< Whether @c findings is shorter than @c total.
+    core::u32 total{0u};   ///< How many were found, before the bound.
+    bool truncated{false}; ///< Whether @c findings is shorter than @c total.
 
     /// How many findings are @c Severity::Defect.
     [[nodiscard]] core::u32 defects() const noexcept;

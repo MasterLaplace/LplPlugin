@@ -253,8 +253,8 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
         for (core::u32 e = encounterStart; e < written; ++e)
         {
             const core::u32 other = out[e].progress;
-            const core::u32 gap = other > fromStart[bestCell] ? other - fromStart[bestCell]
-                                                              : fromStart[bestCell] - other;
+            const core::u32 gap =
+                other > fromStart[bestCell] ? other - fromStart[bestCell] : fromStart[bestCell] - other;
             if (gap < params.minSpacing)
                 tooClose = true;
         }

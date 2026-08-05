@@ -71,8 +71,7 @@ core::u32 Transcript::trailingRepeats() const noexcept
         // The observation is part of the identity: reissuing a call and getting a
         // DIFFERENT answer is progress, however slow. Only the same call answered
         // the same way means nothing is moving.
-        if (_turns[i].tool != last.tool || _turns[i].args != last.args ||
-            _turns[i].observation != last.observation)
+        if (_turns[i].tool != last.tool || _turns[i].args != last.args || _turns[i].observation != last.observation)
             break;
         ++repeats;
     }

@@ -59,11 +59,11 @@ struct Fact {
  * flatter someone alive at the time.
  */
 enum class SourceKind : core::u32 {
-    Notarial = 0u,     ///< Contracts, registers, acts. Written to be checked.
-    Archaeology = 1u,  ///< Material evidence. Silent about motive, hard to forge.
+    Notarial = 0u,       ///< Contracts, registers, acts. Written to be checked.
+    Archaeology = 1u,    ///< Material evidence. Silent about motive, hard to forge.
     Administrative = 2u, ///< Censuses, tax rolls. Accurate about what was taxed.
-    Chronicle = 3u,    ///< A contemporary account. Honest and partial.
-    Panegyric = 4u,    ///< Written to praise. Accurate only by accident.
+    Chronicle = 3u,      ///< A contemporary account. Honest and partial.
+    Panegyric = 4u,      ///< Written to praise. Accurate only by accident.
     Count = 5u
 };
 
@@ -72,7 +72,7 @@ enum class SourceKind : core::u32 {
  * @brief What is known about a source, as the trust score needs it.
  */
 struct SourceProfile {
-    core::u32 id{0u};                    ///< Matches Fact::source.
+    core::u32 id{0u}; ///< Matches Fact::source.
     SourceKind kind{SourceKind::Chronicle};
     core::u32 yearsAfterEvent{0u};       ///< Distance between the event and the writing.
     core::u32 independentAgreements{0u}; ///< Other sources that say the same thing.

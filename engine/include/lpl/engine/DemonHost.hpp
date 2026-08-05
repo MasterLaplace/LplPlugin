@@ -56,10 +56,10 @@ namespace lpl::engine {
  * to be able to tell a demon that finished from one that gave up.
  */
 enum class ThinkOutcome : core::u8 {
-    Concluded = 0,    ///< The planner had nothing left worth doing.
-    BudgetExhausted,  ///< It ran out of turns with work outstanding.
-    Stuck,            ///< It repeated itself and the world stopped answering differently.
-    NoLegalMove       ///< Every fix the critics suggested is currently ungated.
+    Concluded = 0,   ///< The planner had nothing left worth doing.
+    BudgetExhausted, ///< It ran out of turns with work outstanding.
+    Stuck,           ///< It repeated itself and the world stopped answering differently.
+    NoLegalMove      ///< Every fix the critics suggested is currently ungated.
 };
 
 /**
@@ -68,11 +68,11 @@ enum class ThinkOutcome : core::u8 {
  */
 struct ThinkResult {
     ThinkOutcome outcome{ThinkOutcome::Concluded};
-    core::u32 turns{0u};             ///< Turns actually taken.
-    core::u32 acts{0u};              ///< Calls that were accepted.
-    core::u32 refusals{0u};          ///< Calls the validator or the world rejected.
-    core::u32 defectsBefore{0u};     ///< Defects the critics saw on entry.
-    core::u32 defectsAfter{0u};      ///< Defects still standing on exit.
+    core::u32 turns{0u};         ///< Turns actually taken.
+    core::u32 acts{0u};          ///< Calls that were accepted.
+    core::u32 refusals{0u};      ///< Calls the validator or the world rejected.
+    core::u32 defectsBefore{0u}; ///< Defects the critics saw on entry.
+    core::u32 defectsAfter{0u};  ///< Defects still standing on exit.
 
     /**
      * @brief Whether the world ends up sound: no defect the critics can name.

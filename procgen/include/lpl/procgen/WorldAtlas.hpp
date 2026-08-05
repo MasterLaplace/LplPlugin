@@ -48,14 +48,14 @@ namespace lpl::procgen {
  * beside a live grid.
  */
 struct WorldAtlas : WorldSnapshot {
-    DrainageNetwork drainage{}; ///< Flow directions, accumulation, the filled surface.
-    VoronoiDiagram regions{};   ///< Surface provinces, when partitioned.
-    ClimateField climate{};     ///< The six axes, when shaped.
-    DungeonMap dungeon{};       ///< The flat underground layer, when carved.
-    CaveSystem caveSystem{};    ///< The layered underground, when dug.
-    VoxelVolume townVolume{};   ///< The town raised by the shape grammar.
-    VoxelVolume roadsideVolume{};              ///< Roadside modules, when decorated.
-    lpl::pmr::vector<BuildingPlot> plots{};    ///< Building footprints the settlement laid out.
+    DrainageNetwork drainage{};             ///< Flow directions, accumulation, the filled surface.
+    VoronoiDiagram regions{};               ///< Surface provinces, when partitioned.
+    ClimateField climate{};                 ///< The six axes, when shaped.
+    DungeonMap dungeon{};                   ///< The flat underground layer, when carved.
+    CaveSystem caveSystem{};                ///< The layered underground, when dug.
+    VoxelVolume townVolume{};               ///< The town raised by the shape grammar.
+    VoxelVolume roadsideVolume{};           ///< Roadside modules, when decorated.
+    lpl::pmr::vector<BuildingPlot> plots{}; ///< Building footprints the settlement laid out.
 
     /**
      * @brief The height a viewer draws water at.

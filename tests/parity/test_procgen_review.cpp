@@ -21,10 +21,10 @@
  */
 
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/Biome.hpp>
 #include <lpl/procgen/Chunking.hpp>
 #include <lpl/procgen/Dungeon.hpp>
-#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/LSystem.hpp>
 #include <lpl/procgen/QualityGate.hpp>

@@ -224,9 +224,9 @@ inline constexpr FieldDesc kSleepStateFields[] = {
 // and damage, and breeding compounds it, so a float would let two machines
 // disagree about a population after a few generations.
 inline constexpr FieldDesc kGenomeFields[] = {
-    {"maxSpeed",   FieldType::Fixed32,  0, 4 << 16},
-    {"vision",     FieldType::Fixed32,  4, 8 << 16},
-    {"strength",   FieldType::Fixed32,  8, 5 << 16},
+    {"maxSpeed",   FieldType::Fixed32, 0,  4 << 16},
+    {"vision",     FieldType::Fixed32, 4,  8 << 16},
+    {"strength",   FieldType::Fixed32, 8,  5 << 16},
     {"absorption", FieldType::Fixed32, 12, 1 << 16},
     {"size",       FieldType::Fixed32, 16, 1 << 16},
 };
@@ -234,7 +234,7 @@ inline constexpr FieldDesc kGenomeFields[] = {
 // web is not a rare creature, it is an out-of-range read.
 inline constexpr FieldDesc kCreatureFields[] = {
     {"species", FieldType::U32, 0, 0, true, 0, 15},
-    {"id",      FieldType::U32, 4, 0},
+    {"id", FieldType::U32, 4, 0},
 };
 // Unit facing on the ground plane. Bounded to [-1, 1] in raw Q16.16 because a
 // facing longer than one is not a fast animal, it is a pace multiplier hidden in

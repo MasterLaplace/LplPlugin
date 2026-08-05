@@ -208,9 +208,9 @@ struct Placement {
  * @brief How much to put where.
  */
 struct PlacementParams {
-    core::u32 encounters{4u};     ///< Spots wanted on the spine.
-    core::u32 rewards{2u};        ///< Spots wanted off it.
-    core::u32 minSpacing{3u};     ///< Cells between two spots of the same role.
+    core::u32 encounters{4u};      ///< Spots wanted on the spine.
+    core::u32 rewards{2u};         ///< Spots wanted off it.
+    core::u32 minSpacing{3u};      ///< Cells between two spots of the same role.
     core::u32 rewardMinDetour{2u}; ///< A reward must lie at least this far off the path.
 };
 

@@ -211,9 +211,9 @@ bool Engraving::read(core::u8 *bytes, core::u32 size, lpl::pmr::vector<core::u8>
 
         core::u32 cursor = 8u;
         core::u32 lengths[static_cast<core::u32>(BootstrapLevel::Count)]{};
-        const core::u32 kept = levels > static_cast<core::u32>(BootstrapLevel::Count)
-                                   ? static_cast<core::u32>(BootstrapLevel::Count)
-                                   : levels;
+        const core::u32 kept = levels > static_cast<core::u32>(BootstrapLevel::Count) ?
+                                   static_cast<core::u32>(BootstrapLevel::Count) :
+                                   levels;
         for (core::u32 i = 0u; i < kept; ++i)
         {
             lengths[i] = readWord(replica + cursor);

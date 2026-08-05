@@ -349,8 +349,8 @@ core::u32 TerrainRenderer::drawHerd(const render::RenderTarget &rt, const math::
                 static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
             const auto *creature = static_cast<const core::u32 *>(chunk->writeComponent(ecs::ComponentId::Creature));
             const auto *genome =
-                hasGenome ? static_cast<const ecology::Genome *>(chunk->writeComponent(ecs::ComponentId::Genome))
-                          : nullptr;
+                hasGenome ? static_cast<const ecology::Genome *>(chunk->writeComponent(ecs::ComponentId::Genome)) :
+                            nullptr;
             if (positions == nullptr || creature == nullptr)
                 continue;
 
@@ -375,8 +375,18 @@ core::u32 TerrainRenderer::drawHerd(const render::RenderTarget &rt, const math::
                 // A billboard rather than a box: at this scale a creature is a
                 // handful of pixels, and six lit faces cost six times as much to
                 // say the same.
-                const core::f32 body[12] = {wx - size, ground,        wz, wx + size, ground,        wz,
-                                            wx + size, ground + size * 2.4f, wz, wx - size, ground + size * 2.4f, wz};
+                const core::f32 body[12] = {wx - size,
+                                            ground,
+                                            wz,
+                                            wx + size,
+                                            ground,
+                                            wz,
+                                            wx + size,
+                                            ground + size * 2.4f,
+                                            wz,
+                                            wx - size,
+                                            ground + size * 2.4f,
+                                            wz};
                 triangles += render::fillPolygonClipped(rt, mvp, body, 4u, tint);
             }
         }

@@ -159,8 +159,8 @@ void collectDifferences(const detail::JVal &a, const detail::JVal &b, const std:
         // half, a diff would report nothing when b merely ADDED a block.
         for (const auto &member : b.obj)
             if (a.find(member.first) == nullptr)
-                out.push_back({path.empty() ? member.first : path + "." + member.first, "null",
-                               detail::emit(member.second)});
+                out.push_back(
+                    {path.empty() ? member.first : path + "." + member.first, "null", detail::emit(member.second)});
         return;
     }
     case detail::JVal::T::Arr: {
@@ -436,8 +436,7 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         // side by side — the question a correction loop asks after every edit.
         const detail::JVal *left = cmdObj.find("a");
         const detail::JVal *right = cmdObj.find("b");
-        if (left == nullptr || left->t != detail::JVal::T::Str || right == nullptr ||
-            right->t != detail::JVal::T::Str)
+        if (left == nullptr || left->t != detail::JVal::T::Str || right == nullptr || right->t != detail::JVal::T::Str)
             return reportError("diff_scenes", "missing \"a\" or \"b\" document string");
 
         bool leftOk = false;

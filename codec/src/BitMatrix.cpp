@@ -54,15 +54,9 @@ BitMatrix::BitMatrix(core::u32 rows, core::u32 columns) : _rows(rows), _columns(
         _rowPointers[i] = base + static_cast<core::usize>(i) * _rowWords;
 }
 
-core::u64 *BitMatrix::row(core::u32 row) noexcept
-{
-    return row < _rows ? _rowPointers[row] : nullptr;
-}
+core::u64 *BitMatrix::row(core::u32 row) noexcept { return row < _rows ? _rowPointers[row] : nullptr; }
 
-const core::u64 *BitMatrix::row(core::u32 row) const noexcept
-{
-    return row < _rows ? _rowPointers[row] : nullptr;
-}
+const core::u64 *BitMatrix::row(core::u32 row) const noexcept { return row < _rows ? _rowPointers[row] : nullptr; }
 
 bool BitMatrix::test(core::u32 row, core::u32 column) const noexcept
 {

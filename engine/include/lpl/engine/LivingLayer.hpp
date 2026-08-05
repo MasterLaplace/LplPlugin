@@ -35,9 +35,9 @@
 #    include <lpl/ecology/Populations.hpp>
 #    include <lpl/ecology/Vegetation.hpp>
 #    include <lpl/ecs/Archetype.hpp>
-#    include <lpl/engine/systems/CreatureSystems.hpp>
 #    include <lpl/ecs/Partition.hpp>
 #    include <lpl/ecs/Registry.hpp>
+#    include <lpl/engine/systems/CreatureSystems.hpp>
 #    include <lpl/math/Random.hpp>
 
 namespace lpl::engine {
@@ -47,9 +47,9 @@ namespace lpl::engine {
  * @brief The budgets a host can afford for the living layer.
  */
 struct LivingLayerParams {
-    core::u32 maxBodies{48u};     ///< Bodies on screen, all species together.
-    core::u32 speciesCount{2u};   ///< Species that get bodies (grazer, hunter).
-    core::u32 scentSpan{64u};     ///< Cells across the pheromone window.
+    core::u32 maxBodies{48u};   ///< Bodies on screen, all species together.
+    core::u32 speciesCount{2u}; ///< Species that get bodies (grazer, hunter).
+    core::u32 scentSpan{64u};   ///< Cells across the pheromone window.
     /// Stigmergy channels. Six, because that is how many @c ai::ScentChannel names
     /// and the herd now reads them by meaning: plant, herbivore, carnivore, terror,
     /// kin, pheromone. Two was enough while every animal climbed one hard-coded
@@ -155,7 +155,6 @@ private:
     [[nodiscard]] core::u32 rawBodiesFor(core::u32 webIndex) const noexcept;
 
 public:
-
     /**
      * @brief Creates one body of a species somewhere it can stand.
      *

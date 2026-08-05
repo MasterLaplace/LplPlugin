@@ -45,9 +45,9 @@ inline constexpr core::u8 kSpecificationMagic[4] = {'L', 'P', 'L', 'I'};
  * @brief One row of the engraved table: what an opcode is called and how wide it is.
  */
 struct IsaEntry {
-    core::u8 opcode{0u};                ///< Numeric value in the instruction stream.
-    core::u8 operands{0u};              ///< Operand bytes it reads, 0 to 3.
-    char mnemonic[kMnemonicBytes]{};    ///< NUL-padded name.
+    core::u8 opcode{0u};             ///< Numeric value in the instruction stream.
+    core::u8 operands{0u};           ///< Operand bytes it reads, 0 to 3.
+    char mnemonic[kMnemonicBytes]{}; ///< NUL-padded name.
 };
 
 /**
@@ -55,9 +55,9 @@ struct IsaEntry {
  * @brief Every opcode a specification names.
  */
 struct IsaTable {
-    core::u32 instructionBytes{0u};              ///< Bytes per instruction.
-    core::u32 registerCount{0u};                 ///< Registers the machine has.
-    core::u32 count{0u};                         ///< Rows below.
+    core::u32 instructionBytes{0u}; ///< Bytes per instruction.
+    core::u32 registerCount{0u};    ///< Registers the machine has.
+    core::u32 count{0u};            ///< Rows below.
     IsaEntry entry[static_cast<core::u32>(Opcode::Count)]{};
 };
 

@@ -45,12 +45,12 @@ inline constexpr core::u32 kNotJournalled = 0xFFFFFFFFu;
  * @brief One reason-act-observe step.
  */
 struct Turn {
-    core::u32 index{0u};                  ///< 0-based turn number.
-    std::string thought;                  ///< Why, in the caller's own words. May be empty.
-    std::string tool;                     ///< Which capability was invoked.
-    std::string args;                     ///< Its arguments, as JSON.
-    std::string observation;              ///< What came back: a report, or a refusal.
-    bool ok{false};                       ///< Whether the act was accepted.
+    core::u32 index{0u};                    ///< 0-based turn number.
+    std::string thought;                    ///< Why, in the caller's own words. May be empty.
+    std::string tool;                       ///< Which capability was invoked.
+    std::string args;                       ///< Its arguments, as JSON.
+    std::string observation;                ///< What came back: a report, or a refusal.
+    bool ok{false};                         ///< Whether the act was accepted.
     core::u32 journalEntry{kNotJournalled}; ///< Where CommandJournal recorded it.
 };
 

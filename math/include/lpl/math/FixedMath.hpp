@@ -168,8 +168,9 @@ inline constexpr Fixed32 kLog2E = Fixed32::fromRaw(94548); // round(65536 * 1.44
     if (integerPart >= 0)
     {
         const core::i64 scaled = series << integerPart;
-        return scaled >= static_cast<core::i64>(Fixed32::max().raw()) ? Fixed32::max()
-                                                                     : Fixed32::fromRaw(static_cast<core::i32>(scaled));
+        return scaled >= static_cast<core::i64>(Fixed32::max().raw()) ?
+                   Fixed32::max() :
+                   Fixed32::fromRaw(static_cast<core::i32>(scaled));
     }
     return Fixed32::fromRaw(static_cast<core::i32>(series >> (-integerPart)));
 }

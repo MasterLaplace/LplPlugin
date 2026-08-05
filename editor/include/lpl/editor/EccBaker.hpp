@@ -51,7 +51,8 @@ struct EccPolicy {
  * @return The image with its parity section, or the input unchanged when it is not a
  *         pack.
  */
-[[nodiscard]] std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPolicy &policy = EccPolicy{});
+[[nodiscard]] std::vector<core::u8> attachEcc(const std::vector<core::u8> &image,
+                                              const EccPolicy &policy = EccPolicy{});
 
 } // namespace lpl::editor
 

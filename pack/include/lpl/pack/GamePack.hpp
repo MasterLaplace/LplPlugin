@@ -484,7 +484,6 @@ inline constexpr core::u32 kWireBiomeColours = 16u;
 /// Bits of ViewV1::flags.
 inline constexpr core::u32 kViewFlagOverridePalette = 1u << 0; ///< Use the table below.
 
-
 /**
  * @struct ViewV1
  * @brief Wire form of a view profile: what a world LOOKS like.
@@ -632,7 +631,6 @@ public:
      * wrong-sized section is a fault.
      */
     [[nodiscard]] bool readView(ViewV1 &outView) const noexcept;
-
 
 private:
     const core::u8 *_bytes{nullptr};

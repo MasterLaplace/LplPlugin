@@ -45,9 +45,9 @@ namespace lpl::codec {
  * of the authoritative state and have to mean the same bits on both targets.
  */
 struct SolitonParams {
-    core::u32 sourceBlocks{0u};                                  ///< K, the packets the payload was cut into.
-    math::Fixed32 c{math::Fixed32::fromRaw(2621)};               ///< ~0.04, the usual tuning constant.
-    math::Fixed32 delta{math::Fixed32::fromRaw(3277)};           ///< ~0.05, the tolerated failure probability.
+    core::u32 sourceBlocks{0u};                        ///< K, the packets the payload was cut into.
+    math::Fixed32 c{math::Fixed32::fromRaw(2621)};     ///< ~0.04, the usual tuning constant.
+    math::Fixed32 delta{math::Fixed32::fromRaw(3277)}; ///< ~0.05, the tolerated failure probability.
 };
 
 /**

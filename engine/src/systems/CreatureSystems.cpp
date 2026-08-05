@@ -18,9 +18,9 @@
 // the header keeps only the forward declaration, which is what stops the cycle
 // (LivingLayer.hpp includes this header for CreatureFieldView).
 #include <lpl/engine/LivingLayer.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
-#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/Grid.hpp>
 
 namespace lpl::engine::systems {
@@ -411,8 +411,7 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
         for (const auto &chunk : part->chunks())
         {
             CreatureChunk view;
-            if (!chunk ||
-                !viewCreatures(*part, *chunk, view, kNeedVelocity | kNeedGenome | kNeedHeading))
+            if (!chunk || !viewCreatures(*part, *chunk, view, kNeedVelocity | kNeedGenome | kNeedHeading))
                 continue;
 
             for (core::u32 i = 0u; i < view.count; ++i)
@@ -558,7 +557,7 @@ void CreaturePipeline::build(ecs::Registry &registry, LivingLayer &living, ITerr
     // both drivers below get the order from the enumeration rather than from the
     // shape of the code around them.
     auto deposit = lpl::pmr::make_unique<ScentDepositSystem>(registry, living.scent().field(), living.herdParams(),
-                                                            living.fieldView());
+                                                             living.fieldView());
     _deposit = deposit.get();
     _stages[static_cast<core::u32>(CreatureStage::ScentDeposit)] = std::move(deposit);
 

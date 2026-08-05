@@ -175,9 +175,8 @@ int main()
     {
         ecs::Registry world;
         editor::CommandJournal journal{world};
-        const char *recipeArgs =
-            R"({"seed":7,"width":16,"depth":16,"terrain":{"amplitude":0.0,"octaves":1},)"
-            R"("erosion":{"enabled":false},"rivers":{"enabled":true}})";
+        const char *recipeArgs = R"({"seed":7,"width":16,"depth":16,"terrain":{"amplitude":0.0,"octaves":1},)"
+                                 R"("erosion":{"enabled":false},"rivers":{"enabled":true}})";
         (void) journal.execute(std::string{R"({"cmd":"generate_world",)"} + (recipeArgs + 1));
 
         const agent::ToolRegistry tools = agent::ToolRegistry::forWorld(world);

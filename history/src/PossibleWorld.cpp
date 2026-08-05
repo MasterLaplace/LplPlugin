@@ -54,9 +54,8 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
         }
 
         SourceProfile profile{};
-        const math::Fixed32 trust = corpus.sourceProfile(fact.source, profile)
-                                        ? trustworthiness(profile, view.weights)
-                                        : math::Fixed32::half();
+        const math::Fixed32 trust =
+            corpus.sourceProfile(fact.source, profile) ? trustworthiness(profile, view.weights) : math::Fixed32::half();
         index.push_back(static_cast<core::u32>(i));
         weight.push_back(fact.sigma * trust);
         ++outReport.admitted;

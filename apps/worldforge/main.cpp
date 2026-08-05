@@ -41,26 +41,26 @@
 #include <GL/gl.h>
 #include <GLFW/glfw3.h>
 
+#include <lpl/agent/Observation.hpp>
+#include <lpl/agent/Planner.hpp>
+#include <lpl/agent/Transcript.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/ecology/Herd.hpp>
+#include <lpl/ecology/LivingRecipe.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/ComponentReflection.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/editor/EditorSession.hpp>
-#include <lpl/math/FixedPoint.hpp>
-#include <lpl/math/Vec3.hpp>
-#include <lpl/agent/Observation.hpp>
-#include <lpl/agent/Planner.hpp>
-#include <lpl/agent/Transcript.hpp>
-#include <lpl/engine/DemonHost.hpp>
-#include <lpl/engine/InferenceBudget.hpp>
-#include <lpl/physics/CpuPhysicsBackend.hpp>
-#include <lpl/ecology/Herd.hpp>
-#include <lpl/ecology/LivingRecipe.hpp>
 #include <lpl/editor/GamePackBaker.hpp>
+#include <lpl/engine/DemonHost.hpp>
 #include <lpl/engine/GridTerrain.hpp>
+#include <lpl/engine/InferenceBudget.hpp>
 #include <lpl/engine/LivingLayer.hpp>
 #include <lpl/engine/systems/CreatureSystems.hpp>
+#include <lpl/math/FixedPoint.hpp>
+#include <lpl/math/Vec3.hpp>
+#include <lpl/physics/CpuPhysicsBackend.hpp>
 #include <lpl/procgen/Dungeon.hpp>
 #include <lpl/procgen/Liminal.hpp>
 #include <lpl/procgen/MapMesh.hpp>
@@ -206,8 +206,8 @@ std::string proceduralJson(const EditorUi &ui)
                   ui.hfOctaves, ui.doErode ? "true" : "false", ui.thermalIterations, ui.hydraulicIterations,
                   ui.doRivers ? "true" : "false", ui.doClimate ? "true" : "false", ui.doCaves ? "true" : "false",
                   ui.hfCols, ui.hfRows, ui.caveFill, ui.caveSteps, ui.doTown ? "true" : "false",
-                  ui.doCaves ? "true" : "false", ui.gateMinPath, kBiomeNames[ui.scBiome], ui.scDensity,
-                  ui.scHalfExtent, ui.scCollidable ? "true" : "false");
+                  ui.doCaves ? "true" : "false", ui.gateMinPath, kBiomeNames[ui.scBiome], ui.scDensity, ui.scHalfExtent,
+                  ui.scCollidable ? "true" : "false");
     return std::string{cmd};
 }
 
@@ -325,7 +325,7 @@ void stepLiving(EditorUi &ui)
     {
         view.living.stepWeb();
         view.living.reconcile(view.ticks, [&](lpl::math::Random &random, lpl::core::u32 /*attempt*/,
-                                             lpl::math::Fixed32 &outX, lpl::math::Fixed32 &outZ) {
+                                              lpl::math::Fixed32 &outX, lpl::math::Fixed32 &outZ) {
             const lpl::core::u32 width = view.obstacles.width();
             const lpl::core::u32 depth = view.obstacles.depth();
             if (width == 0u)
@@ -334,8 +334,10 @@ void stepLiving(EditorUi &ui)
             const lpl::core::u32 z = random.below(depth);
             if (view.obstacles.at(x, z) != 0u)
                 return false;
-            outX = lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(x) - static_cast<lpl::core::i32>(width / 2u));
-            outZ = lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(z) - static_cast<lpl::core::i32>(depth / 2u));
+            outX =
+                lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(x) - static_cast<lpl::core::i32>(width / 2u));
+            outZ =
+                lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(z) - static_cast<lpl::core::i32>(depth / 2u));
             return true;
         });
     }
@@ -575,7 +577,8 @@ void drawCaine(EditorUi &ui)
     if (ImGui::Button("Think"))
     {
         ui.demon.consider(lpl::agent::Intent{ui.intent, 0u});
-        ui.lastThink = ui.demon.think(lpl::engine::InferenceBudget::ofTurns(static_cast<lpl::core::u32>(ui.demonTurns)));
+        ui.lastThink =
+            ui.demon.think(lpl::engine::InferenceBudget::ofTurns(static_cast<lpl::core::u32>(ui.demonTurns)));
         ui.hasThought = true;
     }
     ImGui::SameLine();
@@ -683,8 +686,7 @@ void drawFurnishing(EditorUi &ui)
             wanted.rewards = static_cast<lpl::core::u32>(ui.furnishRewards);
             wanted.minSpacing = static_cast<lpl::core::u32>(ui.furnishSpacing);
             lpl::procgen::Placement spots[32]{};
-            const lpl::core::u32 placed =
-                lpl::procgen::placeAlongHotPath(level, hot, sx, sz, wanted, spots, 32u);
+            const lpl::core::u32 placed = lpl::procgen::placeAlongHotPath(level, hot, sx, sz, wanted, spots, 32u);
             for (lpl::core::u32 i = 0u; i < placed; ++i)
                 ui.furnished.push_back(spots[i]);
 
@@ -806,9 +808,8 @@ void drawAtlas(EditorUi &ui)
             ImGui::SameLine();
             if (ImGui::Button("Tick once"))
                 stepLiving(ui);
-            ImGui::Text("tick %u  %u bodies  %u/%u plants standing  %u grazed", view.ticks,
-                        view.living.herd().size(), view.terrain.standingPlants(), view.terrain.plantCount(),
-                        view.terrain.grazed());
+            ImGui::Text("tick %u  %u bodies  %u/%u plants standing  %u grazed", view.ticks, view.living.herd().size(),
+                        view.terrain.standingPlants(), view.terrain.plantCount(), view.terrain.grazed());
             if (const lpl::engine::systems::LocomotionSystem *walk = view.creatures.locomotion(); walk != nullptr)
                 ImGui::TextDisabled("%u cornered, %u avoided, %u strays", walk->cornered(), walk->avoided(),
                                     walk->strays());
@@ -837,17 +838,16 @@ void drawAtlas(EditorUi &ui)
             if (liminalView)
             {
                 // The zone palette, from the same place the 3D mesher takes it.
-                const lpl::procgen::Rgb colour =
-                    lpl::procgen::isWalkable(view.liminal.map.at(x, z))
-                        ? lpl::procgen::liminalZoneColour(view.liminal.zones.at(x, z))
-                        : lpl::procgen::Rgb{0.10f, 0.10f, 0.12f};
+                const lpl::procgen::Rgb colour = lpl::procgen::isWalkable(view.liminal.map.at(x, z)) ?
+                                                     lpl::procgen::liminalZoneColour(view.liminal.zones.at(x, z)) :
+                                                     lpl::procgen::Rgb{0.10f, 0.10f, 0.12f};
                 rect(x, z, colour, 1.0f);
                 continue;
             }
 
-            lpl::procgen::Rgb colour = lpl::procgen::surfaceColour(
-                view.atlas, static_cast<lpl::procgen::MapShading>(view.shading),
-                static_cast<lpl::core::u32>(view.climateAxis), x, z);
+            lpl::procgen::Rgb colour =
+                lpl::procgen::surfaceColour(view.atlas, static_cast<lpl::procgen::MapShading>(view.shading),
+                                            static_cast<lpl::core::u32>(view.climateAxis), x, z);
             if (view.paintRivers && !view.atlas.rivers.empty() && view.atlas.rivers.at(x, z) != 0u)
                 colour = {0.16f, 0.42f, 0.72f};
             if (view.paintSettlement && !view.atlas.settlement.empty())
@@ -896,8 +896,8 @@ void drawAtlas(EditorUi &ui)
                 continue;
             // The write side, like every creature system: nothing here swaps buffers.
             const auto *position = static_cast<const FVec3 *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
-            const auto *creature = static_cast<const lpl::core::u32 *>(
-                chunk->writeComponent(lpl::ecs::ComponentId::Creature));
+            const auto *creature =
+                static_cast<const lpl::core::u32 *>(chunk->writeComponent(lpl::ecs::ComponentId::Creature));
             if (position == nullptr || creature == nullptr)
                 continue;
             const float cx = origin.x + (position[row].x.toFloat() + static_cast<float>(halfW)) * cell;

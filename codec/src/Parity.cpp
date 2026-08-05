@@ -82,10 +82,10 @@ core::u32 foldReducedSystem(core::u32 &outMismatch)
     const EliminationResult plainResult = gaussJordan(plain, kColumns);
     const EliminationResult blockedResult = fourRussiansEliminate(blocked, kColumns, 4u);
 
-    outMismatch = (plain.fold(kFnv1aOffsetBasis) == blocked.fold(kFnv1aOffsetBasis) &&
-                   plainResult.rank == blockedResult.rank)
-                      ? 0u
-                      : 1u;
+    outMismatch =
+        (plain.fold(kFnv1aOffsetBasis) == blocked.fold(kFnv1aOffsetBasis) && plainResult.rank == blockedResult.rank) ?
+            0u :
+            1u;
 
     return plain.fold(kFnv1aOffsetBasis);
 }

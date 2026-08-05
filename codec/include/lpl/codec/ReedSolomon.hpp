@@ -132,9 +132,8 @@ struct TransversalReport {
  * @param outParity         Receives parityShards * rowBytes bytes.
  * @return false when the parameters exceed the field or the fixed bounds.
  */
-[[nodiscard]] bool transversalEncode(const core::u8 *protectedBytesPtr, core::u32 protectedBytes,
-                                     core::u32 dataShards, core::u32 parityShards, core::u32 rowBytes,
-                                     core::u8 *outParity) noexcept;
+[[nodiscard]] bool transversalEncode(const core::u8 *protectedBytesPtr, core::u32 protectedBytes, core::u32 dataShards,
+                                     core::u32 parityShards, core::u32 rowBytes, core::u8 *outParity) noexcept;
 
 /**
  * @brief Corrects a transversally coded span in place.

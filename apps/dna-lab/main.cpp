@@ -198,8 +198,7 @@ int main(int argc, char **argv)
         codec::BiologicalLimits limits;
         lpl::pmr::vector<codec::Droplet> valid;
         const core::u32 examined = fountain.emitValid(shape.blockCount, limits, params.firstSeed, valid);
-        std::printf("  in-silico filter: %zu synthesisable strands out of %u examined",
-                    valid.size(), examined);
+        std::printf("  in-silico filter: %zu synthesisable strands out of %u examined", valid.size(), examined);
         if (examined != 0u)
             std::printf(" (%u%% kept)", static_cast<core::u32>((valid.size() * 100u) / examined));
         std::printf("\n  GC within [%u,%u] permille, homopolymer runs at most %u\n\n", limits.minGcPermille,
@@ -212,8 +211,8 @@ int main(int argc, char **argv)
     const codec::DecayParams decay;
     for (core::u32 innerParity : {0u, 4u})
     {
-        std::printf("  %s\n", innerParity == 0u ? "-- fountain only --"
-                                                 : "-- fountain, plus Reed-Solomon inside each strand --");
+        std::printf("  %s\n",
+                    innerParity == 0u ? "-- fountain only --" : "-- fountain, plus Reed-Solomon inside each strand --");
         std::printf("  years   strands  intact  lost  substituted  fixed  dropped  payload\n");
         std::printf("  ------  -------  ------  ----  -----------  -----  -------  -------\n");
 
@@ -246,9 +245,8 @@ int main(int argc, char **argv)
             const bool ok = codec::decodeErasure(aged, shape, params, recovered, decoded);
             const bool exact = ok && identical(recovered, corpus);
 
-            std::printf("  %6u  %7u  %6u  %4u  %11u  %5u  %7u  %s\n", years, report.strands, report.intact,
-                        report.lost, report.substitutions, fixed, dropped,
-                        exact ? "RECOVERED" : (ok ? "wrong" : "LOST"));
+            std::printf("  %6u  %7u  %6u  %4u  %11u  %5u  %7u  %s\n", years, report.strands, report.intact, report.lost,
+                        report.substitutions, fixed, dropped, exact ? "RECOVERED" : (ok ? "wrong" : "LOST"));
         }
         std::printf("\n");
     }

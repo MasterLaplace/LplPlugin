@@ -266,8 +266,7 @@ int main()
         // Nothing was broken anywhere: every layer did exactly what it says it does.
         // That is what makes this worth an assertion rather than a fix.
         const procgen::WorldRecipe viewerRecipe = pack::toEngineRecipe(viewerWorld);
-        check(viewerRecipe.biomes.seaLevel == viewerLook.seaLevel,
-              "and the sea it classifies is the sea it draws");
+        check(viewerRecipe.biomes.seaLevel == viewerLook.seaLevel, "and the sea it classifies is the sea it draws");
     }
 
     // ── Every pass is IN the recipe ───────────────────────────────────────────
@@ -390,9 +389,9 @@ int main()
         for (core::u32 i = 0u; i < sizeof(verge); ++i)
             viewer.roadsidePattern[i] = verge[i];
 
-        const procgen::BiomeId kBiomes[] = {procgen::BiomeId::Taiga,   procgen::BiomeId::Forest,
+        const procgen::BiomeId kBiomes[] = {procgen::BiomeId::Taiga,      procgen::BiomeId::Forest,
                                             procgen::BiomeId::Rainforest, procgen::BiomeId::Savanna,
-                                            procgen::BiomeId::Desert,  procgen::BiomeId::Marsh};
+                                            procgen::BiomeId::Desert,     procgen::BiomeId::Marsh};
         viewer.scatterCount = 6u;
         for (core::u32 i = 0u; i < 6u; ++i)
         {

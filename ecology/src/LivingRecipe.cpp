@@ -16,8 +16,8 @@
 
 #include <lpl/ecology/LivingRecipe.hpp>
 
-#include <lpl/procgen/Grid.hpp>
 #include <lpl/math/Random.hpp>
+#include <lpl/procgen/Grid.hpp>
 #include <lpl/std/vector.hpp>
 
 namespace lpl::ecology {

@@ -9,8 +9,8 @@
 
 #include <lpl/procgen/CaveSystem.hpp>
 
-#include <lpl/procgen/QualityGate.hpp>
 #include <lpl/math/Random.hpp>
+#include <lpl/procgen/QualityGate.hpp>
 
 namespace lpl::procgen {
 

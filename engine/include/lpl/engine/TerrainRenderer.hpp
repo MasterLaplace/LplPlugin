@@ -141,9 +141,10 @@ public:
      */
     template <typename Palette, typename HeightAt, typename ColourAt, typename GroundAt>
     core::u32 drawBounded(const render::RenderTarget &rt, const render::OrbitCamera &camera, TerrainSurface &surface,
-                          const PropLibrary &props, const ecs::Registry &registry, core::u32 gridWidth, core::u32 gridDepth,
-                          const ecology::PlantCell *plants, core::u32 plantCount, const TerrainDrawParams &params,
-                          Palette &&palette, HeightAt &&heightAt, ColourAt &&colourAt, GroundAt &&groundAt);
+                          const PropLibrary &props, const ecs::Registry &registry, core::u32 gridWidth,
+                          core::u32 gridDepth, const ecology::PlantCell *plants, core::u32 plantCount,
+                          const TerrainDrawParams &params, Palette &&palette, HeightAt &&heightAt, ColourAt &&colourAt,
+                          GroundAt &&groundAt);
 
 private:
     /** @brief Refreshes the reflection probe from the visible set. */

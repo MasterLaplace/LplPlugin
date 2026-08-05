@@ -94,7 +94,8 @@ static_assert(mutationsGoThroughTheJournal(), "a mutating tool bypasses the comm
 // The mapping to JSON types is the one both emitters go through; pin the cases
 // that matter, because getting Fixed32 wrong would put decimals on the wire for
 // authoritative state.
-static_assert(paramKindOf(ecs::FieldType::Fixed32) == ParamKind::Integer, "authoritative fields travel as raw integers");
+static_assert(paramKindOf(ecs::FieldType::Fixed32) == ParamKind::Integer,
+              "authoritative fields travel as raw integers");
 static_assert(paramKindOf(ecs::FieldType::F32) == ParamKind::Number, "cosmetic floats travel as numbers");
 static_assert(paramKindOf(ecs::FieldType::Vec3Fixed) == ParamKind::Object, "composites are objects");
 static_assert(jsonTypeName(ParamKind::Integer) == "integer", "JSON-Schema spelling");

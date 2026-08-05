@@ -76,7 +76,7 @@ void parityCorpus(Corpus &outCorpus)
     addSource(outCorpus, kSourceCharter, SourceKind::Notarial, 0u, 1u);
     addSource(outCorpus, kSourceSurvey, SourceKind::Administrative, 10u, 1u);
 
-    addFact(outCorpus, kSubjectKing, kPredicateDiedOf, kObjectBattle, 1204, 1204, kSourceChronicler, 29491); // 0.45
+    addFact(outCorpus, kSubjectKing, kPredicateDiedOf, kObjectBattle, 1204, 1204, kSourceChronicler, 29491);   // 0.45
     addFact(outCorpus, kSubjectKing, kPredicateDiedOf, kObjectDysentery, 1204, 1204, kSourceOsteology, 60293); // 0.92
 
     // Two independent sources agreeing that the capital existed: the case fusion is

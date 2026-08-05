@@ -30,9 +30,9 @@ namespace lpl::history {
  * @brief A span of years, and the rate the simulation crosses it at.
  */
 struct Era {
-    core::i32 startYear{0};      ///< First year simulated, inclusive.
-    core::i32 endYear{0};        ///< Last year simulated, inclusive.
-    core::u32 ticksPerYear{1u};  ///< Steps the scheduler takes per year.
+    core::i32 startYear{0};     ///< First year simulated, inclusive.
+    core::i32 endYear{0};       ///< Last year simulated, inclusive.
+    core::u32 ticksPerYear{1u}; ///< Steps the scheduler takes per year.
 
     /**
      * @brief Years the era covers.

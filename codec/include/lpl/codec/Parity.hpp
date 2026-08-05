@@ -51,7 +51,7 @@ namespace lpl::codec {
     // today.
     params.overheadPermille = 800u;
     params.firstSeed = 0x5EEDu;
-    params.tuning.c = math::Fixed32::fromRaw(2621);    // ~0.04
+    params.tuning.c = math::Fixed32::fromRaw(2621);     // ~0.04
     params.tuning.delta = math::Fixed32::fromRaw(3277); // ~0.05
     return params;
 }
@@ -88,17 +88,17 @@ namespace lpl::codec {
  * C struct field by field, the same reason WorldRecipeResult is.
  */
 struct CodecFoldResult {
-    core::u32 solitonSignature{0u};  ///< Fold of the degree distribution's weights.
-    core::u32 dropletSignature{0u};  ///< Fold of every emitted droplet, seed and payload.
-    core::u32 matrixSignature{0u};   ///< Fold of a reduced GF(2) system.
-    core::u32 payloadSignature{0u};  ///< Fold of the recovered payload.
-    core::u32 emitted{0u};           ///< Droplets the fountain produced.
-    core::u32 delivered{0u};         ///< Droplets left after the gate's drops.
-    core::u32 peeledBlocks{0u};      ///< Blocks belief propagation resolved.
-    core::u32 eliminatedBlocks{0u};  ///< Blocks the Gaussian tail finished.
-    core::u32 residualRows{0u};      ///< Rows the elimination was given.
-    core::u32 recovered{0u};         ///< 1 when the payload came back byte for byte.
-    core::u32 vectorKernel{0u};      ///< 1 when this build took the widened XOR path.
+    core::u32 solitonSignature{0u}; ///< Fold of the degree distribution's weights.
+    core::u32 dropletSignature{0u}; ///< Fold of every emitted droplet, seed and payload.
+    core::u32 matrixSignature{0u};  ///< Fold of a reduced GF(2) system.
+    core::u32 payloadSignature{0u}; ///< Fold of the recovered payload.
+    core::u32 emitted{0u};          ///< Droplets the fountain produced.
+    core::u32 delivered{0u};        ///< Droplets left after the gate's drops.
+    core::u32 peeledBlocks{0u};     ///< Blocks belief propagation resolved.
+    core::u32 eliminatedBlocks{0u}; ///< Blocks the Gaussian tail finished.
+    core::u32 residualRows{0u};     ///< Rows the elimination was given.
+    core::u32 recovered{0u};        ///< 1 when the payload came back byte for byte.
+    core::u32 vectorKernel{0u};     ///< 1 when this build took the widened XOR path.
 };
 
 /**

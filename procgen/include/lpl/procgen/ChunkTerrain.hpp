@@ -34,11 +34,11 @@
 #ifndef LPL_PROCGEN_CHUNK_TERRAIN_HPP
 #    define LPL_PROCGEN_CHUNK_TERRAIN_HPP
 
+#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Biome.hpp>
 #    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/Climate.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
-#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/ValueNoise.hpp>
 
 namespace lpl::procgen {

@@ -63,8 +63,7 @@ namespace lpl::editor {
  * @param outRecipe      Filled on success; absent fields keep their defaults.
  * @return An error when the block is malformed.
  */
-[[nodiscard]] core::ExpectedVoid parseProceduralBlock(std::string_view proceduralJson,
-                                                      procgen::WorldRecipe &outRecipe);
+[[nodiscard]] core::ExpectedVoid parseProceduralBlock(std::string_view proceduralJson, procgen::WorldRecipe &outRecipe);
 
 /**
  * @brief Emits a `"procedural"` block for @p recipe, as it appears in a scene.

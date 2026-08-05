@@ -89,14 +89,14 @@ struct Act {
  * @brief Everything a decision is allowed to depend on that both worlds can state.
  */
 struct DecisionContext {
-    const char *available{nullptr};    ///< Space-separated names of what can be done now.
-    core::u32 availableBytes{0u};      ///< Bytes of @ref available.
-    const Act *transcript{nullptr};    ///< What has happened, including observations.
-    core::u32 transcriptLines{0u};     ///< Lines in @ref transcript.
-    const char *goal{nullptr};         ///< What the sovereign asked for; may be null.
-    core::u32 goalBytes{0u};           ///< Bytes of @ref goal.
-    core::u32 turn{0u};                ///< Round within this budget, from zero.
-    core::u32 turnsRemaining{0u};      ///< Including this one.
+    const char *available{nullptr}; ///< Space-separated names of what can be done now.
+    core::u32 availableBytes{0u};   ///< Bytes of @ref available.
+    const Act *transcript{nullptr}; ///< What has happened, including observations.
+    core::u32 transcriptLines{0u};  ///< Lines in @ref transcript.
+    const char *goal{nullptr};      ///< What the sovereign asked for; may be null.
+    core::u32 goalBytes{0u};        ///< Bytes of @ref goal.
+    core::u32 turn{0u};             ///< Round within this budget, from zero.
+    core::u32 turnsRemaining{0u};   ///< Including this one.
 
     /**
      * The last stretch of the budget, where a conclusion is required.

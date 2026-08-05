@@ -22,7 +22,7 @@ namespace {
  * reason this is a system rather than a call inside a World.
  */
 constexpr ecs::ResourceAccess kResources[] = {
-    {ecs::ResourceId::Terrain, ecs::AccessMode::ReadWrite},
+    {ecs::ResourceId::Terrain,    ecs::AccessMode::ReadWrite},
     {ecs::ResourceId::Vegetation, ecs::AccessMode::ReadWrite},
 };
 

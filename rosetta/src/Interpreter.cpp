@@ -119,9 +119,7 @@ bool Interpreter::run(const core::u8 *program, core::u32 programSize, core::u8 *
         case Opcode::Add: reg(a) = reg(b) + reg(c); break;
         case Opcode::Sub: reg(a) = reg(b) - reg(c); break;
         case Opcode::Xor: reg(a) = reg(b) ^ reg(c); break;
-        case Opcode::Shift:
-            reg(a) = c < 128u ? (reg(b) << (c % 32u)) : (reg(b) >> ((c - 128u) % 32u));
-            break;
+        case Opcode::Shift: reg(a) = c < 128u ? (reg(b) << (c % 32u)) : (reg(b) >> ((c - 128u) % 32u)); break;
         case Opcode::Jump:
             counter = (static_cast<core::u32>(b) << 8) | c;
             jumped = true;

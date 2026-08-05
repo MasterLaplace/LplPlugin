@@ -42,8 +42,8 @@
 
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/Cordic.hpp>
-#    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/math/FixedMath.hpp>
+#    include <lpl/math/FixedPoint.hpp>
 
 namespace lpl::engine {
 

@@ -90,7 +90,8 @@ void SolitonTable::build(const SolitonParams &params)
     const core::u64 ratio = (static_cast<core::u64>(k) << 16) / deltaRaw;
     const core::u32 boundedRatio = ratio > 0xFFFFFFFFull ? 0xFFFFFFFFu : static_cast<core::u32>(ratio);
 
-    _robustScale = params.c * fixedLn(boundedRatio) * math::fixedSqrt(math::Fixed32::fromInt(static_cast<core::i32>(k)));
+    _robustScale =
+        params.c * fixedLn(boundedRatio) * math::fixedSqrt(math::Fixed32::fromInt(static_cast<core::i32>(k)));
 
     // The spike sits at K/R. A robust scale at or below one would put it past K,
     // where tau is defined to be zero — the distribution then degenerates to the
@@ -104,11 +105,8 @@ void SolitonTable::build(const SolitonParams &params)
     _spikeDegree = spike;
 
     // tau's spike value: R * ln(R / delta) / K.
-    const core::u32 robustInteger =
-        _robustScale.raw() > 0 ? static_cast<core::u32>(_robustScale.raw() >> 16) : 0u;
-    const core::u64 spikeRatio = robustInteger == 0u
-                                     ? 0u
-                                     : (static_cast<core::u64>(robustInteger) << 16) / deltaRaw;
+    const core::u32 robustInteger = _robustScale.raw() > 0 ? static_cast<core::u32>(_robustScale.raw() >> 16) : 0u;
+    const core::u64 spikeRatio = robustInteger == 0u ? 0u : (static_cast<core::u64>(robustInteger) << 16) / deltaRaw;
     const math::Fixed32 spikeWeight =
         _robustScale * fixedLn(spikeRatio > 0xFFFFFFFFull ? 0xFFFFFFFFu : static_cast<core::u32>(spikeRatio));
 
@@ -161,8 +159,7 @@ core::u32 SolitonTable::drawDegree(math::Random &stream) const noexcept
     // __int128 would do it in one line and is unavailable on i686, which is the whole
     // reason this project has the LPL_NO_INT128 rule.
     const core::u32 draw = stream.next();
-    const core::u64 target =
-        ((_total >> 32) * draw) + (((_total & 0xFFFFFFFFull) * draw) >> 32);
+    const core::u64 target = ((_total >> 32) * draw) + (((_total & 0xFFFFFFFFull) * draw) >> 32);
 
     core::u32 lowDegree = 0u;
     core::u32 highDegree = _sourceBlocks - 1u;

@@ -87,10 +87,7 @@ public:
      * inconsistency with visible consequences: @ref chance drives every per-cell
      * decision in the module.
      */
-    [[nodiscard]] constexpr Fixed32 unit() noexcept
-    {
-        return Fixed32::fromRaw(static_cast<core::i32>(next() >> 16));
-    }
+    [[nodiscard]] constexpr Fixed32 unit() noexcept { return Fixed32::fromRaw(static_cast<core::i32>(next() >> 16)); }
 
     /**
      * @brief A biased coin.

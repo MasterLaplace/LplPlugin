@@ -82,9 +82,9 @@ enum class ConstraintKind : core::u32 {
  * @brief A fact, plus what the run must do about it.
  */
 struct Constraint {
-    Fact fact{};                                  ///< What is claimed.
-    ConstraintKind kind{ConstraintKind::Score};   ///< What to do about it.
-    math::Fixed32 confidence{};                   ///< After fusion; may exceed the fact's own sigma.
+    Fact fact{};                                ///< What is claimed.
+    ConstraintKind kind{ConstraintKind::Score}; ///< What to do about it.
+    math::Fixed32 confidence{};                 ///< After fusion; may exceed the fact's own sigma.
 };
 
 } // namespace lpl::history
