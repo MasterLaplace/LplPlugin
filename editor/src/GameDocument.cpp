@@ -180,9 +180,7 @@ SceneDescription parseScene(const detail::JVal &object, std::string defaultName)
         // Reuse the recipe reader rather than duplicating twenty field names:
         // a second parser would drift from the baker's the first time a knob is
         // added, and the drift would silently change generated worlds.
-        const std::string wrapped =
-            std::string{"{\"format\":\""} + kFormat + "\",\"procedural\":" + detail::emit(*procedural) + "}";
-        if (parseSceneRecipe(wrapped, scene.recipe))
+        if (parseProceduralBlock(detail::emit(*procedural), scene.recipe))
             scene.hasRecipe = true;
     }
 

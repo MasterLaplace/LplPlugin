@@ -166,13 +166,22 @@ public:
      * - concentration [0..1] → speed scale [0.70x..1.30x]
      * - Blink detection (rising-edge) triggers jump if grounded
      *
+     * **Fixed32 in, Fixed32 out.** This used to take and return floats, and the
+     * caller quantised the result — so a player's velocity, which is authoritative
+     * state, passed through a float on one link of the chain. Input is an
+     * INGESTION boundary: the one float that genuinely comes from outside (the
+     * concentration a BCI reports) is quantised here, once, and every step after
+     * it is fixed-point. That is the same rule CharacterController already follows
+     * for its cap.
+     *
      * @param entityId  Entity to compute for.
      * @param currentVel Current velocity (Y preserved for jump).
      * @param speed     Base movement speed (default 50).
      * @return Modified velocity vector.
      */
-    [[nodiscard]] math::Vec3<float> computeMovementVelocity(core::u32 entityId, math::Vec3<float> currentVel,
-                                                            float speed = 50.f);
+    [[nodiscard]] math::Vec3<math::Fixed32> computeMovementVelocity(
+        core::u32 entityId, math::Vec3<math::Fixed32> currentVel,
+        math::Fixed32 speed = math::Fixed32::fromInt(50));
 
     // --------------------------------------------------------------------- //
     //  Global state                                                           //

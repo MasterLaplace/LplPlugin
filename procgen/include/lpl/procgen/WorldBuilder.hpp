@@ -49,12 +49,12 @@
 #    include <lpl/procgen/Dungeon.hpp>
 #    include <lpl/procgen/Erosion.hpp>
 #    include <lpl/procgen/Extrusion.hpp>
-#    include <lpl/procgen/FixedMath.hpp>
+#    include <lpl/math/FixedMath.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
 #    include <lpl/procgen/Hydrology.hpp>
 #    include <lpl/procgen/LSystem.hpp>
 #    include <lpl/procgen/QualityGate.hpp>
-#    include <lpl/procgen/Random.hpp>
+#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Routing.hpp>
 #    include <lpl/procgen/Settlement.hpp>
 #    include <lpl/procgen/ShapeGrammar.hpp>
@@ -543,7 +543,7 @@ private:
     [[nodiscard]] lpl::pmr::vector<core::u32> eligibleCells(const ScatterRule &rule) const;
 
     /// Thins @p cells down to a blue-noise subset honouring the rule's density.
-    void selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<core::u32> &cells, Random random) const;
+    void selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<core::u32> &cells, math::Random random) const;
 
     core::u32 _seed;
     core::f32 _cellSize{1.0f};

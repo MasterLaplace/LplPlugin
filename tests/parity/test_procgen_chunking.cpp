@@ -21,6 +21,7 @@
  */
 
 #include <lpl/procgen/Chunking.hpp>
+#include <lpl/procgen/EndlessPlan.hpp>
 #include <lpl/procgen/Erosion.hpp>
 
 #include <cstdio>
@@ -337,6 +338,71 @@ void testTrunksCrossChunks()
 
 } // namespace
 
+/**
+ * @brief The endless world is the recipe's world, scaled — not a second one.
+ *
+ * The chunk parameters and the content rule used to be written out by hand beside the
+ * recipe they were supposed to agree with. Two descriptions of one world, free to
+ * drift, with nothing to say when they had — and one of them did: where the sea is
+ * was a constant in a sample while the classifier used the recipe's, so the same world
+ * had two shorelines depending on which half of the code you asked.
+ */
+void testTheEndlessWorldComesFromTheRecipe()
+{
+    std::printf("the endless world is the recipe's world, scaled up to walk through\n");
+
+    procgen::WorldRecipe recipe;
+    recipe.seed = 20260804u;
+    recipe.terrain.seed = 20260804u;
+    recipe.terrain.amplitude = 14.0f;
+    recipe.terrain.frequency = 0.09f;
+    recipe.terrain.octaves = 5u;
+    recipe.terrain.kind = procgen::NoiseKind::Ridged;
+    recipe.biomes.seaLevel = -1.0f;
+    recipe.biomes.beachHeight = 0.9f;
+
+    const procgen::EndlessPlan plan = procgen::endlessPlanFromRecipe(recipe, 24u);
+
+    // The structure is the recipe's, so editing a document changes the world you walk
+    // through. That was true only by coincidence while the two were written apart.
+    check(plan.chunk.noise.seed == recipe.seed, "the plan carries the recipe's seed");
+    check(plan.chunk.noise.kind == procgen::NoiseKind::Ridged, "and its noise kind");
+    check(plan.chunk.noise.octaves == 5u, "and its octave structure");
+    check(plan.chunk.size == 24u, "and the chunk size it was asked for");
+
+    // The one that matters. Where the sea is has to be ONE answer: a second one
+    // classifies a cell as land, draws water over it and refuses to let anything walk
+    // on it, all at once, with nothing looking wrong anywhere.
+    check(plan.rule.seaLevel == recipe.biomes.seaLevel, "the sea it floods is the sea the recipe classifies");
+    check(plan.rule.beachBand == recipe.biomes.beachHeight, "and the shore it draws is the shore it classifies");
+
+    // The scaling is not the identity, and that is its whole point: a map read from
+    // above and a place walked through at eye height are not the same terrain.
+    check(plan.chunk.noise.amplitude > recipe.terrain.amplitude, "a walked world has taller relief");
+    check(plan.chunk.noise.frequency < recipe.terrain.frequency, "and fewer, wider landforms");
+
+    // Monotone rather than a threshold: a fixed number here would be a number chosen
+    // so that today's tuning passes, which is this repository's most-repeated mistake.
+    core::f32 previousSpan = -1.0f;
+    for (core::f32 relief : {1.0f, 2.0f, 4.0f})
+    {
+        procgen::WalkScale scale;
+        scale.reliefScale = relief;
+        const procgen::EndlessPlan scaled = procgen::endlessPlanFromRecipe(recipe, 24u);
+        const procgen::EndlessPlan bigger = procgen::endlessPlanFromRecipe(recipe, 24u, scale);
+        (void) scaled;
+
+        const procgen::Heightfield field = procgen::generateChunkTerrain(bigger.chunk, {0, 0});
+        math::Fixed32 low{};
+        math::Fixed32 high{};
+        (void) procgen::heightRange(field, low, high);
+        const core::f32 span = high.toFloat() - low.toFloat();
+        check(span >= previousSpan, "raising the relief scale never flattens the world");
+        previousSpan = span;
+    }
+    std::printf("    tallest span at relief x4: %.2f m\n", static_cast<double>(previousSpan));
+}
+
 int main()
 {
     std::printf("== procgen chunking: a world with no edges ==\n");
@@ -345,6 +411,7 @@ int main()
     testRiversFollowTheTerrain();
     testErodedSeamsAreExact();
     testTrunksCrossChunks();
+    testTheEndlessWorldComesFromTheRecipe();
     testDeterminism();
 
     // ── The signatures the kernel must reproduce ────────────────────────────

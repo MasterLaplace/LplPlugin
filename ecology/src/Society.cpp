@@ -9,7 +9,7 @@
 
 #include <lpl/ecology/Society.hpp>
 
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 
 namespace lpl::ecology {
 
@@ -376,7 +376,7 @@ math::Fixed32 geneticDiversity(const Genome *genomes, core::u32 count)
             variance = variance + d * d;
         }
         variance = variance / math::Fixed32::fromInt(static_cast<core::i32>(count));
-        return procgen::fixedSqrt(variance) / mean;
+        return math::fixedSqrt(variance) / mean;
     };
 
     math::Fixed32 total = variation(&Genome::maxSpeed) + variation(&Genome::vision) + variation(&Genome::strength) +

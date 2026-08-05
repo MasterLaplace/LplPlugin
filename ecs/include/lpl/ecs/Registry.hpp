@@ -108,6 +108,24 @@ public:
      */
     [[nodiscard]] core::Expected<EntityRef> resolve(EntityId id) const;
 
+    /**
+     * @brief Resolves an EntityId all the way to the chunk and row that hold it.
+     *
+     * @ref resolve stops at an @ref EntityRef, which carries a @c chunkIndex and a
+     * @c localIndex but not the partition — and a chunk index alone does NOT identify
+     * a chunk, because every partition has one. Walking the partitions and *verifying
+     * that the chunk really holds this entity* is the missing half, and it was written
+     * out by hand twice (a map viewer's body lookup and ecology::Herd's) before it was
+     * written once. Getting the verification wrong does not fail loudly: it reads the
+     * row of a different archetype, so a body gets moved by writing over somebody
+     * else's data.
+     *
+     * @param id     Entity to find.
+     * @param outRow Receives the row within the returned chunk.
+     * @return The chunk holding @p id, or nullptr when the entity is dead or unplaced.
+     */
+    [[nodiscard]] Chunk *chunkOf(EntityId id, core::u32 &outRow) const noexcept;
+
     /** @brief Returns the total number of live entities. */
     [[nodiscard]] core::u32 liveCount() const noexcept;
 

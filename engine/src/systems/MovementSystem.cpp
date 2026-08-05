@@ -106,21 +106,18 @@ void MovementSystem::execute(core::f32 /*dt*/)
                 if (!_impl->inputManager.hasEntity(eid))
                     continue;
 
-                // Input is the ingestion boundary: run the (float) movement math,
-                // then quantize the result back into the authoritative Fixed32
-                // velocity. computeMovementVelocity itself may migrate to Fixed32
-                // in a later boundary-hardening slice.
-                math::Vec3<float> currentVel{velocities[i].x.toFloat(), velocities[i].y.toFloat(),
-                                             velocities[i].z.toFloat()};
-
-                math::Vec3<float> vel = _impl->inputManager.computeMovementVelocity(eid, currentVel);
-
-                velocities[i] = {math::Fixed32::fromFloat(vel.x), math::Fixed32::fromFloat(vel.y),
-                                 math::Fixed32::fromFloat(vel.z)};
+                // Fixed32 all the way through. The round trip to float and back
+                // that used to live here meant a player's velocity — authoritative
+                // state — passed through a float on one link of the chain; the one
+                // measurement that really comes from outside is quantised inside
+                // computeMovementVelocity, at the boundary, exactly once.
+                const math::Vec3<math::Fixed32> vel =
+                    _impl->inputManager.computeMovementVelocity(eid, velocities[i]);
+                velocities[i] = vel;
 
                 // Wake entity if velocity is non-zero and it was sleeping
-                float speedSq = vel.x * vel.x + vel.y * vel.y + vel.z * vel.z;
-                if (speedSq > 0.0001f && sleepStates && sleepStates[i] != 0)
+                const math::Fixed32 speedSq = vel.x * vel.x + vel.y * vel.y + vel.z * vel.z;
+                if (speedSq > math::Fixed32::fromFloat(0.0001f) && sleepStates && sleepStates[i] != 0)
                 {
                     sleepStates[i] = 0;
                 }

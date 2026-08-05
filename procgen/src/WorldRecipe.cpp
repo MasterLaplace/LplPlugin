@@ -24,6 +24,31 @@ using FVec3 = math::Vec3<math::Fixed32>;
 constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
 constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
+/**
+ * @brief Raises the finished field until its lowest cell reaches @p clearance.
+ * @return The shift actually applied; 0 when the ground was already high enough,
+ *         which is also what every caller adds to its absolute thresholds.
+ */
+[[nodiscard]] core::f32 liftGround(WorldBuilder &builder, core::f32 clearance)
+{
+    if (clearance <= 0.0f)
+        return 0.0f;
+
+    math::Fixed32 low{};
+    math::Fixed32 high{};
+    if (!heightRange(builder.heightfield(), low, high))
+        return 0.0f;
+
+    const core::f32 lift = clearance - low.toFloat();
+    if (lift <= 0.0f)
+        return 0.0f;
+
+    // normalize maps min and max onto the two bounds linearly, so asking for the same
+    // span translated is an exact shift, not a rescale.
+    builder.normalize(low.toFloat() + lift, high.toFloat() + lift);
+    return lift;
+}
+
 } // namespace
 
 core::u32 foldWorldState(const ecs::Registry &registry) noexcept
@@ -71,7 +96,7 @@ core::u32 foldWorldState(const ecs::Registry &registry) noexcept
     return hash;
 }
 
-void applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
+core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
 {
     // The pass order lives here, in one place, rather than at every call site.
     // It is not a style preference: two callers ordering erosion and rivers
@@ -89,6 +114,12 @@ void applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
     if (recipe.normalizeTerrain)
         builder.normalize(recipe.heightLow, recipe.heightHigh);
 
+    // Terracing before erosion, because erosion is what softens the steps back into
+    // something that looks cut rather than stamped. The other way round gives sharp
+    // benches on a smooth hill, which reads as a rendering artefact.
+    if (recipe.terraceSteps != 0u)
+        builder.terraces(recipe.terraceSteps);
+
     if (recipe.erodeTerrain)
     {
         builder.erodeThermal(recipe.thermal);
@@ -98,31 +129,83 @@ void applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
     if (recipe.carveRivers)
         builder.rivers(recipe.rivers);
 
+    // The world is put in the frame the physics expects HERE — after erosion and the
+    // rivers, because the lowest cell is not knowable before them, and before a single
+    // entity exists, because moving the ground under things already standing on it
+    // means chasing a list that only ever grows. See WorldRecipe::groundClearance.
+    const core::f32 lift = liftGround(builder, recipe.groundClearance);
+
+    // Provinces before the climate block: the districting is a partition of the
+    // SURFACE, so it belongs with the terrain that is now final, and a settlement laid
+    // out later can be anchored on it.
+    if (recipe.partitionRegions)
+        builder.regions(recipe.provinces);
+
     if (recipe.classifyBiomes)
     {
+        BiomeParams biomes = recipe.biomes;
+        ClimateParams axes = recipe.axes;
+        // Every absolute threshold travels with the lift, or the classifier reads the
+        // shifted field against thresholds tuned for the old one and calls a plain a
+        // summit.
+        biomes.seaLevel += lift;
+        biomes.mountainHeight += lift;
+        biomes.snowHeight += lift;
+        axes.seaLevel += lift;
+
         builder.climate(recipe.climate);
-        builder.climateAxes(recipe.axes);
-        builder.biomes(recipe.biomes);
+        builder.climateAxes(axes);
+        builder.biomes(biomes);
     }
 
     const core::u32 rules = recipe.scatterCount < kMaxScatterRules ? recipe.scatterCount : kMaxScatterRules;
     for (core::u32 i = 0u; i < rules; ++i)
         builder.scatter(recipe.scatter[i]);
 
+    // One underground, chosen by the recipe. Four generators existed and only the
+    // cellular one could be named, so the other three were reachable exclusively by
+    // hand-written builder calls — a world nothing could save, bake or replay.
     if (recipe.carveCaves)
-        builder.caves(recipe.caves);
+    {
+        switch (recipe.caveKind)
+        {
+        case CaveKind::Bsp: builder.dungeon(recipe.rooms); break;
+        case CaveKind::Dla: builder.dlaCaves(recipe.aggregation); break;
+        case CaveKind::Layered: builder.caveSystem(recipe.caveSystem); break;
+        case CaveKind::Cellular: builder.caves(recipe.caves); break;
+        }
+    }
 
     if (recipe.placeSettlement)
-        builder.settlement(recipe.settlement);
+    {
+        SettlementParams settlement = recipe.settlement;
+        settlement.minHeight += lift;
+        builder.settlement(settlement);
+    }
+
+    // The grammar needs the plots the settlement laid out, so it cannot run before
+    // one exists. Raising a town is what turns a painted footprint into a silhouette.
+    if (recipe.raiseBuildings)
+        builder.buildings(recipe.buildings);
 
     // After the settlement, never before: the road field is anchored on the
     // districts the town laid out, so growing first would steer the network by
     // a town that does not exist yet.
     if (recipe.growRoads)
-        builder.roads(recipe.roads);
+    {
+        RoadParams roads = recipe.roads;
+        roads.minHeight += lift;
+        builder.roads(roads);
+    }
+
+    // And the verges after the roads they decorate.
+    if (recipe.roadsideLevels != 0u && recipe.roadsidePattern[0] != '\0')
+        builder.roadside(recipe.roadsidePattern, recipe.roadsideLevels);
 
     if (recipe.checkPlayability)
         builder.validate(recipe.gate);
+
+    return lift;
 }
 
 WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe)

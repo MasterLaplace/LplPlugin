@@ -51,10 +51,144 @@ namespace lpl::procgen {
  *
  * Bounded on purpose. A recipe is a wire object before it is an engine object,
  * and a wire object with an unbounded list needs a length prefix, a heap and a
- * bounds check in ring 0. Four kinds of prop is what a hand-authored world uses;
- * anything richer is a job for several recipes rather than for an open array.
+ * bounds check in ring 0.
+ *
+ * Eight rather than four, because four was a real ceiling: one rule per biome is
+ * how vegetation is actually written — a taiga is conifers, a savanna is scrub, a
+ * marsh is reeds — and four runs out at the fifth kind of plant. A viewer that
+ * wanted six had to write `WorldBuilder` calls by hand, and a world built that way
+ * cannot be saved, baked, replayed in ring 0 or asked for by an intelligence.
+ * `lpl::pack::kWireScatterRules` must match, and a static_assert says so.
  */
-inline constexpr core::u32 kMaxScatterRules = 4u;
+inline constexpr core::u32 kMaxScatterRules = 8u;
+
+/**
+ * @brief Longest roadside grammar a recipe may carry, NUL included.
+ *
+ * A fixed array rather than a string, for the reason the whole recipe is bounded: it
+ * is a wire object before it is an engine object, and a wire object with an unbounded
+ * string needs a length prefix, a heap and a bounds check in ring 0. Sixty-four
+ * characters is several times the longest pattern the grammar was designed for
+ * (`{[A,P]:2,[BL,P]:1}*,[G,P]` is twenty-five).
+ */
+inline constexpr core::u32 kMaxRoadsidePattern = 64u;
+
+/**
+ * @enum CaveKind
+ * @brief Which underground generator a recipe asks for.
+ *
+ * Four generators existed and a recipe could name exactly one of them, so the other
+ * three were reachable only by writing @ref WorldBuilder calls by hand — which is
+ * what a viewer did, and why its world could not be saved, baked, replayed in ring 0
+ * or asked for by an intelligence. A director who cannot name what it wants is not a
+ * director.
+ *
+ * @c Cellular stays the default because it is what @ref parityWorldRecipe bakes and
+ * what every existing document therefore means.
+ */
+enum class CaveKind : core::u32 {
+    Cellular = 0u, ///< Automaton smoothing with connectivity repair. The default.
+    Bsp = 1u,      ///< Recursive partition into rooms joined by corridors.
+    Dla = 2u,      ///< Diffusion-limited aggregation: thin, branching, organic.
+
+    /**
+     * @brief A stack of plans joined by shafts, at least one reaching the surface.
+     *
+     * The gate judges this one in three dimensions — see @ref evaluateCaveSystem. It
+     * did not, for a while: @ref GateCriteria was asked of the flat @c DungeonMap,
+     * which this generator leaves empty, so a layered recipe reported zero open cells
+     * and failed a world that was perfectly navigable, and a document had to switch
+     * @c checkPlayability off to use the generator at all.
+     *
+     * Worth keeping in mind because the first test written for it passed for exactly
+     * that reason and proved nothing: the layered cave "differed from the default" by
+     * reporting nothing at all.
+     */
+    Layered = 3u
+};
+
+namespace detail {
+
+/// Character-by-character equality. No libc: this module is freestanding.
+[[nodiscard]] constexpr bool sameName(const char *a, const char *b) noexcept
+{
+    if (a == nullptr || b == nullptr)
+        return false;
+    while (*a != '\0' && *a == *b)
+    {
+        ++a;
+        ++b;
+    }
+    return *a == *b;
+}
+
+} // namespace detail
+
+/// @return The word a document spells @p kind with.
+[[nodiscard]] constexpr const char *caveKindName(CaveKind kind) noexcept
+{
+    switch (kind)
+    {
+    case CaveKind::Cellular: return "cellular";
+    case CaveKind::Bsp: return "bsp";
+    case CaveKind::Dla: return "dla";
+    case CaveKind::Layered: return "layered";
+    }
+    return "cellular";
+}
+
+/**
+ * @brief Reads a cave kind from a document.
+ *
+ * A WORD, never an index, for the reason every named thing in this format is one: an
+ * index means whatever the enumeration happened to be on the day it was written, so
+ * reordering the enum silently reinterprets every document already on disk.
+ *
+ * @param name The spelling, as @ref caveKindName produces it.
+ * @param outKind Set on success.
+ * @return false when the word is not one of the four.
+ */
+[[nodiscard]] constexpr bool caveKindByName(const char *name, CaveKind &outKind) noexcept
+{
+    for (core::u32 i = 0u; i <= static_cast<core::u32>(CaveKind::Layered); ++i)
+    {
+        const CaveKind kind = static_cast<CaveKind>(i);
+        if (detail::sameName(name, caveKindName(kind)))
+        {
+            outKind = kind;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @return The word a document spells @p metric with.
+[[nodiscard]] constexpr const char *distanceMetricName(DistanceMetric metric) noexcept
+{
+    switch (metric)
+    {
+    case DistanceMetric::Euclidean: return "euclidean";
+    case DistanceMetric::Manhattan: return "manhattan";
+    case DistanceMetric::Chebyshev: return "chebyshev";
+    }
+    return "euclidean";
+}
+
+/// Reads a province distance metric from a document. See @ref caveKindByName for why
+/// it is a word.
+[[nodiscard]] constexpr bool distanceMetricByName(const char *name, DistanceMetric &outMetric) noexcept
+{
+    for (core::u32 i = 0u; i <= static_cast<core::u32>(DistanceMetric::Chebyshev); ++i)
+    {
+        const DistanceMetric metric = static_cast<DistanceMetric>(i);
+        if (detail::sameName(name, distanceMetricName(metric)))
+        {
+            outMetric = metric;
+            return true;
+        }
+    }
+    return false;
+}
 
 /**
  * @struct WorldRecipe
@@ -82,26 +216,71 @@ struct WorldRecipe {
     core::f32 heightLow{-8.0f};  ///< Normalised range floor, when @ref normalizeTerrain.
     core::f32 heightHigh{16.0f}; ///< Normalised range ceiling.
 
+    /**
+     * @brief Lowest the finished ground may sit, or 0 to leave the field where it fell.
+     *
+     * The built-in physics stops a body half a unit above the origin and knows
+     * nothing about a heightfield, so a world whose ground dips under that line has
+     * **two** floors: the real one, and a flat invisible one the bodies actually come
+     * to rest on. The fix is to move the world, once, before a single entity exists —
+     * shifting it afterwards and then chasing everything already placed in it is the
+     * wrong way round, and it does not work, because "everything" grows.
+     *
+     * A measurement, not a constant: the shift is `clearance - lowest cell`, which is
+     * only knowable once erosion and the rivers have run. That is why this is its own
+     * pass late in the pipeline rather than a value folded into @ref heightLow, which
+     * is applied before either.
+     *
+     * Every absolute threshold travels with it — sea level, the mountain and snow
+     * lines, the climate's sea level, the floors the settlement and the roads refuse
+     * to build below — so the classification still sees the relative elevations it was
+     * tuned for. Forgetting one of them is what puts roads under the new ground.
+     */
+    core::f32 groundClearance{0.0f};
+
     ThermalErosionParams thermal{};     ///< Talus relaxation.
     HydraulicErosionParams hydraulic{}; ///< Capacity-limited water erosion.
     RiverParams rivers{};               ///< How much drainage becomes visible water.
     MoistureParams climate{};           ///< Rainfall, wind, coastal reach.
     ClimateParams axes{};               ///< The six climate axes' shaping.
     BiomeParams biomes{};               ///< Sea, shore and summit thresholds.
-    CaveParams caves{};                 ///< Underground layer.
+    VoronoiParams provinces{};          ///< Surface regions, when @ref partitionRegions.
+    CaveParams caves{};                 ///< Underground layer, when @ref caveKind is Cellular.
+    BspDungeonParams rooms{};           ///< Underground layer, when @ref caveKind is Bsp.
+    DlaParams aggregation{};            ///< Underground layer, when @ref caveKind is Dla.
+    CaveSystemParams caveSystem{};      ///< Underground layer, when @ref caveKind is Layered.
     SettlementParams settlement{};      ///< Town layout.
+    BuildingGrammarParams buildings{};  ///< How a plot becomes a volume, when @ref raiseBuildings.
     RoadParams roads{};                 ///< Road network grown over the town.
     GateCriteria gate{};                ///< What the underground must satisfy.
 
     ScatterRule scatter[kMaxScatterRules]{}; ///< Prop rules, first @ref scatterCount used.
     core::u32 scatterCount{0u};              ///< Rules actually in play.
 
+    /**
+     * @brief Terrace steps, or 0 to leave the field smooth.
+     *
+     * A count rather than a count-plus-flag: zero steps and "no terracing" are the
+     * same world, so a second switch could only ever contradict the first.
+     */
+    core::u32 terraceSteps{0u};
+
+    /// Which underground generator runs. See @ref CaveKind.
+    CaveKind caveKind{CaveKind::Cellular};
+
+    /// The L-system the roadside decoration follows; empty leaves the verges bare.
+    char roadsidePattern[kMaxRoadsidePattern]{};
+    /// Voxel levels the roadside modules occupy; 0 also leaves them bare.
+    core::u32 roadsideLevels{0u};
+
     bool normalizeTerrain{true};  ///< Rescale the field before any absolute threshold reads it.
     bool erodeTerrain{true};      ///< Run both erosion models.
     bool carveRivers{true};       ///< Route drainage and cut river beds.
     bool classifyBiomes{true};    ///< Compute moisture and classify.
+    bool partitionRegions{false}; ///< Divide the surface into Voronoi provinces.
     bool carveCaves{true};        ///< Generate the underground layer.
     bool placeSettlement{true};   ///< Lay a town onto the terrain.
+    bool raiseBuildings{false};   ///< Extrude the plots with the shape grammar.
     bool growRoads{true};         ///< Grow a road network over it.
     bool materializeGround{true}; ///< Emit one entity per ground cell (off: props only).
     bool checkPlayability{true};  ///< Judge the underground against @ref gate.
@@ -229,8 +408,13 @@ struct WorldRecipeResult {
  *
  * @param builder Destination builder, freshly constructed with the recipe's seed.
  * @param recipe  The passes to configure.
+ * @return The vertical shift @ref WorldRecipe::groundClearance applied, 0 when none.
+ *         A caller that reads absolute heights afterwards — where the sea is, what
+ *         counts as too deep to walk in — needs it, because the world it is about to
+ *         measure is not at the altitude its own recipe named. Returned rather than
+ *         recomputed: it is only knowable at the moment erosion finished.
  */
-void applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe);
+core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe);
 
 /**
  * @brief Runs every enabled pass of @p recipe into @p registry and folds it.

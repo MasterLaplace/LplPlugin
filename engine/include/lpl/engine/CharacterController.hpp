@@ -43,7 +43,7 @@
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/Cordic.hpp>
 #    include <lpl/math/FixedPoint.hpp>
-#    include <lpl/procgen/FixedMath.hpp>
+#    include <lpl/math/FixedMath.hpp>
 
 namespace lpl::engine {
 
@@ -158,7 +158,7 @@ public:
     [[nodiscard]] math::Fixed32 verticalSpeed() const noexcept { return _vy; }
 
     /** @brief Horizontal speed, for a readout or a walk cycle. */
-    [[nodiscard]] math::Fixed32 groundSpeed() const noexcept { return procgen::fixedSqrt(_vx * _vx + _vz * _vz); }
+    [[nodiscard]] math::Fixed32 groundSpeed() const noexcept { return math::fixedSqrt(_vx * _vx + _vz * _vz); }
 
     [[nodiscard]] bool isGrounded() const noexcept { return _grounded; }
     [[nodiscard]] bool isSliding() const noexcept { return _sliding; }

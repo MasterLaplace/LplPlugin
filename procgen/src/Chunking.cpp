@@ -11,7 +11,7 @@
 
 #include <lpl/procgen/Erosion.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 
 namespace lpl::procgen {
@@ -22,7 +22,7 @@ core::u32 chunkSeed(const ChunkParams &params, ChunkCoord coord)
     // (1, 0) and (0, 1) must not share a seed, and a simple sum or xor would
     // give them one.
     const core::u32 mixed = ValueNoise2D::hash2(coord.x, coord.z, params.worldSeed);
-    return deriveStream(mixed, 0xC804Bu).state();
+    return math::deriveStream(mixed, 0xC804Bu).state();
 }
 
 math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)

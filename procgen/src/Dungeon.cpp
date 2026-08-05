@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/Dungeon.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -58,7 +58,7 @@ struct BspNode {
 };
 
 void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const BspDungeonParams &params,
-                   Random &random, lpl::pmr::vector<Room> *outRooms, core::u32 &outCenterX, core::u32 &outCenterZ)
+                   math::Random &random, lpl::pmr::vector<Room> *outRooms, core::u32 &outCenterX, core::u32 &outCenterZ)
 {
     const bool tooSmallToSplit = node.width < params.minLeafSize * 2u && node.depth < params.minLeafSize * 2u;
 
@@ -300,7 +300,7 @@ DungeonMap generateBspDungeon(const BspDungeonParams &params, lpl::pmr::vector<R
         return DungeonMap{};
 
     DungeonMap map{params.width, params.depth, DungeonCell::Wall};
-    Random random = deriveStream(params.seed, 0xB59u);
+    math::Random random = math::deriveStream(params.seed, 0xB59u);
 
     core::u32 centerX = 0u;
     core::u32 centerZ = 0u;
@@ -314,7 +314,7 @@ DungeonMap generateCellularCave(const CaveParams &params)
         return DungeonMap{};
 
     DungeonMap map{params.width, params.depth, DungeonCell::Wall};
-    Random random = deriveStream(params.seed, 0xCA7Eu);
+    math::Random random = math::deriveStream(params.seed, 0xCA7Eu);
     const math::Fixed32 fill = math::Fixed32::fromFloat(params.fillProbability);
 
     // Seed with noise, keeping a solid border.
@@ -360,7 +360,7 @@ DungeonMap generateDrunkardWalk(const DrunkardParams &params)
         return DungeonMap{};
 
     DungeonMap map{params.width, params.depth, DungeonCell::Wall};
-    Random random = deriveStream(params.seed, 0xD24Bu);
+    math::Random random = math::deriveStream(params.seed, 0xD24Bu);
 
     const core::u32 margin = params.margin;
     if (params.width <= margin * 2u + 1u || params.depth <= margin * 2u + 1u)
@@ -459,7 +459,7 @@ void erodeEdges(DungeonMap &map, core::u32 seed, core::f32 strength)
     if (map.empty())
         return;
 
-    Random random = deriveStream(seed, 0xE20Du);
+    math::Random random = math::deriveStream(seed, 0xE20Du);
     const math::Fixed32 chance = math::Fixed32::fromFloat(strength);
     const DungeonMap source = map;
 
@@ -487,7 +487,7 @@ core::u32 forceConnectivity(DungeonMap &map, core::u32 seed)
     if (map.empty())
         return 0u;
 
-    Random random = deriveStream(seed, 0xC0FFEEu);
+    math::Random random = math::deriveStream(seed, 0xC0FFEEu);
     core::u32 broken = 0u;
 
     for (;;)
@@ -577,7 +577,7 @@ core::u32 mergeRoomsAsymmetric(DungeonMap &map, core::u32 seed, core::f32 streng
     if (map.empty())
         return 0u;
 
-    Random random = deriveStream(seed, 0x11E56u);
+    math::Random random = math::deriveStream(seed, 0x11E56u);
     const math::Fixed32 chance = math::Fixed32::fromFloat(strength);
     const DungeonMap source = map;
     core::u32 opened = 0u;
@@ -611,7 +611,7 @@ core::u32 misalignPillars(DungeonMap &map, core::u32 seed, core::f32 density)
     if (map.empty())
         return 0u;
 
-    Random random = deriveStream(seed, 0x9111Au);
+    math::Random random = math::deriveStream(seed, 0x9111Au);
     const math::Fixed32 chance = math::Fixed32::fromFloat(density);
     core::u32 placed = 0u;
 

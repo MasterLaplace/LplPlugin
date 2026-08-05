@@ -90,6 +90,18 @@ Config::Builder &Config::Builder::enableRealTimeGuard(bool enabled) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::enableEcology(bool enabled) noexcept
+{
+    _enableEcology = enabled;
+    return *this;
+}
+
+Config::Builder &Config::Builder::enableStreaming(bool enabled) noexcept
+{
+    _enableStreaming = enabled;
+    return *this;
+}
+
 Config::Builder &Config::Builder::enableGpu(bool enabled) noexcept
 {
     _enableGpu = enabled;
@@ -263,6 +275,8 @@ Config Config::Builder::build() const noexcept
     cfg._enableRendering = _enableRendering;
     cfg._enableRealTimeGuard = _enableRealTimeGuard;
     cfg._enableGpu = _enableGpu;
+    cfg._enableEcology = _enableEcology;
+    cfg._enableStreaming = _enableStreaming;
     cfg._serverAddress = _serverAddress;
     cfg._serverPort = _serverPort;
     cfg._maxResidentChunks = _maxResidentChunks;

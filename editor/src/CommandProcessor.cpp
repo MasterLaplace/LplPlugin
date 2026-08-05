@@ -117,6 +117,76 @@ WorldStats collectWorldStats(const ecs::Registry &registry)
     return stats;
 }
 
+/// One named divergence between two documents.
+struct Difference {
+    std::string path;
+    std::string a;
+    std::string b;
+};
+
+/**
+ * @brief Walks two parsed documents together, naming every place they differ.
+ *
+ * Structural rather than schema-driven, and that is the point: a diff written
+ * against the recipe's field list would be a second reader of `.lplscene`, drifting
+ * from parseSceneRecipe on the first field anybody added. This one knows nothing
+ * about worlds — it compares JSON — so it stays correct as the format grows, and
+ * it names paths (`procedural.terrain.frequency`) a caller can act on.
+ */
+void collectDifferences(const detail::JVal &a, const detail::JVal &b, const std::string &path,
+                        std::vector<Difference> &out)
+{
+    if (a.t != b.t)
+    {
+        out.push_back({path, detail::emit(a), detail::emit(b)});
+        return;
+    }
+    switch (a.t)
+    {
+    case detail::JVal::T::Obj: {
+        for (const auto &member : a.obj)
+        {
+            const detail::JVal *other = b.find(member.first);
+            const std::string child = path.empty() ? member.first : path + "." + member.first;
+            if (other == nullptr)
+                // "null" rather than a word: the report must stay valid JSON, and a
+                // caller reading `"b": null` at a named path knows the key is gone.
+                out.push_back({child, detail::emit(member.second), "null"});
+            else
+                collectDifferences(member.second, *other, child, out);
+        }
+        // Members only the second document has are differences too; without this
+        // half, a diff would report nothing when b merely ADDED a block.
+        for (const auto &member : b.obj)
+            if (a.find(member.first) == nullptr)
+                out.push_back({path.empty() ? member.first : path + "." + member.first, "null",
+                               detail::emit(member.second)});
+        return;
+    }
+    case detail::JVal::T::Arr: {
+        const std::size_t shared = a.arr.size() < b.arr.size() ? a.arr.size() : b.arr.size();
+        for (std::size_t i = 0u; i < shared; ++i)
+            collectDifferences(a.arr[i], b.arr[i], path + "[" + std::to_string(i) + "]", out);
+        if (a.arr.size() != b.arr.size())
+            out.push_back({path + ".length", std::to_string(a.arr.size()), std::to_string(b.arr.size())});
+        return;
+    }
+    case detail::JVal::T::Num:
+        if (a.num != b.num)
+            out.push_back({path, detail::emit(a), detail::emit(b)});
+        return;
+    case detail::JVal::T::Str:
+        if (a.str != b.str)
+            out.push_back({path, detail::emit(a), detail::emit(b)});
+        return;
+    case detail::JVal::T::Bool:
+        if (a.b != b.b)
+            out.push_back({path, detail::emit(a), detail::emit(b)});
+        return;
+    case detail::JVal::T::Null: return;
+    }
+}
+
 // Executes a single command object; always returns a JSON report object.
 std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
 {
@@ -136,16 +206,8 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         // The command object IS a "procedural" block, so it is read by the very
         // reader a `.lplscene` goes through — one schema, not a parallel one that
         // drifts. Anything an editor can build, a document can carry.
-        detail::JVal format;
-        format.t = detail::JVal::T::Str;
-        format.str = "lplscene/1";
-        detail::JVal document;
-        document.t = detail::JVal::T::Obj;
-        document.obj.emplace_back("format", format);
-        document.obj.emplace_back("procedural", cmdObj);
-
         procgen::WorldRecipe recipe{};
-        if (const auto parsed = parseSceneRecipe(detail::emit(document), recipe); !parsed)
+        if (const auto parsed = parseProceduralBlock(detail::emit(cmdObj), recipe); !parsed)
             return reportError("generate_world", "the recipe is not valid");
 
         const procgen::WorldRecipeResult baked = procgen::bakeWorld(registry, recipe);
@@ -366,6 +428,49 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         std::string out = "{\"cmd\":\"query_entities\",\"ok\":true,\"matched\":" + std::to_string(matched);
         out += ",\"truncated\":" + std::string(matched > limit ? "true" : "false");
         out += ",\"indices\":[" + samples + "]}";
+        return out;
+    }
+    if (cmd == "diff_scenes")
+    {
+        // Answers "what did that change" without a human reading two documents
+        // side by side — the question a correction loop asks after every edit.
+        const detail::JVal *left = cmdObj.find("a");
+        const detail::JVal *right = cmdObj.find("b");
+        if (left == nullptr || left->t != detail::JVal::T::Str || right == nullptr ||
+            right->t != detail::JVal::T::Str)
+            return reportError("diff_scenes", "missing \"a\" or \"b\" document string");
+
+        bool leftOk = false;
+        bool rightOk = false;
+        const detail::JVal parsedLeft = detail::parse(left->str, &leftOk);
+        const detail::JVal parsedRight = detail::parse(right->str, &rightOk);
+        if (!leftOk || !rightOk)
+            return reportError("diff_scenes", "a document did not parse");
+
+        std::vector<Difference> differences;
+        collectDifferences(parsedLeft, parsedRight, "", differences);
+
+        // Bounded, like query_entities: a whole-document dump is exactly the
+        // bulky return the CCR note says must be skimmed rather than streamed.
+        const core::u32 limit = static_cast<core::u32>(cmdObj.numOr("limit", 32.0));
+        std::string out = "{\"cmd\":\"diff_scenes\",\"ok\":true,\"identical\":";
+        out += differences.empty() ? "true" : "false";
+        out += ",\"differences\":" + std::to_string(differences.size());
+        out += ",\"truncated\":" + std::string(differences.size() > limit ? "true" : "false");
+        out += ",\"changes\":[";
+        for (core::u32 i = 0u; i < limit && i < differences.size(); ++i)
+        {
+            if (i != 0u)
+                out += ',';
+            out += "{\"path\":\"";
+            appendEscaped(out, differences[i].path);
+            out += "\",\"a\":";
+            out += differences[i].a;
+            out += ",\"b\":";
+            out += differences[i].b;
+            out += '}';
+        }
+        out += "]}";
         return out;
     }
     return reportError(cmd, "unknown command");

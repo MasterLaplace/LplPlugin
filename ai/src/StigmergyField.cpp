@@ -191,6 +191,50 @@ core::u32 StigmergyField::gradientDirection(core::u32 channel, core::u32 x, core
     return best;
 }
 
+core::u32 StigmergyField::palateDirection(const ScentPalate &palate, core::u32 x, core::u32 z) const
+{
+    if (palate.count == 0u || x >= _width || z >= _depth)
+        return kNoDirection;
+
+    // Scores a cell against everything this animal cares about. Attraction and
+    // repulsion are the same sum with opposite signs, which is why a wolf and a
+    // deer can share one field and one line of code.
+    const auto score = [&](core::u32 cx, core::u32 cz) {
+        math::Fixed32 total{};
+        for (core::u32 t = 0u; t < palate.count; ++t)
+        {
+            const ScentAffinity &term = palate.terms[t];
+            if (term.channel >= _channels)
+                continue;
+            total = total + _cells[index(term.channel, cx, cz)] * term.weight;
+        }
+        return total;
+    };
+
+    core::u32 best = kNoDirection;
+    math::Fixed32 bestValue = score(x, z);
+
+    for (core::u32 n = 0u; n < 8u; ++n)
+    {
+        const core::i32 nx = static_cast<core::i32>(x) + procgen::kNeighbor8X[n];
+        const core::i32 nz = static_cast<core::i32>(z) + procgen::kNeighbor8Z[n];
+        if (nx < 0 || nz < 0 || static_cast<core::u32>(nx) >= _width || static_cast<core::u32>(nz) >= _depth)
+            continue;
+        if (_blocked[static_cast<core::u32>(nz) * _width + static_cast<core::u32>(nx)] != 0u)
+            continue;
+
+        // Strictly better, so a plateau leaves the agent where it is rather than
+        // letting the neighbour order decide — the same tie rule gradientDirection
+        // uses, and the reason two targets agree.
+        if (const math::Fixed32 v = score(static_cast<core::u32>(nx), static_cast<core::u32>(nz)); v > bestValue)
+        {
+            bestValue = v;
+            best = n;
+        }
+    }
+    return best;
+}
+
 core::u32 StigmergyField::fold() const
 {
     core::u32 hash = kFnv1aOffsetBasis;

@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/Aggregation.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -80,7 +80,7 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
     }
 
     DungeonMap map{params.width, params.depth, DungeonCell::Wall};
-    Random random = deriveStream(params.seed, 0xD1Au);
+    math::Random random = math::deriveStream(params.seed, 0xD1Au);
 
     const core::i32 centerX = static_cast<core::i32>(params.width / 2u);
     const core::i32 centerZ = static_cast<core::i32>(params.depth / 2u);

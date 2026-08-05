@@ -259,4 +259,27 @@ std::string emit(const JVal &value)
     return "null";
 }
 
+void overlay(JVal &target, const JVal &patch)
+{
+    if (target.t != JVal::T::Obj || patch.t != JVal::T::Obj)
+    {
+        target = patch;
+        return;
+    }
+    for (const auto &member : patch.obj)
+    {
+        JVal *existing = nullptr;
+        for (auto &candidate : target.obj)
+            if (candidate.first == member.first)
+            {
+                existing = &candidate.second;
+                break;
+            }
+        if (existing == nullptr)
+            target.obj.push_back(member);
+        else
+            overlay(*existing, member.second);
+    }
+}
+
 } // namespace lpl::editor::detail

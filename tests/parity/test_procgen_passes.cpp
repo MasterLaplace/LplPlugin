@@ -24,7 +24,7 @@
 #include <lpl/procgen/Erosion.hpp>
 #include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/Hydrology.hpp>
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 #include <lpl/procgen/WaveFunctionCollapse.hpp>
 #include <lpl/procgen/WorldBuilder.hpp>
 
@@ -74,19 +74,19 @@ int main()
     // ─────────────────────────────────────────────────────────────────────────
     std::printf("-- random stream --\n");
     {
-        procgen::Random a{1337u};
-        procgen::Random b{1337u};
+        math::Random a{1337u};
+        math::Random b{1337u};
         bool identical = true;
         for (core::u32 i = 0u; i < 1000u; ++i)
             identical = identical && a.next() == b.next();
         check(identical, "the same seed replays the same stream");
 
-        procgen::Random c{1338u};
-        procgen::Random d{1337u};
+        math::Random c{1338u};
+        math::Random d{1337u};
         check(c.next() != d.next(), "a different seed diverges");
 
         // A stream that leans on its low bits would show here.
-        procgen::Random spread{99u};
+        math::Random spread{99u};
         core::u32 buckets[4] = {0u, 0u, 0u, 0u};
         for (core::u32 i = 0u; i < 4000u; ++i)
             ++buckets[spread.below(4u)];
@@ -95,7 +95,7 @@ int main()
             balanced = balanced && buckets[i] > 700u && buckets[i] < 1300u;
         check(balanced, "below() is roughly uniform");
 
-        check(procgen::deriveStream(1337u, 1u).state() != procgen::deriveStream(1337u, 2u).state(),
+        check(math::deriveStream(1337u, 1u).state() != math::deriveStream(1337u, 2u).state(),
               "different salts give independent streams");
     }
 

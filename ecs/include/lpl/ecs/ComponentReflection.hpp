@@ -57,7 +57,11 @@ enum class FieldType : core::u8 {
     QuatF      ///< 4x F32 (render-only).
 };
 
-/** @brief Byte size of a single field of the given type. */
+/**
+ * @brief Byte size of a single field of the given type.
+ * @param t The field type.
+ * @return The byte size of the field.
+ */
 [[nodiscard]] constexpr core::u32 fieldSize(FieldType t) noexcept
 {
     switch (t)
@@ -75,7 +79,11 @@ enum class FieldType : core::u8 {
     return 0;
 }
 
-/** @brief Byte alignment of a single field of the given type. */
+/**
+ * @brief Byte alignment of a single field of the given type.
+ * @param t The field type.
+ * @return The byte alignment of the field.
+ */
 [[nodiscard]] constexpr core::u32 fieldAlign(FieldType t) noexcept
 {
     switch (t)
@@ -86,13 +94,21 @@ enum class FieldType : core::u8 {
     }
 }
 
-/** @brief True if the field carries authoritative (deterministic) state. */
+/**
+ * @brief True if the field carries authoritative (deterministic) state.
+ * @param t The field type.
+ * @return True if the field is authoritative, false otherwise.
+ */
 [[nodiscard]] constexpr bool isAuthoritative(FieldType t) noexcept
 {
     return t == FieldType::Fixed32 || t == FieldType::Vec3Fixed;
 }
 
-/** @brief Reinterpret a float's bit pattern as an i64 (for @c defaultRaw). */
+/**
+ * @brief Reinterpret a float's bit pattern as an i64 (for @c defaultRaw).
+ * @param f The float to reinterpret.
+ * @return The i64 representation of the float's bits.
+ */
 [[nodiscard]] constexpr core::i64 floatBits(float f) noexcept
 {
     return static_cast<core::i64>(static_cast<core::i32>(std::bit_cast<core::u32>(f)));
@@ -204,6 +220,29 @@ inline constexpr FieldDesc kPlayerTagFields[] = {
 inline constexpr FieldDesc kSleepStateFields[] = {
     {"asleep", FieldType::U8, 0, 0, true, 0, 1},
 };
+// The animal's heritable traits. Authoritative — a genome multiplies into speed
+// and damage, and breeding compounds it, so a float would let two machines
+// disagree about a population after a few generations.
+inline constexpr FieldDesc kGenomeFields[] = {
+    {"maxSpeed",   FieldType::Fixed32,  0, 4 << 16},
+    {"vision",     FieldType::Fixed32,  4, 8 << 16},
+    {"strength",   FieldType::Fixed32,  8, 5 << 16},
+    {"absorption", FieldType::Fixed32, 12, 1 << 16},
+    {"size",       FieldType::Fixed32, 16, 1 << 16},
+};
+// Trophic role and identity. Bounded because a species index outside the food
+// web is not a rare creature, it is an out-of-range read.
+inline constexpr FieldDesc kCreatureFields[] = {
+    {"species", FieldType::U32, 0, 0, true, 0, 15},
+    {"id",      FieldType::U32, 4, 0},
+};
+// Unit facing on the ground plane. Bounded to [-1, 1] in raw Q16.16 because a
+// facing longer than one is not a fast animal, it is a pace multiplier hidden in
+// a direction — and the pace belongs to the genome.
+inline constexpr FieldDesc kHeadingFields[] = {
+    {"x", FieldType::Fixed32, 0, 1 << 16, true, -(1 << 16), 1 << 16},
+    {"z", FieldType::Fixed32, 4, 0,       true, -(1 << 16), 1 << 16},
+};
 inline constexpr FieldDesc kBciInputFields[] = {
     {"alpha",         FieldType::F32, 0, floatBits(0.0f)},
     {"beta",          FieldType::F32, 4, floatBits(0.0f)},
@@ -224,6 +263,9 @@ inline constexpr ComponentSchema kSchemas[] = {
     {ComponentId::PlayerTag,       "PlayerTag",       kPlayerTagFields      },
     {ComponentId::SleepState,      "SleepState",      kSleepStateFields     },
     {ComponentId::BciInput,        "BciInput",        kBciInputFields       },
+    {ComponentId::Genome,          "Genome",          kGenomeFields         },
+    {ComponentId::Creature,        "Creature",        kCreatureFields       },
+    {ComponentId::Heading,         "Heading",         kHeadingFields        },
 };
 
 static_assert(sizeof(kSchemas) / sizeof(kSchemas[0]) == static_cast<core::usize>(ComponentId::Count),
@@ -231,13 +273,20 @@ static_assert(sizeof(kSchemas) / sizeof(kSchemas[0]) == static_cast<core::usize>
 
 } // namespace detail
 
-/** @brief Returns the reflection schema for a known component. */
+/**
+ * @brief Returns the reflection schema for a known component.
+ * @param id The component ID.
+ * @return The matching ComponentSchema.
+ */
 [[nodiscard]] constexpr const ComponentSchema &schemaOf(ComponentId id) noexcept
 {
     return detail::kSchemas[static_cast<core::usize>(id)];
 }
 
-/** @brief Read-only view of every component schema. */
+/**
+ * @brief Returns a read-only view of every component schema.
+ * @return A span containing all component schemas.
+ */
 [[nodiscard]] constexpr std::span<const ComponentSchema> allSchemas() noexcept
 {
     return {detail::kSchemas, static_cast<core::usize>(ComponentId::Count)};
@@ -245,6 +294,7 @@ static_assert(sizeof(kSchemas) / sizeof(kSchemas[0]) == static_cast<core::usize>
 
 /**
  * @brief Resolves a component name to its id.
+ * @param name The component name.
  * @return The matching ComponentId, or ComponentId::Count if unknown.
  */
 [[nodiscard]] constexpr ComponentId componentIdByName(std::string_view name) noexcept

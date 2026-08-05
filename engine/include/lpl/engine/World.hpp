@@ -20,6 +20,7 @@
 #    include <lpl/ecs/Registry.hpp>
 #    include <lpl/ecs/SystemScheduler.hpp>
 #    include <lpl/ecs/WorldPartition.hpp>
+#    include <lpl/engine/LivingLayer.hpp>
 #    include <lpl/math/FixedPoint.hpp>
 #    include <lpl/math/StateHash.hpp>
 #    include <lpl/std/memory.hpp>
@@ -114,6 +115,44 @@ public:
     [[nodiscard]] ecs::WorldPartition *spatialPartition() noexcept { return _spatial.get(); }
 
     /**
+     * @brief Creates the living layer — herd, scent field, food web — on demand.
+     *
+     * Same shape as @ref enableSpatialPartition, and for the same reason: this is
+     * a WORLD facility, not an engine subsystem. The engine can allocate it from a
+     * Config flag, because a budget is host-independent; it cannot RUN it, because
+     * stepping a herd needs three answers only the world has — where a body sits in
+     * the scent window (which differs between a bounded map and a streamed one),
+     * whether it may stand there, and what happens where it grazes.
+     *
+     * That split is what makes an ecology something a DOCUMENT can ask for. Before
+     * it, "this world is alive" was a fact about a C++ type, so no recipe and no
+     * intelligence could request one.
+     *
+     * Idempotent — returns the existing layer on repeat calls.
+     *
+     * @param params  Budgets: bodies, species, scent window, channels.
+     * @param recipe  The ecosystem: food web, genome drift, stigmergy physics.
+     * @param seed    Master seed for the layer's own streams.
+     */
+    LivingLayer &enableLivingLayer(const LivingLayerParams &params, const ecology::LivingRecipe &recipe,
+                                   core::u32 seed)
+    {
+        if (!_living)
+        {
+            _living = lpl::pmr::make_unique<LivingLayer>();
+            _living->configure(params, recipe, seed);
+        }
+        return *_living;
+    }
+
+    /**
+     * @brief The living layer, or nullptr if @ref enableLivingLayer was never called.
+     * @return The living layer, or nullptr if it was never created.
+     */
+    [[nodiscard]] LivingLayer *livingLayer() noexcept { return _living.get(); }
+    [[nodiscard]] const LivingLayer *livingLayer() const noexcept { return _living.get(); }
+
+    /**
      * @brief Finalise the system graph. Call once, after every system is
      *        registered on @ref scheduler and before the first tick.
      */
@@ -193,6 +232,7 @@ private:
     ecs::Registry _registry;                            ///< Authoritative entity state.
     ecs::SystemScheduler _scheduler;                    ///< Steps the registry; takes _jobSystem.
     lpl::pmr::unique_ptr<ecs::WorldPartition> _spatial; ///< Optional broad-phase (on demand).
+    lpl::pmr::unique_ptr<LivingLayer> _living;          ///< Optional ecology (on demand).
 };
 
 } // namespace lpl::engine

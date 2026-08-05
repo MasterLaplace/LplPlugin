@@ -9,6 +9,7 @@
 
 #include <lpl/engine/ConfigValidation.hpp>
 #include <lpl/engine/GameProfile.hpp>
+#include <lpl/engine/HostProfile.hpp>
 
 #include <cstdio>
 #include <cstring>
@@ -122,6 +123,30 @@ int main()
         // A clean full-broadcast server has nothing to warn about.
         const auto clean = B{}.serverMode(true).enablePhysics(true).enableNetworking(true).build();
         check(warningCount(clean) == 0, "a plain full-broadcast server is conflict-free");
+    }
+
+    // ── Host profiles declare the SHAPE of the world ───────────────────────── //
+    //
+    // Which host streams is a contract, not a default that happens to hold: the
+    // parity smokes fold a BOUNDED world, and they fold it on the server profiles.
+    // While the shape was inferred from "is there a display", that held only by
+    // coincidence — so it is asserted here, where breaking it is a failing test
+    // rather than a moved signature three layers downstream.
+    {
+        using B = engine::Config::Builder;
+        const auto streams = [](engine::HostProfile profile) {
+            B builder;
+            return engine::applyHostProfile(builder, profile).build().enableStreaming();
+        };
+        check(streams(engine::HostProfile::Ring0Client), "the kernel client streams, without a line of its own code");
+        check(streams(engine::HostProfile::DesktopClient), "so does the desktop client");
+        check(!streams(engine::HostProfile::Ring0Server), "the kernel server keeps a bounded world");
+        check(!streams(engine::HostProfile::DedicatedServer), "and so does the dedicated server");
+        check(!B{}.build().enableStreaming(), "a world is bounded unless something says otherwise");
+        // A budget with no switch was the previous state: maxResidentChunks meant
+        // nothing until something decided the world was endless.
+        check(B{}.enableStreaming(true).maxResidentChunks(64u).build().maxResidentChunks() == 64u,
+              "the switch and the budget travel together");
     }
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);

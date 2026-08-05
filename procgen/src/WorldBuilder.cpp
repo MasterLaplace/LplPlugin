@@ -14,7 +14,7 @@
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/math/Vec3.hpp>
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -92,7 +92,7 @@ WorldBuilder &WorldBuilder::addLayer(const NoiseParams &noise)
     ensureTerrain();
     NoiseParams seeded = noise;
     if (seeded.seed == NoiseParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0x1A4E4u).state();
+        seeded.seed = math::deriveStream(_seed, 0x1A4E4u).state();
     addNoiseLayer(_height, seeded);
     _drainageReady = false;
     _moistureReady = false;
@@ -253,7 +253,7 @@ WorldBuilder &WorldBuilder::dungeon(const BspDungeonParams &params)
 {
     BspDungeonParams seeded = params;
     if (seeded.seed == BspDungeonParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0xD065u).state();
+        seeded.seed = math::deriveStream(_seed, 0xD065u).state();
     _dungeon = generateBspDungeon(seeded);
     const DungeonReport report = connectRegions(_dungeon, 1u);
     _dungeonFloor = report.floorCells;
@@ -265,7 +265,7 @@ WorldBuilder &WorldBuilder::caves(const CaveParams &params)
 {
     CaveParams seeded = params;
     if (seeded.seed == CaveParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0xCA4E5u).state();
+        seeded.seed = math::deriveStream(_seed, 0xCA4E5u).state();
     _dungeon = generateCellularCave(seeded);
     _dungeonFloor = 0u;
     for (core::u32 i = 0u; i < _dungeon.cellCount(); ++i)
@@ -279,7 +279,7 @@ WorldBuilder &WorldBuilder::dlaCaves(const DlaParams &params)
 {
     DlaParams seeded = params;
     if (seeded.seed == DlaParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0xD1AAu).state();
+        seeded.seed = math::deriveStream(_seed, 0xD1AAu).state();
     DlaReport report;
     _dungeon = generateDlaCave(seeded, &report);
     _dungeonFloor = report.openCells;
@@ -299,7 +299,7 @@ WorldBuilder &WorldBuilder::regions(const VoronoiParams &params)
     ensureTerrain();
     VoronoiParams seeded = params;
     if (seeded.seed == VoronoiParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0x4E610u).state();
+        seeded.seed = math::deriveStream(_seed, 0x4E610u).state();
     // The partition covers the terrain, so its extent is taken from the
     // heightfield rather than trusted from the caller.
     seeded.width = _height.width();
@@ -313,7 +313,7 @@ WorldBuilder &WorldBuilder::tiles(const TileSet &tileSet, const WfcParams &param
     ensureTerrain();
     WfcParams seeded = params;
     if (seeded.seed == WfcParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0x7F1Eu).state();
+        seeded.seed = math::deriveStream(_seed, 0x7F1Eu).state();
     seeded.width = _height.width();
     seeded.depth = _height.depth();
 
@@ -416,6 +416,18 @@ WorldBuilder &WorldBuilder::tiles(const TileSet &tileSet, const WfcParams &param
 
 WorldBuilder &WorldBuilder::validate(const GateCriteria &criteria)
 {
+    // A layered system fills _caveSystem and leaves _dungeon empty, so judging the
+    // flat map would report zero open cells and fail a world that is perfectly
+    // navigable. The builder knows which underground it generated; asking the right
+    // one is its business rather than the caller's, or every caller repeats the test
+    // and one of them gets it wrong.
+    if (_dungeon.empty() && _caveSystem.layerCount != 0u)
+    {
+        _quality = evaluateCaveSystem(_caveSystem);
+        _gatePassed = passesGate(_quality, criteria);
+        return *this;
+    }
+
     if (_dungeon.empty())
     {
         // Nothing to judge. Saying "passed" would be a claim about a level that was
@@ -446,7 +458,7 @@ WorldBuilder &WorldBuilder::settlement(const SettlementParams &params)
     ensureTerrain();
     SettlementParams seeded = params;
     if (seeded.seed == SettlementParams{}.seed)
-        seeded.seed = deriveStream(_seed, 0x70A4u).state();
+        seeded.seed = math::deriveStream(_seed, 0x70A4u).state();
     // A settlement must match the terrain it stands on, so its extent is taken
     // from the heightfield rather than trusted from the caller.
     seeded.width = _height.width();
@@ -472,7 +484,7 @@ WorldBuilder &WorldBuilder::roads(const RoadParams &params)
 
     const core::u32 width = _height.width();
     const core::u32 depth = _height.depth();
-    Random random = deriveStream(params.seed != 0u ? params.seed : _seed, 0x20AD5u);
+    math::Random random = math::deriveStream(params.seed != 0u ? params.seed : _seed, 0x20AD5u);
 
     // ── Global goals: where roads want to run ────────────────────────────────
     //
@@ -658,7 +670,7 @@ WorldBuilder &WorldBuilder::caveSystem(const CaveSystemParams &params)
     local.width = _height.width();
     local.depth = _height.depth();
     if (local.seed == CaveSystemParams{}.seed)
-        local.seed = deriveStream(_seed, 0xCA7E5u).state();
+        local.seed = math::deriveStream(_seed, 0xCA7E5u).state();
 
     _caveSystem = generateCaveSystem(local, _height, _biomes.empty() ? nullptr : &_biomes);
     _undergroundVolume = caveVolume(_caveSystem, local, 1u);
@@ -719,7 +731,7 @@ lpl::pmr::vector<core::u32> WorldBuilder::eligibleCells(const ScatterRule &rule)
     if (endemic)
     {
         allowedRegion.resize(_regions.regionCount, core::u8{0});
-        Random draw{_seed ^ (0xE7DE9B1Fu * (rule.tag + 1u))};
+        math::Random draw{_seed ^ (0xE7DE9B1Fu * (rule.tag + 1u))};
         // The raw Q16.16 word IS the share scaled by 65536, so it is the threshold
         // already. Multiplying by fromInt(0x10000) would have been the natural
         // spelling and would have overflowed Fixed32 to zero — granting the
@@ -779,7 +791,7 @@ lpl::pmr::vector<core::u32> WorldBuilder::eligibleCells(const ScatterRule &rule)
     return cells;
 }
 
-void WorldBuilder::selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<core::u32> &cells, Random random) const
+void WorldBuilder::selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<core::u32> &cells, math::Random random) const
 {
     if (cells.empty())
         return;
@@ -797,7 +809,7 @@ void WorldBuilder::selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<cor
     // square lattice. Deriving it from the requested density rather than asking for
     // a radius keeps the parameter meaning "how much of the ground is covered",
     // which is the thing a caller actually knows.
-    const core::u32 baseSpacing = integerSqrt(static_cast<core::u32>(cells.size()) / target);
+    const core::u32 baseSpacing = math::integerSqrt(static_cast<core::u32>(cells.size()) / target);
     const core::u32 spacing = baseSpacing < 1u ? 1u : baseSpacing;
     const bool haveMoisture = _moisture.width() == _height.width() && _moisture.depth() == _height.depth();
     const math::Fixed32 affinity = math::Fixed32::fromFloat(rule.moistureAffinity);
@@ -1041,7 +1053,7 @@ core::u32 WorldBuilder::collectProps(lpl::pmr::vector<Placement> &placements)
         const math::Fixed32 propHalf = math::Fixed32::fromFloat(rule.halfExtent);
 
         lpl::pmr::vector<core::u32> cells = eligibleCells(rule);
-        selectBlueNoise(rule, cells, deriveStream(_seed, 0x5CA7u + r));
+        selectBlueNoise(rule, cells, math::deriveStream(_seed, 0x5CA7u + r));
 
         for (core::u32 i = 0u; i < cells.size(); ++i)
         {

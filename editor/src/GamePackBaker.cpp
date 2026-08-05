@@ -478,6 +478,7 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         recipe.terrain.kind = readNoiseKind(*terrain, "kind", recipe.terrain.kind);
         recipe.heightLow = readF32(*terrain, "low", recipe.heightLow);
         recipe.heightHigh = readF32(*terrain, "high", recipe.heightHigh);
+        recipe.groundClearance = readF32(*terrain, "groundClearance", recipe.groundClearance);
         recipe.normalizeTerrain = readBool(*terrain, "normalize", recipe.normalizeTerrain);
     }
 
@@ -556,6 +557,78 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         recipe.caves.minRegionSize = readU32(*caves, "minRegionSize", recipe.caves.minRegionSize);
     }
 
+    // Which of the four underground generators, as a WORD: an index would mean
+    // whatever the enumeration was on the day the document was written.
+    if (const detail::JVal *kind = procedural->find("caveKind"); kind != nullptr && kind->t == detail::JVal::T::Str)
+    {
+        procgen::CaveKind resolved = recipe.caveKind;
+        if (!procgen::caveKindByName(kind->str.c_str(), resolved))
+            return core::makeError(core::ErrorCode::kDeserializationFailed,
+                                   lpl::pmr::string{"unknown caveKind; expected cellular, bsp, dla or layered"});
+        recipe.caveKind = resolved;
+    }
+
+    if (const detail::JVal *rooms = procedural->find("rooms"); rooms != nullptr && rooms->t == detail::JVal::T::Obj)
+    {
+        recipe.rooms.width = readU32(*rooms, "width", recipe.rooms.width);
+        recipe.rooms.depth = readU32(*rooms, "depth", recipe.rooms.depth);
+        recipe.rooms.seed = readU32(*rooms, "seed", recipe.rooms.seed);
+        recipe.rooms.maxDepth = readU32(*rooms, "maxDepth", recipe.rooms.maxDepth);
+        recipe.rooms.minLeafSize = readU32(*rooms, "minLeafSize", recipe.rooms.minLeafSize);
+        recipe.rooms.roomPadding = readU32(*rooms, "roomPadding", recipe.rooms.roomPadding);
+        recipe.rooms.corridorWidth = readU32(*rooms, "corridorWidth", recipe.rooms.corridorWidth);
+    }
+
+    if (const detail::JVal *dla = procedural->find("aggregation"); dla != nullptr && dla->t == detail::JVal::T::Obj)
+    {
+        recipe.aggregation.width = readU32(*dla, "width", recipe.aggregation.width);
+        recipe.aggregation.depth = readU32(*dla, "depth", recipe.aggregation.depth);
+        recipe.aggregation.seed = readU32(*dla, "seed", recipe.aggregation.seed);
+        recipe.aggregation.particles = readU32(*dla, "particles", recipe.aggregation.particles);
+        recipe.aggregation.maxStepsPerParticle =
+            readU32(*dla, "maxStepsPerParticle", recipe.aggregation.maxStepsPerParticle);
+        recipe.aggregation.spawnMargin = readU32(*dla, "spawnMargin", recipe.aggregation.spawnMargin);
+        recipe.aggregation.thickness = readU32(*dla, "thickness", recipe.aggregation.thickness);
+    }
+
+    if (const detail::JVal *system = procedural->find("caveSystem");
+        system != nullptr && system->t == detail::JVal::T::Obj)
+    {
+        recipe.caveSystem.width = readU32(*system, "width", recipe.caveSystem.width);
+        recipe.caveSystem.depth = readU32(*system, "depth", recipe.caveSystem.depth);
+        recipe.caveSystem.seed = readU32(*system, "seed", recipe.caveSystem.seed);
+        recipe.caveSystem.layers = readU32(*system, "layers", recipe.caveSystem.layers);
+        recipe.caveSystem.levelsPerLayer = readU32(*system, "levelsPerLayer", recipe.caveSystem.levelsPerLayer);
+        recipe.caveSystem.topFill = readF32(*system, "topFill", recipe.caveSystem.topFill);
+        recipe.caveSystem.deepFill = readF32(*system, "deepFill", recipe.caveSystem.deepFill);
+        recipe.caveSystem.automatonSteps = readU32(*system, "automatonSteps", recipe.caveSystem.automatonSteps);
+        recipe.caveSystem.minChamberSize = readU32(*system, "minChamberSize", recipe.caveSystem.minChamberSize);
+        recipe.caveSystem.shaftsPerPair = readU32(*system, "shaftsPerPair", recipe.caveSystem.shaftsPerPair);
+        recipe.caveSystem.entrances = readU32(*system, "entrances", recipe.caveSystem.entrances);
+        recipe.caveSystem.entranceMaxSlope = readF32(*system, "entranceMaxSlope", recipe.caveSystem.entranceMaxSlope);
+    }
+
+    if (const detail::JVal *provinces = procedural->find("provinces");
+        provinces != nullptr && provinces->t == detail::JVal::T::Obj)
+    {
+        recipe.partitionRegions = readBool(*provinces, "enabled", true);
+        recipe.provinces.width = readU32(*provinces, "width", recipe.provinces.width);
+        recipe.provinces.depth = readU32(*provinces, "depth", recipe.provinces.depth);
+        recipe.provinces.seed = readU32(*provinces, "seed", recipe.provinces.seed);
+        recipe.provinces.cellSize = readU32(*provinces, "cellSize", recipe.provinces.cellSize);
+        recipe.provinces.jitter = readF32(*provinces, "jitter", recipe.provinces.jitter);
+        recipe.provinces.warpStrength = readF32(*provinces, "warpStrength", recipe.provinces.warpStrength);
+        if (const detail::JVal *metric = provinces->find("metric");
+            metric != nullptr && metric->t == detail::JVal::T::Str)
+        {
+            procgen::DistanceMetric resolved = recipe.provinces.metric;
+            if (!procgen::distanceMetricByName(metric->str.c_str(), resolved))
+                return core::makeError(core::ErrorCode::kDeserializationFailed,
+                                       lpl::pmr::string{"unknown province metric"});
+            recipe.provinces.metric = resolved;
+        }
+    }
+
     if (const detail::JVal *town = procedural->find("settlement"); town != nullptr && town->t == detail::JVal::T::Obj)
     {
         recipe.placeSettlement = readBool(*town, "enabled", recipe.placeSettlement);
@@ -626,8 +699,55 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         }
     }
 
+    recipe.terraceSteps = readU32(*procedural, "terraceSteps", recipe.terraceSteps);
+
+    if (const detail::JVal *grammar = procedural->find("buildings");
+        grammar != nullptr && grammar->t == detail::JVal::T::Obj)
+    {
+        recipe.raiseBuildings = readBool(*grammar, "enabled", true);
+        recipe.buildings.seed = readU32(*grammar, "seed", recipe.buildings.seed);
+        recipe.buildings.minFloors = readU32(*grammar, "minFloors", recipe.buildings.minFloors);
+        recipe.buildings.maxFloors = readU32(*grammar, "maxFloors", recipe.buildings.maxFloors);
+        recipe.buildings.baseHeight = readU32(*grammar, "baseHeight", recipe.buildings.baseHeight);
+        recipe.buildings.floorHeight = readU32(*grammar, "floorHeight", recipe.buildings.floorHeight);
+        recipe.buildings.roofHeight = readU32(*grammar, "roofHeight", recipe.buildings.roofHeight);
+        recipe.buildings.inset = readU32(*grammar, "inset", recipe.buildings.inset);
+        recipe.buildings.roofTaper = readF32(*grammar, "roofTaper", recipe.buildings.roofTaper);
+        recipe.buildings.hollow = readBool(*grammar, "hollow", recipe.buildings.hollow);
+    }
+
+    if (const detail::JVal *verges = procedural->find("roadside");
+        verges != nullptr && verges->t == detail::JVal::T::Obj)
+    {
+        recipe.roadsideLevels = readU32(*verges, "levels", recipe.roadsideLevels);
+        if (const detail::JVal *pattern = verges->find("pattern");
+            pattern != nullptr && pattern->t == detail::JVal::T::Str)
+        {
+            // Truncation is REFUSED rather than silent: a clipped L-system is a
+            // different grammar, and it would grow a different verge on every reload
+            // with nothing to say why.
+            if (pattern->str.size() + 1u > procgen::kMaxRoadsidePattern)
+                return core::makeError(core::ErrorCode::kDeserializationFailed,
+                                       lpl::pmr::string{"roadside pattern is longer than a recipe may carry"});
+            core::usize i = 0u;
+            for (; i < pattern->str.size(); ++i)
+                recipe.roadsidePattern[i] = pattern->str[i];
+            recipe.roadsidePattern[i] = '\0';
+        }
+    }
+
     outRecipe = recipe;
     return {};
+}
+
+core::ExpectedVoid parseProceduralBlock(std::string_view proceduralJson, procgen::WorldRecipe &outRecipe)
+{
+    // The minimal document parseSceneRecipe expects, built once instead of at
+    // three call sites that each spelled the format string themselves.
+    std::string wrapped{"{\"format\":\"lplscene/1\",\"procedural\":"};
+    wrapped.append(proceduralJson);
+    wrapped += '}';
+    return parseSceneRecipe(wrapped, outRecipe);
 }
 
 std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
@@ -667,6 +787,8 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
     appendF32(out, "low", recipe.heightLow);
     out += ',';
     appendF32(out, "high", recipe.heightHigh);
+    out += ',';
+    appendF32(out, "groundClearance", recipe.groundClearance);
     out += '}';
 
     out += ",\"erosion\":{";
@@ -778,6 +900,123 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
     out += ',';
     appendU32(out, "minRegionSize", recipe.caves.minRegionSize);
     out += '}';
+
+    // The four-way choice, as a word. See procgen::caveKindName.
+    out += ",\"caveKind\":\"";
+    out += procgen::caveKindName(recipe.caveKind);
+    out += '"';
+
+    out += ",\"rooms\":{";
+    appendU32(out, "width", recipe.rooms.width);
+    out += ',';
+    appendU32(out, "depth", recipe.rooms.depth);
+    out += ',';
+    appendU32(out, "seed", recipe.rooms.seed);
+    out += ',';
+    appendU32(out, "maxDepth", recipe.rooms.maxDepth);
+    out += ',';
+    appendU32(out, "minLeafSize", recipe.rooms.minLeafSize);
+    out += ',';
+    appendU32(out, "roomPadding", recipe.rooms.roomPadding);
+    out += ',';
+    appendU32(out, "corridorWidth", recipe.rooms.corridorWidth);
+    out += '}';
+
+    out += ",\"aggregation\":{";
+    appendU32(out, "width", recipe.aggregation.width);
+    out += ',';
+    appendU32(out, "depth", recipe.aggregation.depth);
+    out += ',';
+    appendU32(out, "seed", recipe.aggregation.seed);
+    out += ',';
+    appendU32(out, "particles", recipe.aggregation.particles);
+    out += ',';
+    appendU32(out, "maxStepsPerParticle", recipe.aggregation.maxStepsPerParticle);
+    out += ',';
+    appendU32(out, "spawnMargin", recipe.aggregation.spawnMargin);
+    out += ',';
+    appendU32(out, "thickness", recipe.aggregation.thickness);
+    out += '}';
+
+    out += ",\"caveSystem\":{";
+    appendU32(out, "width", recipe.caveSystem.width);
+    out += ',';
+    appendU32(out, "depth", recipe.caveSystem.depth);
+    out += ',';
+    appendU32(out, "seed", recipe.caveSystem.seed);
+    out += ',';
+    appendU32(out, "layers", recipe.caveSystem.layers);
+    out += ',';
+    appendU32(out, "levelsPerLayer", recipe.caveSystem.levelsPerLayer);
+    out += ',';
+    appendF32(out, "topFill", recipe.caveSystem.topFill);
+    out += ',';
+    appendF32(out, "deepFill", recipe.caveSystem.deepFill);
+    out += ',';
+    appendU32(out, "automatonSteps", recipe.caveSystem.automatonSteps);
+    out += ',';
+    appendU32(out, "minChamberSize", recipe.caveSystem.minChamberSize);
+    out += ',';
+    appendU32(out, "shaftsPerPair", recipe.caveSystem.shaftsPerPair);
+    out += ',';
+    appendU32(out, "entrances", recipe.caveSystem.entrances);
+    out += ',';
+    appendF32(out, "entranceMaxSlope", recipe.caveSystem.entranceMaxSlope);
+    out += '}';
+
+    out += ",\"provinces\":{";
+    appendBool(out, "enabled", recipe.partitionRegions);
+    out += ',';
+    appendU32(out, "width", recipe.provinces.width);
+    out += ',';
+    appendU32(out, "depth", recipe.provinces.depth);
+    out += ',';
+    appendU32(out, "seed", recipe.provinces.seed);
+    out += ',';
+    appendU32(out, "cellSize", recipe.provinces.cellSize);
+    out += ',';
+    appendF32(out, "jitter", recipe.provinces.jitter);
+    out += ',';
+    appendF32(out, "warpStrength", recipe.provinces.warpStrength);
+    out += ",\"metric\":\"";
+    out += procgen::distanceMetricName(recipe.provinces.metric);
+    out += "\"}";
+
+    out += ",\"buildings\":{";
+    appendBool(out, "enabled", recipe.raiseBuildings);
+    out += ',';
+    appendU32(out, "seed", recipe.buildings.seed);
+    out += ',';
+    appendU32(out, "minFloors", recipe.buildings.minFloors);
+    out += ',';
+    appendU32(out, "maxFloors", recipe.buildings.maxFloors);
+    out += ',';
+    appendU32(out, "baseHeight", recipe.buildings.baseHeight);
+    out += ',';
+    appendU32(out, "floorHeight", recipe.buildings.floorHeight);
+    out += ',';
+    appendU32(out, "roofHeight", recipe.buildings.roofHeight);
+    out += ',';
+    appendU32(out, "inset", recipe.buildings.inset);
+    out += ',';
+    appendF32(out, "roofTaper", recipe.buildings.roofTaper);
+    out += ',';
+    appendBool(out, "hollow", recipe.buildings.hollow);
+    out += '}';
+
+    out += ",\"roadside\":{";
+    appendU32(out, "levels", recipe.roadsideLevels);
+    out += ",\"pattern\":\"";
+    // The grammar's own alphabet is letters, brackets, commas, colons and stars —
+    // nothing JSON needs escaped. A quote or a backslash reaching here would mean the
+    // pattern came from somewhere it should not have.
+    for (core::u32 i = 0u; i < procgen::kMaxRoadsidePattern && recipe.roadsidePattern[i] != '\0'; ++i)
+        if (recipe.roadsidePattern[i] != '"' && recipe.roadsidePattern[i] != '\\')
+            out += recipe.roadsidePattern[i];
+    out += "\"}";
+
+    out += ',';
+    appendU32(out, "terraceSteps", recipe.terraceSteps);
 
     out += ",\"settlement\":{";
     appendBool(out, "enabled", recipe.placeSettlement);
@@ -1013,10 +1252,10 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
     const pack::RecipeV1 wire = pack::toWireRecipe(recipe);
 
     // One, two or three sections. A world with nothing declared living on it and no
-    // stated look stays a one-section pack, byte for byte what this function
-    // produced before either existed — which is what keeps every cartridge baked so
-    // far valid, and the parity gate's own image unchanged. That property is why
-    // sections are the extension mechanism and a grown RecipeV1 is not.
+    // stated look stays a one-section pack: the recipe alone. Sections separate things
+    // that are OPTIONAL and independently consumed — what lives on a world, what it
+    // looks like — not halves of one description. Every pass of the pipeline is in the
+    // recipe section, because every pass is the recipe.
     const core::u32 sectionCount = 1u + (living != nullptr ? 1u : 0u) + (view != nullptr ? 1u : 0u);
     constexpr core::u32 kHeaderBytes = static_cast<core::u32>(sizeof(pack::Header));
     const core::u32 tableBytes = sectionCount * static_cast<core::u32>(sizeof(pack::SectionEntry));
@@ -1071,8 +1310,8 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
     header.totalSize = totalSize;
     header.sectionCount = sectionCount;
     header.contentHash = pack::hashBytes(content.data(), static_cast<core::u32>(content.size()));
-    header.reserved0 = 0u;
-    header.reserved1 = 0u;
+    header.eccOffset = 0u; // no parity section unless attachEcc adds one
+    header.eccSize = 0u;
 
     std::vector<core::u8> image;
     image.reserve(totalSize);

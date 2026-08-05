@@ -118,6 +118,19 @@ public:
      */
     [[nodiscard]] std::string history() const { return journal_.toJson(); }
 
+    /**
+     * @brief The journal itself, for something else that must edit undoably.
+     *
+     * Exposed for exactly one reason: engine::DemonHost takes a journal, and an
+     * intelligence attached to an editor session has to record its acts in the SAME
+     * journal the Undo button reads. Handing it a journal of its own would make the
+     * demon's edits invisible to undo — which is the property that made routing
+     * every act through a journal worth doing in the first place.
+     *
+     * @return The journal every edit of this session is recorded in.
+     */
+    [[nodiscard]] CommandJournal &journal() noexcept { return journal_; }
+
     /// Rebuilds the world from a serialised history, discarding the current one.
     [[nodiscard]] core::Expected<core::u32> replayHistory(std::string_view json) { return journal_.replay(json); }
     /// Serializes the world to a `.lplscene` document.

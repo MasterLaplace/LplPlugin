@@ -17,7 +17,7 @@
 #include <lpl/ecology/LivingRecipe.hpp>
 
 #include <lpl/procgen/Grid.hpp>
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 #include <lpl/std/vector.hpp>
 
 namespace lpl::ecology {
@@ -93,7 +93,7 @@ LivingResult runLiving(const LivingRecipe &recipe)
     antX.reserve(recipe.ants);
     antZ.reserve(recipe.ants);
     {
-        procgen::Random placement{recipe.seed ^ 0xA47C0102u};
+        math::Random placement{recipe.seed ^ 0xA47C0102u};
         for (core::u32 i = 0u; i < recipe.ants; ++i)
         {
             antX.push_back(placement.below(recipe.width));
@@ -110,7 +110,7 @@ LivingResult runLiving(const LivingRecipe &recipe)
     lpl::pmr::vector<ai::Boid> flock;
     flock.reserve(recipe.boids);
     {
-        procgen::Random spawn{recipe.seed ^ 0xB01D0303u};
+        math::Random spawn{recipe.seed ^ 0xB01D0303u};
         for (core::u32 i = 0u; i < recipe.boids; ++i)
         {
             ai::Boid boid{};
@@ -135,7 +135,7 @@ LivingResult runLiving(const LivingRecipe &recipe)
     for (core::u32 i = 0u; i + 3u < recipe.rooms; i += 3u)
         abstractWorld.connect(i, i + 3u);
     {
-        procgen::Random spread{recipe.seed ^ 0xC0DE0404u};
+        math::Random spread{recipe.seed ^ 0xC0DE0404u};
         for (core::u32 i = 0u; i < recipe.creatures; ++i)
             (void) abstractWorld.addCreature(i + 1u, i % 3u, spread.below(recipe.rooms));
     }
@@ -174,7 +174,7 @@ LivingResult runLiving(const LivingRecipe &recipe)
             next.reserve(population.size());
             for (core::u32 i = 0u; i < population.size(); ++i)
             {
-                procgen::Random pick{heredityStream ^ (0x9E3779B9u * (i + 1u))};
+                math::Random pick{heredityStream ^ (0x9E3779B9u * (i + 1u))};
                 const core::u32 a = pick.below(static_cast<core::u32>(population.size()));
                 const core::u32 b = pick.below(static_cast<core::u32>(population.size()));
                 next.push_back(breed(population[a], population[b], local, capacity, recipe.heredity, heredityStream));

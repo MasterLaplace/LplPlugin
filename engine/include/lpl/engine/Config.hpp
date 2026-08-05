@@ -40,6 +40,36 @@ public:
         Builder &enableRendering(bool enabled) noexcept;
         Builder &enableRealTimeGuard(bool enabled) noexcept;
         Builder &enableGpu(bool enabled) noexcept;
+
+        /**
+         * @brief Whether this world is ALIVE: herd, scent field, food web.
+         *
+         * A flag rather than a fact about a C++ type, and that is the whole point.
+         * Before it, "this world has an ecology" was decided by which World class
+         * the host happened to instantiate, so no document and no intelligence
+         * could ask for one. A Config is serialisable data; a type is not.
+         *
+         * The engine ALLOCATES the layer (a budget is host-independent). It does
+         * not step it: that needs three answers only a world has — where a body
+         * sits in the scent window, whether it may stand there, and what happens
+         * where it grazes. See World::enableLivingLayer.
+         */
+        Builder &enableEcology(bool enabled) noexcept;
+        /**
+         * @brief Declares that this world is STREAMED rather than bounded.
+         *
+         * The whether, next to the how much: @ref maxResidentChunks was already
+         * here, and a budget with no switch meant the shape of the world was
+         * inferred instead of declared — the sample decided it streamed if a
+         * display happened to be available, which coupled "is there a screen" to
+         * "is the world endless" and left the parity gates depending on that
+         * coincidence.
+         *
+         * Deliberately just a boolean. Radii, release ratios and priorities live
+         * in procgen::StreamingParams and the WorldRecipe, and copying them here
+         * is exactly the duplication that had to be undone once already.
+         */
+        Builder &enableStreaming(bool enabled) noexcept;
         Builder &serverAddress(pmr::string addr) noexcept;
         Builder &serverPort(core::u16 port) noexcept;
         Builder &serverWorkerThreads(core::u32 n) noexcept;
@@ -103,6 +133,8 @@ public:
         core::usize _worldArenaSize{64 * 1024 * 1024};
         bool _enableBci{false};
         bool _enableGpu{false};
+        bool _enableEcology{false};
+        bool _enableStreaming{false};
         bool _enablePhysics{true};
         bool _enableNetworking{true};
         bool _enableRendering{true};
@@ -324,6 +356,16 @@ public:
      */
     [[nodiscard]] bool enableRealTimeGuard() const noexcept { return _enableRealTimeGuard; }
     [[nodiscard]] bool enableGpu() const noexcept { return _enableGpu; }
+    /**
+     * @brief Tests whether ecology is enabled.
+     * @return True if ecology is enabled, false otherwise.
+     */
+    [[nodiscard]] bool enableEcology() const noexcept { return _enableEcology; }
+    /**
+     * @brief Tests whether the world streams around a moving focus.
+     * @return True when the world is endless, false when it is a bounded map.
+     */
+    [[nodiscard]] bool enableStreaming() const noexcept { return _enableStreaming; }
     [[nodiscard]] const pmr::string &serverAddress() const noexcept { return _serverAddress; }
     [[nodiscard]] core::u16 serverPort() const noexcept { return _serverPort; }
 
@@ -337,28 +379,52 @@ public:
      */
     [[nodiscard]] core::u32 maxResidentChunks() const noexcept { return _maxResidentChunks; }
 
-    /** @brief Level-of-detail rings; each ring doubles the sampling stride. */
+    /**
+     * @brief Level-of-detail rings; each ring doubles the sampling stride.
+     * @return The number of LOD rings.
+     */
     [[nodiscard]] core::u32 lodRings() const noexcept { return _lodRings; }
 
-    /** @brief Furthest a prop is worth drawing, in world cells. */
+    /**
+     * @brief Furthest a prop is worth drawing, in world cells.
+     * @return The view distance.
+     */
     [[nodiscard]] core::f32 viewDistance() const noexcept { return _viewDistance; }
 
-    /** @brief Whether the terrain casts shadows onto itself and its props. */
+    /**
+     * @brief Whether the terrain casts shadows onto itself and its props.
+     * @return True if terrain shadows are enabled, false otherwise.
+     */
     [[nodiscard]] bool enableTerrainShadows() const noexcept { return _enableTerrainShadows; }
 
-    /** @brief Chunks whose shadow mask is refreshed per tick (amortisation). */
+    /**
+     * @brief Chunks whose shadow mask is refreshed per tick (amortisation).
+     * @return The number of shadow chunks refreshed per tick.
+     */
     [[nodiscard]] core::u32 shadowChunksPerTick() const noexcept { return _shadowChunksPerTick; }
 
-    /** @brief Per-pixel surface shading (grain, fog, level of detail). */
+    /**
+     * @brief Per-pixel surface shading (grain, fog, level of detail).
+     * @return True if per-pixel surface shading is enabled, false otherwise.
+     */
     [[nodiscard]] bool enablePerPixelSurface() const noexcept { return _enablePerPixelSurface; }
 
-    /** @brief Physically based surface shading; implies per-pixel. */
+    /**
+     * @brief Physically based surface shading; implies per-pixel.
+     * @return True if PBR surface shading is enabled, false otherwise.
+     */
     [[nodiscard]] bool enablePbrSurface() const noexcept { return _enablePbrSurface; }
 
-    /** @brief Planar reflection probe on water surfaces. */
+    /**
+     * @brief Planar reflection probe on water surfaces.
+     * @return True if water reflection is enabled, false otherwise.
+     */
     [[nodiscard]] bool enableWaterReflection() const noexcept { return _enableWaterReflection; }
 
-    /** @brief Sky evaluation block: one ray per NxN pixels. 1 is per-pixel. */
+    /**
+     * @brief Sky evaluation block: one ray per NxN pixels. 1 is per-pixel.
+     * @return The sky block size.
+     */
     [[nodiscard]] core::u32 skyBlockSize() const noexcept { return _skyBlockSize; }
 
 private:
@@ -386,6 +452,8 @@ private:
     core::usize _worldArenaSize{64 * 1024 * 1024};
     bool _enableBci{false};
     bool _enableGpu{false};
+    bool _enableEcology{false};
+    bool _enableStreaming{false};
     bool _enablePhysics{true};
     bool _enableNetworking{true};
     bool _enableRendering{true};

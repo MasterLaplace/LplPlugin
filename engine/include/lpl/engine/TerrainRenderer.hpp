@@ -29,6 +29,9 @@
 
 #    include <lpl/ai/Personality.hpp>
 #    include <lpl/ecology/Herd.hpp>
+#    include <lpl/ecs/Archetype.hpp>
+#    include <lpl/ecs/Partition.hpp>
+#    include <lpl/ecs/Registry.hpp>
 #    include <lpl/engine/PropLibrary.hpp>
 #    include <lpl/engine/TerrainStreamer.hpp>
 #    include <lpl/engine/TerrainSurface.hpp>
@@ -128,7 +131,7 @@ public:
      */
     template <typename Palette, typename GroundAt>
     core::u32 drawStreamed(const render::RenderTarget &rt, const render::OrbitCamera &camera, TerrainStreamer &streamer,
-                           TerrainSurface &surface, const PropLibrary &props, const ecology::Herd &herd,
+                           TerrainSurface &surface, const PropLibrary &props, const ecs::Registry &registry,
                            const TerrainDrawParams &params, core::u32 frame, Palette &&palette, GroundAt &&groundAt);
 
     /**
@@ -138,7 +141,7 @@ public:
      */
     template <typename Palette, typename HeightAt, typename ColourAt, typename GroundAt>
     core::u32 drawBounded(const render::RenderTarget &rt, const render::OrbitCamera &camera, TerrainSurface &surface,
-                          const PropLibrary &props, const ecology::Herd &herd, core::u32 gridWidth, core::u32 gridDepth,
+                          const PropLibrary &props, const ecs::Registry &registry, core::u32 gridWidth, core::u32 gridDepth,
                           const ecology::PlantCell *plants, core::u32 plantCount, const TerrainDrawParams &params,
                           Palette &&palette, HeightAt &&heightAt, ColourAt &&colourAt, GroundAt &&groundAt);
 
@@ -150,7 +153,7 @@ private:
 
     /** @brief The herd, as billboards standing on the ground the eye is looking at. */
     template <typename GroundAt>
-    core::u32 drawHerd(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp, const ecology::Herd &herd,
+    core::u32 drawHerd(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp, const ecs::Registry &registry,
                        const TerrainDrawParams &params, GroundAt &&groundAt) const;
 
     /**

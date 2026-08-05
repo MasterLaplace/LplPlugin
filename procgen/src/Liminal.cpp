@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/Liminal.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 
 namespace lpl::procgen {

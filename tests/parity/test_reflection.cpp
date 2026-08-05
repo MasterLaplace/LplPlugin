@@ -27,6 +27,7 @@
 #include <cstring>
 #include <string>
 
+#include <lpl/agent/Schema.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/ComponentReflection.hpp>
 
@@ -43,14 +44,6 @@ static void check(bool ok, const char *what)
 }
 
 // --- Host-side derivations from the schema (slice 1) ----------------------- //
-
-static float rawToFloat(core::i64 raw)
-{
-    std::uint32_t bits = static_cast<std::uint32_t>(static_cast<core::i32>(raw));
-    float f;
-    std::memcpy(&f, &bits, sizeof(f));
-    return f;
-}
 
 // Emit one field's value from raw component bytes.
 static std::string emitValue(const ecs::FieldDesc &f, const core::byte *data)
@@ -116,52 +109,14 @@ static std::string emitJson(const ecs::ComponentSchema &s, const core::byte *dat
     return out;
 }
 
-static const char *jsonType(FieldType t)
-{
-    switch (t)
-    {
-    case FieldType::F32: return "number";
-    case FieldType::Fixed32: return "integer"; // raw
-    case FieldType::I32:
-    case FieldType::U32:
-    case FieldType::U16:
-    case FieldType::U8: return "integer";
-    default: return "object";
-    }
-}
-
-static std::string emitJsonSchema(const ecs::ComponentSchema &s)
-{
-    std::string out = "{\"type\":\"object\",\"title\":\"";
-    out += s.name;
-    out += "\",\"properties\":{";
-    bool first = true;
-    for (const ecs::FieldDesc &f : s.fields)
-    {
-        if (!first)
-            out += ",";
-        first = false;
-        out += "\"";
-        out += f.name;
-        out += "\":{\"type\":\"";
-        out += jsonType(f.type);
-        out += "\"";
-        if (f.hasBounds)
-        {
-            char b[96];
-            if (f.type == FieldType::F32)
-                std::snprintf(b, sizeof(b), ",\"minimum\":%g,\"maximum\":%g", rawToFloat(f.minRaw),
-                              rawToFloat(f.maxRaw));
-            else
-                std::snprintf(b, sizeof(b), ",\"minimum\":%lld,\"maximum\":%lld", static_cast<long long>(f.minRaw),
-                              static_cast<long long>(f.maxRaw));
-            out += b;
-        }
-        out += "}";
-    }
-    out += "}}";
-    return out;
-}
+// emitJsonSchema used to live here as a file-local static, and this file's own
+// header said the emitters "will move into the editor module". It moved to
+// agent/, because that is where the second consumer turned up: a JSON-Schema is
+// only ever wanted in order to constrain a model. The assertion below is
+// unchanged and now pins the emitter the GBNF grammar is actually built from —
+// two emitters that agreed today would be the mixColours duplication of §33
+// waiting to happen.
+using lpl::agent::emitJsonSchema;
 
 int main()
 {

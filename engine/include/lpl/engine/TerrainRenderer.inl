@@ -103,7 +103,7 @@ inline void TerrainRenderer::selectChunks(const math::Mat4<core::f32> &mvp, cons
 template <typename Palette, typename GroundAt>
 core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const render::OrbitCamera &camera,
                                         TerrainStreamer &streamer, TerrainSurface &surface, const PropLibrary &props,
-                                        const ecology::Herd &herd, const TerrainDrawParams &params, core::u32 frame,
+                                        const ecs::Registry &registry, const TerrainDrawParams &params, core::u32 frame,
                                         Palette &&palette, GroundAt &&groundAt)
 {
     _triangles = 0u;
@@ -255,14 +255,14 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
     _propCycles += now() - flushBegan;
 
     const core::u64 herdBegan = now();
-    _triangles += drawHerd(rt, mvp, herd, params, groundAt);
+    _triangles += drawHerd(rt, mvp, registry, params, groundAt);
     _herdCycles += now() - herdBegan;
     return _triangles;
 }
 
 template <typename Palette, typename HeightAt, typename ColourAt, typename GroundAt>
 core::u32 TerrainRenderer::drawBounded(const render::RenderTarget &rt, const render::OrbitCamera &camera,
-                                       TerrainSurface &surface, const PropLibrary &props, const ecology::Herd &herd,
+                                       TerrainSurface &surface, const PropLibrary &props, const ecs::Registry &registry,
                                        core::u32 gridWidth, core::u32 gridDepth, const ecology::PlantCell *plants,
                                        core::u32 plantCount, const TerrainDrawParams &params, Palette &&palette,
                                        HeightAt &&heightAt, ColourAt &&colourAt, GroundAt &&groundAt)
@@ -312,46 +312,74 @@ core::u32 TerrainRenderer::drawBounded(const render::RenderTarget &rt, const ren
                          plants[i].cellZ - static_cast<core::i32>(halfZ), heightAt(cellX, cellZ), 1.0f);
     }
     _triangles += props.flushPlants(rt, mvp, basis, haze);
-    _triangles += drawHerd(rt, mvp, herd, params, groundAt);
+    _triangles += drawHerd(rt, mvp, registry, params, groundAt);
     return _triangles;
 }
 
 template <typename GroundAt>
 core::u32 TerrainRenderer::drawHerd(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
-                                    const ecology::Herd &herd, const TerrainDrawParams &params,
+                                    const ecs::Registry &registry, const TerrainDrawParams &params,
                                     GroundAt &&groundAt) const
 {
+    // Draws what is IN THE WORLD, not what a container remembers. Everything a
+    // body needs to be drawn — where it is, what kind it is, how big it is — is a
+    // component now, so this pass no longer takes an ecology::Herd at all: the
+    // renderer and the simulation stopped having to agree about a second list.
+    //
+    // Read the side the WRITER wrote. A creature's components are written on the
+    // back buffer, by the spawn and then by the locomotion system, and the buffer
+    // swap is a phase callback the Engine installs after Physics — so a world whose
+    // systems are all PrePhysics never publishes a front buffer at all. Reading the
+    // front here drew every animal at the origin with a size of zero, which looks
+    // exactly like no animals. (Props are the other way round: procgen writes them
+    // on the front buffer and nothing moves them, which is why drawProps reads it.)
     core::u32 triangles = 0u;
-    for (core::u32 i = 0u; i < herd.size(); ++i)
+    for (const auto &part : registry.partitions())
     {
-        const ecology::HerdMember &member = herd.at(i);
-        const core::f32 wx = member.body.x.toFloat();
-        const core::f32 wz = member.body.z.toFloat();
-        // The ground that is DRAWN, not the noise: the two differ by exactly what
-        // erosion moved, and the herd hung in the air above the ridges it lowered.
-        const core::f32 ground = groundAt(member.body.x.toInt(), member.body.z.toInt());
-        const core::f32 size = params.bodyScale * member.genome.size.toFloat();
+        if (!part || !part->archetype().has(ecs::ComponentId::Position) ||
+            !part->archetype().has(ecs::ComponentId::Creature))
+            continue;
+        const bool hasGenome = part->archetype().has(ecs::ComponentId::Genome);
 
-        const ai::PersonalityTraits traits = ai::personalityOf(member.id, member.species);
-        core::u32 tint = member.species == 1u ? params.hunterTint : params.grazerTint;
-        if (traits.aggression > math::Fixed32::fromFloat(0.75f))
-            tint |= 0x00200000u;
+        for (const auto &chunk : part->chunks())
+        {
+            if (!chunk)
+                continue;
+            const auto *positions =
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+            const auto *creature = static_cast<const core::u32 *>(chunk->writeComponent(ecs::ComponentId::Creature));
+            const auto *genome =
+                hasGenome ? static_cast<const ecology::Genome *>(chunk->writeComponent(ecs::ComponentId::Genome))
+                          : nullptr;
+            if (positions == nullptr || creature == nullptr)
+                continue;
 
-        // A billboard rather than a box: at this scale a creature is a handful of
-        // pixels, and six lit faces cost six times as much to say the same.
-        const core::f32 body[12] = {wx - size,
-                                    ground,
-                                    wz,
-                                    wx + size,
-                                    ground,
-                                    wz,
-                                    wx + size,
-                                    ground + size * 2.4f,
-                                    wz,
-                                    wx - size,
-                                    ground + size * 2.4f,
-                                    wz};
-        triangles += render::fillPolygonClipped(rt, mvp, body, 4u, tint);
+            for (core::u32 i = 0u; i < chunk->count(); ++i)
+            {
+                const core::u32 species = creature[i * 2u];
+                const core::u32 id = creature[i * 2u + 1u];
+                const core::f32 wx = positions[i].x.toFloat();
+                const core::f32 wz = positions[i].z.toFloat();
+                // The ground that is DRAWN, not the noise: the two differ by exactly
+                // what erosion moved, and the herd hung in the air above the ridges
+                // it lowered.
+                const core::f32 ground = groundAt(positions[i].x.toInt(), positions[i].z.toInt());
+                const core::f32 scale = genome != nullptr ? genome[i].size.toFloat() : 1.0f;
+                const core::f32 size = params.bodyScale * scale;
+
+                const ai::PersonalityTraits traits = ai::personalityOf(id, species);
+                core::u32 tint = species == 1u ? params.hunterTint : params.grazerTint;
+                if (traits.aggression > math::Fixed32::fromFloat(0.75f))
+                    tint |= 0x00200000u;
+
+                // A billboard rather than a box: at this scale a creature is a
+                // handful of pixels, and six lit faces cost six times as much to
+                // say the same.
+                const core::f32 body[12] = {wx - size, ground,        wz, wx + size, ground,        wz,
+                                            wx + size, ground + size * 2.4f, wz, wx - size, ground + size * 2.4f, wz};
+                triangles += render::fillPolygonClipped(rt, mvp, body, 4u, tint);
+            }
+        }
     }
     return triangles;
 }

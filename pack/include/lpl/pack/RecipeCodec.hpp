@@ -24,11 +24,60 @@
 static_assert(lpl::pack::kWireScatterRules == lpl::procgen::kMaxScatterRules,
               "wire and engine must agree on how many scatter rules a recipe carries");
 
+static_assert(lpl::pack::kWireRoadsidePattern == lpl::procgen::kMaxRoadsidePattern,
+              "wire and engine must agree on how long a roadside grammar may be");
+
 static_assert(sizeof(lpl::pack::LivingV1::species) / sizeof(lpl::pack::LivingSpeciesV1) ==
                   lpl::ecology::kMaxLivingSpecies,
               "wire and engine must agree on how many species a living recipe carries");
 
 namespace lpl::pack {
+
+namespace detail {
+
+/**
+ * @brief Reads one wire scatter rule.
+ *
+ * A free function because a rule is converted in both directions and a field-by-field
+ * copy written twice is a field silently dropped in one of them the day a rule grows a
+ * knob.
+ */
+inline void readScatterRule(const ScatterV1 &from, procgen::ScatterRule &to) noexcept
+{
+    to.biome = static_cast<procgen::BiomeId>(from.biome);
+    to.density = from.density;
+    to.halfExtent = from.halfExtent;
+    to.maxSlope = from.maxSlope;
+    to.minMoisture = from.minMoisture;
+    to.maxMoisture = from.maxMoisture;
+    to.moistureAffinity = from.moistureAffinity;
+    to.tag = from.tag;
+    to.treeLine = from.treeLine;
+    to.altitudeFalloff = from.altitudeFalloff;
+    to.maxRiverDistance = from.maxRiverDistance;
+    to.endemicShare = from.endemicShare;
+    to.collidable = (from.flags & kScatterFlagCollidable) != 0u;
+}
+
+/// Flattens one scatter rule into its wire form. See @ref readScatterRule.
+inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) noexcept
+{
+    to.biome = static_cast<core::u32>(from.biome);
+    to.density = from.density;
+    to.halfExtent = from.halfExtent;
+    to.maxSlope = from.maxSlope;
+    to.minMoisture = from.minMoisture;
+    to.maxMoisture = from.maxMoisture;
+    to.moistureAffinity = from.moistureAffinity;
+    to.tag = from.tag;
+    to.treeLine = from.treeLine;
+    to.altitudeFalloff = from.altitudeFalloff;
+    to.maxRiverDistance = from.maxRiverDistance;
+    to.endemicShare = from.endemicShare;
+    to.flags = from.collidable ? kScatterFlagCollidable : 0u;
+}
+
+} // namespace detail
 
 /**
  * @brief Expands a wire recipe into the engine's in-memory recipe.
@@ -55,6 +104,7 @@ namespace lpl::pack {
     recipe.terrain.kind = static_cast<procgen::NoiseKind>(wire.noiseKind);
     recipe.heightLow = wire.heightLow;
     recipe.heightHigh = wire.heightHigh;
+    recipe.groundClearance = wire.groundClearance;
 
     recipe.thermal.iterations = wire.thermalIterations;
     recipe.thermal.talus = wire.thermalTalus;
@@ -99,6 +149,72 @@ namespace lpl::pack {
     recipe.axes.weirdnessOctaves = wire.axisWeirdnessOctaves;
     recipe.axes.surfaceDepth = wire.axisSurfaceDepth;
 
+    recipe.provinces.width = wire.provinceWidth;
+    recipe.provinces.depth = wire.provinceDepth;
+    recipe.provinces.seed = wire.provinceSeed;
+    recipe.provinces.cellSize = wire.provinceCellSize;
+    recipe.provinces.jitter = wire.provinceJitter;
+    recipe.provinces.warpStrength = wire.provinceWarpStrength;
+    recipe.provinces.metric = static_cast<procgen::DistanceMetric>(wire.provinceMetric);
+
+    recipe.terraceSteps = wire.terraceSteps;
+    // Clamped rather than trusted: a byte from disk naming a fifth generator would
+    // otherwise index a switch that has four.
+    recipe.caveKind = wire.caveKind <= static_cast<core::u32>(procgen::CaveKind::Layered)
+                          ? static_cast<procgen::CaveKind>(wire.caveKind)
+                          : procgen::CaveKind::Cellular;
+
+    recipe.rooms.width = wire.roomsWidth;
+    recipe.rooms.depth = wire.roomsDepth;
+    recipe.rooms.seed = wire.roomsSeed;
+    recipe.rooms.maxDepth = wire.roomsMaxDepth;
+    recipe.rooms.minLeafSize = wire.roomsMinLeafSize;
+    recipe.rooms.roomPadding = wire.roomsPadding;
+    recipe.rooms.corridorWidth = wire.roomsCorridorWidth;
+
+    recipe.aggregation.width = wire.dlaWidth;
+    recipe.aggregation.depth = wire.dlaDepth;
+    recipe.aggregation.seed = wire.dlaSeed;
+    recipe.aggregation.particles = wire.dlaParticles;
+    recipe.aggregation.maxStepsPerParticle = wire.dlaMaxStepsPerParticle;
+    recipe.aggregation.spawnMargin = wire.dlaSpawnMargin;
+    recipe.aggregation.thickness = wire.dlaThickness;
+
+    recipe.caveSystem.width = wire.systemWidth;
+    recipe.caveSystem.depth = wire.systemDepth;
+    recipe.caveSystem.seed = wire.systemSeed;
+    recipe.caveSystem.layers = wire.systemLayers;
+    recipe.caveSystem.levelsPerLayer = wire.systemLevelsPerLayer;
+    recipe.caveSystem.topFill = wire.systemTopFill;
+    recipe.caveSystem.deepFill = wire.systemDeepFill;
+    recipe.caveSystem.automatonSteps = wire.systemAutomatonSteps;
+    recipe.caveSystem.minChamberSize = wire.systemMinChamberSize;
+    recipe.caveSystem.shaftsPerPair = wire.systemShaftsPerPair;
+    recipe.caveSystem.entrances = wire.systemEntrances;
+    recipe.caveSystem.entranceMaxSlope = wire.systemEntranceMaxSlope;
+
+    recipe.buildings.seed = wire.buildingSeed;
+    recipe.buildings.minFloors = wire.buildingMinFloors;
+    recipe.buildings.maxFloors = wire.buildingMaxFloors;
+    recipe.buildings.baseHeight = wire.buildingBaseHeight;
+    recipe.buildings.floorHeight = wire.buildingFloorHeight;
+    recipe.buildings.roofHeight = wire.buildingRoofHeight;
+    recipe.buildings.inset = wire.buildingInset;
+    recipe.buildings.roofTaper = wire.buildingRoofTaper;
+    recipe.buildings.baseMaterial = static_cast<core::u8>(wire.buildingBaseMaterial);
+    recipe.buildings.wallMaterial = static_cast<core::u8>(wire.buildingWallMaterial);
+    recipe.buildings.roofMaterial = static_cast<core::u8>(wire.buildingRoofMaterial);
+    recipe.buildings.hollow = (wire.flags & kRecipeFlagBuildingsHollow) != 0u;
+
+    recipe.roadsideLevels = wire.roadsideLevels;
+    for (core::u32 i = 0u; i < kWireRoadsidePattern; ++i)
+        recipe.roadsidePattern[i] = wire.roadsidePattern[i];
+    // A pattern that arrived unterminated is a truncated grammar, not a shorter one.
+    recipe.roadsidePattern[kWireRoadsidePattern - 1u] = '\0';
+
+    recipe.partitionRegions = (wire.flags & kRecipeFlagPartitionRegions) != 0u;
+    recipe.raiseBuildings = (wire.flags & kRecipeFlagRaiseBuildings) != 0u;
+
     recipe.caves.width = wire.caveWidth;
     recipe.caves.depth = wire.caveDepth;
     recipe.caves.seed = wire.caveSeed;
@@ -137,23 +253,7 @@ namespace lpl::pack {
     // rather than trusted: a cartridge is input, not a promise.
     recipe.scatterCount = wire.scatterCount < kWireScatterRules ? wire.scatterCount : kWireScatterRules;
     for (core::u32 i = 0u; i < recipe.scatterCount; ++i)
-    {
-        const ScatterV1 &from = wire.scatter[i];
-        procgen::ScatterRule &to = recipe.scatter[i];
-        to.biome = static_cast<procgen::BiomeId>(from.biome);
-        to.density = from.density;
-        to.halfExtent = from.halfExtent;
-        to.maxSlope = from.maxSlope;
-        to.minMoisture = from.minMoisture;
-        to.maxMoisture = from.maxMoisture;
-        to.moistureAffinity = from.moistureAffinity;
-        to.tag = from.tag;
-        to.treeLine = from.treeLine;
-        to.altitudeFalloff = from.altitudeFalloff;
-        to.maxRiverDistance = from.maxRiverDistance;
-        to.endemicShare = from.endemicShare;
-        to.collidable = (from.flags & kScatterFlagCollidable) != 0u;
-    }
+        detail::readScatterRule(wire.scatter[i], recipe.scatter[i]);
 
     recipe.normalizeTerrain = (wire.flags & kRecipeFlagNormalizeTerrain) != 0u;
     recipe.erodeTerrain = (wire.flags & kRecipeFlagErodeTerrain) != 0u;
@@ -193,6 +293,7 @@ namespace lpl::pack {
     wire.noiseKind = static_cast<core::u32>(recipe.terrain.kind);
     wire.heightLow = recipe.heightLow;
     wire.heightHigh = recipe.heightHigh;
+    wire.groundClearance = recipe.groundClearance;
 
     wire.thermalIterations = recipe.thermal.iterations;
     wire.thermalTalus = recipe.thermal.talus;
@@ -235,6 +336,63 @@ namespace lpl::pack {
     wire.axisWeirdnessOctaves = recipe.axes.weirdnessOctaves;
     wire.axisSurfaceDepth = recipe.axes.surfaceDepth;
     wire.biomeSnowlineWarmth = recipe.biomes.snowlineWarmth;
+
+    wire.provinceWidth = recipe.provinces.width;
+    wire.provinceDepth = recipe.provinces.depth;
+    wire.provinceSeed = recipe.provinces.seed;
+    wire.provinceCellSize = recipe.provinces.cellSize;
+    wire.provinceJitter = recipe.provinces.jitter;
+    wire.provinceWarpStrength = recipe.provinces.warpStrength;
+    wire.provinceMetric = static_cast<core::u32>(recipe.provinces.metric);
+
+    wire.terraceSteps = recipe.terraceSteps;
+    wire.caveKind = static_cast<core::u32>(recipe.caveKind);
+
+    wire.roomsWidth = recipe.rooms.width;
+    wire.roomsDepth = recipe.rooms.depth;
+    wire.roomsSeed = recipe.rooms.seed;
+    wire.roomsMaxDepth = recipe.rooms.maxDepth;
+    wire.roomsMinLeafSize = recipe.rooms.minLeafSize;
+    wire.roomsPadding = recipe.rooms.roomPadding;
+    wire.roomsCorridorWidth = recipe.rooms.corridorWidth;
+
+    wire.dlaWidth = recipe.aggregation.width;
+    wire.dlaDepth = recipe.aggregation.depth;
+    wire.dlaSeed = recipe.aggregation.seed;
+    wire.dlaParticles = recipe.aggregation.particles;
+    wire.dlaMaxStepsPerParticle = recipe.aggregation.maxStepsPerParticle;
+    wire.dlaSpawnMargin = recipe.aggregation.spawnMargin;
+    wire.dlaThickness = recipe.aggregation.thickness;
+
+    wire.systemWidth = recipe.caveSystem.width;
+    wire.systemDepth = recipe.caveSystem.depth;
+    wire.systemSeed = recipe.caveSystem.seed;
+    wire.systemLayers = recipe.caveSystem.layers;
+    wire.systemLevelsPerLayer = recipe.caveSystem.levelsPerLayer;
+    wire.systemTopFill = recipe.caveSystem.topFill;
+    wire.systemDeepFill = recipe.caveSystem.deepFill;
+    wire.systemAutomatonSteps = recipe.caveSystem.automatonSteps;
+    wire.systemMinChamberSize = recipe.caveSystem.minChamberSize;
+    wire.systemShaftsPerPair = recipe.caveSystem.shaftsPerPair;
+    wire.systemEntrances = recipe.caveSystem.entrances;
+    wire.systemEntranceMaxSlope = recipe.caveSystem.entranceMaxSlope;
+
+    wire.buildingSeed = recipe.buildings.seed;
+    wire.buildingMinFloors = recipe.buildings.minFloors;
+    wire.buildingMaxFloors = recipe.buildings.maxFloors;
+    wire.buildingBaseHeight = recipe.buildings.baseHeight;
+    wire.buildingFloorHeight = recipe.buildings.floorHeight;
+    wire.buildingRoofHeight = recipe.buildings.roofHeight;
+    wire.buildingInset = recipe.buildings.inset;
+    wire.buildingRoofTaper = recipe.buildings.roofTaper;
+    wire.buildingBaseMaterial = recipe.buildings.baseMaterial;
+    wire.buildingWallMaterial = recipe.buildings.wallMaterial;
+    wire.buildingRoofMaterial = recipe.buildings.roofMaterial;
+
+    wire.roadsideLevels = recipe.roadsideLevels;
+    for (core::u32 i = 0u; i < kWireRoadsidePattern; ++i)
+        wire.roadsidePattern[i] = recipe.roadsidePattern[i];
+    wire.roadsidePattern[kWireRoadsidePattern - 1u] = '\0';
 
     wire.caveWidth = recipe.caves.width;
     wire.caveDepth = recipe.caves.depth;
@@ -312,6 +470,12 @@ namespace lpl::pack {
         wire.flags |= kRecipeFlagGateRequireGoal;
     if (recipe.gate.requireFullyConnected)
         wire.flags |= kRecipeFlagGateRequireConnected;
+    if (recipe.partitionRegions)
+        wire.flags |= kRecipeFlagPartitionRegions;
+    if (recipe.raiseBuildings)
+        wire.flags |= kRecipeFlagRaiseBuildings;
+    if (recipe.buildings.hollow)
+        wire.flags |= kRecipeFlagBuildingsHollow;
 
     return wire;
 }

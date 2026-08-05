@@ -63,12 +63,13 @@
 #    include <lpl/procgen/Botany.hpp>
 #    include <lpl/procgen/ChunkResidency.hpp>
 #    include <lpl/procgen/ChunkTerrain.hpp>
+#    include <lpl/procgen/EndlessPlan.hpp>
 #    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/Climate.hpp>
-#    include <lpl/procgen/FixedMath.hpp>
+#    include <lpl/math/FixedMath.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
 #    include <lpl/procgen/Hydrology.hpp>
-#    include <lpl/procgen/Random.hpp>
+#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Streaming.hpp>
 #    include <lpl/procgen/ValueNoise.hpp>
 #    include <lpl/procgen/WorldBuilder.hpp>
@@ -83,6 +84,7 @@
 #    include <lpl/render/OrbitCamera.hpp>
 #    include <lpl/render/Overlay.hpp>
 #    include <lpl/render/Pbr.hpp>
+#    include <lpl/engine/systems/CreatureSystems.hpp>
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/Reflection.hpp>
 #    include <lpl/render/Revolve.hpp>
@@ -91,6 +93,7 @@
 #    include <lpl/render/SkyDome.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
 #    include <lpl/render/Topology.hpp>
+#    include <lpl/engine/ITerrainQuery.hpp>
 #    include <lpl/render/Water.hpp>
 
 namespace lpl::samples {
@@ -98,8 +101,14 @@ namespace lpl::samples {
 /**
  * @class TerrainWorld
  * @brief A world on a heightfield: generated, streamed, lit, walked and grazed.
+ *
+ * Also the ground the creature systems stand on: it implements
+ * engine::ITerrainQuery, because the two questions an animal asks the terrain —
+ * may I stand here, is there anything to eat here — are the two only a world can
+ * answer, and answering them differs completely between the bounded grid and the
+ * streamed one.
  */
-class TerrainWorld final : public engine::World {
+class TerrainWorld final : public engine::World, public engine::ITerrainQuery {
 public:
     /**
      * @brief Builds the viewer around a recipe.
@@ -190,6 +199,10 @@ public:
             core::Log::info("TerrainWorld: WASD=walk SPACE=jump mouse=look O=map V=detach X=exit");
         }
 
+        // A body is an entity now, so the herd needs its registry BEFORE the first
+        // spawn — which happens inside generate().
+        _living.bind(registry());
+
         generate();
 
         // Boot INTO the world, not above a map of it.
@@ -201,24 +214,101 @@ public:
         // press of O away, which is the right way round: the interesting mode is the
         // default and the diagnostic one is opt-in.
         //
-        // Headless keeps the bounded world: there is nobody to walk, the streamer
-        // would generate chunks for a camera that draws nothing, and the parity
-        // smokes fold the bounded path.
-        if (_hasSurface)
-        {
+        // WHICH SHAPE the world has is now declared, by Config::enableStreaming,
+        // and not inferred from whether a display turned up. Those are two different
+        // questions that happened to have the same answer here, and while they were
+        // one condition the parity smokes folded a bounded world only because the
+        // headless profile has no surface — a coincidence, not a contract.
+        if (context.config.enableStreaming())
             setInfinite(true);
+        // First person needs a screen to look at, which is a presentation question.
+        if (_hasSurface && _infinite)
+        {
             _camera.setFirstPerson(true);
             _camera.setPitch(kFirstPersonPitch);
         }
+
+        // An animal's whole tick, as systems, registered after generate() because
+        // that is when the living layer knows its recipe.
+        //
+        // ORDER MATTERS and is enforced, not hoped for — and it is stated in
+        // engine::systems::CreatureStage rather than by the shape of six calls here.
+        // Registration order breaks ties, but every consecutive pair also shares a
+        // declared dependency, so the scheduler builds a real edge: deposit and
+        // evaporation both write ResourceId::ScentField, steering reads it, flocking
+        // and steering both write Velocity, and grazing reads the Position that
+        // locomotion writes. Get flocking before steering and the boid pass
+        // overwrites the scent impulse — the pack stops flanking, and nothing else
+        // says why. This order used to be written out twice, here and in the map
+        // viewer, and neither copy could tell you it was the same order.
+        _creatures.build(registry(), _living, *this);
+        if (auto registered = _creatures.registerOn(scheduler()); !registered)
+            core::Log::warn("TerrainWorld: a creature system was refused; the living layer will be incomplete");
         return {};
     }
 
+    // ── engine::ITerrainQuery ────────────────────────────────────────────────
+    //
+    // The two answers the creature systems need and cannot derive. Both dispatch
+    // on the world's mode, which is exactly why they belong to the world: a
+    // bounded grid has a blocked mask and a plant array, a streamed one has noise
+    // and per-chunk plants, and no system should have to know which it is in.
+
+    /// @copydoc engine::ITerrainQuery::standable
+    [[nodiscard]] bool standable(math::Fixed32 x, math::Fixed32 z) const override
+    {
+        if (_infinite)
+        {
+            const core::f32 height =
+                procgen::sampleWorldHeight(_streamer.chunkParams(), x.toInt(), z.toInt()).toFloat();
+            return height > seaLevel() + 0.2f;
+        }
+        core::u32 cx = 0u;
+        core::u32 cz = 0u;
+        if (!worldToCell(x, z, cx, cz))
+            return false;
+        return _blocked.at(cx, cz) == 0u;
+    }
+
+    /// @copydoc engine::ITerrainQuery::recoveryDirection
+    ///
+    /// The bounded grid is centred on the origin, so its ground is toward (0,0).
+    /// The streamed world has no centre at all and answers with the focus it
+    /// streams around — the one place its chunks are guaranteed to be resident.
+    [[nodiscard]] bool recoveryDirection(math::Fixed32 x, math::Fixed32 z, math::Fixed32 &outX,
+                                         math::Fixed32 &outZ) const override
+    {
+        const math::Fixed32 targetX = _infinite ? math::Fixed32::fromFloat(_camera.focusX()) : math::Fixed32{};
+        const math::Fixed32 targetZ = _infinite ? math::Fixed32::fromFloat(_camera.focusZ()) : math::Fixed32{};
+        // A unit step per axis, not a normalised vector: this is a nudge out of
+        // somewhere illegal, and the pace belongs to the genome.
+        outX = x.raw() > targetX.raw() ? -math::Fixed32::one() : math::Fixed32::one();
+        outZ = z.raw() > targetZ.raw() ? -math::Fixed32::one() : math::Fixed32::one();
+        return true;
+    }
+
+    /// @copydoc engine::ITerrainQuery::consumePlantAt
+    bool consumePlantAt(core::i32 worldX, core::i32 worldZ) override
+    {
+        const bool ate = _infinite ? grazeEndless(worldX, worldZ)
+                                   : grazeBounded(math::Fixed32::fromInt(worldX), math::Fixed32::fromInt(worldZ));
+        if (ate)
+            _living.countGrazed();
+        return ate;
+    }
+
     /// Authoritative: the herd walks, the vegetation regrows, the web steps.
+    ///
+    /// Almost none of that is written here any more. The animals are six systems on
+    /// the scheduler, so this tick is what remains of a world's own job: move the
+    /// walker, follow it with the window and the resident chunks, and integrate the
+    /// population every so often. The body moves FIRST, before the streaming, the
+    /// window and the systems: following last tick's position means the chunk under
+    /// your feet was requested a tick late, which at a run is a visible seam opening
+    /// ahead of you.
     void onFixedStep(core::f32 dt) override
     {
         const core::u64 stepBegan = timestamp();
-        engine::World::onFixedStep(dt);
-        ++_ticks;
         // A day every four minutes at 60 Hz: long enough that the light reads as
         // moving rather than flickering, short enough to see a sunset without
         // waiting for one.
@@ -228,10 +318,6 @@ public:
 
         if (_infinite)
         {
-            // The body BEFORE the streaming and the field: both follow the walker,
-            // and following last tick's position means the chunk under your feet is
-            // the one requested a tick late — which at a run is a visible seam
-            // opening ahead of you.
             stepBody(dt);
             recentreField();
             streamChunks();
@@ -246,17 +332,18 @@ public:
                     if (ResidentChunk *chunk = _streamer.nextShadowChunk(); chunk != nullptr)
                         refreshShadows(*chunk);
                 }
-            stepHerd();
-            _living.scent().field().step(_living.recipe().stigmergy);
-            if (_ticks % kWebPeriod == 0u)
-            {
-                _living.web().step(1u);
-                reconcile();
-            }
-            _simCycles += timestamp() - stepBegan;
-            return;
         }
-        stepHerd();
+
+        // Before the scheduler, because the systems read it.
+        refreshCreatureView();
+        // The animals: mark, evaporate, steer, flock, graze, walk. Evaporation is
+        // NOT a line in this function any more — it used to be one, inside the
+        // infinite branch and before its `return`, so on a BOUNDED map the field
+        // never evaporated at all. A system registered once cannot be forgotten in
+        // one branch of an if.
+        engine::World::onFixedStep(dt);
+        ++_ticks;
+
         if (_ticks % kWebPeriod == 0u)
         {
             _living.web().step(1u);
@@ -405,8 +492,6 @@ private:
     static constexpr core::f32 kDayStep = 1.0f / 14400.0f;
     /// Cells across the pheromone window that follows the walker.
     static constexpr core::u32 kFieldSpan = 64u;
-    /// Thermal iterations each streamed chunk gets. Also its apron, plus one.
-    static constexpr core::u32 kEndlessErosion = 6u;
     /// Ambient floor: what a surface facing away from the sun still receives.
     static constexpr core::f32 kAmbient = 0.28f;
     /// Fog density. The reciprocal is roughly the distance at which haze wins.
@@ -446,52 +531,6 @@ private:
     static constexpr core::f32 kPlantCanopyDistance = 11.0f;
     static constexpr core::f32 kChunkCentreY = 8.0f;
     static constexpr core::f32 kChunkHalfHeight = 72.0f;
-    /// Relief, in metres rather than in map units: see where this is applied.
-    static constexpr core::f32 kReliefScale = 2.8f;
-    /**
-     * @brief Feature width. LOWER is wider, and wider is what an open world is.
-     *
-     * A quarter of the map's frequency, not half. At 0.55 the world alternated
-     * ridge, drowned valley, ridge about every twenty metres — walkable only along
-     * a crest or through water, which is precisely what it looked like. Halving it
-     * again doubles the distance between features, so a plain has room to be a
-     * plain before the next hill starts.
-     */
-    static constexpr core::f32 kReliefFrequency = 0.26f;
-
-    // ── Terrain shape ────────────────────────────────────────────────────────
-    //
-    // Raw fractal noise puts most of the world on a slope, and at an amplitude big
-    // enough for real mountains, most of the world is a slope you cannot climb.
-    // No amplitude fixes that — the problem is the distribution. So the range is
-    // redistributed: a wide flattened band that is walkable ground, and a narrow
-    // top band that is allowed to become tall. See NoiseParams::plainsFlatten.
-    static constexpr core::f32 kPlainsFlatten = 0.80f;
-    static constexpr core::f32 kPlainsWidth = 0.55f;
-    static constexpr core::f32 kMountainThreshold = 0.58f;
-    /**
-     * @brief Mountains rise five times faster than the flattened ground.
-     *
-     * This is what buys real SCALE at eye height. The flattening divides the
-     * everyday relief by five, so without this the world would be a plate; with it,
-     * the same amplitude that makes a walkable plain also makes a peak that reads
-     * as a mountain when you stand at its foot.
-     */
-    static constexpr core::f32 kMountainGain = 5.0f;
-    /**
-     * @brief Metres the shaped land is lifted above the sea.
-     *
-     * Flattening compresses the everyday range towards ZERO, and the sea sits at
-     * -1 — so without a lift roughly half of the new, walkable world came out under
-     * water, which the first screenshot showed as an ocean with a strip of beach.
-     * Raising the land by four metres puts the plains band clear of the waterline
-     * and leaves only the genuinely low ground to flood, which is what makes a lake
-     * a lake instead of the default state of the world.
-     */
-    static constexpr core::f32 kLandLift = 4.0f;
-    /// Above this the ground is bare rock; above the next, snow. Metres.
-    static constexpr core::f32 kRockLine = 42.0f;
-    static constexpr core::f32 kSnowLine = 62.0f;
 
     /// How the surface is coloured.
     enum class Shading : core::u32 {
@@ -500,9 +539,6 @@ private:
         Moisture,
         Count
     };
-
-    /// One animal is ecology::HerdMember: a flocked body, a genome, an identity.
-    using Creature = ecology::HerdMember;
 
     /// A plant is ecology::PlantCell: a signed world cell, standing or regrowing.
     using Plant = ecology::PlantCell;
@@ -540,7 +576,7 @@ private:
             // passes' intermediate grids the moment the few this game reads have
             // been copied out is procgen::buildSnapshot's.
             const procgen::WorldSnapshot snapshot =
-                procgen::buildSnapshot(recipe, &registry(), &_propIds, procgen::WalkabilityRule{kSeaLevel, 2.4f});
+                procgen::buildSnapshot(recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f});
 
             _height = snapshot.height;
             _biomes = snapshot.biomes;
@@ -592,7 +628,7 @@ private:
         // never integrated, so grazing a valley bare moves the number because the
         // plants are gone.
         _plants.clear();
-        procgen::Random thin{_seed ^ 0x5EED11u};
+        math::Random thin{_seed ^ 0x5EED11u};
         for (core::u32 z = 0u; z < _gridDepth; ++z)
             for (core::u32 x = 0u; x < _gridWidth; ++x)
             {
@@ -611,7 +647,7 @@ private:
         // document cannot state, because it is how much vegetation THIS seed grew.
         _living.configure(livingParams(), _livingRecipe, _seed);
         _living.seedWeb(static_cast<core::u32>(_plants.size()));
-        _living.openScent(_gridWidth < _gridDepth ? _gridWidth : _gridDepth, 2u);
+        _living.openScent(_gridWidth < _gridDepth ? _gridWidth : _gridDepth, _living.params().scentLayers);
         _living.scent().centreOn(0, 0);
         _living.scent().field().setObstacles(_blocked);
         seedHerd();
@@ -667,27 +703,17 @@ private:
             return;
         }
 
-        _chunkParams.size = kChunkSize;
-        _chunkParams.worldSeed = _seed;
-        _chunkParams.noise = _recipe.terrain;
-        _chunkParams.noise.seed = _seed;
-        // Real scale: one cell is one metre — the trees measure 6.8 m, the eye
-        // stands at 2 m — so the relief has to be metres too. The cartridge's
-        // amplitude is tuned for a 64-cell map seen from above, where 16 m of
-        // peak-to-trough is a mountain range; walking through it at eye height,
-        // the same terrain is a lawn. The gate's parameters are NOT touched:
-        // procgen::parityChunkParams stays exactly as it was, so the P9 signature
-        // does not move because the viewer changed how tall its hills are.
-        _chunkParams.noise.amplitude = _recipe.terrain.amplitude * kReliefScale;
-        _chunkParams.noise.frequency = _recipe.terrain.frequency * kReliefFrequency;
-        // The shaping is the STREAMED world's, not the recipe's: the bounded map is
-        // a map, seen from above, where raw noise reads correctly. It is walking
-        // through it at eye height that needs plains.
-        _chunkParams.noise.baseHeight = _recipe.terrain.baseHeight + kLandLift;
-        _chunkParams.noise.plainsFlatten = kPlainsFlatten;
-        _chunkParams.noise.plainsWidth = kPlainsWidth;
-        _chunkParams.noise.mountainThreshold = kMountainThreshold;
-        _chunkParams.noise.mountainGain = kMountainGain;
+        // ONE description of this world, scaled up to walk through. The chunk
+        // parameters and the content rule used to be written out by hand right here,
+        // beside the recipe they were supposed to agree with — two descriptions of one
+        // world, in one function, with nothing to say when they drifted. See
+        // procgen::endlessPlanFromRecipe for what the scaling means and why it is not
+        // the identity.
+        procgen::WorldRecipe seeded = _recipe;
+        seeded.seed = _seed;
+        seeded.terrain.seed = _seed;
+        const procgen::EndlessPlan plan = procgen::endlessPlanFromRecipe(seeded, kChunkSize);
+        _chunkParams = plan.chunk;
 
         _streamParams.generateRadius = kStreamRadius;
         // 1.5x: the hysteresis that stops a camera sitting on a boundary from
@@ -720,7 +746,7 @@ private:
         // resident, and tickVegetation corrects it every tick from what it finds.
         _living.configure(livingParams(), _livingRecipe, _seed);
         _living.seedWeb(0u);
-        _living.openScent(kFieldSpan, 2u);
+        _living.openScent(kFieldSpan, _living.params().scentLayers);
         _living.scent().centreOn(0, 0);
 
         // One place says what the residency policy is: the chunk parameters, the
@@ -730,26 +756,7 @@ private:
         // One call says what the endless world is: the terrain parameters, the
         // streaming policy and the memory ceiling. The rule below is the CONTENT —
         // where the sea and the snow line are, how much erosion, how dense the woods.
-        procgen::ChunkTerrainRule rule;
-        rule.erosionIterations = kEndlessErosion;
-        rule.seaLevel = kSeaLevel;
-        // ONE cell in fourteen, not one in three.
-        //
-        // This is what actually decides how many trees exist — not the recipe's
-        // scatter densities, which govern a different pass. One in three was tuned
-        // on the old terrain, where most ground was rock, water or a slope too steep
-        // to plant on, so it only ever applied to a fraction of the world.
-        // Flattening made nearly all of it plantable at once and the same rule
-        // became a wall of trunks: a hundred and twelve thousand triangles, props at
-        // forty-seven percent of the frame.
-        rule.vegetationOneIn = 14u;
-        // The rock and snow lines are in METRES, so they have to follow the relief
-        // they describe. Mountains now rise five times faster than the everyday
-        // ground: at the old eight and eleven metres, every gentle plain came out
-        // bare rock under snow.
-        rule.rockLine = kRockLine;
-        rule.snowLine = kSnowLine;
-        _streamer.configure(_chunkParams, _riverParams, _streamParams, _maxResident, rule);
+        _streamer.configure(_chunkParams, _riverParams, _streamParams, _maxResident, plan.rule);
 
         seedHerd();
 
@@ -859,13 +866,13 @@ private:
     /// Fills the herd to what the freshly seeded web says should exist.
     void seedHerd()
     {
-        procgen::Random stock{_seed ^ 0x57EA11u};
+        math::Random stock{_seed ^ 0x57EA11u};
         for (core::u32 species = 0u; species + 1u < _living.web().species.size() && species < 2u; ++species)
         {
             const core::u32 wanted = _living.bodiesFor(species);
             for (core::u32 i = 0u; i < wanted; ++i)
                 (void) _living.spawn(stock, species,
-                                     [this](procgen::Random &r, core::u32 a, math::Fixed32 &x, math::Fixed32 &z) {
+                                     [this](math::Random &r, core::u32 a, math::Fixed32 &x, math::Fixed32 &z) {
                                          return proposeSpawn(r, a, x, z);
                                      });
         }
@@ -878,7 +885,7 @@ private:
      * put its herd at (0,0), where nobody ever goes. In the bounded one, any unblocked
      * cell of the grid.
      */
-    [[nodiscard]] bool proposeSpawn(procgen::Random &random, core::u32 attempt, math::Fixed32 &outX,
+    [[nodiscard]] bool proposeSpawn(math::Random &random, core::u32 attempt, math::Fixed32 &outX,
                                     math::Fixed32 &outZ) const
     {
         (void) attempt;
@@ -888,7 +895,7 @@ private:
             const core::f32 offsetZ = static_cast<core::f32>(random.range(-20, 20));
             outX = math::Fixed32::fromFloat(_camera.focusX() + offsetX);
             outZ = math::Fixed32::fromFloat(_camera.focusZ() + offsetZ);
-            return walkable(outX, outZ);
+            return standable(outX, outZ);
         }
         const core::u32 x = random.below(_gridWidth);
         const core::u32 z = random.below(_gridDepth);
@@ -910,40 +917,17 @@ private:
     }
 
     /**
-     * @brief One tick of the living layer, through ecology::Herd.
+     * @brief Tells the creature systems where the pheromone window sits now.
      *
-     * The flocking, the scent following, the speed from the genome and the
-     * walkability slide are the module's. What this world supplies is the three
-     * things only it knows: how a world cell maps into the pheromone window (which
-     * MOVES with the walker in the endless world), where an animal may stand, and
-     * what happens when a grazer eats here.
+     * The one thing the systems cannot derive: the window FOLLOWS the walker in the
+     * endless world, so the mapping from a world cell to a field cell moves every
+     * tick. It is passed as data — an origin and a size — rather than as a callback,
+     * because data can be written down, folded and replayed.
      */
-    /// One tick of the living layer; the two modes differ only in what they read.
-    void stepHerd()
-    {
-        _living.stepHerd(
-            kStep,
-            [this](core::i32 worldX, core::i32 worldZ, core::u32 &outX, core::u32 &outZ) {
-                if (_infinite)
-                    return fieldCell(worldX, worldZ, outX, outZ);
-                return worldToCell(math::Fixed32::fromInt(worldX), math::Fixed32::fromInt(worldZ), outX, outZ);
-            },
-            [this](math::Fixed32 x, math::Fixed32 z) { return walkable(x, z); },
-            [this](core::i32 worldX, core::i32 worldZ) {
-                if (_infinite)
-                {
-                    grazeEndless(worldX, worldZ);
-                    return;
-                }
-                core::u32 cx = 0u;
-                core::u32 cz = 0u;
-                if (worldToCell(math::Fixed32::fromInt(worldX), math::Fixed32::fromInt(worldZ), cx, cz))
-                    graze(cx, cz);
-            });
-    }
+    void refreshCreatureView() { _creatures.setView(_living.fieldView()); }
 
-    /// Eats one plant in the chunk that holds a world cell.
-    void grazeEndless(core::i32 worldX, core::i32 worldZ)
+    /// Eats one plant in the chunk that holds a world cell. @return true when it ate.
+    [[nodiscard]] bool grazeEndless(core::i32 worldX, core::i32 worldZ)
     {
         for (core::u32 c = 0u; c < _streamer.size(); ++c)
         {
@@ -954,22 +938,24 @@ private:
                 worldZ >= originZ + static_cast<core::i32>(kChunkSize))
                 continue;
             if (chunk.plants.empty())
-                return; // the cell's chunk was found; no other holds it
-            if (ecology::grazeAt(&chunk.plants[0], static_cast<core::u32>(chunk.plants.size()), worldX, worldZ, 1,
-                                 _living.recipe().regrowthTicks))
-                _living.countGrazed();
-            return;
+                return false; // the cell's chunk was found; no other holds it
+            return ecology::grazeAt(&chunk.plants[0], static_cast<core::u32>(chunk.plants.size()), worldX, worldZ, 1,
+                                    _living.recipe().regrowthTicks);
         }
+        return false;
     }
 
-    /// Eats one plant near a bounded-world cell.
-    void graze(core::u32 x, core::u32 z)
+    /// Eats one plant near a world position, on the bounded grid. @return true when it ate.
+    [[nodiscard]] bool grazeBounded(math::Fixed32 x, math::Fixed32 z)
     {
         if (_plants.empty())
-            return;
-        if (ecology::grazeAt(&_plants[0], static_cast<core::u32>(_plants.size()), static_cast<core::i32>(x),
-                             static_cast<core::i32>(z), 1, _living.recipe().regrowthTicks))
-            _living.countGrazed();
+            return false;
+        core::u32 cx = 0u;
+        core::u32 cz = 0u;
+        if (!worldToCell(x, z, cx, cz))
+            return false;
+        return ecology::grazeAt(&_plants[0], static_cast<core::u32>(_plants.size()), static_cast<core::i32>(cx),
+                                static_cast<core::i32>(cz), 1, _living.recipe().regrowthTicks);
     }
 
     /**
@@ -1001,7 +987,7 @@ private:
     /// Brings the bodies in line with the census; engine::LivingLayer keeps the ratio.
     void reconcile()
     {
-        _living.reconcile(_ticks, [this](procgen::Random &r, core::u32 a, math::Fixed32 &x, math::Fixed32 &z) {
+        _living.reconcile(_ticks, [this](math::Random &r, core::u32 a, math::Fixed32 &x, math::Fixed32 &z) {
             return proposeSpawn(r, a, x, z);
         });
     }
@@ -1075,7 +1061,7 @@ private:
         if (_infinite)
         {
             _lastTriangles =
-                _renderer.drawStreamed(rt, _camera, _streamer, _terrainSurface, _props, _living.herd(), params, _frames,
+                _renderer.drawStreamed(rt, _camera, _streamer, _terrainSurface, _props, registry(), params, _frames,
                                        palette, [this](core::i32 x, core::i32 z) { return groundAt(x, z); });
             return;
         }
@@ -1083,7 +1069,7 @@ private:
         if (_height.empty())
             return;
         _lastTriangles = _renderer.drawBounded(
-            rt, _camera, _terrainSurface, _props, _living.herd(), _gridWidth, _gridDepth,
+            rt, _camera, _terrainSurface, _props, registry(), _gridWidth, _gridDepth,
             _plants.empty() ? nullptr : &_plants[0], static_cast<core::u32>(_plants.size()), params, palette,
             [this](core::u32 x, core::u32 z) { return _height.at(x, z).toFloat(); },
             [this](core::u32 x, core::u32 z) { return cellColour(x, z); },
@@ -1627,7 +1613,7 @@ private:
     void spawnBody()
     {
         const auto ground = [this](core::i32 x, core::i32 z) { return _streamer.groundHeightAt(x, z); };
-        const math::Fixed32 shore = math::Fixed32::fromFloat(kSeaLevel + 0.5f);
+        const math::Fixed32 shore = math::Fixed32::fromFloat(seaLevel() + 0.5f);
 
         for (core::i32 radius = 0; radius <= kSpawnSearchCells; ++radius)
         {
@@ -1720,21 +1706,6 @@ private:
      * @c sampleWorldHeight can answer anywhere, including in chunks nobody has
      * generated. That is exactly what a creature walking toward the horizon needs.
      */
-    [[nodiscard]] bool walkable(math::Fixed32 x, math::Fixed32 z) const noexcept
-    {
-        if (_infinite)
-        {
-            const core::f32 height =
-                procgen::sampleWorldHeight(_streamer.chunkParams(), x.toInt(), z.toInt()).toFloat();
-            return height > kSeaLevel + 0.2f;
-        }
-        core::u32 cx = 0u;
-        core::u32 cz = 0u;
-        if (!worldToCell(x, z, cx, cz))
-            return false;
-        return _blocked.at(cx, cz) == 0u;
-    }
-
     [[nodiscard]] core::u32 standingPlants() const noexcept
     {
         return _plants.empty() ? 0u : ecology::countStanding(&_plants[0], static_cast<core::u32>(_plants.size()));
@@ -1756,10 +1727,16 @@ private:
 
     static constexpr core::f32 kFloor = -6.0f;
     static constexpr core::f32 kCeiling = 14.0f;
-    static constexpr core::f32 kSeaLevel = -1.0f;
+    /// Where the sea is: the RECIPE's, never a constant here.
+    ///
+    /// There was a `kSeaLevel = -1.0f` in this block, and with it the shipped
+    /// cartridge had three answers to one question: the classifier called everything
+    /// at or below -4 (the engine default, since the document said nothing) Ocean, the
+    /// view profile drew water at -1, and this constant blocked walking below -1. The
+    /// band between them was land you could not walk on, under water, that the scatter
+    /// was free to plant trees in.
+    [[nodiscard]] core::f32 seaLevel() const noexcept { return _recipe.biomes.seaLevel; }
     /// One fixed tick at 60 Hz, in seconds.
-    static inline const math::Fixed32 kStep = math::Fixed32::fromRaw(1092);
-
     // The frame buffers live in BSS, like the other sample's: a kernel stack
     // cannot hold 480x300 pixels plus their depth, and the heap should not have to.
     static core::u32 _color[kRenderWidth * kRenderHeight];
@@ -1824,6 +1801,9 @@ private:
     /// The endless world's chunks: residency, generation, one ground height.
     /// Population, bodies and the scent they read: engine::LivingLayer.
     engine::LivingLayer _living;
+    /// Owned by the scheduler; held to keep their window in step with the scent's.
+    /// The six systems of an animal's tick, ordered by engine::systems::CreatureStage.
+    engine::systems::CreaturePipeline _creatures;
 
     mutable engine::TerrainStreamer _streamer;
 

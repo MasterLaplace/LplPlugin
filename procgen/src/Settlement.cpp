@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/Settlement.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -156,7 +156,7 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
     VoronoiParams voronoi;
     voronoi.width = params.width;
     voronoi.depth = params.depth;
-    voronoi.seed = deriveStream(params.seed, 0xD157u).state();
+    voronoi.seed = math::deriveStream(params.seed, 0xD157u).state();
     voronoi.cellSize = params.districtSize;
     voronoi.jitter = 0.7f;
     const VoronoiDiagram districts = computeVoronoi(voronoi);
@@ -224,7 +224,7 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
     }
 
     // ── Plots facing a street ───────────────────────────────────────────────
-    Random random = deriveStream(params.seed, 0xB1D5u);
+    math::Random random = math::deriveStream(params.seed, 0xB1D5u);
     const math::Fixed32 density = math::Fixed32::fromFloat(params.plotDensity);
     const core::u32 minPlot = params.minPlot == 0u ? 1u : params.minPlot;
     const core::u32 maxPlot = params.maxPlot < minPlot ? minPlot : params.maxPlot;

@@ -48,6 +48,10 @@
         "climate": {
           "enabled": true
         },
+        "_biomes_comment": "seaLevel is stated here and NOT left to the engine default, because three things read it and they have to agree: the classifier that decides what is Ocean, the walkability mask, and the water plane the view profile draws at -1.0. It was left out once, so the classifier used -4.0 while the water was drawn at -1.0 — the band between them was land you could not walk on, under water, that the scatter was free to plant trees in.",
+        "biomes": {
+          "seaLevel": -1.0
+        },
         "caves": {
           "enabled": true,
           "width": 64,

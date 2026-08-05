@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/Hydrology.hpp>
 
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 #include <lpl/std/vector.hpp>
 
@@ -234,7 +234,7 @@ DrainageNetwork computeDrainage(const Heightfield &field)
 
                 // A diagonal step falls the same distance over a longer run, so
                 // comparing raw drops would bias every channel onto diagonals.
-                const math::Fixed32 slope = n < 4u ? drop : drop * kInvSqrt2;
+                const math::Fixed32 slope = n < 4u ? drop : drop * math::kInvSqrt2;
                 // Strictly greater: the first of several equally steep
                 // neighbours wins, and kNeighbor8 order is fixed, so the choice
                 // is the same everywhere.
@@ -394,10 +394,10 @@ core::u32 carveRivers(Heightfield &field, const DrainageNetwork &network, const 
         if (drop.raw() <= 0)
             continue;
         if (direction >= 4u)
-            drop = drop * kInvSqrt2;
+            drop = drop * math::kInvSqrt2;
 
         const core::i64 value =
-            static_cast<core::i64>(integerSqrt(network.accumulation[i])) * static_cast<core::i64>(drop.raw());
+            static_cast<core::i64>(math::integerSqrt(network.accumulation[i])) * static_cast<core::i64>(drop.raw());
         power[i] = value;
         if (value > maxPower)
             maxPower = value;
@@ -535,7 +535,7 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
         }
     }
 
-    const math::Fixed32 maxFlowLog = fixedLog2(network.maxAccumulation);
+    const math::Fixed32 maxFlowLog = math::fixedLog2(network.maxAccumulation);
 
     for (core::u32 z = 0u; z < field.depth(); ++z)
         for (core::u32 x = 0u; x < field.width(); ++x)
@@ -558,7 +558,7 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
             // modest stream read as wet instead of only the river mouth.
             math::Fixed32 flowTerm = math::Fixed32::zero();
             if (maxFlowLog.raw() > 0)
-                flowTerm = fixedLog2(network.accumulation[i]) / maxFlowLog;
+                flowTerm = math::fixedLog2(network.accumulation[i]) / maxFlowLog;
 
             const math::Fixed32 altitudeTerm =
                 span.raw() != 0 ? math::Fixed32::one() - (field[i] - lowest) / span : math::Fixed32::half();

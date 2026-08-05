@@ -10,7 +10,7 @@
 #include <lpl/procgen/LSystem.hpp>
 
 #include <lpl/math/FixedPoint.hpp>
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -145,7 +145,7 @@ void drawSegment(Grid<core::u8> &canvas, math::Fixed32 fromX, math::Fixed32 from
 lpl::pmr::string expandLSystem(const LSystemParams &params)
 {
     lpl::pmr::string current = params.axiom;
-    Random random = deriveStream(params.seed, 0x15A5u);
+    math::Random random = math::deriveStream(params.seed, 0x15A5u);
 
     for (core::u32 round = 0u; round < params.iterations; ++round)
     {

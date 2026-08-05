@@ -23,7 +23,10 @@ target("lpl-engine")
         "lpl-pack",
         "lpl-procgen",
         "lpl-ai",
-        "lpl-ecology"
+        "lpl-ecology",
+        -- engine/ HOSTS the demon (DemonHost), so the arrow points this way. agent/
+        -- deliberately knows nothing about engine/, which is what keeps it acyclic.
+        "lpl-agent"
     )
 
     if has_config("renderer") then

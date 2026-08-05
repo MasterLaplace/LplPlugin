@@ -47,7 +47,11 @@ struct JVal {
     std::vector<JVal> arr;
     std::vector<std::pair<std::string, JVal>> obj;
 
-    /// Member value for @p key on an object, or nullptr if absent.
+    /**
+     * @brief Member value for @p key on an object, or nullptr if absent.
+     * @param key The key to search for.
+     * @return A pointer to the value if found, nullptr otherwise.
+     */
     [[nodiscard]] const JVal *find(std::string_view key) const
     {
         for (const auto &kv : obj)
@@ -56,7 +60,12 @@ struct JVal {
         return nullptr;
     }
 
-    /// Numeric field @p key, or @p fallback if absent / not a number.
+    /**
+     * @brief Numeric field @p key, or @p fallback if absent / not a number.
+     * @param key The key to search for.
+     * @param fallback The value to return if the key is absent or not a number.
+     * @return The numeric value if found and valid, otherwise the fallback.
+     */
     [[nodiscard]] double numOr(std::string_view key, double fallback) const
     {
         const JVal *v = find(key);
@@ -86,7 +95,12 @@ struct Parser {
     JVal object();
 };
 
-/// Parses @p text into a JSON value; sets @p ok (if given) to the parse status.
+/**
+ * @brief Parses @p text into a JSON value; sets @p ok (if given) to the parse status.
+ * @param text The JSON text to parse.
+ * @param ok Optional pointer to a boolean that will be set to true if parsing succeeded, false otherwise.
+ * @return The parsed JSON value.
+ */
 [[nodiscard]] JVal parse(std::string_view text, bool *ok = nullptr);
 
 /**
@@ -98,6 +112,22 @@ struct Parser {
  * the round trip rebuilds the same world it described.
  */
 [[nodiscard]] std::string emit(const JVal &value);
+
+/**
+ * @brief Overlays @p patch onto @p target, RECURSIVELY.
+ *
+ * A key the patch names replaces the target's value, except when both sides are
+ * objects — then it descends. So `{"terrain":{"octaves":6}}` laid over
+ * `{"seed":7,"terrain":{"amplitude":3,"octaves":1}}` keeps the seed AND the
+ * amplitude, and changes only the octaves.
+ *
+ * Not to be confused with the field-level overlay SceneSerializer uses for
+ * template inheritance, which stops at one level on purpose: a component's
+ * fields are flat, and descending into them would let a partial override leave a
+ * component half-inherited. Same word, two depths, two reasons — unifying them
+ * would silently change what a `$use` chain means.
+ */
+void overlay(JVal &target, const JVal &patch);
 
 } // namespace lpl::editor::detail
 

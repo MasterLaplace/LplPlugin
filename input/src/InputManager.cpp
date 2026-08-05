@@ -145,7 +145,9 @@ void InputManager::updateGroundedState(core::u32 entityId, float currentVelY, fl
     state->isGrounded = pmr::fabs(currentVelY) < threshold;
 }
 
-math::Vec3<float> InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<float> currentVel, float speed)
+math::Vec3<math::Fixed32> InputManager::computeMovementVelocity(core::u32 entityId,
+                                                                 math::Vec3<math::Fixed32> currentVel,
+                                                                 math::Fixed32 speed)
 {
     auto *state = getStateMut(entityId);
     if (!state)
@@ -153,30 +155,36 @@ math::Vec3<float> InputManager::computeMovementVelocity(core::u32 entityId, math
         return currentVel;
     }
 
-    // WASD movement direction
-    float dx = 0.0f;
-    float dz = 0.0f;
+    // WASD movement direction. Integral by construction: a key is down or it is
+    // not, so nothing here needs a float to be exact.
+    math::Fixed32 dx{};
+    math::Fixed32 dz{};
 
     if (state->getKey(KEY_W))
-        dz -= 1.0f;
+        dz = dz - math::Fixed32::one();
     if (state->getKey(KEY_S))
-        dz += 1.0f;
+        dz = dz + math::Fixed32::one();
     if (state->getKey(KEY_A))
-        dx -= 1.0f;
+        dx = dx - math::Fixed32::one();
     if (state->getKey(KEY_D))
-        dx += 1.0f;
+        dx = dx + math::Fixed32::one();
 
-    // Neural speed modulation: concentration [0..1] → scale [0.70x..1.30x]
-    float neuralScale = 1.0f;
-    float concentration = state->neural.concentration;
+    // Neural speed modulation: concentration [0..1] → scale [0.70x..1.30x].
+    //
+    // THE ingestion point. Concentration is a measurement from outside the
+    // simulation and arrives as a float; it is quantised here, exactly once, and
+    // everything downstream of this line is fixed-point. Quantising later — as
+    // the caller used to — put a float on the authoritative path.
+    math::Fixed32 neuralScale = math::Fixed32::one();
+    const math::Fixed32 concentration = math::Fixed32::fromFloat(state->neural.concentration);
 
-    if (concentration > 0.001f)
+    if (concentration > math::Fixed32::fromFloat(0.001f))
     {
         // Linear interpolation: 0.0 → 0.70, 0.5 → 1.00, 1.0 → 1.30
-        neuralScale = 0.70f + concentration * 0.60f;
+        neuralScale = math::Fixed32::fromFloat(0.70f) + concentration * math::Fixed32::fromFloat(0.60f);
     }
 
-    float finalSpeed = speed * neuralScale;
+    const math::Fixed32 finalSpeed = speed * neuralScale;
 
     // Apply movement
     currentVel.x = dx * finalSpeed;
@@ -185,7 +193,7 @@ math::Vec3<float> InputManager::computeMovementVelocity(core::u32 entityId, math
     // Blink-based jump (rising-edge, grounded only)
     if (state->getAxis(15) > 0.5f && state->isGrounded)
     {
-        currentVel.y = 15.0f; // Jump impulse
+        currentVel.y = math::Fixed32::fromInt(15); // Jump impulse
         state->isGrounded = false;
     }
     state->setAxis(15, 0.0f); // Clear blink trigger

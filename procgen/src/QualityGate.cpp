@@ -207,6 +207,128 @@ HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u3
     return analysis;
 }
 
+core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analysis, core::u32 startX, core::u32 startZ,
+                            const PlacementParams &params, Placement *out, core::u32 capacity)
+{
+    if (out == nullptr || capacity == 0u || !analysis.valid || map.empty() || analysis.onPath.empty())
+        return 0u;
+
+    const DistanceMap fromStart = computeDistanceMap(map, startX, startZ);
+    core::u32 written = 0u;
+
+    // How long the route is, in steps rather than in cells: spacing an encounter
+    // "every N cells of the grid" would bunch them wherever the path doubles back.
+    core::u32 spine = 0u;
+    for (core::u32 i = 0u; i < analysis.onPath.cellCount(); ++i)
+        if (analysis.onPath[i] != 0u && fromStart[i] != kUnreachable && fromStart[i] > spine)
+            spine = fromStart[i];
+
+    // ── encounters, evenly spaced through the player's progress ──────────────
+    const core::u32 encounterStart = written;
+    for (core::u32 k = 1u; k <= params.encounters && written < capacity; ++k)
+    {
+        const core::u32 wanted = (spine * k) / (params.encounters + 1u);
+        bool found = false;
+        core::u32 bestCell = 0u;
+        core::u32 bestError = 0u;
+        for (core::u32 i = 0u; i < analysis.onPath.cellCount(); ++i)
+        {
+            if (analysis.onPath[i] == 0u || fromStart[i] == kUnreachable)
+                continue;
+            const core::u32 progress = fromStart[i];
+            const core::u32 error = progress > wanted ? progress - wanted : wanted - progress;
+            // Strictly smaller: the first of several equally good cells wins, in
+            // scan order, so the furnished level is reproducible.
+            if (!found || error < bestError)
+            {
+                found = true;
+                bestCell = i;
+                bestError = error;
+            }
+        }
+        if (!found)
+            break;
+
+        bool tooClose = false;
+        for (core::u32 e = encounterStart; e < written; ++e)
+        {
+            const core::u32 other = out[e].progress;
+            const core::u32 gap = other > fromStart[bestCell] ? other - fromStart[bestCell]
+                                                              : fromStart[bestCell] - other;
+            if (gap < params.minSpacing)
+                tooClose = true;
+        }
+        if (tooClose)
+            continue; // a short route legitimately holds fewer encounters
+
+        out[written].x = bestCell % map.width();
+        out[written].z = bestCell / map.width();
+        out[written].role = PlacementRole::Encounter;
+        out[written].detour = 0u;
+        out[written].progress = fromStart[bestCell];
+        ++written;
+    }
+
+    // ── rewards: the deepest dead ends, deepest first ────────────────────────
+    //
+    // A dead end and not merely a deep cell. A deep cell in the middle of a wide
+    // room is walked through, and a prize the player crosses by accident is not a
+    // reward. This is the same measurement that condemned the geometry as an
+    // excrescence, used to furnish it.
+    const core::u32 rewardStart = written;
+    for (core::u32 k = 0u; k < params.rewards && written < capacity; ++k)
+    {
+        bool found = false;
+        core::u32 bestCell = 0u;
+        core::u32 bestDepth = 0u;
+        for (core::u32 i = 0u; i < analysis.detour.cellCount(); ++i)
+        {
+            const core::u32 depth = analysis.detour[i];
+            if (depth == kUnreachable || depth < params.rewardMinDetour)
+                continue;
+            const core::u32 x = i % map.width();
+            const core::u32 z = i / map.width();
+            if (!walkable(map.at(x, z)) || walkableNeighbours(map, x, z) != 1u)
+                continue;
+
+            bool taken = false;
+            for (core::u32 r = rewardStart; r < written; ++r)
+            {
+                if (out[r].x == x && out[r].z == z)
+                {
+                    taken = true;
+                    break;
+                }
+                const core::u32 dx = out[r].x > x ? out[r].x - x : x - out[r].x;
+                const core::u32 dz = out[r].z > z ? out[r].z - z : z - out[r].z;
+                if (dx + dz < params.minSpacing)
+                    taken = true;
+            }
+            if (taken)
+                continue;
+
+            // Strictly greater: deepest wins, first-in-scan-order breaks ties.
+            if (!found || depth > bestDepth)
+            {
+                found = true;
+                bestCell = i;
+                bestDepth = depth;
+            }
+        }
+        if (!found)
+            break; // the level has no more hiding places, which is a fact about it
+
+        out[written].x = bestCell % map.width();
+        out[written].z = bestCell / map.width();
+        out[written].role = PlacementRole::Reward;
+        out[written].detour = bestDepth;
+        out[written].progress = fromStart[bestCell] == kUnreachable ? 0u : fromStart[bestCell];
+        ++written;
+    }
+
+    return written;
+}
+
 DistanceMap computeFleeMap(const DungeonMap &map, const DistanceMap &danger, core::u32 safeDistance)
 {
     DistanceMap flee{map.width(), map.depth(), kUnreachable};

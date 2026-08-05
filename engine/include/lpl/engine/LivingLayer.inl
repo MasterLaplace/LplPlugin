@@ -24,6 +24,10 @@ inline void LivingLayer::configure(const LivingLayerParams &params, const ecolog
     _nextId = 1u;
     _grazed = 0u;
     _herd.clear();
+    // The one HerdParams this layer runs on: the systems hold a reference to it,
+    // so it is configured here rather than rebuilt each step.
+    _herdParams.speciesCount = params.speciesCount;
+    ecology::applyDefaultScents(_herdParams);
 }
 
 inline void LivingLayer::seedWeb(core::u32 standingPlants)
@@ -49,22 +53,64 @@ inline void LivingLayer::seedWeb(core::u32 standingPlants)
     }
 }
 
-inline core::u32 LivingLayer::bodiesFor(core::u32 species) const noexcept
+inline core::u32 LivingLayer::webIndexOfBodied(core::u32 bodied) const noexcept
 {
-    const core::u32 counted =
-        _web.species.size() < _params.speciesCount ? static_cast<core::u32>(_web.species.size()) : _params.speciesCount;
-    if (species >= counted)
+    core::u32 seen = 0u;
+    for (core::u32 i = 0u; i < _web.species.size(); ++i)
+    {
+        if (_web.species[i].params.level == ecology::TrophicLevel::Producer)
+            continue;
+        if (seen == bodied)
+            return i;
+        ++seen;
+    }
+    return kNoSpecies;
+}
+
+inline core::u32 LivingLayer::rawBodiesFor(core::u32 webIndex) const noexcept
+{
+    if (webIndex >= _web.species.size())
+        return 0u;
+    const ecology::Species &species = _web.species[webIndex];
+    // At or below its refuge the species is gone as far as the model is concerned,
+    // and drawing a body for it would contradict the census.
+    if (species.population <= species.params.refuge)
         return 0u;
 
-    math::Fixed32 total{};
-    for (core::u32 i = 0u; i < counted; ++i)
-        total = total + _web.species[i].population;
+    const core::u32 perBody = _recipe.headPerBody != 0u ? _recipe.headPerBody : 2u;
+    core::i32 wanted = species.population.toInt() / static_cast<core::i32>(perBody);
+    // Above its refuge, so it exists — and a world where existing is invisible is
+    // not showing the model. This is the floor that was learned the hard way: at one
+    // body per ten head, a population of seven floored to zero and the map stayed
+    // empty while the HUD cheerfully reported a working ecosystem. The spawning, the
+    // flocking and the drawing were all correct and all ran on an empty list.
+    if (wanted < 1)
+        wanted = 1;
+    return static_cast<core::u32>(wanted);
+}
 
-    const core::f32 totalF = total.toFloat();
-    const core::f32 budget = static_cast<core::f32>(_params.maxBodies);
-    const core::f32 scale = totalF > budget ? budget / totalF : 1.0f;
-    const core::f32 wanted = _web.species[species].population.toFloat() * scale;
-    return static_cast<core::u32>(wanted < 0.0f ? 0.0f : wanted);
+inline core::u32 LivingLayer::bodiesFor(core::u32 species) const noexcept
+{
+    if (species >= _params.speciesCount)
+        return 0u;
+    const core::u32 index = webIndexOfBodied(species);
+    if (index == kNoSpecies)
+        return 0u;
+
+    const core::u32 mine = rawBodiesFor(index);
+    core::u32 total = 0u;
+    for (core::u32 i = 0u; i < _params.speciesCount; ++i)
+    {
+        const core::u32 other = webIndexOfBodied(i);
+        if (other != kNoSpecies)
+            total += rawBodiesFor(other);
+    }
+    if (total <= _params.maxBodies || total == 0u)
+        return mine;
+
+    // Proportional, so the shape of the web survives the ceiling.
+    const core::u32 scaled = (mine * _params.maxBodies) / total;
+    return scaled == 0u && mine != 0u ? 1u : scaled;
 }
 
 } // namespace lpl::engine

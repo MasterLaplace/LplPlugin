@@ -60,6 +60,8 @@ enum class SectionType : core::u32 {
     WorldRecipe = 1u,  ///< A procgen recipe: seed + passes (see RecipeV1).
     LivingRecipe = 2u, ///< What lives on it: food web, herd, stigmergy (see LivingV1).
     ViewProfile = 3u,  ///< What it LOOKS like: sky, water, palette (see ViewV1).
+    /// 4 is reserved for a baked entity export; see docs/PLAN_caine.md phase 4.2.
+    Ecc = 5u, ///< Transversal Reed-Solomon parity over the rest of the pack (see EccV1).
 };
 
 /**
@@ -72,8 +74,23 @@ struct Header {
     core::u32 totalSize;     ///< Size of the whole image, header included.
     core::u32 sectionCount;  ///< Entries in the section table that follows.
     core::u32 contentHash;   ///< FNV-1a over every byte after this header.
-    core::u32 reserved0;     ///< Must be 0.
-    core::u32 reserved1;     ///< Must be 0.
+
+    /**
+     * Offset and size of the parity section, or 0 when there is none.
+     *
+     * Duplicated here, out of the section table, and that redundancy is the whole
+     * reason the repair works. The parity protects everything from the end of this
+     * header onward — which INCLUDES the section table — so a burst landing on the
+     * table destroys the only thing that could have said where the parity is. That was
+     * measured, not imagined: with the locator in the table alone, 30 of 31 whole-row
+     * bursts repaired and the one that wiped row zero reported "no parity section" on
+     * a pack that had one.
+     *
+     * The header is outside the protected span for exactly this reason: it is small,
+     * it is the bootstrap, and it is the one thing a repair cannot afford to have lost.
+     */
+    core::u32 eccOffset;
+    core::u32 eccSize;
 };
 static_assert(sizeof(Header) == 32u, "GamePack header layout is wire format");
 
@@ -102,12 +119,26 @@ inline constexpr core::u32 kRecipeFlagGateRequireGoal = 1u << 8;
 inline constexpr core::u32 kRecipeFlagGateRequireConnected = 1u << 9;
 inline constexpr core::u32 kRecipeFlagGrowRoads = 1u << 10;
 inline constexpr core::u32 kRecipeFlagRoadArterials = 1u << 11;
+inline constexpr core::u32 kRecipeFlagPartitionRegions = 1u << 12;
+inline constexpr core::u32 kRecipeFlagRaiseBuildings = 1u << 13;
+inline constexpr core::u32 kRecipeFlagBuildingsHollow = 1u << 14;
+
+/// Longest roadside grammar a cartridge carries, NUL included. Must match the engine.
+inline constexpr core::u32 kWireRoadsidePattern = 64u;
 
 /// Bits of ScatterV1::flags.
 inline constexpr core::u32 kScatterFlagCollidable = 1u << 0;
 
-/// Scatter rules a wire recipe carries; mirrors procgen::kMaxScatterRules.
-inline constexpr core::u32 kWireScatterRules = 4u;
+/**
+ * @brief Scatter rules a wire recipe carries; mirrors procgen::kMaxScatterRules.
+ *
+ * Eight, because one rule per biome is the natural way to write vegetation — a taiga
+ * is conifers, a savanna is scrub, a marsh is reeds — and four ran out at the fifth
+ * kind of plant. A world that wanted six had to be built by hand-written
+ * `WorldBuilder` calls, which is a world that cannot be saved, baked, replayed in
+ * ring 0 or asked for by an intelligence.
+ */
+inline constexpr core::u32 kWireScatterRules = 8u;
 
 /**
  * @struct ScatterV1
@@ -146,9 +177,18 @@ static_assert(sizeof(ScatterV1) == 52u, "GamePack scatter rule is wire format");
  * a second path the cartridge cannot carry, which is how a project ends up with
  * two generators and a parity gate that exercises the one nothing else runs.
  *
- * Four hundred-odd bytes still buys a whole world — the point of a recipe is not
- * that it is small in the absolute, it is that it does not grow with the world it
- * describes.
+ * A kilobyte still buys a whole world — the point of a recipe is not that it is
+ * small in the absolute, it is that it does not grow with the world it describes.
+ *
+ * It carries every pass, including the ones that were briefly split into a
+ * `Morphology` section. That split existed for exactly one reason — `sizeof(RecipeV1)`
+ * was treated as frozen, so growing it would have invalidated cartridges already
+ * baked — and the reason does not apply: there is no released version of this format
+ * and no reader in the wild. Two homes for recipe fields, justified by a constraint
+ * that is not real, is a worse thing to explain than a longer struct. The size
+ * assertion below stays, but it now means "this layout is deliberate", not "this
+ * layout may never change": it catches padding a compiler slipped in, not growth an
+ * author intended.
  */
 struct RecipeV1 {
     // ── World ───────────────────────────────────────────────────────────────
@@ -169,6 +209,8 @@ struct RecipeV1 {
     core::u32 noiseKind; ///< procgen::NoiseKind value.
     core::f32 heightLow;
     core::f32 heightHigh;
+    core::f32 groundClearance; ///< Lowest the finished ground may sit; 0 leaves it where it fell.
+    core::u32 terraceSteps;    ///< 0 leaves the field smooth.
 
     // ── Thermal erosion ─────────────────────────────────────────────────────
     core::u32 thermalIterations;
@@ -225,7 +267,23 @@ struct RecipeV1 {
     core::u32 axisWeirdnessOctaves;
     core::f32 axisSurfaceDepth;
 
+    // ── Provinces ───────────────────────────────────────────────────────────
+    core::u32 provinceWidth;
+    core::u32 provinceDepth;
+    core::u32 provinceSeed;
+    core::u32 provinceCellSize;
+    core::f32 provinceJitter;
+    core::f32 provinceWarpStrength;
+    core::u32 provinceMetric; ///< procgen::DistanceMetric value.
+
     // ── Underground ─────────────────────────────────────────────────────────
+    //
+    // Four generators, and the recipe names which one runs. Carrying all four sets of
+    // parameters rather than a union is what lets a document switch generator without
+    // losing the settings of the one it is leaving.
+    core::u32 caveKind; ///< procgen::CaveKind value.
+
+    // Cellular.
     core::u32 caveWidth;
     core::u32 caveDepth;
     core::u32 caveSeed;
@@ -234,6 +292,40 @@ struct RecipeV1 {
     core::u32 caveBirthLimit;
     core::u32 caveSurvivalLimit;
     core::u32 caveMinRegionSize;
+
+    // BSP rooms.
+    core::u32 roomsWidth;
+    core::u32 roomsDepth;
+    core::u32 roomsSeed;
+    core::u32 roomsMaxDepth;
+    core::u32 roomsMinLeafSize;
+    core::u32 roomsPadding;
+    core::u32 roomsCorridorWidth;
+
+    // Diffusion-limited aggregation.
+    core::u32 dlaWidth;
+    core::u32 dlaDepth;
+    core::u32 dlaSeed;
+    core::u32 dlaParticles;
+    core::u32 dlaMaxStepsPerParticle;
+    core::u32 dlaSpawnMargin;
+    core::u32 dlaThickness;
+
+    // The layered system. Every knob, not a chosen five: a document that can name
+    // only half a generator sends its author back to hand-written builder calls for
+    // the other half, which is the thing this format exists to stop.
+    core::u32 systemWidth;
+    core::u32 systemDepth;
+    core::u32 systemSeed;
+    core::u32 systemLayers;
+    core::u32 systemLevelsPerLayer;
+    core::f32 systemTopFill;
+    core::f32 systemDeepFill;
+    core::u32 systemAutomatonSteps;
+    core::u32 systemMinChamberSize;
+    core::u32 systemShaftsPerPair;
+    core::u32 systemEntrances;
+    core::f32 systemEntranceMaxSlope;
 
     // ── Settlement ──────────────────────────────────────────────────────────
     core::u32 settlementSeed;
@@ -255,6 +347,22 @@ struct RecipeV1 {
     core::f32 roadMinHeight;
     core::u32 roadGridDistricts;
 
+    // ── The shape grammar ───────────────────────────────────────────────────
+    core::u32 buildingSeed;
+    core::u32 buildingMinFloors;
+    core::u32 buildingMaxFloors;
+    core::u32 buildingBaseHeight;
+    core::u32 buildingFloorHeight;
+    core::u32 buildingRoofHeight;
+    core::u32 buildingInset;
+    core::f32 buildingRoofTaper;
+    core::u32 buildingBaseMaterial;
+    core::u32 buildingWallMaterial;
+    core::u32 buildingRoofMaterial;
+
+    core::u32 roadsideLevels;                   ///< 0 leaves the verges bare.
+    char roadsidePattern[kWireRoadsidePattern]; ///< NUL-terminated L-system.
+
     // ── Playability gate ────────────────────────────────────────────────────
     core::u32 gateMinPathLength;
     core::u32 gateMinWalkableCells;
@@ -266,7 +374,7 @@ struct RecipeV1 {
 
     core::u32 flags; ///< kRecipeFlag* bits.
 };
-static_assert(sizeof(RecipeV1) == 532u, "GamePack recipe layout is wire format");
+static_assert(sizeof(RecipeV1) == 996u, "GamePack recipe layout is wire format");
 
 /**
  * @struct LivingSpeciesV1
@@ -375,6 +483,7 @@ inline constexpr core::u32 kWireBiomeColours = 16u;
 
 /// Bits of ViewV1::flags.
 inline constexpr core::u32 kViewFlagOverridePalette = 1u << 0; ///< Use the table below.
+
 
 /**
  * @struct ViewV1
@@ -523,6 +632,7 @@ public:
      * wrong-sized section is a fault.
      */
     [[nodiscard]] bool readView(ViewV1 &outView) const noexcept;
+
 
 private:
     const core::u8 *_bytes{nullptr};

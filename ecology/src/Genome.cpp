@@ -9,7 +9,7 @@
 
 #include <lpl/ecology/Genome.hpp>
 
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 
 namespace lpl::ecology {
 
@@ -117,7 +117,7 @@ PopulationStats strengthStats(const Genome *genomes, core::u32 count)
         variance = variance + d * d;
     }
     variance = variance / math::Fixed32::fromInt(static_cast<core::i32>(count));
-    stats.deviation = procgen::fixedSqrt(variance);
+    stats.deviation = math::fixedSqrt(variance);
     return stats;
 }
 

@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/WaveFunctionCollapse.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -384,7 +384,7 @@ private:
 
     const TileSet &_tiles;
     const WfcParams &_params;
-    Random _random;
+    math::Random _random;
     Grid<core::u64> _possible;
     /// Cached popcount of every cell's mask, so entropy never recounts bits.
     Grid<core::u8> _options;
@@ -453,7 +453,7 @@ WfcResult solveWfc(const TileSet &tiles, const WfcParams &params, const TileGrid
 
         // Each attempt draws from its own stream, so a retry explores a
         // different arrangement instead of replaying the failed one.
-        Solver solver{tiles, params, deriveStream(params.seed, 0x5EEDu + attempt).state()};
+        Solver solver{tiles, params, math::deriveStream(params.seed, 0x5EEDu + attempt).state()};
 
         bool ok = true;
         if (preset != nullptr && preset->width() == params.width && preset->depth() == params.depth)

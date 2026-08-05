@@ -10,7 +10,7 @@
 #include <lpl/procgen/Botany.hpp>
 
 #include <lpl/math/Cordic.hpp>
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -122,7 +122,7 @@ TreeSkeleton growTree(const TreeParams &params)
 
     // Growth wobbles per tree, so a stand grown from one grammar is a stand of
     // different trees rather than one tree stamped many times.
-    Random jitter{params.seed ^ 0x5B7Eu};
+    math::Random jitter{params.seed ^ 0x5B7Eu};
 
     TurtleState state;
     state.frame.hy = math::Fixed32::one(); // straight up

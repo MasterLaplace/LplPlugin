@@ -40,6 +40,18 @@ enum class ComponentId : core::u16 {
     PlayerTag = 9,
     SleepState = 10,
     BciInput = 11,
+    /// Heritable traits: 5x Fixed32 (speed, vision, strength, absorption, size).
+    Genome = 12,
+    /// What KIND of creature this is: a trophic role, and a stable identity.
+    Creature = 13,
+    /// Unit facing on the ground plane: 2x Fixed32 (x, z).
+    ///
+    /// AUTHORITATIVE, and that is the whole reason it is a component: a walker
+    /// advances along its facing at a pace its genome fixes, so the facing is an
+    /// input to the next position. It used to be two fields inside
+    /// ecology::HerdMember, which meant the state that decides where a body goes
+    /// lived outside the registry the body lives in.
+    Heading = 14,
 
     Count
 };
@@ -87,6 +99,13 @@ struct ComponentLayout {
  *   PlayerTag        → u8 (1, 1)
  *   SleepState       → u8 (1, 1)
  *   BciInput         → 3×float (12, 4) — alpha, beta, concentration
+ *   Genome           → 5×Fixed32 (20, 4) — AUTHORITATIVE: these multiply into
+ *                      speeds and damage, so a float here would desynchronise a
+ *                      population after a few generations of breeding
+ *   Creature         → 2×u32 (8, 4) — species index, stable id
+ *   Heading          → 2×Fixed32 (8, 4) — AUTHORITATIVE: a walker's next position
+ *                      is its facing times its pace, so a float facing would let
+ *                      two machines walk the same animal to different cells
  */
 [[nodiscard]] constexpr ComponentLayout defaultLayout(ComponentId id) noexcept
 {
@@ -104,6 +123,9 @@ struct ComponentLayout {
     case ComponentId::PlayerTag: return {id, 1, 1};
     case ComponentId::SleepState: return {id, 1, 1};
     case ComponentId::BciInput: return {id, 12, 4};
+    case ComponentId::Genome: return {id, 20, 4};
+    case ComponentId::Creature: return {id, 8, 4};
+    case ComponentId::Heading: return {id, 8, 4};
     default: return {id, 4, 4};
     }
 }

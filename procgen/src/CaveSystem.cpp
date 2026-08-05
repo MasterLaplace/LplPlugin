@@ -9,7 +9,8 @@
 
 #include <lpl/procgen/CaveSystem.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/procgen/QualityGate.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -51,17 +52,25 @@ struct StackIndex {
 }
 
 /**
- * @brief Flood-fills the stack from every entrance, counting what it can reach.
+ * @brief Flood-fills the stack from every entrance, in steps.
  *
  * Movement is 4-connected within a layer and vertical only where a shaft exists —
  * which is exactly what a body can do, and what makes the count mean "reachable"
  * rather than "present".
+ *
+ * It carries DISTANCES rather than a visited flag, because the two questions the
+ * stack has to answer — "can a body get everywhere?" and "how far in is the far end?"
+ * — are the same traversal. Two traversals would be two chances to disagree about
+ * what a shaft is.
+ *
+ * @param outDistance Steps from the nearest entrance; @ref kUnreachable where none.
+ * @return Cells actually reached.
  */
-core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u8> &visited)
+core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u32> &outDistance)
 {
     const core::u32 perLayer = system.layer[0].cellCount();
-    visited.clear();
-    visited.resize(static_cast<core::usize>(perLayer) * system.layerCount, core::u8{0});
+    outDistance.clear();
+    outDistance.resize(static_cast<core::usize>(perLayer) * system.layerCount, kUnreachable);
 
     lpl::pmr::vector<core::u32> queue;
     for (core::u32 i = 0u; i < system.shafts.size(); ++i)
@@ -71,9 +80,9 @@ core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u8
             continue;
         const core::u32 cell = system.layer[0].index(shaft.x, shaft.z);
         const core::u32 flat = flatten(system, shaft.upperLayer, cell);
-        if (visited[flat] == 0u && isWalkable(system.layer[shaft.upperLayer][cell]))
+        if (outDistance[flat] == kUnreachable && isWalkable(system.layer[shaft.upperLayer][cell]))
         {
-            visited[flat] = 1u;
+            outDistance[flat] = 0u;
             queue.push_back(flat);
         }
     }
@@ -99,9 +108,9 @@ core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u8
             if (!isWalkable(plan[cell]))
                 continue;
             const core::u32 next = flatten(system, here.layer, cell);
-            if (visited[next] != 0u)
+            if (outDistance[next] != kUnreachable)
                 continue;
-            visited[next] = 1u;
+            outDistance[next] = outDistance[flat] + 1u;
             queue.push_back(next);
         }
 
@@ -110,9 +119,9 @@ core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u8
             isWalkable(system.layer[here.layer + 1u][here.cell]))
         {
             const core::u32 next = flatten(system, here.layer + 1u, here.cell);
-            if (visited[next] == 0u)
+            if (outDistance[next] == kUnreachable)
             {
-                visited[next] = 1u;
+                outDistance[next] = outDistance[flat] + 1u;
                 queue.push_back(next);
             }
         }
@@ -120,9 +129,9 @@ core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u8
             isWalkable(system.layer[here.layer - 1u][here.cell]))
         {
             const core::u32 next = flatten(system, here.layer - 1u, here.cell);
-            if (visited[next] == 0u)
+            if (outDistance[next] == kUnreachable)
             {
-                visited[next] = 1u;
+                outDistance[next] = outDistance[flat] + 1u;
                 queue.push_back(next);
             }
         }
@@ -138,8 +147,8 @@ void recountReachability(CaveSystem &system)
             if (isWalkable(system.layer[l][i]))
                 ++system.hollowCells;
 
-    lpl::pmr::vector<core::u8> visited;
-    system.reachableCells = floodFromEntrances(system, visited);
+    lpl::pmr::vector<core::u32> distance;
+    system.reachableCells = floodFromEntrances(system, distance);
 }
 
 } // namespace
@@ -175,7 +184,7 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
         system.layer[l] = generateCellularCave(cave);
     }
 
-    Random random{params.seed ^ 0x5AF75u};
+    math::Random random{params.seed ^ 0x5AF75u};
     const DungeonMap &top = system.layer[0];
 
     // ── Shafts between layers ───────────────────────────────────────────────
@@ -253,6 +262,78 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
     return system;
 }
 
+LevelQuality evaluateCaveSystem(const CaveSystem &system)
+{
+    LevelQuality quality{};
+    if (system.layerCount == 0u || system.layer[0].empty())
+        return quality;
+
+    const core::u32 width = system.layer[0].width();
+    const core::u32 perLayer = system.layer[0].cellCount();
+
+    lpl::pmr::vector<core::u32> distance;
+    quality.reachableCells = floodFromEntrances(system, distance);
+
+    for (core::u32 l = 0u; l < system.layerCount; ++l)
+        for (core::u32 cell = 0u; cell < perLayer; ++cell)
+            if (isWalkable(system.layer[l][cell]))
+                ++quality.walkableCells;
+
+    quality.fullyConnected = quality.walkableCells != 0u && quality.reachableCells == quality.walkableCells;
+
+    // Neighbours are counted the way a body moves: four within a layer, plus the
+    // shafts. A cell at the bottom of a shaft with one corridor off it is a junction
+    // of two, not a dead end — which is the whole difference between judging a stack
+    // and judging each of its floors on its own.
+    const core::u32 deepest = system.layerCount - 1u;
+    for (core::u32 l = 0u; l < system.layerCount; ++l)
+    {
+        const DungeonMap &plan = system.layer[l];
+        for (core::u32 cell = 0u; cell < perLayer; ++cell)
+        {
+            if (!isWalkable(plan[cell]))
+                continue;
+
+            const core::u32 x = cell % width;
+            const core::u32 z = cell / width;
+            core::u32 ways = 0u;
+            for (core::u32 n = 0u; n < 4u; ++n)
+            {
+                const core::i32 nx = static_cast<core::i32>(x) + kNeighbor4X[n];
+                const core::i32 nz = static_cast<core::i32>(z) + kNeighbor4Z[n];
+                if (plan.contains(nx, nz) &&
+                    isWalkable(plan[plan.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz))]))
+                    ++ways;
+            }
+            if (l + 1u < system.layerCount && hasShaft(system, l, l + 1u, cell) &&
+                isWalkable(system.layer[l + 1u][cell]))
+                ++ways;
+            if (l > 0u && hasShaft(system, l - 1u, l, cell) && isWalkable(system.layer[l - 1u][cell]))
+                ++ways;
+
+            quality.deadEnds += ways == 1u ? 1u : 0u;
+            quality.junctions += ways >= 3u ? 1u : 0u;
+
+            const core::u32 steps = distance[flatten(system, l, cell)];
+            if (steps == kUnreachable)
+                continue;
+            if (steps > quality.longestDistance)
+                quality.longestDistance = steps;
+            // The "exit" of a stack is its bottom. A system whose deepest layer cannot
+            // be reached from the surface is the exact failure this judgement exists
+            // to catch, and it is invisible to anything that looks at one plan.
+            if (l == deepest)
+            {
+                quality.goalReachable = true;
+                if (steps > quality.pathLength)
+                    quality.pathLength = steps;
+            }
+        }
+    }
+
+    return quality;
+}
+
 core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
 {
     if (system.layerCount == 0u || system.layer[0].empty())
@@ -260,7 +341,7 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
     if (system.entranceCount == 0u)
         return 0u; // Nothing to be reachable FROM; the caller wanted a sealed system.
 
-    Random random{seed};
+    math::Random random{seed};
     core::u32 opened = 0u;
     const core::u32 perLayer = system.layer[0].cellCount();
     const core::u32 width = system.layer[0].width();
@@ -270,7 +351,7 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
     // spinning here forever — which matters because this runs at world build.
     for (core::u32 round = 0u; round < perLayer; ++round)
     {
-        lpl::pmr::vector<core::u8> visited;
+        lpl::pmr::vector<core::u32> visited;
         const core::u32 reached = floodFromEntrances(system, visited);
         if (reached == system.hollowCells)
             break;
@@ -291,7 +372,7 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
             for (core::u32 cell = 0u; cell < perLayer; ++cell)
             {
                 const core::u32 flat = flatten(system, l, cell);
-                if (visited[flat] != 0u || !isWalkable(plan[cell]))
+                if (visited[flat] != kUnreachable || !isWalkable(plan[cell]))
                     continue;
 
                 const core::u32 x = cell % width;
@@ -304,7 +385,7 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
                     if (!plan.contains(nx, nz))
                         continue;
                     const core::u32 other = plan.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
-                    if (visited[flatten(system, l, other)] == 0u)
+                    if (visited[flatten(system, l, other)] == kUnreachable)
                         continue;
                     ++candidates;
                     if (random.below(candidates) == 0u)
@@ -320,7 +401,7 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
                     const core::u32 other = dir == 0u ? l - 1u : l + 1u;
                     if ((dir == 0u && l == 0u) || (dir == 1u && l + 1u >= system.layerCount))
                         continue;
-                    if (visited[flatten(system, other, cell)] == 0u)
+                    if (visited[flatten(system, other, cell)] == kUnreachable)
                         continue;
                     ++candidates;
                     if (random.below(candidates) == 0u)
@@ -341,7 +422,7 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
             // so fill the orphans in instead, and say how many.
             for (core::u32 l = 0u; l < system.layerCount; ++l)
                 for (core::u32 cell = 0u; cell < perLayer; ++cell)
-                    if (visited[flatten(system, l, cell)] == 0u && isWalkable(system.layer[l][cell]))
+                    if (visited[flatten(system, l, cell)] == kUnreachable && isWalkable(system.layer[l][cell]))
                     {
                         system.layer[l][cell] = DungeonCell::Wall;
                         ++opened;

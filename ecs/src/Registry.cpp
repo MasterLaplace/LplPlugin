@@ -283,6 +283,38 @@ core::Expected<EntityRef> Registry::resolve(EntityId id) const
     return _impl->slots[id.slot()].ref;
 }
 
+Chunk *Registry::chunkOf(EntityId id, core::u32 &outRow) const noexcept
+{
+    const auto ref = resolve(id);
+    if (!ref)
+        return nullptr;
+    const core::u32 chunkIndex = ref.value().chunkIndex;
+    const core::u32 row = ref.value().localIndex;
+
+    for (const auto &partition : partitions())
+    {
+        if (!partition)
+            continue;
+        const auto &chunks = partition->chunks();
+        if (chunkIndex >= chunks.size() || !chunks[chunkIndex])
+            continue;
+        Chunk *chunk = chunks[chunkIndex].get();
+        if (row >= chunk->count())
+            continue;
+        // The verification that makes this correct: every partition has a chunk at
+        // this index, and only one of them holds this entity. Without the identity
+        // check the first partition with a deep enough chunk answers, and a caller
+        // then writes over an unrelated archetype's row.
+        const std::span<const EntityId> entities = chunk->entities();
+        if (row < entities.size() && entities[row] == id)
+        {
+            outRow = row;
+            return chunk;
+        }
+    }
+    return nullptr;
+}
+
 core::u32 Registry::liveCount() const noexcept { return _impl->liveCount.load(std::memory_order_relaxed); }
 
 Partition &Registry::getOrCreatePartition(const Archetype &archetype)

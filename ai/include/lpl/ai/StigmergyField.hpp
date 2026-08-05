@@ -76,6 +76,46 @@ enum class ScentChannel : core::u32 {
 };
 
 /**
+ * @struct ScentAffinity
+ * @brief What one channel means to one kind of animal.
+ *
+ * A positive weight attracts, a negative one repels, and the magnitude says how
+ * much. That sign is the whole ecology: the same field that pulls a wolf toward a
+ * deer pushes the deer away from the wolf, and neither needs to know the other
+ * exists.
+ */
+struct ScentAffinity {
+    core::u32 channel{0u};
+    math::Fixed32 weight{}; ///< Positive attracts, negative repels.
+};
+
+/**
+ * @struct ScentPalate
+ * @brief Everything one kind of animal steers by.
+ *
+ * The missing half of the field. @ref ScentChannel has named Plant, Herbivore,
+ * Carnivore, Terror and Kin since the field was written, and nothing read any of
+ * them: every animal climbed one hard-coded channel, so a deer followed the deer
+ * scent instead of fleeing the wolf. A palate is what turns those names into
+ * behaviour.
+ */
+struct ScentPalate {
+    ScentAffinity terms[kMaxStigmergyChannels]{};
+    core::u32 count{0u};
+
+    /**
+     * @brief Adds one term; ignored once full.
+     * @param channel The scent channel to add.
+     * @param weight The weight of the term.
+     */
+    constexpr void add(ScentChannel channel, math::Fixed32 weight) noexcept
+    {
+        if (count < kMaxStigmergyChannels)
+            terms[count++] = ScentAffinity{static_cast<core::u32>(channel), weight};
+    }
+};
+
+/**
  * @struct StigmergyParams
  * @brief How fast the field forgets and how far it spreads.
  */
@@ -138,7 +178,9 @@ public:
      */
     void setObstacles(const procgen::Grid<core::u8> &blocked);
 
-    /// @brief Zeroes every channel, keeping the obstacles.
+    /**
+     * @brief Zeroes every channel, keeping the obstacles.
+     */
     void clear();
 
     /**
@@ -201,10 +243,35 @@ public:
      */
     [[nodiscard]] core::u32 gradientDirection(core::u32 channel, core::u32 x, core::u32 z, bool uphill) const;
 
-    /// @brief FNV-1a fold of every channel, for determinism checks.
+    /**
+     * @brief The best move for an animal with @p palate: steepest ascent of the
+     *        WEIGHTED SUM of the channels it cares about.
+     *
+     * One pass over the eight neighbours, reading @c palate.count channels each —
+     * O(1) per agent, no map materialised. That is the difference from
+     * @c procgen::combineDesires, which builds a whole DesireMap by combining
+     * distance fields: those are static and precomputed, this one evaporates every
+     * tick, and rebuilding a full map per tick would cost the width times the
+     * depth times the channels to answer a question about nine cells. Same idea,
+     * different substrate, different cost — do not unify them.
+     *
+     * @param palate What this animal is attracted to and repelled by.
+     * @param x      Agent column.
+     * @param z      Agent row.
+     * @return A direction index into @c procgen::kNeighbor8, or @ref kNoDirection
+     *         when standing still scores best.
+     */
+    [[nodiscard]] core::u32 palateDirection(const ScentPalate &palate, core::u32 x, core::u32 z) const;
+
+    /**
+     * @brief FNV-1a fold of every channel, for determinism checks.
+     * @return The folded value.
+     */
     [[nodiscard]] core::u32 fold() const;
 
-    /// Returned by @ref gradientDirection when standing still is the best move.
+    /**
+     * @brief Returned by @ref gradientDirection when standing still is the best move.
+     */
     static constexpr core::u32 kNoDirection = 0xFFFFFFFFu;
 
 private:

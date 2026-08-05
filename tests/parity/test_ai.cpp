@@ -21,6 +21,7 @@
  */
 
 #include <lpl/ai/AbstractWorld.hpp>
+#include <lpl/ai/AntColony.hpp>
 #include <lpl/ai/Affordance.hpp>
 #include <lpl/ai/AiMap.hpp>
 #include <lpl/ai/Personality.hpp>
@@ -28,7 +29,7 @@
 #include <lpl/ai/SpringBody.hpp>
 #include <lpl/ai/StigmergyField.hpp>
 #include <lpl/ai/Swarm.hpp>
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 
 #include <cstdio>
 
@@ -254,6 +255,108 @@ void testColonyAbandonsABlockedTrail()
                 ++residue;
     std::printf("    %u cells still carry a residue after 600 more ticks\n", residue);
     check(residue == 0u, "evaporation reaches zero rather than leaving a permanent trace");
+}
+
+void testTheColonyClosesItsTrail()
+{
+    std::printf("the homing rule is what turns a field into a route\n");
+
+    // Every mechanism of ant colony optimisation was in this module and there was no
+    // colony: the agents, the nest and the rule that sends them home lived inside a
+    // viewer's main.cpp, where none of this could be stated. The rule is the part
+    // worth testing, because it is the one thing chooseAntMove cannot express — the
+    // choice is local, the rule is about the colony.
+    const core::u32 size = 64u;
+    const core::u32 nest = size / 2u;
+
+    struct Run {
+        core::u32 furthest;    ///< Squared distance of the furthest agent from the nest.
+        core::u32 returns;     ///< Agents sent home over the whole run.
+        core::u32 strongCells; ///< Cells carrying a real trail, not the diffuse floor.
+        core::u32 fold;
+    };
+
+    const auto run = [&](core::u32 forageRange, core::u32 ticks) {
+        ai::StigmergyField field{size, size, 1u};
+        ai::StigmergyParams decay;
+        decay.evaporation = 0.98f;
+        decay.diffusion = 0.05f;
+
+        ai::AntColonyParams params;
+        params.agents = 24u;
+        params.forageRange = forageRange;
+        params.seed = 4242u;
+        // Explorers, or the seeded field simply holds every agent on its nest and the
+        // rule under test never gets a chance to fire.
+        params.ants.explore16 = 8u;
+
+        ai::AntColony colony;
+        colony.reset(field, size, size, params, nest, nest);
+
+        Run out{0u, 0u, 0u, 0x811C9DC5u};
+        for (core::u32 tick = 0u; tick < ticks; ++tick)
+        {
+            colony.step(field);
+            field.step(decay);
+            for (core::u32 i = 0u; i < colony.agentCount(); ++i)
+            {
+                const core::i32 dx = static_cast<core::i32>(colony.agentX(i)) - static_cast<core::i32>(nest);
+                const core::i32 dz = static_cast<core::i32>(colony.agentZ(i)) - static_cast<core::i32>(nest);
+                const core::u32 squared = static_cast<core::u32>(dx * dx + dz * dz);
+                if (squared > out.furthest)
+                    out.furthest = squared;
+            }
+        }
+        out.returns = colony.returns();
+
+        // A trail is where the pheromone is STRONG. Counting non-zero cells would
+        // count the diffuse background instead, which saturates the whole map within a
+        // few hundred ticks and makes every colony look identical.
+        core::i32 peak = 0;
+        for (core::u32 z = 0u; z < size; ++z)
+            for (core::u32 x = 0u; x < size; ++x)
+                if (field.value(0u, x, z).raw() > peak)
+                    peak = field.value(0u, x, z).raw();
+        for (core::u32 z = 0u; z < size; ++z)
+            for (core::u32 x = 0u; x < size; ++x)
+            {
+                const core::i32 raw = field.value(0u, x, z).raw();
+                if (peak > 0 && raw > peak / 4)
+                    ++out.strongCells;
+                out.fold = (out.fold ^ static_cast<core::u32>(raw)) * 0x01000193u;
+            }
+        return out;
+    };
+
+    const Run held = run(6u, 600u);
+    std::printf("    range 6:  furthest %u cells away, %u sent home, %u cells carry a trail\n",
+                math::integerSqrt(held.furthest), held.returns, held.strongCells);
+
+    // The rule's guarantee, stated as the rule states it: an agent is never further
+    // from the nest than its forage range. Diagonal steps mean it can overshoot by
+    // one step before being caught, so the bound is the range plus one.
+    check(math::integerSqrt(held.furthest) <= 7u, "no agent is ever further from the nest than its forage range");
+    check(held.returns > 0u, "and the rule actually fires");
+
+    const Run loose = run(size * 4u, 600u);
+    std::printf("    unbounded: furthest %u cells away, %u sent home, %u cells carry a trail\n",
+                math::integerSqrt(loose.furthest), loose.returns, loose.strongCells);
+    check(loose.returns == 0u, "a range wider than the map never sends anyone home");
+
+    // The difference the rule makes: held near its nest the colony keeps reinforcing
+    // the same cells, so a trail exists. Left to diffuse outward it spreads its
+    // deposits over the whole map and nothing stands out — a field rather than a
+    // route, which is the distinction the rule exists for.
+    check(math::integerSqrt(loose.furthest) > math::integerSqrt(held.furthest),
+          "and its agents do wander further");
+    check(held.strongCells < loose.strongCells,
+          "a homing colony concentrates its trail; an unbounded one spreads it thin");
+
+    // Same seed, same trail: the colony advances ONE shared random stream agent by
+    // agent, so its determinism depends on visiting them in index order.
+    const Run again = run(6u, 600u);
+    std::printf("    trail fold 0x%08X\n", held.fold);
+    check(again.fold == held.fold && again.returns == held.returns, "the same seed walks the same trail");
 }
 
 void testExplorationIsWhatFindsTheDetour()
@@ -532,7 +635,7 @@ void testSpringBodyStaysBounded()
     // "solution" is a plausible-looking pose that violates the bone lengths.
     const math::Fixed32 dx = near.jointX;
     const math::Fixed32 dz = near.jointZ;
-    const math::Fixed32 upperLength = procgen::fixedSqrt(dx * dx + dz * dz);
+    const math::Fixed32 upperLength = math::fixedSqrt(dx * dx + dz * dz);
     std::printf("    solved knee sits %.3f from the hip (bone length 2.000)\n", upperLength.toFloat());
     check((upperLength - math::Fixed32::fromInt(2)).abs() < math::Fixed32::fromFloat(0.05f),
           "the solved joint honours the bone length");
@@ -602,6 +705,7 @@ int main()
     testDiffusionGoesAroundWalls();
     testEncirclementEmerges();
     testColonyAbandonsABlockedTrail();
+    testTheColonyClosesItsTrail();
     testExplorationIsWhatFindsTheDetour();
     testReversalCostsMoreThanGoingRound();
     testPersonalityIsDerivedNotStored();

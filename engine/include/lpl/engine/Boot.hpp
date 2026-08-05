@@ -49,7 +49,15 @@ struct BootRequest {
     HostProfile host{HostProfile::Ring0Client};
     core::u32 tickRate{60u};
 
-    const void *packBytes{nullptr}; ///< Cartridge bytes, if any.
+    /**
+     * Cartridge bytes, if any.
+     *
+     * MUTABLE, so the parity section can be used. A reader handed a const pointer can
+     * detect damage and nothing more; repairing needs somewhere to put the corrected
+     * byte. The kernel copies its GRUB module into memory it owns before pointing
+     * this at it.
+     */
+    core::u8 *packBytes{nullptr};
     core::u32 packSize{0u};
     const void *fallbackPackBytes{nullptr}; ///< Pack compiled into the image, if any.
     core::u32 fallbackPackSize{0u};
@@ -87,11 +95,20 @@ BootResult bootGame(const BootRequest &request, pmr::unique_ptr<platform::IPlatf
     BootResult result{};
     core::Log::info(request.banner);
 
-    const pack::Cartridge cartridge =
-        pack::loadCartridge(request.packBytes, request.packSize, request.fallbackPackBytes, request.fallbackPackSize,
-                            procgen::parityWorldRecipe(), ecology::parityLivingRecipe());
+    // Repairing, not plain: a cartridge that carries parity gets one chance to fix
+    // itself before the boot falls back to the compiled recipe. Only when it does not
+    // already open — a healthy image is never written to.
+    pack::EccRepairReport repair{};
+    const pack::Cartridge cartridge = pack::loadCartridgeRepairing(
+        request.packBytes, request.packSize, request.fallbackPackBytes, request.fallbackPackSize,
+        procgen::parityWorldRecipe(), ecology::parityLivingRecipe(), repair);
     result.source = cartridge.source;
     result.packFailed = cartridge.failed;
+
+    if (repair.present && repair.damagedCodewords != 0u)
+        core::Log::info("Boot: the cartridge was damaged and its parity section repaired it");
+    else if (repair.present && !repair.repaired)
+        core::Log::error("Boot: the cartridge is damaged beyond what its parity can correct");
 
     if (cartridge.failed)
         core::Log::error("Boot: the pack failed to validate — falling back to the compiled recipe");

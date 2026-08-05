@@ -9,7 +9,7 @@
 
 #include <lpl/ai/SpringBody.hpp>
 
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 
 namespace lpl::ai {
 
@@ -35,7 +35,7 @@ void SpringBody::connect(core::u32 a, core::u32 b, math::Fixed32 stiffness)
     const math::Fixed32 dz = _chunks[b].z - _chunks[a].z;
     // Rest length is the CURRENT separation: a body is defined by the pose it was
     // built in, so assembling one never starts it fighting itself.
-    const math::Fixed32 rest = procgen::fixedSqrt(dx * dx + dz * dz);
+    const math::Fixed32 rest = math::fixedSqrt(dx * dx + dz * dz);
 
     BodyChunkConnection link;
     link.a = a;
@@ -86,7 +86,7 @@ void SpringBody::step(const SpringBodyParams &params)
 
             const math::Fixed32 dx = b.x - a.x;
             const math::Fixed32 dz = b.z - a.z;
-            const math::Fixed32 distance = procgen::fixedSqrt(dx * dx + dz * dz);
+            const math::Fixed32 distance = math::fixedSqrt(dx * dx + dz * dz);
             if (distance.raw() == 0)
                 continue;
 
@@ -128,7 +128,7 @@ math::Fixed32 SpringBody::strainEnergy() const
         const BodyChunkConnection &link = _links[l];
         const math::Fixed32 dx = _chunks[link.b].x - _chunks[link.a].x;
         const math::Fixed32 dz = _chunks[link.b].z - _chunks[link.a].z;
-        const math::Fixed32 error = procgen::fixedSqrt(dx * dx + dz * dz) - link.restLength;
+        const math::Fixed32 error = math::fixedSqrt(dx * dx + dz * dz) - link.restLength;
         total = total + error * error * link.stiffness;
     }
     return total;
@@ -157,7 +157,7 @@ TwoBoneSolution solveTwoBone(math::Fixed32 rootX, math::Fixed32 rootZ, math::Fix
     const math::Fixed32 dx = targetX - rootX;
     const math::Fixed32 dz = targetZ - rootZ;
     const math::Fixed32 distanceSquared = dx * dx + dz * dz;
-    const math::Fixed32 distance = procgen::fixedSqrt(distanceSquared);
+    const math::Fixed32 distance = math::fixedSqrt(distanceSquared);
 
     // Reported, not clamped. A limb that silently snaps to full extension puts a
     // foot where there is no ground, and the body then walks on it.
@@ -185,7 +185,7 @@ TwoBoneSolution solveTwoBone(math::Fixed32 rootX, math::Fixed32 rootZ, math::Fix
     math::Fixed32 hSquared = upper * upper - a * a;
     if (hSquared < math::Fixed32::zero())
         hSquared = math::Fixed32::zero(); // Rounding at the reach limit, not a failure.
-    const math::Fixed32 h = procgen::fixedSqrt(hSquared);
+    const math::Fixed32 h = math::fixedSqrt(hSquared);
 
     const math::Fixed32 nx = dx / distance;
     const math::Fixed32 nz = dz / distance;

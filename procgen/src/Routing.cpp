@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/Routing.hpp>
 
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 
 namespace lpl::procgen {
 
@@ -172,7 +172,7 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
             // the same for both is what makes a router produce staircases.
             // sqrt(2) as 2/sqrt(2), because the module already keeps 1/sqrt(2)
             // exactly and a second constant is a second thing to get wrong.
-            const math::Fixed32 step = n < 4u ? base : base * (kInvSqrt2 + kInvSqrt2);
+            const math::Fixed32 step = n < 4u ? base : base * (math::kInvSqrt2 + math::kInvSqrt2);
 
             // Climbing: what actually decides where a road goes. Absolute, so a
             // descent is as expensive as a climb — a road cut into a hillside
@@ -325,7 +325,7 @@ core::u32 connectPlaces(const Heightfield &field, const lpl::pmr::vector<core::u
                 if (settled[next] != 0u)
                     continue;
 
-                const math::Fixed32 step = n < 4u ? base : base * (kInvSqrt2 + kInvSqrt2);
+                const math::Fixed32 step = n < 4u ? base : base * (math::kInvSqrt2 + math::kInvSqrt2);
                 const math::Fixed32 rise = (field[next] - height).abs();
                 math::Fixed32 cost = step + slopeCost * rise;
                 if (field[next] <= waterLevel)

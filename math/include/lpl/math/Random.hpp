@@ -19,13 +19,13 @@
 
 #pragma once
 
-#ifndef LPL_PROCGEN_RANDOM_HPP
-#    define LPL_PROCGEN_RANDOM_HPP
+#ifndef LPL_MATH_RANDOM_HPP
+#    define LPL_MATH_RANDOM_HPP
 
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/FixedPoint.hpp>
 
-namespace lpl::procgen {
+namespace lpl::math {
 
 /**
  * @class Random
@@ -87,16 +87,16 @@ public:
      * inconsistency with visible consequences: @ref chance drives every per-cell
      * decision in the module.
      */
-    [[nodiscard]] constexpr math::Fixed32 unit() noexcept
+    [[nodiscard]] constexpr Fixed32 unit() noexcept
     {
-        return math::Fixed32::fromRaw(static_cast<core::i32>(next() >> 16));
+        return Fixed32::fromRaw(static_cast<core::i32>(next() >> 16));
     }
 
     /**
      * @brief A biased coin.
      * @param probability Chance of true, clamped to [0, 1].
      */
-    [[nodiscard]] constexpr bool chance(math::Fixed32 probability) noexcept { return unit() < probability; }
+    [[nodiscard]] constexpr bool chance(Fixed32 probability) noexcept { return unit() < probability; }
 
     /// @return The raw internal state (for deriving sub-streams).
     [[nodiscard]] constexpr core::u32 state() const noexcept { return _state; }
@@ -128,6 +128,6 @@ private:
     return Random{mixed};
 }
 
-} // namespace lpl::procgen
+} // namespace lpl::math
 
-#endif // LPL_PROCGEN_RANDOM_HPP
+#endif // LPL_MATH_RANDOM_HPP

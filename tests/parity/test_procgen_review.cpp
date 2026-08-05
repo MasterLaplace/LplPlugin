@@ -24,7 +24,7 @@
 #include <lpl/procgen/Biome.hpp>
 #include <lpl/procgen/Chunking.hpp>
 #include <lpl/procgen/Dungeon.hpp>
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/LSystem.hpp>
 #include <lpl/procgen/QualityGate.hpp>
@@ -60,31 +60,31 @@ int main()
         bool exact = true;
         for (core::u32 v = 0u; v < 5000u; ++v)
         {
-            const core::u32 r = procgen::integerSqrt(v);
+            const core::u32 r = math::integerSqrt(v);
             exact = exact && r * r <= v && (r + 1u) * (r + 1u) > v;
         }
-        check(exact, "integerSqrt returns the exact floor of the root");
-        check(procgen::integerSqrt(0xFFFFFFFFu) == 65535u, "integerSqrt handles the full 32-bit range");
+        check(exact, "math::integerSqrt returns the exact floor of the root");
+        check(math::integerSqrt(0xFFFFFFFFu) == 65535u, "math::integerSqrt handles the full 32-bit range");
 
         // The reason this exists: the drainage area of a large map exceeds what a
         // Fixed32 can even hold, so the compression has to happen in integers.
-        check(procgen::fixedLog2(1u).raw() == 0, "log2(1) is zero");
-        check(procgen::fixedLog2(1024u) == math::Fixed32::fromInt(10), "log2 is exact on powers of two");
+        check(math::fixedLog2(1u).raw() == 0, "log2(1) is zero");
+        check(math::fixedLog2(1024u) == math::Fixed32::fromInt(10), "log2 is exact on powers of two");
         bool monotone = true;
         for (core::u32 v = 1u; v < 4096u; ++v)
-            monotone = monotone && procgen::fixedLog2(v) <= procgen::fixedLog2(v + 1u);
+            monotone = monotone && math::fixedLog2(v) <= math::fixedLog2(v + 1u);
         check(monotone, "log2 never decreases");
 
         math::Fixed32 rootError = math::Fixed32::zero();
         for (core::i32 v = 1; v < 400; ++v)
         {
             const math::Fixed32 x = math::Fixed32::fromInt(v);
-            const math::Fixed32 r = procgen::fixedSqrt(x);
+            const math::Fixed32 r = math::fixedSqrt(x);
             const math::Fixed32 error = (r * r - x).abs();
             if (error > rootError)
                 rootError = error;
         }
-        check(rootError < math::Fixed32::fromFloat(0.05f), "fixedSqrt squares back to its input");
+        check(rootError < math::Fixed32::fromFloat(0.05f), "math::fixedSqrt squares back to its input");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -476,6 +476,84 @@ int main()
                     ++traps;
             }
         check(traps == 0u, "the flee map has no local minimum to wedge an agent into");
+
+        // ── the analysis FURNISHES the level, not just judges it ─────────────
+        //
+        // Both answers were already computed and neither was used by anything: the
+        // spine is where the player certainly goes, so an encounter placed on it is
+        // met rather than missed, and the deepest dead ends are where something is
+        // worth hiding for the same reason they were architectural excrescences.
+        procgen::PlacementParams furnish;
+        furnish.encounters = 4u;
+        furnish.rewards = 3u;
+        furnish.minSpacing = 3u;
+        furnish.rewardMinDetour = 2u;
+        procgen::Placement spots[16]{};
+        const core::u32 placed = procgen::placeAlongHotPath(level, hot, startX, startZ, furnish, spots, 16u);
+        std::printf("    furnished %u spots\n", placed);
+        check(placed > 0u, "the level gets furnished from its own measurements");
+
+        core::u32 encounters = 0u;
+        core::u32 rewards = 0u;
+        bool encountersOnSpine = true;
+        bool rewardsOffSpine = true;
+        bool rewardsAreDeadEnds = true;
+        for (core::u32 i = 0u; i < placed; ++i)
+        {
+            const core::u32 cell = level.index(spots[i].x, spots[i].z);
+            if (spots[i].role == procgen::PlacementRole::Encounter)
+            {
+                ++encounters;
+                encountersOnSpine = encountersOnSpine && hot.onPath[cell] != 0u;
+            }
+            else
+            {
+                ++rewards;
+                rewardsOffSpine = rewardsOffSpine && spots[i].detour >= furnish.rewardMinDetour;
+                core::u32 adjacent = 0u;
+                for (core::u32 n = 0u; n < 4u; ++n)
+                {
+                    const core::i32 nx = static_cast<core::i32>(spots[i].x) + procgen::kNeighbor4X[n];
+                    const core::i32 nz = static_cast<core::i32>(spots[i].z) + procgen::kNeighbor4Z[n];
+                    if (level.contains(nx, nz) &&
+                        procgen::isWalkable(level.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz))))
+                        ++adjacent;
+                }
+                rewardsAreDeadEnds = rewardsAreDeadEnds && adjacent == 1u;
+            }
+        }
+        std::printf("    %u encounters on the spine, %u rewards off it\n", encounters, rewards);
+        check(encounters > 0u && encountersOnSpine, "every encounter sits ON the critical path");
+        check(rewards > 0u && rewardsOffSpine, "every reward sits off it, past the threshold");
+        // A prize the player walks over by accident is litter, not a reward.
+        check(rewardsAreDeadEnds, "and every reward is a dead end, not a cell in a room");
+
+        // Encounters spread through the ROUTE, not through the grid: the whole point
+        // of measuring progress rather than counting cells.
+        core::u32 lastProgress = 0u;
+        bool spreads = true;
+        for (core::u32 i = 0u; i < placed; ++i)
+        {
+            if (spots[i].role != procgen::PlacementRole::Encounter)
+                continue;
+            spreads = spreads && spots[i].progress > lastProgress;
+            lastProgress = spots[i].progress;
+        }
+        check(spreads, "encounters advance through the player's progress, in order");
+
+        // Deterministic, because a furnished level is content and content is folded.
+        procgen::Placement again[16]{};
+        const core::u32 twice = procgen::placeAlongHotPath(level, hot, startX, startZ, furnish, again, 16u);
+        bool identical = twice == placed;
+        for (core::u32 i = 0u; i < placed && identical; ++i)
+            identical = again[i].x == spots[i].x && again[i].z == spots[i].z && again[i].role == spots[i].role &&
+                        again[i].detour == spots[i].detour;
+        check(identical, "furnishing the same level twice gives the same spots");
+
+        // A capacity of one is not an error: it is a caller with room for one spot.
+        procgen::Placement single{};
+        check(procgen::placeAlongHotPath(level, hot, startX, startZ, furnish, &single, 1u) == 1u,
+              "a caller with room for one gets one");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -120,7 +120,7 @@ void CharacterController::step(const CharacterParams &params, const CharacterInt
     // Diagonal input must not be faster than straight input. Normalising only when
     // the magnitude exceeds one keeps a half-pressed direction slow, which an
     // unconditional normalise would silently turn into a full-speed walk.
-    const math::Fixed32 wishLength = procgen::fixedSqrt(wishX * wishX + wishZ * wishZ);
+    const math::Fixed32 wishLength = math::fixedSqrt(wishX * wishX + wishZ * wishZ);
     if (wishLength > math::Fixed32::one())
     {
         wishX = wishX / wishLength;

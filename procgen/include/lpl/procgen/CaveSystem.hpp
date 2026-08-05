@@ -41,6 +41,7 @@
 #    include <lpl/procgen/Dungeon.hpp>
 #    include <lpl/procgen/Extrusion.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
+#    include <lpl/procgen/QualityGate.hpp>
 
 namespace lpl::procgen {
 
@@ -133,6 +134,32 @@ struct CaveSystem {
  * @param seed   Stream for tie-breaking.
  * @return Number of cells opened.
  */
+/**
+ * @brief Judges a stack the way @ref evaluateLevel judges one plan.
+ *
+ * The playability gate could not judge a layered system at all. @ref GateCriteria was
+ * asked of the flat @c DungeonMap, which this generator leaves empty because it fills
+ * a @ref CaveSystem instead — so a recipe asking for layers reported zero open cells
+ * and failed a world that was perfectly navigable, and a document had to switch the
+ * gate off to use the generator. Switching a check off to use a feature is how a check
+ * stops meaning anything.
+ *
+ * The measurements are the same ones, taken in three dimensions: reachability floods
+ * from the entrances through the shafts, and a cell's neighbours are the four beside
+ * it plus whatever shaft touches it. Two consequences worth naming:
+ *
+ * - `goalReachable` means **the deepest layer can be reached from the surface**. That
+ *   is the failure a stack has and a plan does not — more layers means more places to
+ *   be sealed in — and nothing that looks at one floor can see it.
+ * - `pathLength` is the deepest reachable cell's distance from the way in, so
+ *   @ref GateCriteria::minPathLength keeps its meaning: reject a system whose bottom
+ *   is one step from daylight.
+ *
+ * @param system The stack to measure; an empty one measures as all zeroes.
+ * @return The measurements, for @ref passesGate.
+ */
+[[nodiscard]] LevelQuality evaluateCaveSystem(const CaveSystem &system);
+
 core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed);
 
 /**

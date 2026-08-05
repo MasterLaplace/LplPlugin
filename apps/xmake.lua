@@ -51,7 +51,10 @@ if has_config("worldforge") then
 target("lpl-worldforge")
     set_kind("binary")
     set_group("apps")
-    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-editor", "lpl-procgen", "lpl-physics")
+    -- lpl-agent + lpl-engine are here for the Caine panel: engine::DemonHost owns
+    -- the generate/look/correct loop, and a second copy inside a panel would be the
+    -- duplication this repository keeps paying for.
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-editor", "lpl-procgen", "lpl-physics", "lpl-agent", "lpl-engine")
     add_packages("glfw", "imgui")
     if is_plat("linux") then
         add_syslinks("GL")
@@ -101,3 +104,39 @@ if has_config("mapview") then
         add_syslinks("GL", "X11", "m")
     target_end()
 end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- The demon's tooling. Each of these exists because a claim in the plan needs an
+-- instrument: a coding scheme judged without a wet lab, an artifact that proves
+-- it carries its own reader, a world run across centuries, and the server profile
+-- with a mind attached.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("lpl-dna-lab")
+    set_kind("binary")
+    set_group("apps")
+    add_deps("lpl-core", "lpl-math", "lpl-codec")
+    add_files("dna-lab/main.cpp")
+target_end()
+
+target("lpl-rosetta-forge")
+    set_kind("binary")
+    set_group("apps")
+    add_deps("lpl-core", "lpl-codec", "lpl-rosetta", "lpl-pack")
+    add_files("rosetta-forge/main.cpp")
+target_end()
+
+target("lpl-chronicle")
+    set_kind("binary")
+    set_group("apps")
+    add_deps("lpl-engine", "lpl-history", "lpl-ecology", "lpl-procgen")
+    add_files("chronicle/main.cpp")
+target_end()
+
+target("lpl-demon")
+    set_kind("binary")
+    set_group("apps")
+    -- lpl-editor for the scene serializer it writes with; lpl-history stays for
+    -- the chronicle the demon will keep once that chantier lands.
+    add_deps("lpl-engine", "lpl-agent", "lpl-editor", "lpl-history")
+    add_files("demon/main.cpp")
+target_end()

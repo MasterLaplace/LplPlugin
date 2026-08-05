@@ -9,7 +9,7 @@
 
 #include <lpl/ai/AbstractWorld.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::ai {
 
@@ -195,7 +195,7 @@ core::u32 AbstractWorld::tickAbstract(core::u32 tick)
         // so an abstract creature's history is a pure function of when it was
         // last looked at.
         const PersonalityTraits traits = personalityOf(creature.id, creature.species);
-        procgen::Random random{creature.id ^ (tick * 0x9E3779B1u)};
+        math::Random random{creature.id ^ (tick * 0x9E3779B1u)};
 
         // Energy scales the urge to move: a well-fed creature wanders, a starving
         // one is driven. Personality scales it again — this is what makes two

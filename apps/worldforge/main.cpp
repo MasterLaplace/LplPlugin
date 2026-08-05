@@ -15,6 +15,12 @@
  * When the engine's Vulkan renderer is finished, the real viewport moves there;
  * this stays as the quick tool.
  *
+ * One engine dependency did arrive, deliberately: @c engine::DemonHost, for the
+ * Caine panel. The loop that generates, looks and corrects lives there, and a
+ * second copy of it inside a panel would be the duplication this project keeps
+ * paying for — a panel is a view of a loop, not a place to keep one. It brings no
+ * Vulkan with it: the viewport below is still legacy OpenGL.
+ *
  * @author MasterLaplace
  * @version 0.1.0
  * @date 2026-07-16
@@ -26,6 +32,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl2.h>
@@ -42,7 +49,25 @@
 #include <lpl/editor/EditorSession.hpp>
 #include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
+#include <lpl/agent/Observation.hpp>
+#include <lpl/agent/Planner.hpp>
+#include <lpl/agent/Transcript.hpp>
+#include <lpl/engine/DemonHost.hpp>
+#include <lpl/engine/InferenceBudget.hpp>
 #include <lpl/physics/CpuPhysicsBackend.hpp>
+#include <lpl/ecology/Herd.hpp>
+#include <lpl/ecology/LivingRecipe.hpp>
+#include <lpl/editor/GamePackBaker.hpp>
+#include <lpl/engine/GridTerrain.hpp>
+#include <lpl/engine/LivingLayer.hpp>
+#include <lpl/engine/systems/CreatureSystems.hpp>
+#include <lpl/procgen/Dungeon.hpp>
+#include <lpl/procgen/Liminal.hpp>
+#include <lpl/procgen/MapMesh.hpp>
+#include <lpl/procgen/MapShading.hpp>
+#include <lpl/procgen/QualityGate.hpp>
+#include <lpl/procgen/Streaming.hpp>
+#include <lpl/procgen/WorldAtlas.hpp>
 
 namespace {
 
@@ -53,6 +78,55 @@ using FVec3 = lpl::math::Vec3<lpl::math::Fixed32>;
 // vocabulary rather than an enum index a reordering would silently reinterpret.
 constexpr const char *kBiomeNames[] = {"ocean",  "beach",   "snow",      "tundra", "taiga",      "rock",
                                        "desert", "savanna", "grassland", "forest", "rainforest", "marsh"};
+
+/**
+ * @struct AtlasView
+ * @brief The generated world as an instrument, beside the world as cubes.
+ *
+ * The editor's viewport draws one cube per entity, which says where things are and
+ * nothing about the world they are in: no relief, no biomes, no rivers, no
+ * underground, nothing living. The map viewer showed all of that and this could not,
+ * for a concrete reason — `generate_world` runs @c procgen::bakeWorld, which returns
+ * signatures and counts and throws every grid away.
+ *
+ * So this holds a @c procgen::WorldAtlas, re-derived from the SAME procedural block
+ * the Generate button issued. Generation is deterministic, so a recipe run twice is
+ * the same world down to the bit: a diagnostic re-derivation, not a second source of
+ * truth. Nothing here is authored — none of it is saved, and the creatures below live
+ * in their own registry precisely so `save_scene` does not emit a preview.
+ *
+ * Every layer is drawn with the shared definitions rather than a second set:
+ * @c procgen::MapShading colours it, @c engine::GridTerrain answers the ground, and
+ * @c engine::systems::CreaturePipeline runs the six systems in the one order they are
+ * declared in. Writing a second copy of any of those is what this whole slice exists
+ * to refuse.
+ */
+struct AtlasView {
+    lpl::procgen::WorldAtlas atlas;
+    lpl::procgen::LiminalSpace liminal;
+    bool has = false;
+    bool hasLiminal = false;
+
+    // What the map shows.
+    int shading = 0; ///< Index into lpl::procgen::MapShading.
+    int climateAxis = 0;
+    int scale = 8; ///< Pixels per cell.
+    bool paintRivers = true, paintSettlement = true, paintRoads = true;
+    bool overlayBlocked = false, overlayCaves = false, overlayPlots = false;
+    bool overlayChunks = false, showLiminal = false;
+    int chunkSize = 16, chunkRadius = 3;
+
+    // The living preview: its own registry, because these bodies are not part of the
+    // document being edited and must never be saved with it.
+    lpl::ecs::Registry registry;
+    lpl::engine::LivingLayer living;
+    lpl::engine::GridTerrain terrain;
+    lpl::engine::systems::CreaturePipeline creatures;
+    lpl::procgen::Grid<lpl::core::u8> obstacles;
+    bool livingReady = false;
+    bool livingRunning = false;
+    lpl::core::u32 ticks = 0u;
+};
 
 // ── Editor UI + world state (owned by main, referenced by the panel helpers) ──
 struct EditorUi {
@@ -85,7 +159,187 @@ struct EditorUi {
     // Scene file I/O.
     char scenePath[256] = "world.lplscene";
     std::string sceneStatus = "(no file yet)";
+
+    // ── Caine: the intelligence attached to this session ──────────────────────
+    //
+    // The planner is deterministic on purpose. Local inference is a separate
+    // process behind a file/socket boundary, and until it is wired the panel is
+    // still worth having: agent::CorrectionPlanner follows the critics' own
+    // suggestions, which is what a competent operator would do, so the loop can be
+    // watched working without a model in the picture.
+    lpl::agent::CorrectionPlanner planner;
+    lpl::engine::DemonHost demon{session.registry(), session.journal(), planner};
+    char intent[256] = "a world with rivers and a village";
+    // Furnishing panel: what the level's own measurements say to place.
+    int furnishEncounters = 4, furnishRewards = 3, furnishSpacing = 3;
+    std::vector<lpl::procgen::Placement> furnished;
+    std::string furnishStatus = "(not furnished yet)";
+    int demonTurns = 8;
+    bool hasThought = false;
+    lpl::engine::ThinkResult lastThink{};
+
+    /// The world as an instrument. See AtlasView for why it is a re-derivation.
+    AtlasView view;
 };
+
+/**
+ * @brief The `procedural` block the procgen panel's controls describe.
+ *
+ * Built once and used twice: handed to the session as a `generate_world` command (so
+ * the act is journalled and undoable) and parsed into a recipe for the atlas. Two
+ * strings would eventually differ by one field and the picture would stop being of
+ * the world the button built.
+ */
+std::string proceduralJson(const EditorUi &ui)
+{
+    char cmd[768];
+    std::snprintf(cmd, sizeof(cmd),
+                  R"({"cmd":"generate_world","seed":%d,"width":%d,"depth":%d,"cellSize":%f,)"
+                  R"("terrain":{"seed":%d,"frequency":%f,"amplitude":%f,"octaves":%d},)"
+                  R"("erosion":{"enabled":%s,"thermalIterations":%d,"hydraulicIterations":%d},)"
+                  R"("rivers":{"enabled":%s},"climate":{"enabled":%s},)"
+                  R"("caves":{"enabled":%s,"width":%d,"depth":%d,"fillProbability":%f,"steps":%d},)"
+                  R"("settlement":{"enabled":%s},)"
+                  R"("gate":{"enabled":%s,"minPathLength":%d},)"
+                  R"("scatter":[{"biome":"%s","density":%f,"halfExtent":%f,"collidable":%s}]})",
+                  ui.hfSeed, ui.hfCols, ui.hfRows, ui.hfSpacing, ui.hfSeed, ui.hfNoiseScale, ui.hfAmplitude,
+                  ui.hfOctaves, ui.doErode ? "true" : "false", ui.thermalIterations, ui.hydraulicIterations,
+                  ui.doRivers ? "true" : "false", ui.doClimate ? "true" : "false", ui.doCaves ? "true" : "false",
+                  ui.hfCols, ui.hfRows, ui.caveFill, ui.caveSteps, ui.doTown ? "true" : "false",
+                  ui.doCaves ? "true" : "false", ui.gateMinPath, kBiomeNames[ui.scBiome], ui.scDensity,
+                  ui.scHalfExtent, ui.scCollidable ? "true" : "false");
+    return std::string{cmd};
+}
+
+/**
+ * @brief Re-derives the atlas from the block the Generate button just issued.
+ *
+ * Registry is null on purpose: the entities already exist in the session's registry,
+ * created by the journalled command. Materialising a second copy here would double
+ * every prop in the hierarchy.
+ */
+void refreshAtlas(EditorUi &ui)
+{
+    lpl::procgen::WorldRecipe recipe{};
+    if (!lpl::editor::parseProceduralBlock(proceduralJson(ui), recipe))
+    {
+        ui.view.has = false;
+        return;
+    }
+    ui.view.atlas = lpl::procgen::buildAtlas(recipe, nullptr, nullptr);
+    ui.view.has = !ui.view.atlas.height.empty();
+    ui.view.livingReady = false;
+    ui.view.livingRunning = false;
+    ui.view.ticks = 0u;
+}
+
+/**
+ * @brief Stands an ecology up on the atlas: obstacles, plants, herd, six systems.
+ *
+ * The obstacle mask is the atlas's own — ONE notion of "blocked", extended with the
+ * footprints the settlement raised. A second slope threshold here would be the third
+ * notion, which is how an animal ends up standing in a lake the scent flows around.
+ */
+void startLiving(EditorUi &ui)
+{
+    AtlasView &view = ui.view;
+    if (!view.has)
+        return;
+
+    const lpl::core::u32 width = view.atlas.height.width();
+    const lpl::core::u32 depth = view.atlas.height.depth();
+    const lpl::core::u32 seed = static_cast<lpl::core::u32>(ui.hfSeed);
+
+    view.obstacles = view.atlas.blocked;
+    if (!view.atlas.settlement.empty())
+        for (lpl::core::u32 z = 0u; z < depth; ++z)
+            for (lpl::core::u32 x = 0u; x < width; ++x)
+                if (view.atlas.settlement.at(x, z) == lpl::procgen::SettlementCell::Plot)
+                    view.obstacles.at(x, z) = 1u;
+
+    lpl::engine::LivingLayerParams params;
+    params.maxBodies = 96u;
+    params.speciesCount = 2u;
+    params.scentSpan = width < depth ? width : depth;
+    params.scentLayers = 6u;
+    params.webPeriod = 60u;
+
+    lpl::ecology::LivingRecipe recipe = lpl::ecology::parityLivingRecipe();
+    recipe.regrowthTicks = 600u;
+
+    view.terrain.reset(&view.obstacles, width, depth, recipe.regrowthTicks);
+    // The plants come from procgen's own thinning rule, which exists for exactly this
+    // and keeps a reload growing the same forest. Cell indices become world cells: the
+    // grid is centred on the origin, which is the one conversion the systems cannot know.
+    const lpl::core::i32 halfW = static_cast<lpl::core::i32>(width / 2u);
+    const lpl::core::i32 halfD = static_cast<lpl::core::i32>(depth / 2u);
+    (void) lpl::procgen::scatterVegetation(
+        view.atlas, seed ^ 0x5EEDu, 6u,
+        [](lpl::procgen::BiomeId biome) {
+            return biome == lpl::procgen::BiomeId::Forest || biome == lpl::procgen::BiomeId::Taiga ||
+                   biome == lpl::procgen::BiomeId::Rainforest || biome == lpl::procgen::BiomeId::Grassland ||
+                   biome == lpl::procgen::BiomeId::Marsh;
+        },
+        [&](lpl::core::i32 x, lpl::core::i32 z) { view.terrain.addPlant(x - halfW, z - halfD); });
+
+    view.living.configure(params, recipe, seed);
+    view.living.bind(view.registry);
+    view.living.openScent(params.scentSpan, params.scentLayers);
+    view.living.scent().centreOn(0, 0);
+    view.living.scent().field().setObstacles(view.obstacles);
+    view.living.seedWeb(view.terrain.standingPlants());
+
+    // The six systems, in the one order engine::systems::CreatureStage declares.
+    view.creatures.build(view.registry, view.living, view.terrain);
+
+    view.living.reconcile(0u, [&](lpl::math::Random &random, lpl::core::u32 /*attempt*/, lpl::math::Fixed32 &outX,
+                                  lpl::math::Fixed32 &outZ) {
+        // Somewhere an animal can actually stand: dropping a herd into the sea and
+        // letting the flocking rules sort it out gives a confident-looking shoal of deer.
+        if (width == 0u)
+            return false;
+        const lpl::core::u32 x = random.below(width);
+        const lpl::core::u32 z = random.below(depth);
+        if (view.obstacles.at(x, z) != 0u)
+            return false;
+        outX = lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(x) - halfW);
+        outZ = lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(z) - halfD);
+        return true;
+    });
+
+    view.livingReady = true;
+    view.ticks = 0u;
+}
+
+/// One tick of the preview ecology: the six systems, then the field, then the web.
+void stepLiving(EditorUi &ui)
+{
+    AtlasView &view = ui.view;
+    if (!view.livingReady)
+        return;
+    ++view.ticks;
+    view.creatures.step(1.0f / 60.0f);
+    view.living.stepScent();
+    view.living.setProducerPopulation(view.terrain.tickVegetation());
+    if (view.ticks % view.living.params().webPeriod == 0u)
+    {
+        view.living.stepWeb();
+        view.living.reconcile(view.ticks, [&](lpl::math::Random &random, lpl::core::u32 /*attempt*/,
+                                             lpl::math::Fixed32 &outX, lpl::math::Fixed32 &outZ) {
+            const lpl::core::u32 width = view.obstacles.width();
+            const lpl::core::u32 depth = view.obstacles.depth();
+            if (width == 0u)
+                return false;
+            const lpl::core::u32 x = random.below(width);
+            const lpl::core::u32 z = random.below(depth);
+            if (view.obstacles.at(x, z) != 0u)
+                return false;
+            outX = lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(x) - static_cast<lpl::core::i32>(width / 2u));
+            outZ = lpl::math::Fixed32::fromInt(static_cast<lpl::core::i32>(z) - static_cast<lpl::core::i32>(depth / 2u));
+            return true;
+        });
+    }
+}
 
 // ── ImGui panels — all backend-agnostic, all driven by EditorSession ──────────
 
@@ -212,25 +466,13 @@ void drawProcgen(EditorUi &ui)
 
     if (ImGui::Button("Generate world"))
     {
-        char cmd[768];
-        std::snprintf(cmd, sizeof(cmd),
-                      R"({"cmd":"generate_world","seed":%d,"width":%d,"depth":%d,"cellSize":%f,)"
-                      R"("terrain":{"seed":%d,"frequency":%f,"amplitude":%f,"octaves":%d},)"
-                      R"("erosion":{"enabled":%s,"thermalIterations":%d,"hydraulicIterations":%d},)"
-                      R"("rivers":{"enabled":%s},"climate":{"enabled":%s},)"
-                      R"("caves":{"enabled":%s,"width":%d,"depth":%d,"fillProbability":%f,"steps":%d},)"
-                      R"("settlement":{"enabled":%s},)"
-                      R"("gate":{"enabled":%s,"minPathLength":%d},)"
-                      R"("scatter":[{"biome":"%s","density":%f,"halfExtent":%f,"collidable":%s}]})",
-                      ui.hfSeed, ui.hfCols, ui.hfRows, ui.hfSpacing, ui.hfSeed, ui.hfNoiseScale, ui.hfAmplitude,
-                      ui.hfOctaves, ui.doErode ? "true" : "false", ui.thermalIterations, ui.hydraulicIterations,
-                      ui.doRivers ? "true" : "false", ui.doClimate ? "true" : "false", ui.doCaves ? "true" : "false",
-                      ui.hfCols, ui.hfRows, ui.caveFill, ui.caveSteps, ui.doTown ? "true" : "false",
-                      ui.doCaves ? "true" : "false", ui.gateMinPath, kBiomeNames[ui.scBiome], ui.scDensity,
-                      ui.scHalfExtent, ui.scCollidable ? "true" : "false");
+        // ONE procedural block, two consumers: the journalled command that builds the
+        // world, and the atlas that shows it. See proceduralJson.
+        const std::string cmd = proceduralJson(ui);
         const auto r = ui.session.command(cmd);
         ui.lastReport = r.has_value() ? r.value() : "generate failed";
         ui.lastGate = ui.lastReport;
+        refreshAtlas(ui);
     }
 
     ImGui::Separator();
@@ -311,6 +553,394 @@ void drawSim(EditorUi &ui)
 
 // A unit cube with per-face normals (colour comes from the caller via
 // GL_COLOR_MATERIAL, shading from GL_LIGHT0).
+/**
+ * @brief The Caine panel: what was asked, what was done, what is still wrong.
+ *
+ * The only place the loop can be WATCHED. Everything it shows is already
+ * computed — the critics' findings, the ReAct transcript, the journal indices —
+ * and none of it was visible anywhere: a fold proves a loop ran, it does not show
+ * what it decided.
+ */
+void drawCaine(EditorUi &ui)
+{
+    ImGui::Begin("Caine");
+
+    ImGui::TextWrapped("The intelligence directs; the deterministic engine executes.");
+    ImGui::Separator();
+
+    ImGui::InputText("intent", ui.intent, sizeof(ui.intent));
+    ImGui::SliderInt("turn budget", &ui.demonTurns, 1, 32);
+    // Turns, never milliseconds: a wall clock on a replayable path is a desync
+    // waiting for a slow frame.
+    if (ImGui::Button("Think"))
+    {
+        ui.demon.consider(lpl::agent::Intent{ui.intent, 0u});
+        ui.lastThink = ui.demon.think(lpl::engine::InferenceBudget::ofTurns(static_cast<lpl::core::u32>(ui.demonTurns)));
+        ui.hasThought = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Undo last act"))
+        (void) ui.session.undo();
+
+    if (ui.hasThought)
+    {
+        const char *outcome = "concluded";
+        switch (ui.lastThink.outcome)
+        {
+        case lpl::engine::ThinkOutcome::Concluded: outcome = "concluded"; break;
+        case lpl::engine::ThinkOutcome::BudgetExhausted: outcome = "budget exhausted"; break;
+        case lpl::engine::ThinkOutcome::Stuck: outcome = "stuck (same call twice)"; break;
+        case lpl::engine::ThinkOutcome::NoLegalMove: outcome = "no legal move"; break;
+        }
+        ImGui::Text("%s in %u turns: %u acts, %u refusals", outcome, ui.lastThink.turns, ui.lastThink.acts,
+                    ui.lastThink.refusals);
+        ImGui::Text("defects %u -> %u  %s", ui.lastThink.defectsBefore, ui.lastThink.defectsAfter,
+                    ui.lastThink.sound() ? "(sound)" : "");
+    }
+
+    // ── What the critics say NOW, not what they said when it stopped ──────────
+    const lpl::agent::Observations findings = ui.demon.observe();
+    if (ImGui::CollapsingHeader("Defects", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (findings.findings.empty())
+            ImGui::TextUnformatted("Nothing to report.");
+        for (const lpl::agent::Finding &f : findings.findings)
+        {
+            const bool defect = f.severity == lpl::agent::Severity::Defect;
+            ImGui::TextColored(defect ? ImVec4{0.95f, 0.45f, 0.25f, 1.0f} : ImVec4{0.75f, 0.75f, 0.75f, 1.0f},
+                               "[%s] %s", f.code.c_str(), f.message.c_str());
+            if (!f.suggestedTool.empty())
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("-> %s", f.suggestedTool.c_str());
+            }
+        }
+        if (findings.truncated)
+            ImGui::TextDisabled("... %u more", findings.total - static_cast<lpl::core::u32>(findings.findings.size()));
+    }
+
+    if (ImGui::CollapsingHeader("Trace"))
+    {
+        ImGui::BeginChild("react-trace", ImVec2{0.0f, 160.0f}, true);
+        for (const lpl::agent::Turn &turn : ui.demon.transcript().turns())
+        {
+            ImGui::Text("%u. %s %s", turn.index, turn.ok ? "ok " : "REF", turn.tool.c_str());
+            if (!turn.thought.empty())
+                ImGui::TextDisabled("    %s", turn.thought.c_str());
+            if (!turn.observation.empty())
+                ImGui::TextWrapped("    %s", turn.observation.c_str());
+            // The journal index, because that is what makes an act undoable rather
+            // than merely logged.
+            if (turn.journalEntry != lpl::agent::kNotJournalled)
+                ImGui::TextDisabled("    journal #%u", turn.journalEntry);
+        }
+        ImGui::EndChild();
+    }
+
+    ImGui::End();
+}
+
+/**
+ * @brief What a level's own measurements say to put where.
+ *
+ * procgen::analyseHotPath computed both answers and nothing consumed either. The
+ * spine is where a player certainly walks, so an encounter there is met rather
+ * than missed; the deepest dead ends are where something is worth hiding, for the
+ * same reason they were architectural excrescences.
+ */
+void drawFurnishing(EditorUi &ui)
+{
+    ImGui::Begin("Furnishing");
+    ImGui::SliderInt("encounters", &ui.furnishEncounters, 1, 12);
+    ImGui::SliderInt("rewards", &ui.furnishRewards, 1, 12);
+    ImGui::SliderInt("spacing", &ui.furnishSpacing, 1, 12);
+
+    if (ImGui::Button("Furnish the cave"))
+    {
+        // The cave the procgen panel's parameters describe, generated here so the
+        // panel reads the SAME level the Generate button built rather than a second
+        // one that happens to share a seed.
+        lpl::procgen::CaveParams cave;
+        cave.width = static_cast<lpl::core::u32>(ui.hfCols);
+        cave.depth = static_cast<lpl::core::u32>(ui.hfRows);
+        cave.seed = static_cast<lpl::core::u32>(ui.hfSeed);
+        cave.fillProbability = ui.caveFill;
+        cave.steps = static_cast<lpl::core::u32>(ui.caveSteps);
+        const lpl::procgen::DungeonMap level = lpl::procgen::generateCellularCave(cave);
+
+        lpl::core::u32 sx = 0u, sz = 0u, gx = 0u, gz = 0u;
+        ui.furnished.clear();
+        if (!lpl::procgen::findFarthestPair(level, sx, sz, gx, gz))
+        {
+            ui.furnishStatus = "the cave has no two ends to run between";
+        }
+        else
+        {
+            const lpl::procgen::HotPathAnalysis hot =
+                lpl::procgen::analyseHotPath(level, sx, sz, gx, gz, /*detourLimit=*/6u);
+            lpl::procgen::PlacementParams wanted;
+            wanted.encounters = static_cast<lpl::core::u32>(ui.furnishEncounters);
+            wanted.rewards = static_cast<lpl::core::u32>(ui.furnishRewards);
+            wanted.minSpacing = static_cast<lpl::core::u32>(ui.furnishSpacing);
+            lpl::procgen::Placement spots[32]{};
+            const lpl::core::u32 placed =
+                lpl::procgen::placeAlongHotPath(level, hot, sx, sz, wanted, spots, 32u);
+            for (lpl::core::u32 i = 0u; i < placed; ++i)
+                ui.furnished.push_back(spots[i]);
+
+            char line[160];
+            std::snprintf(line, sizeof(line), "spine %u cells, deepest detour %u, %u spots placed", hot.pathCells,
+                          hot.deepestDetour, placed);
+            ui.furnishStatus = line;
+        }
+    }
+
+    ImGui::TextWrapped("%s", ui.furnishStatus.c_str());
+    ImGui::Separator();
+    // Fewer spots than asked is a fact about the level, not an error: a cave with
+    // one dead end has one hiding place.
+    for (const lpl::procgen::Placement &spot : ui.furnished)
+        ImGui::Text("%-9s (%3u,%3u)  detour %2u  progress %3u",
+                    spot.role == lpl::procgen::PlacementRole::Encounter ? "encounter" : "reward", spot.x, spot.z,
+                    spot.detour, spot.progress);
+    ImGui::End();
+}
+
+/**
+ * @brief The Atlas panel: the five layers the editor could not show.
+ *
+ * Drawn as filled rectangles on an ImGui draw list rather than as a texture: there is
+ * no texture upload path in this throwaway viewport, a map is at most 128x128 cells,
+ * and a rectangle per cell is both cheap and exactly what a flat map is.
+ *
+ * Layer order is not arbitrary. The base shading goes down first, then what is a
+ * property of the ground (rivers, streets, highways — painted INTO the surface by
+ * procgen::buildSurfaceMesh's own style for the same reason), then what sits on it
+ * (blocked cells, cave floor, plots), then what moves (creatures), then what is only a
+ * plan (chunk boundaries). Reversing any pair hides the thing the layer exists to show.
+ */
+void drawAtlas(EditorUi &ui)
+{
+    ImGui::Begin("Atlas");
+    AtlasView &view = ui.view;
+
+    if (ImGui::Button("Re-derive from the recipe"))
+        refreshAtlas(ui);
+    ImGui::SameLine();
+    ImGui::TextDisabled(view.has ? "%u x %u cells" : "(generate a world first)", view.atlas.width, view.atlas.depth);
+
+    if (!view.has)
+    {
+        ImGui::TextWrapped("The Generate button builds the world; this shows it. Both read the same "
+                           "procedural block, and generation is deterministic, so the picture is of "
+                           "the world that was built rather than of one that resembles it.");
+        ImGui::End();
+        return;
+    }
+
+    // ── What colours a cell ───────────────────────────────────────────────────
+    const char *modes[static_cast<int>(lpl::procgen::MapShading::Count)];
+    for (int i = 0; i < static_cast<int>(lpl::procgen::MapShading::Count); ++i)
+        modes[i] = lpl::procgen::mapShadingName(static_cast<lpl::procgen::MapShading>(i));
+    ImGui::Combo("shading", &view.shading, modes, static_cast<int>(lpl::procgen::MapShading::Count));
+    if (view.shading == static_cast<int>(lpl::procgen::MapShading::Climate))
+    {
+        ImGui::SliderInt("axis", &view.climateAxis, 0, static_cast<int>(lpl::procgen::kClimateAxisCount) - 1);
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", lpl::procgen::climateAxisName(static_cast<lpl::core::u32>(view.climateAxis)));
+    }
+    ImGui::SliderInt("zoom", &view.scale, 2, 16);
+
+    if (ImGui::CollapsingHeader("Layers", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("rivers", &view.paintRivers);
+        ImGui::SameLine();
+        ImGui::Checkbox("streets", &view.paintSettlement);
+        ImGui::SameLine();
+        ImGui::Checkbox("highways", &view.paintRoads);
+        ImGui::Checkbox("blocked", &view.overlayBlocked);
+        ImGui::SameLine();
+        ImGui::Checkbox("caves", &view.overlayCaves);
+        ImGui::SameLine();
+        ImGui::Checkbox("plots", &view.overlayPlots);
+        ImGui::Checkbox("streaming plan", &view.overlayChunks);
+        if (view.overlayChunks)
+        {
+            ImGui::SliderInt("chunk size", &view.chunkSize, 4, 64);
+            ImGui::SliderInt("radius", &view.chunkRadius, 1, 6);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Liminal sector"))
+    {
+        // A different generator on its own seed, not a view of this world: it is here
+        // because a liminal space is the one thing in the module whose whole point is
+        // how it feels to stand in, and a fold cannot report that.
+        if (ImGui::Button("Generate liminal"))
+        {
+            lpl::procgen::LiminalParams params;
+            params.width = view.atlas.width;
+            params.depth = view.atlas.depth;
+            params.seed = static_cast<lpl::core::u32>(ui.hfSeed) ^ 0x11B1A0u;
+            view.liminal = lpl::procgen::generateLiminal(params);
+            view.hasLiminal = !view.liminal.map.empty();
+            view.showLiminal = view.hasLiminal;
+        }
+        if (view.hasLiminal)
+        {
+            ImGui::SameLine();
+            ImGui::Checkbox("show instead", &view.showLiminal);
+            ImGui::Text("%u open cells, %s, %u pillars", view.liminal.openCells,
+                        view.liminal.connected ? "connected" : "SPLIT", view.liminal.pillars);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Living layer", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (ImGui::Button(view.livingReady ? "Reseed ecology" : "Stand an ecology up"))
+            startLiving(ui);
+        if (view.livingReady)
+        {
+            ImGui::SameLine();
+            ImGui::Checkbox("running", &view.livingRunning);
+            ImGui::SameLine();
+            if (ImGui::Button("Tick once"))
+                stepLiving(ui);
+            ImGui::Text("tick %u  %u bodies  %u/%u plants standing  %u grazed", view.ticks,
+                        view.living.herd().size(), view.terrain.standingPlants(), view.terrain.plantCount(),
+                        view.terrain.grazed());
+            if (const lpl::engine::systems::LocomotionSystem *walk = view.creatures.locomotion(); walk != nullptr)
+                ImGui::TextDisabled("%u cornered, %u avoided, %u strays", walk->cornered(), walk->avoided(),
+                                    walk->strays());
+        }
+    }
+
+    ImGui::Separator();
+
+    // ── The canvas ────────────────────────────────────────────────────────────
+    const float cell = static_cast<float>(view.scale);
+    const bool liminalView = view.showLiminal && view.hasLiminal;
+    const lpl::core::u32 width = liminalView ? view.liminal.map.width() : view.atlas.width;
+    const lpl::core::u32 depth = liminalView ? view.liminal.map.depth() : view.atlas.depth;
+
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const auto rect = [&](lpl::core::u32 x, lpl::core::u32 z, const lpl::procgen::Rgb &colour, float alpha) {
+        const ImVec2 a{origin.x + static_cast<float>(x) * cell, origin.y + static_cast<float>(z) * cell};
+        const ImVec2 b{a.x + cell, a.y + cell};
+        draw->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(ImVec4{colour.r, colour.g, colour.b, alpha}));
+    };
+
+    for (lpl::core::u32 z = 0u; z < depth; ++z)
+        for (lpl::core::u32 x = 0u; x < width; ++x)
+        {
+            if (liminalView)
+            {
+                // The zone palette, from the same place the 3D mesher takes it.
+                const lpl::procgen::Rgb colour =
+                    lpl::procgen::isWalkable(view.liminal.map.at(x, z))
+                        ? lpl::procgen::liminalZoneColour(view.liminal.zones.at(x, z))
+                        : lpl::procgen::Rgb{0.10f, 0.10f, 0.12f};
+                rect(x, z, colour, 1.0f);
+                continue;
+            }
+
+            lpl::procgen::Rgb colour = lpl::procgen::surfaceColour(
+                view.atlas, static_cast<lpl::procgen::MapShading>(view.shading),
+                static_cast<lpl::core::u32>(view.climateAxis), x, z);
+            if (view.paintRivers && !view.atlas.rivers.empty() && view.atlas.rivers.at(x, z) != 0u)
+                colour = {0.16f, 0.42f, 0.72f};
+            if (view.paintSettlement && !view.atlas.settlement.empty())
+                switch (view.atlas.settlement.at(x, z))
+                {
+                case lpl::procgen::SettlementCell::Road: colour = {0.35f, 0.32f, 0.30f}; break;
+                case lpl::procgen::SettlementCell::Plaza: colour = {0.55f, 0.50f, 0.44f}; break;
+                case lpl::procgen::SettlementCell::Plot: colour = {0.82f, 0.55f, 0.22f}; break;
+                default: break;
+                }
+            if (view.paintRoads && !view.atlas.roads.empty() && view.atlas.roads.at(x, z) != 0u)
+                colour = {0.24f, 0.22f, 0.20f};
+            rect(x, z, colour, 1.0f);
+
+            // On top of the ground rather than in it: these are questions ABOUT the
+            // cell, so they are drawn as a wash and the ground stays readable under
+            // them. "This pass did not run" and "this pass produced zero" must not
+            // look alike.
+            if (view.overlayBlocked && !view.atlas.blocked.empty() && view.atlas.blocked.at(x, z) != 0u)
+                rect(x, z, {0.85f, 0.15f, 0.20f}, 0.35f);
+            if (view.overlayCaves && !view.atlas.dungeon.empty() &&
+                lpl::procgen::isWalkable(view.atlas.dungeon.at(x, z)))
+                rect(x, z, {0.95f, 0.62f, 0.14f}, 0.40f);
+        }
+
+    if (!liminalView && view.overlayPlots)
+        for (lpl::core::usize p = 0u; p < view.atlas.plots.size(); ++p)
+        {
+            const lpl::procgen::BuildingPlot &plot = view.atlas.plots[p];
+            const ImVec2 a{origin.x + static_cast<float>(plot.x) * cell, origin.y + static_cast<float>(plot.z) * cell};
+            const ImVec2 b{a.x + static_cast<float>(plot.width) * cell, a.y + static_cast<float>(plot.depth) * cell};
+            draw->AddRect(a, b, IM_COL32(255, 190, 90, 220));
+        }
+
+    // The creatures, read from the registry — there is no second list of them.
+    if (!liminalView && view.livingReady)
+    {
+        const lpl::core::i32 halfW = static_cast<lpl::core::i32>(width / 2u);
+        const lpl::core::i32 halfD = static_cast<lpl::core::i32>(depth / 2u);
+        const lpl::ecology::Herd &herd = view.living.herd();
+        for (lpl::core::u32 i = 0u; i < herd.size(); ++i)
+        {
+            lpl::core::u32 row = 0u;
+            lpl::ecs::Chunk *chunk = view.registry.chunkOf(herd.at(i), row);
+            if (chunk == nullptr || !chunk->archetype().has(lpl::ecs::ComponentId::Creature))
+                continue;
+            // The write side, like every creature system: nothing here swaps buffers.
+            const auto *position = static_cast<const FVec3 *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+            const auto *creature = static_cast<const lpl::core::u32 *>(
+                chunk->writeComponent(lpl::ecs::ComponentId::Creature));
+            if (position == nullptr || creature == nullptr)
+                continue;
+            const float cx = origin.x + (position[row].x.toFloat() + static_cast<float>(halfW)) * cell;
+            const float cz = origin.y + (position[row].z.toFloat() + static_cast<float>(halfD)) * cell;
+            const bool hunter = creature[row * 2u] != 0u;
+            draw->AddCircleFilled(ImVec2{cx, cz}, cell * 0.4f,
+                                  hunter ? IM_COL32(220, 70, 60, 255) : IM_COL32(230, 200, 120, 255));
+        }
+    }
+
+    // The streaming plan, last: it is a plan about the world and not a thing in it, so
+    // it is outlines over everything else. Amber is what the budget would admit THIS
+    // tick; the rest of the wanted region stays unmarked, which is the whole point of
+    // there being a budget at all.
+    if (!liminalView && view.overlayChunks)
+    {
+        lpl::procgen::StreamingParams params;
+        params.generateRadius = static_cast<lpl::core::u32>(view.chunkRadius);
+        params.maxGeneratePerTick = 6u;
+        lpl::procgen::GenerationSource source;
+        source.x = lpl::math::Fixed32::fromFloat(ui.camTarget[0]);
+        source.z = lpl::math::Fixed32::fromFloat(ui.camTarget[2]);
+        const lpl::procgen::StreamingPlan plan = lpl::procgen::planStreaming(&source, 1u, nullptr, 0u, params);
+        const float chunk = static_cast<float>(view.chunkSize) * cell;
+        const float halfW = static_cast<float>(width) * 0.5f * cell;
+        const float halfD = static_cast<float>(depth) * 0.5f * cell;
+        for (lpl::core::u32 i = 0u; i < plan.toGenerate.size(); ++i)
+        {
+            const ImVec2 a{origin.x + halfW + static_cast<float>(plan.toGenerate[i].coord.x) * chunk,
+                           origin.y + halfD + static_cast<float>(plan.toGenerate[i].coord.z) * chunk};
+            const ImVec2 b{a.x + chunk, a.y + chunk};
+            draw->AddRect(a, b, IM_COL32(255, 174, 41, 200));
+        }
+        ImGui::Dummy(ImVec2{0.0f, 0.0f});
+        ImGui::TextDisabled("%u chunks wanted, %u would be built this tick", plan.wanted,
+                            static_cast<lpl::core::u32>(plan.toGenerate.size()));
+    }
+
+    // Reserve the canvas so the panel scrolls rather than overlapping what follows.
+    ImGui::Dummy(ImVec2{static_cast<float>(width) * cell, static_cast<float>(depth) * cell});
+    ImGui::End();
+}
+
 void drawUnitCube()
 {
     glBegin(GL_QUADS);
@@ -665,9 +1295,8 @@ int main()
     EditorUi ui;
     g_ui = &ui;
     (void) ui.backend.init();
-    (void) ui.session.command(R"({"cmd":"generate_world","seed":1337,"width":24,"depth":24,
-                                  "caves":{"width":24,"depth":24,"minRegionSize":12},
-                                  "gate":{"minPathLength":4,"minWalkableCells":16}})");
+    (void) ui.session.command(proceduralJson(ui));
+    refreshAtlas(ui);
     glfwSetScrollCallback(window, scrollCallback);
 
     // Left-button state across frames: distinguishes a click (pick) from a drag
@@ -739,6 +1368,11 @@ int main()
             ui.stepOnce = false;
         }
 
+        // The preview ecology runs on its own switch: it is a diagnostic on its own
+        // registry, so it must not start or stop with the document's physics.
+        if (ui.view.livingRunning)
+            stepLiving(ui);
+
         int fbW = 0, fbH = 0;
         glfwGetFramebufferSize(window, &fbW, &fbH);
 
@@ -763,6 +1397,9 @@ int main()
         drawProcgen(ui);
         drawSceneIO(ui);
         drawSim(ui);
+        drawCaine(ui);
+        drawFurnishing(ui);
+        drawAtlas(ui);
         ImGui::Render();
         ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 

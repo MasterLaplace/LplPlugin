@@ -185,6 +185,68 @@ struct HotPathAnalysis {
 [[nodiscard]] HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u32 startZ, core::u32 goalX,
                                              core::u32 goalZ, core::u32 detourLimit);
 
+/// What a spot on a level is FOR.
+enum class PlacementRole : core::u8 {
+    Encounter = 0, ///< On the spine: the player will pass through here.
+    Reward = 1,    ///< Off it, deep: the player has to choose to come here.
+};
+
+/**
+ * @struct Placement
+ * @brief One spot a level furnishes, and why it was chosen.
+ */
+struct Placement {
+    core::u32 x{0u};
+    core::u32 z{0u};
+    PlacementRole role{PlacementRole::Encounter};
+    core::u32 detour{0u};   ///< Steps off the critical path; 0 for an encounter.
+    core::u32 progress{0u}; ///< Steps from the entrance — how far in this is.
+};
+
+/**
+ * @struct PlacementParams
+ * @brief How much to put where.
+ */
+struct PlacementParams {
+    core::u32 encounters{4u};     ///< Spots wanted on the spine.
+    core::u32 rewards{2u};        ///< Spots wanted off it.
+    core::u32 minSpacing{3u};     ///< Cells between two spots of the same role.
+    core::u32 rewardMinDetour{2u}; ///< A reward must lie at least this far off the path.
+};
+
+/**
+ * @brief Furnishes a level from its own measurements: events on the spine, prizes off it.
+ *
+ * @ref analyseHotPath already knows both answers and neither was ever used. The
+ * critical path is where the player will certainly go, so that is where an
+ * encounter is guaranteed to be met rather than missed; and the same analysis names
+ * the cell farthest off that path, which is the best place in the level to hide
+ * something for exactly the reason that made it an architectural excrescence — a
+ * player only ever reaches it on purpose.
+ *
+ * No randomness. Encounters are spaced by PROGRESS along the spine, not by index
+ * into a flat grid, so they land evenly through the player's route instead of
+ * evenly through memory; rewards are the deepest dead ends, deepest first. Ties
+ * break by ascending flat index, which is what makes the result foldable.
+ *
+ * A reward must be a DEAD END, not merely a deep cell: a deep cell in the middle of
+ * a wide room is passed through, and a prize the player walks over by accident is
+ * not a reward, it is litter.
+ *
+ * @param map        The level.
+ * @param analysis   Its hot-path analysis; @c valid must be true.
+ * @param startX     Entrance column, for measuring progress.
+ * @param startZ     Entrance row.
+ * @param params     How much to place.
+ * @param out        Receives the placements, encounters first.
+ * @param capacity   How many @p out can hold.
+ * @return How many placements were written; fewer than asked when the level has no
+ *         room for them, which is a fact about the level and not an error.
+ */
+[[nodiscard]] core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analysis, core::u32 startX,
+                                          core::u32 startZ, const PlacementParams &params, Placement *out,
+                                          core::u32 capacity);
+
 /**
  * @brief Turns a danger map into one an agent can flee along.
  *

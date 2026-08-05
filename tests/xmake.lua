@@ -142,6 +142,27 @@ target("test-procgen-streaming")
     add_files("parity/test_procgen_streaming.cpp")
 target_end()
 
+target("test-procgen-higen")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen")
+    add_files("parity/test_procgen_higen.cpp")
+target_end()
+
+target("test-heightfield-collision")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-engine")
+    add_files("parity/test_heightfield_collision.cpp")
+target_end()
+
+target("test-map-mesh")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen")
+    add_files("parity/test_map_mesh.cpp")
+target_end()
+
 target("test-ai")
     set_kind("binary")
     set_group("tests")
@@ -222,7 +243,9 @@ target_end()
 target("test-reflection")
     set_kind("binary")
     set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-ecs")
+    -- lpl-agent because the JSON-Schema emitter this test pins now lives there,
+    -- where its second consumer (the GBNF grammar) is. One emitter, two callers.
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-agent")
     add_files("parity/test_reflection.cpp")
 target_end()
 
@@ -416,4 +439,72 @@ target("test-character-controller")
     set_group("tests")
     add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-engine")
     add_files("parity/test_character_controller.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Gates for the new organs. Same rule as everywhere else in this file: assert a
+-- property that can fail, not a signature that merely pins today's arithmetic.
+--
+-- A gate is declared here only once its source asserts something. A target whose
+-- main() is `return 0` is worse than no target: validate.sh discovers it, runs
+-- it, and the absence of an "ALL PASS" line makes the whole battery red — or, if
+-- it were taught to print that line, it would become a check that cannot fail,
+-- the anti-pattern this repo has already paid for twice. So the scaffolding
+-- sources of codec/, history/ and rosetta/ exist under parity/ without a target,
+-- and each one is declared by the batch that fills it.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-agent-tools")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-ecs", "lpl-procgen", "lpl-editor", "lpl-agent", "lpl-image")
+    add_files("parity/test_agent_tools.cpp")
+target_end()
+
+target("test-herd-scent")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-ai", "lpl-ecology", "lpl-engine")
+    add_files("parity/test_herd_scent.cpp")
+target_end()
+
+target("test-agent-loop")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-ecs", "lpl-procgen", "lpl-editor", "lpl-agent", "lpl-engine")
+    add_files("parity/test_agent_loop.cpp")
+target_end()
+
+target("test-codec-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-codec")
+    add_files("parity/test_codec_parity.cpp")
+target_end()
+
+target("test-pack-ecc")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-codec", "lpl-pack", "lpl-editor", "lpl-procgen")
+    add_files("parity/test_pack_ecc.cpp")
+target_end()
+
+target("test-erasure-channel")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-codec")
+    add_files("parity/test_erasure_channel.cpp")
+target_end()
+
+target("test-rosetta-isa")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-codec", "lpl-rosetta")
+    add_files("parity/test_rosetta_isa.cpp")
+target_end()
+
+target("test-history-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-history")
+    add_files("parity/test_history_parity.cpp")
 target_end()

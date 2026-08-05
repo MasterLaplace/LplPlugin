@@ -75,6 +75,10 @@ inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile p
             .enableGpu(false)
             .enableBci(false)
             .enableRealTimeGuard(true)
+            // Endless: the client has a walker, and a walker is what streaming is
+            // for. The server profiles below stay BOUNDED, which is what keeps the
+            // parity smokes folding a finite world.
+            .enableStreaming(true)
             .headless(false)
             .serverMode(false)
             // Presentation: everything the software rasterizer can afford at
@@ -124,6 +128,7 @@ inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile p
             .enableNetworking(false)
             .enableRendering(true)
             .enableRealTimeGuard(false)
+            .enableStreaming(true)
             .headless(false)
             .serverMode(false)
             .lodRings(4u)

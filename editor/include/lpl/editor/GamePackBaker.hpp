@@ -51,6 +51,22 @@ namespace lpl::editor {
 [[nodiscard]] core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRecipe &outRecipe);
 
 /**
+ * @brief Reads a bare `procedural` block, without a document around it.
+ *
+ * A `generate_world` command object IS a procedural block — that is the whole
+ * reason the command takes the shape it does, so that anything an editor can build
+ * a document can carry. Three callers wanted a recipe out of one and each wrapped
+ * it in the minimal document by hand, spelling the format string a third time; a
+ * fourth was about to. The wrapping is here now, once.
+ *
+ * @param proceduralJson The block's JSON object text.
+ * @param outRecipe      Filled on success; absent fields keep their defaults.
+ * @return An error when the block is malformed.
+ */
+[[nodiscard]] core::ExpectedVoid parseProceduralBlock(std::string_view proceduralJson,
+                                                      procgen::WorldRecipe &outRecipe);
+
+/**
  * @brief Emits a `"procedural"` block for @p recipe, as it appears in a scene.
  * @param recipe The recipe to serialise.
  * @return The JSON object text, without a trailing comma or newline.

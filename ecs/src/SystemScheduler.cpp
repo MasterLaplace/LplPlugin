@@ -98,6 +98,24 @@ core::Expected<void> SystemScheduler::buildGraph()
                     break;
             }
 
+            // World-level state, same rule. Without this, two systems sharing a
+            // scent field or a terrain declared no dependency on each other at
+            // all, so the graph was free to put them in one wave — which is only
+            // safe while a wave happens to run sequentially.
+            for (const auto &a : descA.resources)
+            {
+                if (conflict)
+                    break;
+                for (const auto &b : descB.resources)
+                {
+                    if (a.id == b.id && (a.mode == AccessMode::ReadWrite || b.mode == AccessMode::ReadWrite))
+                    {
+                        conflict = true;
+                        break;
+                    }
+                }
+            }
+
             if (conflict)
             {
                 adj[i].push_back(j);

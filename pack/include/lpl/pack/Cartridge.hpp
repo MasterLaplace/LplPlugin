@@ -28,6 +28,7 @@
 #    define LPL_PACK_CARTRIDGE_HPP
 
 #    include <lpl/ecology/LivingRecipe.hpp>
+#    include <lpl/pack/EccSection.hpp>
 #    include <lpl/pack/GamePack.hpp>
 #    include <lpl/pack/RecipeCodec.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
@@ -119,6 +120,43 @@ struct Cartridge {
         out.viewFromPack = true;
     }
     return out;
+}
+
+/**
+ * @brief Repairs @p bytes with its parity section, then decodes it.
+ *
+ * The mutable form, and the only one that can use the parity: a reader handed a const
+ * pointer can report damage and nothing else. A host copies its cartridge into memory
+ * it owns before calling this, which is what the kernel does with a GRUB module.
+ *
+ * Repair is attempted ONLY when the image does not already open. A healthy pack is
+ * left untouched byte for byte — running the code over good data would spend the cost
+ * on every boot and risk writing where nothing was wrong.
+ *
+ * @param bytes        Cartridge bytes, modified in place where they were wrong.
+ * @param size         Bytes available.
+ * @param fallbackBytes Built-in image, used when @p bytes is absent or unrepairable.
+ * @param fallbackSize  Its length.
+ * @param defaults      Recipe to keep when neither image decodes.
+ * @param defaultLiving Living recipe to keep in the same case.
+ * @param outRepair     Receives what the repair attempt found.
+ * @return The decoded cartridge, exactly as loadCartridge would report it.
+ */
+[[nodiscard]] inline Cartridge loadCartridgeRepairing(core::u8 *bytes, core::u32 size, const void *fallbackBytes,
+                                                      core::u32 fallbackSize, const procgen::WorldRecipe &defaults,
+                                                      const ecology::LivingRecipe &defaultLiving,
+                                                      EccRepairReport &outRepair)
+{
+    outRepair = EccRepairReport{};
+
+    if (bytes != nullptr && size != 0u)
+    {
+        View probe;
+        if (!probe.open(bytes, size))
+            (void) repairPack(bytes, size, outRepair);
+    }
+
+    return loadCartridge(bytes, size, fallbackBytes, fallbackSize, defaults, defaultLiving);
 }
 
 } // namespace lpl::pack

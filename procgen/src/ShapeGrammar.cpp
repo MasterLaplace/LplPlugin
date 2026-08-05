@@ -9,7 +9,7 @@
 
 #include <lpl/procgen/ShapeGrammar.hpp>
 
-#include <lpl/procgen/Random.hpp>
+#include <lpl/math/Random.hpp>
 
 namespace lpl::procgen {
 
@@ -173,7 +173,7 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
         return 0u;
 
     out.reserve(length);
-    Random random{seed};
+    math::Random random{seed};
 
     const core::u32 body = grammar.hasTerminator && length > 0u ? length - 1u : length;
     for (core::u32 slot = 0u; slot < body; ++slot)
@@ -206,7 +206,7 @@ VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams
     if (plot.width == 0u || plot.depth == 0u)
         return volume;
 
-    Random random{seed};
+    math::Random random{seed};
 
     const core::u32 minFloors = params.minFloors == 0u ? 1u : params.minFloors;
     const core::u32 maxFloors = params.maxFloors < minFloors ? minFloors : params.maxFloors;

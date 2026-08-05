@@ -9,7 +9,7 @@
 
 #include <lpl/ai/Swarm.hpp>
 
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 
 namespace lpl::ai {
 

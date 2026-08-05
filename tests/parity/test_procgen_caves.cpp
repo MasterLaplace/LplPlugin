@@ -214,6 +214,74 @@ void testBuilderIntegration()
 
 } // namespace
 
+/**
+ * @brief The gate judges the stack, and judges it for the right reason.
+ *
+ * The measurement it replaces did not exist: `checkPlayability` on a layered recipe
+ * was asked of the FLAT map, which this generator leaves empty, so it reported zero
+ * open cells and rejected a navigable world. A document had to switch the gate off to
+ * use the generator — and a check you switch off to use a feature has stopped meaning
+ * anything.
+ *
+ * Both directions are asserted, because only one of them is evidence. That a healthy
+ * system passes proves nothing on its own: an evaluator that returns "fine" for
+ * everything passes it too. So a system is BROKEN on purpose — every shaft to the
+ * deepest layer filled in — and the gate has to notice.
+ */
+void testTheGateJudgesTheStack()
+{
+    std::printf("the playability gate judges a stack in three dimensions\n");
+
+    procgen::CaveSystemParams params;
+    params.width = 64u;
+    params.depth = 64u;
+    params.seed = 20260804u;
+    params.layers = 3u;
+    params.entrances = 2u;
+
+    const procgen::Heightfield surface = makeSurface(64u, params.seed);
+    const procgen::CaveSystem system = procgen::generateCaveSystem(params, surface, nullptr);
+
+    const procgen::LevelQuality quality = procgen::evaluateCaveSystem(system);
+    std::printf("    walkable=%u reachable=%u deepest=%u longest=%u deadEnds=%u junctions=%u\n",
+                quality.walkableCells, quality.reachableCells, quality.pathLength, quality.longestDistance,
+                quality.deadEnds, quality.junctions);
+
+    check(quality.walkableCells == system.hollowCells, "it counts the same hollow cells the generator did");
+    check(quality.reachableCells == system.reachableCells, "and reaches the same ones");
+    check(quality.fullyConnected, "a repaired system is fully connected");
+    check(quality.goalReachable, "and its deepest layer can be reached from the surface");
+    check(quality.pathLength > 0u, "the way down is a walk, not a step");
+    check(quality.longestDistance >= quality.pathLength, "the far end is at least as far as the bottom");
+    check(procgen::passesGate(quality, procgen::GateCriteria{}), "so it passes the default gate");
+
+    // Now seal the bottom. Every shaft into the deepest layer is filled, which leaves
+    // a system that still LOOKS generous — the same hollow cells, the same corridors —
+    // and whose bottom floor no body can ever reach.
+    procgen::CaveSystem sealed = system;
+    const core::u32 deepest = sealed.layerCount - 1u;
+    for (core::u32 i = 0u; i < sealed.shafts.size(); ++i)
+    {
+        const procgen::CaveShaft &shaft = sealed.shafts[i];
+        if (shaft.lowerLayer != deepest || shaft.upperLayer == shaft.lowerLayer)
+            continue;
+        sealed.layer[deepest].at(shaft.x, shaft.z) = procgen::DungeonCell::Wall;
+    }
+
+    const procgen::LevelQuality sealedQuality = procgen::evaluateCaveSystem(sealed);
+    std::printf("    sealed: reachable=%u of %u, goal=%s\n", sealedQuality.reachableCells,
+                sealedQuality.walkableCells, sealedQuality.goalReachable ? "yes" : "no");
+    check(!sealedQuality.goalReachable, "sealing every shaft to the bottom makes the goal unreachable");
+    check(!sealedQuality.fullyConnected, "and leaves a whole floor cut off");
+    check(!procgen::passesGate(sealedQuality, procgen::GateCriteria{}), "and the gate refuses it");
+
+    // The failure that started all this: judging the flat map instead. It is empty for
+    // a layered system, so it reports a world with no cells at all — which is why the
+    // old verdict was "fails" rather than "passes", and why nothing looked wrong.
+    check(procgen::evaluateCaveSystem(procgen::CaveSystem{}).walkableCells == 0u,
+          "an empty stack measures as empty rather than as a healthy one");
+}
+
 int main()
 {
     std::printf("== procgen cave systems ==\n");
@@ -222,6 +290,7 @@ int main()
     testLayersDifferAndDeepen();
     testDeterminism();
     testBuilderIntegration();
+    testTheGateJudgesTheStack();
 
     if (gFailures == 0)
         std::printf("\nALL PASS (0 failures, %d checks)\n", gChecks);

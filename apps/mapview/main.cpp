@@ -46,9 +46,12 @@
 
 #include <lpl/ai/Personality.hpp>
 #include <lpl/ai/StigmergyField.hpp>
+#include <lpl/ai/AntColony.hpp>
 #include <lpl/ai/Swarm.hpp>
 #include <lpl/ecology/Genome.hpp>
+#include <lpl/ecology/Herd.hpp>
 #include <lpl/ecology/Populations.hpp>
+#include <lpl/ecology/Vegetation.hpp>
 #include <lpl/ecs/Archetype.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Entity.hpp>
@@ -58,6 +61,11 @@
 #include <lpl/ecs/SystemScheduler.hpp>
 #include <lpl/engine/Config.hpp>
 #include <lpl/engine/Engine.hpp>
+#include <lpl/engine/GridTerrain.hpp>
+#include <lpl/engine/systems/HeightfieldCollisionSystem.hpp>
+#include <lpl/engine/ITerrainQuery.hpp>
+#include <lpl/engine/LivingLayer.hpp>
+#include <lpl/engine/systems/CreatureSystems.hpp>
 #include <lpl/engine/World.hpp>
 #include <lpl/image/Font8x16.hpp>
 #include <lpl/math/Vec3.hpp>
@@ -66,7 +74,7 @@
 #include <lpl/procgen/Climate.hpp>
 #include <lpl/procgen/Dungeon.hpp>
 #include <lpl/procgen/Extrusion.hpp>
-#include <lpl/procgen/FixedMath.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/procgen/Heightfield.hpp>
 #include <lpl/procgen/Hydrology.hpp>
 #include <lpl/procgen/Liminal.hpp>
@@ -75,6 +83,8 @@
 #include <lpl/procgen/Streaming.hpp>
 #include <lpl/procgen/ValueNoise.hpp>
 #include <lpl/procgen/Voronoi.hpp>
+#include <lpl/procgen/MapMesh.hpp>
+#include <lpl/procgen/MapShading.hpp>
 #include <lpl/procgen/WorldBuilder.hpp>
 
 #include <GL/gl.h>
@@ -99,22 +109,8 @@ using namespace lpl;
 // What the viewer is currently asking the generator for.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// How the surface is coloured.
-/// How the surface is coloured.
-///
-/// @c Climate is one mode rather than six, and the axis it shows is a separate
-/// option: the six axes are the same kind of quantity, and cycling shading
-/// through six near-identical entries would bury the five modes that are not.
-enum class Shading : int {
-    Biome = 0,
-    Height,
-    Moisture,
-    Drainage,
-    Region,
-    Slope,
-    Climate,
-    Count
-};
+/// How the surface is coloured — procgen::MapShading, which the editor shares.
+using Shading = procgen::MapShading;
 
 /// Which grid is on screen.
 ///
@@ -158,39 +154,22 @@ struct Options {
     bool chunkOverlay{false};    ///< Draw the streaming plan around the camera.
 };
 
-/// Everything the generator produced, plus the timing it took.
-struct TerrainData {
-    procgen::Heightfield height;
-    procgen::Heightfield moisture;
-    procgen::BiomeMap biomes;
-    procgen::DrainageNetwork drainage;
-    procgen::VoronoiDiagram regions;
-    procgen::SettlementMap settlement;
-    procgen::Grid<core::u8> roads;
-    procgen::DungeonMap dungeon;
-    procgen::Grid<core::u8> riverMask;
-    procgen::ClimateField climate;
-    procgen::CaveSystem caveSystem;
-    procgen::VoxelVolume townVolume;
-    procgen::VoxelVolume roadsideVolume;
+/// Everything the generator produced, plus what only a viewer adds.
+///
+/// It IS a procgen::WorldAtlas, extended — not a parallel copy of one. This struct
+/// used to be that copy: its own names for counters that live in
+/// procgen::BuiltWorldStats, its own flattened duplicates of two
+/// procgen::DrainageNetwork fields, and its own libm logarithm where the module
+/// already had math::fixedLog2. Deriving from the atlas is what makes the
+/// shading functions shareable with the editor, since they can now take the type
+/// both tools hold.
+///
+/// What stays here is what the builder did not produce: the liminal sector is its
+/// own generator on its own seed, and the wall-clock timing is a fact about this
+/// process rather than about the world.
+struct TerrainData : procgen::WorldAtlas {
     procgen::LiminalSpace liminal;
-    math::Fixed32 low{};
-    math::Fixed32 high{};
-    core::u32 riverCells{0u};
-    core::u32 raisedCells{0u};
-    core::u32 maxAccumulation{0u};
-    core::u32 biomeCounts[static_cast<core::u32>(procgen::BiomeId::Count)] = {};
-    lpl::pmr::vector<procgen::BuildingPlot> plots;
-    core::u32 dungeonFloor{0u};
-    core::u32 roadCells{0u};
-    bool dungeonConnected{false};
-    core::u32 caveLayers{0u};
-    core::u32 caveEntrances{0u};
-    core::u32 caveHollow{0u};
-    core::u32 caveReachable{0u};
-    core::u32 roadsideModules{0u};
     core::u32 liminalSectors{0u};
-    float seaLevel{0.0f};
     double buildMilliseconds{0.0};
 };
 
@@ -201,22 +180,6 @@ const char *noiseName(procgen::NoiseKind kind)
     case procgen::NoiseKind::Fbm: return "fBm";
     case procgen::NoiseKind::Ridged: return "ridged";
     case procgen::NoiseKind::Billow: return "billow";
-    }
-    return "?";
-}
-
-const char *shadingName(Shading shading)
-{
-    switch (shading)
-    {
-    case Shading::Biome: return "biome";
-    case Shading::Height: return "height";
-    case Shading::Moisture: return "moisture";
-    case Shading::Drainage: return "drainage";
-    case Shading::Region: return "region";
-    case Shading::Slope: return "slope";
-    case Shading::Climate: return "climate";
-    case Shading::Count: break;
     }
     return "?";
 }
@@ -267,19 +230,6 @@ const char *caveName(core::u32 kind)
     }
 }
 
-const char *climateAxisName(core::u32 axis)
-{
-    switch (axis % procgen::kClimateAxisCount)
-    {
-    case 0u: return "temperature";
-    case 1u: return "moisture";
-    case 2u: return "continentalness";
-    case 3u: return "erosion";
-    case 4u: return "depth";
-    default: return "weirdness";
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Generation
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,248 +252,177 @@ double nowMilliseconds()
 // boulder, and every boulder likewise, so the world carried twice the geometry it should
 // and nothing could be told apart.
 
-TerrainData generateTerrain(const Options &options, ecs::Registry *registry,
-                            lpl::pmr::vector<ecs::EntityId> *outPropIds)
+/**
+ * @brief The viewer's world, AS A RECIPE.
+ *
+ * Two hundred and twenty lines of hand-written @c WorldBuilder calls used to live
+ * here, and that was the last piece of engine knowledge stranded in this file. It
+ * could not leave until the recipe could NAME what the viewer was asking for:
+ * Voronoi provinces, terracing, three of the four underground generators, the
+ * building grammar, the roadside L-system, the lift that puts the ground above the
+ * physics floor, and — the one that blocked it longest — a sixth scatter rule,
+ * against a ceiling of four.
+ *
+ * What that costs is nothing and what it buys is everything the format is for: this
+ * world can now be saved to a `.lplscene`, baked into a cartridge, replayed in ring 0
+ * and asked for by Caine, because it is the same pipeline the parity gate runs rather
+ * than a second one that resembles it.
+ *
+ * The pass ORDER is no longer decided here either. It is @c procgen::applyRecipe's,
+ * which is the point: two callers ordering erosion and rivers differently produce two
+ * different worlds from the same description, and nothing would say which was meant.
+ */
+[[nodiscard]] procgen::WorldRecipe recipeFor(const Options &options)
 {
-    const double started = nowMilliseconds();
-    TerrainData world;
+    procgen::WorldRecipe recipe;
 
-    procgen::NoiseParams noise;
-    noise.seed = options.seed;
-    noise.kind = options.noise;
-    noise.warpStrength = options.warp ? 8.0f : 0.0f;
+    recipe.seed = options.seed;
+    recipe.width = options.size;
+    recipe.depth = options.size;
 
-    procgen::MoistureParams climate;
-    climate.windDirection = options.windDirection;
+    recipe.terrain.seed = options.seed;
+    recipe.terrain.kind = options.noise;
+    recipe.terrain.warpStrength = options.warp ? 8.0f : 0.0f;
+    // The viewer's own framing: it looks at a map from above, so it takes the noise as
+    // it comes rather than rescaling it into a fixed band.
+    recipe.normalizeTerrain = false;
 
-    procgen::WorldBuilder builder{options.seed};
-    builder.terrain(options.size, options.size, noise).climate(climate);
-    if (options.terraces)
-        builder.terraces(8u);
-    if (options.erosion)
-        builder.erode();
-    if (options.rivers)
-        builder.rivers();
+    recipe.terraceSteps = options.terraces ? 8u : 0u;
+    recipe.erodeTerrain = options.erosion;
+    recipe.carveRivers = options.rivers;
 
-    // ── Put the world in the frame the physics expects, once, before anything is
-    //    placed in it ────────────────────────────────────────────────────────────
-    //
-    // The built-in physics stops any body below kDefaultHalfHeight, half a unit above
-    // the origin, and it knows nothing about a heightfield. A world whose ground dips
-    // under that line therefore has two floors: the real one, and a flat invisible one
-    // the bodies actually come to rest on.
-    //
-    // Shifting the terrain afterwards and then chasing everything already placed in it
-    // is the wrong way round — and it does not work, because "everything" grows: props
-    // today, spawn points and structures tomorrow, each needing to remember it lives in
-    // a frame that moved. The world is shifted HERE, before a single entity exists, and
-    // the biome thresholds are shifted with it so the classification still sees the same
-    // relative elevations it was tuned for.
-    math::Fixed32 rawLow{};
-    math::Fixed32 rawHigh{};
-    (void) procgen::heightRange(builder.heightfield(), rawLow, rawHigh);
-    const float clearance = 1.5f;
-    const float lift = clearance - rawLow.toFloat();
-    if (lift > 0.0f)
-    {
-        // normalizeHeights maps min and max onto the two bounds linearly, so asking for
-        // the same span translated is an exact shift, not a rescale.
-        builder.normalize(rawLow.toFloat() + lift, rawHigh.toFloat() + lift);
-    }
+    // Half a unit is where the built-in physics stops a body, and it knows nothing
+    // about a heightfield — so a world dipping below that line has two floors. One
+    // and a half leaves room for the deepest river bed the erosion cuts.
+    recipe.groundClearance = 1.5f;
 
-    procgen::BiomeParams biomeParams;
-    if (lift > 0.0f)
-    {
-        biomeParams.seaLevel += lift;
-        biomeParams.mountainHeight += lift;
-        biomeParams.snowHeight += lift;
-    }
+    recipe.climate.windDirection = options.windDirection;
 
-    procgen::VoronoiParams provinces;
-    provinces.cellSize = options.size / 6u == 0u ? 6u : options.size / 6u;
-    provinces.metric = options.metric;
-    provinces.warpStrength = options.warp ? 6.0f : 0.0f;
-    builder.regions(provinces);
+    recipe.partitionRegions = true;
+    recipe.provinces.cellSize = options.size / 6u == 0u ? 6u : options.size / 6u;
+    recipe.provinces.metric = options.metric;
+    recipe.provinces.warpStrength = options.warp ? 6.0f : 0.0f;
 
-    // The six-axis hypercube, not just the two-axis Whittaker input. The
-    // classifier already reads it; asking for it here is what makes it
-    // inspectable, and the sea level has to travel with the lifted world for the
-    // continentalness and depth axes to mean anything.
-    procgen::ClimateParams axes;
-    axes.seaLevel += lift > 0.0f ? lift : 0.0f;
-    builder.climateAxes(axes);
-    builder.biomes(biomeParams);
+    recipe.placeSettlement = options.settlement;
+    recipe.settlement.districtSize = 14u;
 
-    if (options.settlement)
-    {
-        procgen::SettlementParams town;
-        town.districtSize = 14u;
-        // The buildable floor is an absolute height too, so it moves with the world.
-        town.minHeight += lift > 0.0f ? lift : 0.0f;
-        builder.settlement(town);
-    }
-
-    if (options.roads)
-    {
-        procgen::RoadParams highways;
-        highways.iterations = 6u;
-        highways.stepLength = 3u;
-        // Same absolute-height caveat as the settlement: the world was lifted, so
-        // a floor of zero would put roads under the new ground rather than above
-        // the old water line.
-        highways.minHeight += lift > 0.0f ? lift : 0.0f;
-        builder.roads(highways);
-    }
+    recipe.growRoads = options.roads;
+    recipe.roads.iterations = 6u;
+    recipe.roads.stepLength = 3u;
 
     // Underground, generated alongside so the view can be toggled without a rebuild.
-    if (options.caveKind % 4u == 3u)
+    // The layered system is a stack of plans joined by shafts, at least one of which
+    // pierces the surface; the three flat kinds are buried voids with no way in, which
+    // is exactly what looking at them makes obvious and what a floor count never did.
+    switch (options.caveKind % 4u)
     {
-        // The layered system: a stack of plans joined by shafts, at least one of
-        // which pierces the surface. The three flat kinds below are all buried
-        // voids with no way in — which is exactly what looking at them makes
-        // obvious and what a floor count never did.
-        procgen::CaveSystemParams system;
-        system.width = options.size;
-        system.depth = options.size;
-        system.seed = options.seed;
-        system.layers = 3u;
-        system.entrances = 3u;
-        builder.caveSystem(system);
-    }
-    else if (options.caveKind % 4u == 1u)
-    {
-        procgen::BspDungeonParams rooms;
-        rooms.width = options.size;
-        rooms.depth = options.size;
-        rooms.seed = options.seed;
-        builder.dungeon(rooms);
-    }
-    else if (options.caveKind % 4u == 2u)
-    {
-        procgen::DlaParams dla;
-        dla.width = options.size;
-        dla.depth = options.size;
-        dla.seed = options.seed;
-        dla.particles = options.size * 8u;
-        builder.dlaCaves(dla);
-    }
-    else
-    {
-        procgen::CaveParams cave;
-        cave.width = options.size;
-        cave.depth = options.size;
-        cave.seed = options.seed;
-        builder.caves(cave);
+    case 1u:
+        recipe.caveKind = procgen::CaveKind::Bsp;
+        recipe.rooms.width = options.size;
+        recipe.rooms.depth = options.size;
+        recipe.rooms.seed = options.seed;
+        break;
+    case 2u:
+        recipe.caveKind = procgen::CaveKind::Dla;
+        recipe.aggregation.width = options.size;
+        recipe.aggregation.depth = options.size;
+        recipe.aggregation.seed = options.seed;
+        recipe.aggregation.particles = options.size * 8u;
+        break;
+    case 3u:
+        recipe.caveKind = procgen::CaveKind::Layered;
+        recipe.caveSystem.width = options.size;
+        recipe.caveSystem.depth = options.size;
+        recipe.caveSystem.seed = options.seed;
+        recipe.caveSystem.layers = 3u;
+        recipe.caveSystem.entrances = 3u;
+        break;
+    default:
+        recipe.caveKind = procgen::CaveKind::Cellular;
+        recipe.caves.width = options.size;
+        recipe.caves.depth = options.size;
+        recipe.caves.seed = options.seed;
+        break;
     }
 
     // The town's third dimension. `extrudeTown` gives prisms and the viewer used to
     // draw its own boxes on top of the footprints; the grammar gives a base course,
     // storeys and a roof, which is the difference between a bar chart and something
-    // that reads as architecture. Drawing the volume rather than a heuristic box also
-    // means what is on screen is what the generator actually produced.
-    if (options.settlement && options.grammarBuildings)
-    {
-        procgen::BuildingGrammarParams grammar;
-        // Three storeys, not five: the grid is one world unit per cell, so a plot
-        // is three or four units across and an eight-level volume reads as a tower
-        // block dropped on a village.
-        grammar.minFloors = 1u;
-        grammar.maxFloors = 3u;
-        grammar.roofHeight = 1u;
-        builder.buildings(grammar);
-    }
+    // that reads as architecture.
+    //
+    // Three storeys, not five: the grid is one world unit per cell, so a plot is three
+    // or four units across and an eight-level volume reads as a tower block dropped on
+    // a village.
+    recipe.raiseBuildings = options.settlement && options.grammarBuildings;
+    recipe.buildings.minFloors = 1u;
+    recipe.buildings.maxFloors = 3u;
+    recipe.buildings.roofHeight = 1u;
+
+    // The linear form of the same grammar: two fence posts to one lamp, then a gap.
+    // The point is that one parser serves both.
     if (options.roads && options.grammarBuildings)
     {
-        // The linear form of the same grammar: two fence posts to one lamp, then a
-        // gap. The point is that one parser serves both.
-        builder.roadside("{[A,P]:2,[BL,P]:1}*,[G,P]", 3u);
+        const char pattern[] = "{[A,P]:2,[BL,P]:1}*,[G,P]";
+        for (core::u32 i = 0u; i < sizeof(pattern); ++i)
+            recipe.roadsidePattern[i] = pattern[i];
+        recipe.roadsideLevels = 3u;
     }
 
-    // Vegetation: the same scatter the builder would place in a real game, with one
-    // rule per biome so a forest is conifers and a savanna is scrub. This is what
-    // `bakeGrids` alone never produced — it stops before any entity exists, so the map
-    // came out bare and the scatter rules were never exercised at all.
-    procgen::ScatterRule conifer;
-    conifer.biome = procgen::BiomeId::Taiga;
-    conifer.density = 0.16f;
-    conifer.halfExtent = 0.42f;
-    conifer.maxSlope = 1.6f;
-    conifer.collidable = true;
-    builder.scatter(conifer);
+    // Vegetation: one rule per biome, so a forest is conifers and a savanna is scrub.
+    // Six of them — the case that could not be written as a recipe at all until the
+    // ceiling moved, and the reason this whole function had to stay hand-written.
+    if (options.vegetation)
+    {
+        struct Species {
+            procgen::BiomeId biome;
+            core::f32 density;
+            core::f32 halfExtent;
+            core::f32 maxSlope;
+            bool collidable;
+        };
+        static constexpr Species kSpecies[] = {
+            {procgen::BiomeId::Taiga, 0.16f, 0.42f, 1.6f, true},
+            {procgen::BiomeId::Forest, 0.18f, 0.5f, 1.6f, true},
+            {procgen::BiomeId::Rainforest, 0.22f, 0.55f, 1.8f, true},
+            {procgen::BiomeId::Savanna, 0.05f, 0.3f, 0.0f, false},
+            {procgen::BiomeId::Desert, 0.03f, 0.22f, 0.0f, false},
+            {procgen::BiomeId::Marsh, 0.2f, 0.25f, 0.0f, false},
+        };
+        static_assert(sizeof(kSpecies) / sizeof(kSpecies[0]) <= procgen::kMaxScatterRules,
+                      "one scatter rule per plant, and the recipe has to hold them all");
 
-    procgen::ScatterRule broadleaf;
-    broadleaf.biome = procgen::BiomeId::Forest;
-    broadleaf.density = 0.18f;
-    broadleaf.halfExtent = 0.5f;
-    broadleaf.maxSlope = 1.6f;
-    broadleaf.collidable = true;
-    builder.scatter(broadleaf);
+        for (const Species &species : kSpecies)
+        {
+            procgen::ScatterRule &rule = recipe.scatter[recipe.scatterCount++];
+            rule.biome = species.biome;
+            rule.density = species.density;
+            rule.halfExtent = species.halfExtent;
+            if (species.maxSlope > 0.0f)
+                rule.maxSlope = species.maxSlope;
+            rule.collidable = species.collidable;
+        }
+    }
 
-    procgen::ScatterRule jungle;
-    jungle.biome = procgen::BiomeId::Rainforest;
-    jungle.density = 0.22f;
-    jungle.halfExtent = 0.55f;
-    jungle.maxSlope = 1.8f;
-    jungle.collidable = true;
-    builder.scatter(jungle);
+    return recipe;
+}
 
-    procgen::ScatterRule scrub;
-    scrub.biome = procgen::BiomeId::Savanna;
-    scrub.density = 0.05f;
-    scrub.halfExtent = 0.3f;
-    builder.scatter(scrub);
+TerrainData generateTerrain(const Options &options, ecs::Registry *registry,
+                            lpl::pmr::vector<ecs::EntityId> *outPropIds)
+{
+    const double started = nowMilliseconds();
 
-    procgen::ScatterRule cactus;
-    cactus.biome = procgen::BiomeId::Desert;
-    cactus.density = 0.03f;
-    cactus.halfExtent = 0.22f;
-    builder.scatter(cactus);
-
-    procgen::ScatterRule reed;
-    reed.biome = procgen::BiomeId::Marsh;
-    reed.density = 0.2f;
-    reed.halfExtent = 0.25f;
-    builder.scatter(reed);
-
-    // Materialise the vegetation into the World's registry, so the props are real
-    // entities the simulation owns rather than something the viewer draws on top.
-    const procgen::BuiltWorldStats stats =
-        registry != nullptr ? builder.materializeProps(*registry, outPropIds) : builder.bakeGrids();
-
-    world.height = builder.heightfield();
-    world.moisture = builder.moisture();
-    world.biomes = builder.biomeMap();
-    world.drainage = builder.drainage();
-    world.regions = builder.regionMap();
-    world.settlement = builder.settlementMap();
-    world.roads = builder.roadMap();
-    world.dungeon = builder.dungeonMap();
-    world.riverMask = procgen::riverMask(world.drainage, 0.02f);
-    world.climate = builder.climateField();
-    world.caveSystem = builder.caves();
-    world.townVolume = builder.townVolume();
-    world.roadsideVolume = builder.roadsideVolume();
-    world.caveLayers = stats.caveLayers;
-    world.caveEntrances = stats.caveEntrances;
-    world.caveHollow = stats.caveHollow;
-    world.caveReachable = stats.caveReachable;
-    world.roadsideModules = stats.roadsideModules;
-    (void) procgen::heightRange(world.height, world.low, world.high);
-    world.riverCells = stats.riverCells;
-    world.roadCells = stats.roadCells;
-    world.raisedCells = world.drainage.raisedCells;
-    world.maxAccumulation = world.drainage.maxAccumulation;
-    world.dungeonFloor = stats.dungeonFloor;
-    world.dungeonConnected = stats.dungeonConnected;
-    world.plots = builder.plots();
-    procgen::countBiomes(world.biomes, world.biomeCounts);
-
-    world.seaLevel = biomeParams.seaLevel;
-
-    // The scenery was placed against the terrain BEFORE it was lifted, so it is a whole
-    // offset out of frame — buried under the ground it was supposed to stand on.
-    // Everything living in the simulation's frame has to move with it, and the props are
-    // the only things written before the shift.
+    // 2.2 rather than the rule's default 2.4 because this is THE walkability mask of
+    // this viewer, the one the living layer walks on — and the snapshot's own header
+    // says why there must be exactly one: three notions of "blocked" is how an animal
+    // ends up standing in a lake the scent flows around.
+    //
+    // Sea level is left at the recipe's own, NOT at a number written here: buildAtlas
+    // shifts both the rule and the reported sea level by whatever lift the ground
+    // clearance actually applied, which is only knowable after erosion has run.
+    procgen::WorldRecipe recipe = recipeFor(options);
+    TerrainData world;
+    static_cast<procgen::WorldAtlas &>(world) = procgen::buildAtlas(
+        recipe, registry, outPropIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.2f});
     world.buildMilliseconds = nowMilliseconds() - started;
     return world;
 }
@@ -552,88 +431,11 @@ TerrainData generateTerrain(const Options &options, ecs::Registry *registry,
 // Colour
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct Rgb {
-    float r, g, b;
-};
+// The palette, the ramps and the seven modes live in procgen::MapShading now —
+// one definition, two tools. They were about to be written a second time for the
+// editor, which is the pattern this repository has paid for eight times.
+using Rgb = procgen::Rgb;
 
-/// The palette. Chosen so a glance reads as a map, not as a debug ramp.
-Rgb biomeColour(procgen::BiomeId biome)
-{
-    switch (biome)
-    {
-    case procgen::BiomeId::Ocean: return {0.07f, 0.20f, 0.42f};
-    case procgen::BiomeId::Beach: return {0.83f, 0.77f, 0.55f};
-    case procgen::BiomeId::Snow: return {0.94f, 0.95f, 0.97f};
-    case procgen::BiomeId::Tundra: return {0.60f, 0.62f, 0.56f};
-    case procgen::BiomeId::Taiga: return {0.20f, 0.38f, 0.31f};
-    case procgen::BiomeId::Rock: return {0.44f, 0.42f, 0.40f};
-    case procgen::BiomeId::Desert: return {0.85f, 0.72f, 0.42f};
-    case procgen::BiomeId::Savanna: return {0.70f, 0.68f, 0.34f};
-    case procgen::BiomeId::Grassland: return {0.42f, 0.60f, 0.30f};
-    case procgen::BiomeId::Forest: return {0.20f, 0.45f, 0.22f};
-    case procgen::BiomeId::Rainforest: return {0.11f, 0.36f, 0.18f};
-    case procgen::BiomeId::Marsh: return {0.31f, 0.42f, 0.33f};
-    case procgen::BiomeId::Lake: return {0.16f, 0.35f, 0.55f};
-    case procgen::BiomeId::Count: break;
-    }
-    return {1.0f, 0.0f, 1.0f};
-}
-
-/// Amber-on-abyss ramp for the scalar views, so they read as instrumentation.
-Rgb rampColour(float t)
-{
-    if (t < 0.0f)
-        t = 0.0f;
-    if (t > 1.0f)
-        t = 1.0f;
-    return {0.05f + 0.95f * t, 0.05f + 0.62f * t * t, 0.10f + 0.15f * t * t * t};
-}
-
-Rgb surfaceColour(const TerrainData &world, const Options &options, core::u32 x, core::u32 z)
-{
-    const float span = (world.high - world.low).toFloat();
-    const float normalized = span > 0.0f ? (world.height.at(x, z) - world.low).toFloat() / span : 0.5f;
-
-    switch (options.shading)
-    {
-    case Shading::Height: return rampColour(normalized);
-    case Shading::Moisture:
-        return world.moisture.empty() ? Rgb{0.5f, 0.5f, 0.5f} : rampColour(world.moisture.at(x, z).toFloat());
-    case Shading::Drainage: {
-        if (world.maxAccumulation == 0u)
-            return {0.1f, 0.1f, 0.1f};
-        // Logarithmic, for the same reason the moisture term is: accumulation
-        // spans four orders of magnitude and a linear ramp shows only the trunk.
-        const float flow = static_cast<float>(world.drainage.accumulation.at(x, z));
-        const float scale = std::log(1.0f + flow) / std::log(1.0f + static_cast<float>(world.maxAccumulation));
-        return rampColour(scale);
-    }
-    case Shading::Region: {
-        if (world.regions.regions.empty())
-            return {0.2f, 0.2f, 0.2f};
-        const core::u16 region = world.regions.regions.at(x, z);
-        // Hash the id so adjacent regions never share a shade.
-        const core::u32 h = procgen::ValueNoise2D::hash2(static_cast<core::i32>(region), 7, 0x9E37u);
-        return {0.25f + 0.7f * static_cast<float>((h >> 0) & 0xFFu) / 255.0f,
-                0.25f + 0.7f * static_cast<float>((h >> 8) & 0xFFu) / 255.0f,
-                0.25f + 0.7f * static_cast<float>((h >> 16) & 0xFFu) / 255.0f};
-    }
-    case Shading::Slope: return rampColour(procgen::slopeAt(world.height, x, z).toFloat() * 0.6f);
-    case Shading::Climate: {
-        if (world.climate.empty())
-            return {0.2f, 0.2f, 0.2f};
-        // Every axis is normalised to [0, 1] by the climate pass, so one ramp
-        // reads all six — and the fact that it does is itself the claim being
-        // looked at: an axis that came out flat or saturated is a bug you can
-        // see here and nowhere in a signature.
-        const core::u32 axis = options.climateAxis % procgen::kClimateAxisCount;
-        return rampColour(world.climate.axes[axis].at(x, z).toFloat());
-    }
-    case Shading::Biome:
-    case Shading::Count: break;
-    }
-    return biomeColour(world.biomes.at(x, z));
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Text, drawn from the engine's console font as GL quads
@@ -675,560 +477,16 @@ void drawText(const char *text, float x, float y, float scale)
 // Mesh
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct Vertex {
-    float x, y, z;
-    float nx, ny, nz;
-    Rgb colour;
-};
-
-/// Builds the surface mesh once per regeneration, so drawing is only a walk.
-std::vector<Vertex> buildSurfaceMesh(const TerrainData &world, const Options &options)
-{
-    std::vector<Vertex> vertices;
-    if (world.height.empty())
-        return vertices;
-
-    const core::u32 width = world.height.width();
-    const core::u32 depth = world.height.depth();
-    const float halfW = static_cast<float>(width) * 0.5f;
-    const float halfD = static_cast<float>(depth) * 0.5f;
-
-    // Per-cell normals from the central difference, which is what makes the
-    // relief read at all: flat shading on a heightfield is nearly invisible.
-    std::vector<Vertex> grid(static_cast<std::size_t>(width) * depth);
-    for (core::u32 z = 0u; z < depth; ++z)
-    {
-        for (core::u32 x = 0u; x < width; ++x)
-        {
-            const float left = world.height.clamped(static_cast<core::i32>(x) - 1, static_cast<core::i32>(z)).toFloat();
-            const float right =
-                world.height.clamped(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)).toFloat();
-            const float back = world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z) - 1).toFloat();
-            const float front =
-                world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1).toFloat();
-
-            float nx = left - right;
-            float ny = 2.0f;
-            float nz = back - front;
-            const float length = std::sqrt(nx * nx + ny * ny + nz * nz);
-            if (length > 0.0f)
-            {
-                nx /= length;
-                ny /= length;
-                nz /= length;
-            }
-
-            Rgb colour = surfaceColour(world, options, x, z);
-            // Rivers, drawn as part of the surface rather than over it: a river is
-            // a property of the ground, and an overlay would z-fight with it.
-            if (options.rivers && !world.riverMask.empty() && world.riverMask.at(x, z) != 0u)
-                colour = {0.16f, 0.42f, 0.72f};
-            if (options.settlement && !world.settlement.empty())
-            {
-                switch (world.settlement.at(x, z))
-                {
-                case procgen::SettlementCell::Road: colour = {0.35f, 0.32f, 0.30f}; break;
-                case procgen::SettlementCell::Plaza: colour = {0.55f, 0.50f, 0.44f}; break;
-                case procgen::SettlementCell::Plot: colour = {0.82f, 0.55f, 0.22f}; break;
-                default: break;
-                }
-            }
-            // The highway network, on top of the town's own streets: it is the
-            // long-distance layer, grown by the grammar and steered by the field,
-            // where the settlement's roads are district borders. Drawn last so a
-            // road crossing a town reads as passing through it.
-            if (options.roads && !world.roads.empty() && world.roads.at(x, z) != 0u)
-                colour = {0.24f, 0.22f, 0.20f};
-
-            grid[world.height.index(x, z)] = Vertex{static_cast<float>(x) - halfW,
-                                                    world.height.at(x, z).toFloat(),
-                                                    static_cast<float>(z) - halfD,
-                                                    nx,
-                                                    ny,
-                                                    nz,
-                                                    colour};
-        }
-    }
-
-    vertices.reserve(static_cast<std::size_t>(width - 1u) * (depth - 1u) * 6u);
-    for (core::u32 z = 0u; z + 1u < depth; ++z)
-    {
-        for (core::u32 x = 0u; x + 1u < width; ++x)
-        {
-            const Vertex &a = grid[world.height.index(x, z)];
-            const Vertex &b = grid[world.height.index(x + 1u, z)];
-            const Vertex &c = grid[world.height.index(x + 1u, z + 1u)];
-            const Vertex &d = grid[world.height.index(x, z + 1u)];
-            vertices.push_back(a);
-            vertices.push_back(b);
-            vertices.push_back(c);
-            vertices.push_back(a);
-            vertices.push_back(c);
-            vertices.push_back(d);
-        }
-    }
-    return vertices;
-}
-
-/**
- * @brief Builds the underground as a real volume: a floor, and walls around it.
- *
- * A flat sheet of coloured quads is not a cave. What makes a dungeon legible is the
- * WALLS — the boundary between the carved space and the rock — because that is the
- * only thing that shows a corridor as a corridor and a chamber as a chamber. So each
- * open cell contributes a floor quad, and each of its solid neighbours contributes a
- * vertical face: the mesh is the surface of the void, not a picture of it.
- *
- * Only the boundary faces are emitted. Rock is not drawn at all, which is both the
- * cheap thing and the right thing: filling the solid would hide the very space the
- * view exists to show.
- */
-std::vector<Vertex> buildDungeonMesh(const TerrainData &world, float depthBelow)
-{
-    std::vector<Vertex> vertices;
-    if (world.dungeon.empty())
-        return vertices;
-
-    const core::u32 width = world.dungeon.width();
-    const core::u32 depth = world.dungeon.depth();
-    const float halfW = static_cast<float>(width) * 0.5f;
-    const float halfD = static_cast<float>(depth) * 0.5f;
-    const float wallHeight = 1.6f;
-
-    const Rgb floorColour{0.52f, 0.44f, 0.36f};
-    const Rgb wallColour{0.30f, 0.26f, 0.24f};
-    const Rgb capColour{0.66f, 0.44f, 0.20f};
-
-    const auto solid = [&world](core::i32 x, core::i32 z) {
-        // Outside the map counts as rock, so the cave is walled in rather than open
-        // to nothing at the border.
-        if (!world.dungeon.contains(x, z))
-            return true;
-        return world.dungeon.at(static_cast<core::u32>(x), static_cast<core::u32>(z)) == procgen::DungeonCell::Wall;
-    };
-
-    const auto quad = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                  float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                  const Rgb &colour) {
-        const Vertex a{ax, ay, az, nx, ny, nz, colour};
-        const Vertex b{bx, by, bz, nx, ny, nz, colour};
-        const Vertex c{cx, cy, cz, nx, ny, nz, colour};
-        const Vertex d{dx, dy, dz, nx, ny, nz, colour};
-        vertices.push_back(a);
-        vertices.push_back(b);
-        vertices.push_back(c);
-        vertices.push_back(a);
-        vertices.push_back(c);
-        vertices.push_back(d);
-    };
-
-    for (core::u32 z = 0u; z < depth; ++z)
-    {
-        for (core::u32 x = 0u; x < width; ++x)
-        {
-            if (solid(static_cast<core::i32>(x), static_cast<core::i32>(z)))
-                continue;
-
-            // The cave hangs a fixed distance below the ground above it, so it follows
-            // the terrain instead of lying on a flat plane the surface never touches.
-            const float ground =
-                world.height.empty() ?
-                    0.0f :
-                    world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
-            const float floorY = ground - depthBelow;
-            const float ceilY = floorY + wallHeight;
-
-            const float x0 = static_cast<float>(x) - halfW;
-            const float x1 = x0 + 1.0f;
-            const float z0 = static_cast<float>(z) - halfD;
-            const float z1 = z0 + 1.0f;
-
-            quad(x0, floorY, z0, x1, floorY, z0, x1, floorY, z1, x0, floorY, z1, 0.0f, 1.0f, 0.0f, floorColour);
-
-            // A wall wherever the rock begins.
-            if (solid(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)))
-                quad(x1, floorY, z0, x1, ceilY, z0, x1, ceilY, z1, x1, floorY, z1, 1.0f, 0.0f, 0.0f, wallColour);
-            if (solid(static_cast<core::i32>(x) - 1, static_cast<core::i32>(z)))
-                quad(x0, floorY, z0, x0, ceilY, z0, x0, ceilY, z1, x0, floorY, z1, -1.0f, 0.0f, 0.0f, wallColour);
-            if (solid(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1))
-                quad(x0, floorY, z1, x0, ceilY, z1, x1, ceilY, z1, x1, floorY, z1, 0.0f, 0.0f, 1.0f, wallColour);
-            if (solid(static_cast<core::i32>(x), static_cast<core::i32>(z) - 1))
-                quad(x0, floorY, z0, x0, ceilY, z0, x1, ceilY, z0, x1, floorY, z0, 0.0f, 0.0f, -1.0f, wallColour);
-
-            // Cap the top of the walls, so from above the plan reads as a plan.
-            if (solid(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)) ||
-                solid(static_cast<core::i32>(x) - 1, static_cast<core::i32>(z)) ||
-                solid(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1) ||
-                solid(static_cast<core::i32>(x), static_cast<core::i32>(z) - 1))
-                quad(x0, ceilY, z0, x1, ceilY, z0, x1, ceilY, z1, x0, ceilY, z1, 0.0f, 1.0f, 0.0f, capColour);
-        }
-    }
-    return vertices;
-}
-
-/**
- * @brief Raises the settlement: buildings as boxes on their footprints, roads as kerbs.
- *
- * Painting the plots onto the ground says where a town is. It does not put a town
- * there — a settlement is read by its silhouette, and a silhouette needs height. Each
- * footprint from @ref procgen::WorldBuilder::plots becomes one box, its height derived
- * from its own area and district so a quarter has a character rather than a uniform
- * skyline, and its base sunk to the lowest ground it covers so nothing floats over a
- * slope.
- */
-std::vector<Vertex> buildTownMesh(const TerrainData &world, const lpl::pmr::vector<procgen::BuildingPlot> &plots)
-{
-    std::vector<Vertex> vertices;
-    if (world.height.empty())
-        return vertices;
-
-    const float halfW = static_cast<float>(world.height.width()) * 0.5f;
-    const float halfD = static_cast<float>(world.height.depth()) * 0.5f;
-
-    const auto box = [&vertices](float x0, float x1, float y0, float y1, float z0, float z1, const Rgb &wall,
-                                 const Rgb &roof) {
-        const auto face = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                      float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                      const Rgb &colour) {
-            const Vertex a{ax, ay, az, nx, ny, nz, colour};
-            const Vertex b{bx, by, bz, nx, ny, nz, colour};
-            const Vertex c{cx, cy, cz, nx, ny, nz, colour};
-            const Vertex d{dx, dy, dz, nx, ny, nz, colour};
-            vertices.push_back(a);
-            vertices.push_back(b);
-            vertices.push_back(c);
-            vertices.push_back(a);
-            vertices.push_back(c);
-            vertices.push_back(d);
-        };
-        face(x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1, 0.0f, 1.0f, 0.0f, roof);
-        face(x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1, 0.0f, 0.0f, 1.0f, wall);
-        face(x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0, 0.0f, 0.0f, -1.0f, wall);
-        face(x1, y0, z1, x1, y1, z1, x1, y1, z0, x1, y0, z0, 1.0f, 0.0f, 0.0f, wall);
-        face(x0, y0, z0, x0, y1, z0, x0, y1, z1, x0, y0, z1, -1.0f, 0.0f, 0.0f, wall);
-    };
-
-    for (core::usize p = 0u; p < plots.size(); ++p)
-    {
-        const procgen::BuildingPlot &plot = plots[p];
-
-        // Sink the base to the lowest ground the footprint covers: a box placed at the
-        // centre height would hang off the downhill corner.
-        float lowest = 1.0e9f;
-        for (core::u32 z = plot.z; z < plot.z + plot.depth; ++z)
-            for (core::u32 x = plot.x; x < plot.x + plot.width; ++x)
-            {
-                const float h = world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
-                if (h < lowest)
-                    lowest = h;
-            }
-        if (lowest > 1.0e8f)
-            continue;
-
-        // Height from the footprint's area and its district, hashed: a big plot on a
-        // busy district gets a tall building, and the variation is reproducible.
-        const core::u32 area = plot.width * plot.depth;
-        const core::u32 h = procgen::ValueNoise2D::hash2(static_cast<core::i32>(plot.x), static_cast<core::i32>(plot.z),
-                                                         static_cast<core::u32>(plot.district) + 1u);
-        const float storeys = 1.0f + static_cast<float>(area) * 0.28f + static_cast<float>(h & 0x7u) * 0.55f;
-
-        const float x0 = static_cast<float>(plot.x) - halfW + 0.12f;
-        const float x1 = static_cast<float>(plot.x + plot.width) - halfW - 0.12f;
-        const float z0 = static_cast<float>(plot.z) - halfD + 0.12f;
-        const float z1 = static_cast<float>(plot.z + plot.depth) - halfD - 0.12f;
-        const float y0 = lowest - 0.4f;
-        const float y1 = lowest + storeys;
-
-        const float tint = static_cast<float>((h >> 8) & 0x3Fu) / 63.0f;
-        const Rgb wall{0.58f + 0.22f * tint, 0.48f + 0.16f * tint, 0.38f + 0.10f * tint};
-        const Rgb roof{0.34f + 0.10f * tint, 0.22f + 0.06f * tint, 0.20f};
-        box(x0, x1, y0, y1, z0, z1, wall, roof);
-    }
-    return vertices;
-}
-
-/**
- * @brief Meshes a voxel volume, emitting only the faces that border empty space.
- *
- * The generic mesher the grammar products need: the town raised by
- * @ref procgen::buildTown and the fences and lamps @ref procgen::decoratePath
- * leaves along the roads are both @ref procgen::VoxelVolume, so both arrive here.
- *
- * Interior faces are skipped, which is not an optimisation so much as a
- * correctness matter for a translucent pass: drawing the inside of a solid means
- * every wall is two coincident surfaces, and the z-fighting reads as noise on the
- * roofs rather than as the "too many quads" it is.
- *
- * @param volume    What to mesh.
- * @param world     The terrain, so the volume sits on the ground it was planned on.
- * @param baseLift  World units between the terrain and level 0 of the volume.
- * @param palette   Colour per material id; index 0 is never drawn.
- */
-std::vector<Vertex> buildVoxelMesh(const procgen::VoxelVolume &volume, const TerrainData &world, float baseLift,
-                                   const Rgb *palette, core::u32 paletteSize, const std::vector<float> *datum = nullptr)
-{
-    std::vector<Vertex> vertices;
-    if (volume.empty() || world.height.empty())
-        return vertices;
-
-    const float halfW = static_cast<float>(world.height.width()) * 0.5f;
-    const float halfD = static_cast<float>(world.height.depth()) * 0.5f;
-    const float cell = 1.0f;
-
-    const auto solid = [&volume](core::i32 x, core::i32 y, core::i32 z) {
-        if (x < 0 || y < 0 || z < 0 || static_cast<core::u32>(x) >= volume.width ||
-            static_cast<core::u32>(y) >= volume.levels || static_cast<core::u32>(z) >= volume.depth)
-            return false;
-        return volume.at(static_cast<core::u32>(x), static_cast<core::u32>(y), static_cast<core::u32>(z)) != 0u;
-    };
-
-    const auto quad = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                  float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                  const Rgb &colour) {
-        const Vertex a{ax, ay, az, nx, ny, nz, colour};
-        const Vertex b{bx, by, bz, nx, ny, nz, colour};
-        const Vertex c{cx, cy, cz, nx, ny, nz, colour};
-        const Vertex d{dx, dy, dz, nx, ny, nz, colour};
-        vertices.push_back(a);
-        vertices.push_back(b);
-        vertices.push_back(c);
-        vertices.push_back(a);
-        vertices.push_back(c);
-        vertices.push_back(d);
-    };
-
-    for (core::u32 y = 0u; y < volume.levels; ++y)
-        for (core::u32 z = 0u; z < volume.depth; ++z)
-            for (core::u32 x = 0u; x < volume.width; ++x)
-            {
-                const core::u8 material = volume.at(x, y, z);
-                if (material == 0u)
-                    continue;
-                const Rgb colour = palette[material < paletteSize ? material : 0u];
-
-                // The ground under the whole FOOTPRINT, not under this column.
-                //
-                // The comment here used to claim exactly that while the code did the
-                // opposite, and the difference is visible from across the map: a plot
-                // on a slope had each of its columns start at its own ground level, so
-                // an eight-level building sheared into a staircase and, along a ridge,
-                // into a long brown wall standing free of the hillside. A plan sits on
-                // one datum; @p datum carries it per cell, filled from the plot
-                // footprints, and falls back to the column when a caller has none
-                // (the roadside decoration genuinely does follow the ground).
-                const core::u32 index = z * volume.width + x;
-                const float ground =
-                    datum != nullptr && index < datum->size() ?
-                        (*datum)[index] :
-                        world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
-                const float y0 = ground + baseLift + static_cast<float>(y) * cell;
-                const float y1 = y0 + cell;
-                const float x0 = static_cast<float>(x) - halfW;
-                const float x1 = x0 + cell;
-                const float z0 = static_cast<float>(z) - halfD;
-                const float z1 = z0 + cell;
-
-                const core::i32 ix = static_cast<core::i32>(x);
-                const core::i32 iy = static_cast<core::i32>(y);
-                const core::i32 iz = static_cast<core::i32>(z);
-
-                if (!solid(ix, iy + 1, iz))
-                    quad(x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1, 0.0f, 1.0f, 0.0f, colour);
-                if (!solid(ix, iy - 1, iz))
-                    quad(x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0, 0.0f, -1.0f, 0.0f, colour);
-                if (!solid(ix + 1, iy, iz))
-                    quad(x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1, 1.0f, 0.0f, 0.0f, colour);
-                if (!solid(ix - 1, iy, iz))
-                    quad(x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0, -1.0f, 0.0f, 0.0f, colour);
-                if (!solid(ix, iy, iz + 1))
-                    quad(x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1, 0.0f, 0.0f, 1.0f, colour);
-                if (!solid(ix, iy, iz - 1))
-                    quad(x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0, 0.0f, 0.0f, -1.0f, colour);
-            }
-    return vertices;
-}
-
-/**
- * @brief Meshes the layered cave system: every floor, and the shafts joining them.
- *
- * The flat underground could be drawn as one plan because it was one plan. A
- * system is a stack, so what has to read is the *vertical* relationship — which
- * layer sits under which, where a shaft drops from one to the next, and which
- * shafts come out on the surface. Entrances are drawn in amber for that reason:
- * an entrance is the difference between a cave and a sealed void, and it is the
- * single property the flat generator could not express at all.
- */
-std::vector<Vertex> buildCaveSystemMesh(const TerrainData &world, float topDepth, float layerSpacing)
-{
-    std::vector<Vertex> vertices;
-    const procgen::CaveSystem &system = world.caveSystem;
-    if (system.layerCount == 0u || world.height.empty())
-        return vertices;
-
-    const float halfW = static_cast<float>(world.height.width()) * 0.5f;
-    const float halfD = static_cast<float>(world.height.depth()) * 0.5f;
-
-    const auto quad = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                  float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                  const Rgb &colour) {
-        const Vertex a{ax, ay, az, nx, ny, nz, colour};
-        const Vertex b{bx, by, bz, nx, ny, nz, colour};
-        const Vertex c{cx, cy, cz, nx, ny, nz, colour};
-        const Vertex d{dx, dy, dz, nx, ny, nz, colour};
-        vertices.push_back(a);
-        vertices.push_back(b);
-        vertices.push_back(c);
-        vertices.push_back(a);
-        vertices.push_back(c);
-        vertices.push_back(d);
-    };
-
-    for (core::u32 layer = 0u; layer < system.layerCount; ++layer)
-    {
-        const procgen::DungeonMap &plan = system.layer[layer];
-        if (plan.empty())
-            continue;
-
-        // Deeper layers darken. Reading depth off a colour is crude and it works:
-        // three identically lit floors stacked in a wireframe are unreadable.
-        const float shade = 1.0f - 0.22f * static_cast<float>(layer);
-        const Rgb floorColour{0.52f * shade, 0.44f * shade, 0.36f * shade};
-        const Rgb wallColour{0.30f * shade, 0.26f * shade, 0.24f * shade};
-
-        const auto rock = [&plan](core::i32 x, core::i32 z) {
-            if (!plan.contains(x, z))
-                return true;
-            return !procgen::isWalkable(plan.at(static_cast<core::u32>(x), static_cast<core::u32>(z)));
-        };
-
-        for (core::u32 z = 0u; z < plan.depth(); ++z)
-            for (core::u32 x = 0u; x < plan.width(); ++x)
-            {
-                if (rock(static_cast<core::i32>(x), static_cast<core::i32>(z)))
-                    continue;
-
-                const float ground =
-                    world.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
-                const float floorY = ground - topDepth - static_cast<float>(layer) * layerSpacing;
-                const float ceilY = floorY + 1.6f;
-                const float x0 = static_cast<float>(x) - halfW;
-                const float x1 = x0 + 1.0f;
-                const float z0 = static_cast<float>(z) - halfD;
-                const float z1 = z0 + 1.0f;
-
-                quad(x0, floorY, z0, x1, floorY, z0, x1, floorY, z1, x0, floorY, z1, 0.0f, 1.0f, 0.0f, floorColour);
-                if (rock(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)))
-                    quad(x1, floorY, z0, x1, ceilY, z0, x1, ceilY, z1, x1, floorY, z1, 1.0f, 0.0f, 0.0f, wallColour);
-                if (rock(static_cast<core::i32>(x) - 1, static_cast<core::i32>(z)))
-                    quad(x0, floorY, z0, x0, ceilY, z0, x0, ceilY, z1, x0, floorY, z1, -1.0f, 0.0f, 0.0f, wallColour);
-                if (rock(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1))
-                    quad(x0, floorY, z1, x0, ceilY, z1, x1, ceilY, z1, x1, floorY, z1, 0.0f, 0.0f, 1.0f, wallColour);
-                if (rock(static_cast<core::i32>(x), static_cast<core::i32>(z) - 1))
-                    quad(x0, floorY, z0, x0, ceilY, z0, x1, ceilY, z0, x1, floorY, z0, 0.0f, 0.0f, -1.0f, wallColour);
-            }
-    }
-
-    // The shafts, as square columns joining the two floors they connect. A surface
-    // shaft runs all the way up to the ground and is drawn in amber.
-    for (core::u32 i = 0u; i < system.shafts.size(); ++i)
-    {
-        const procgen::CaveShaft &shaft = system.shafts[i];
-        const float ground =
-            world.height.clamped(static_cast<core::i32>(shaft.x), static_cast<core::i32>(shaft.z)).toFloat();
-        const float upper =
-            shaft.surface ? ground + 0.4f : ground - topDepth - static_cast<float>(shaft.upperLayer) * layerSpacing;
-        const float lower =
-            ground - topDepth - static_cast<float>(shaft.surface ? shaft.upperLayer : shaft.lowerLayer) * layerSpacing;
-        const Rgb colour = shaft.surface ? Rgb{0.95f, 0.62f, 0.14f} : Rgb{0.40f, 0.34f, 0.30f};
-
-        const float x0 = static_cast<float>(shaft.x) - halfW + 0.25f;
-        const float x1 = x0 + 0.5f;
-        const float z0 = static_cast<float>(shaft.z) - halfD + 0.25f;
-        const float z1 = z0 + 0.5f;
-        quad(x0, lower, z0, x0, upper, z0, x1, upper, z0, x1, lower, z0, 0.0f, 0.0f, -1.0f, colour);
-        quad(x1, lower, z1, x1, upper, z1, x0, upper, z1, x0, lower, z1, 0.0f, 0.0f, 1.0f, colour);
-        quad(x1, lower, z0, x1, upper, z0, x1, upper, z1, x1, lower, z1, 1.0f, 0.0f, 0.0f, colour);
-        quad(x0, lower, z1, x0, upper, z1, x0, upper, z0, x0, lower, z0, -1.0f, 0.0f, 0.0f, colour);
-    }
-    return vertices;
-}
-
-/**
- * @brief Meshes a liminal sector as walls on a flat floor, tinted by zone.
- *
- * Flat on purpose: the whole effect depends on the ceiling being uniform and the
- * light being even, and a liminal space that follows terrain stops being one.
- */
-std::vector<Vertex> buildLiminalMesh(const procgen::LiminalSpace &space)
-{
-    std::vector<Vertex> vertices;
-    if (space.map.empty())
-        return vertices;
-
-    const core::u32 width = space.map.width();
-    const core::u32 depth = space.map.depth();
-    const float halfW = static_cast<float>(width) * 0.5f;
-    const float halfD = static_cast<float>(depth) * 0.5f;
-    const float wallHeight = 2.6f;
-
-    const auto zoneColour = [](procgen::LiminalZone zone) -> Rgb {
-        switch (zone)
-        {
-        case procgen::LiminalZone::Corridor: return {0.76f, 0.72f, 0.55f};
-        case procgen::LiminalZone::Office: return {0.82f, 0.79f, 0.62f};
-        case procgen::LiminalZone::Hall: return {0.70f, 0.68f, 0.58f};
-        case procgen::LiminalZone::Pool: return {0.55f, 0.72f, 0.74f};
-        case procgen::LiminalZone::Count: break;
-        }
-        return {0.7f, 0.7f, 0.7f};
-    };
-
-    const auto quad = [&vertices](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
-                                  float cz, float dx, float dy, float dz, float nx, float ny, float nz,
-                                  const Rgb &colour) {
-        const Vertex a{ax, ay, az, nx, ny, nz, colour};
-        const Vertex b{bx, by, bz, nx, ny, nz, colour};
-        const Vertex c{cx, cy, cz, nx, ny, nz, colour};
-        const Vertex d{dx, dy, dz, nx, ny, nz, colour};
-        vertices.push_back(a);
-        vertices.push_back(b);
-        vertices.push_back(c);
-        vertices.push_back(a);
-        vertices.push_back(c);
-        vertices.push_back(d);
-    };
-
-    const auto rock = [&space](core::i32 x, core::i32 z) {
-        if (!space.map.contains(x, z))
-            return true;
-        return !procgen::isWalkable(space.map.at(static_cast<core::u32>(x), static_cast<core::u32>(z)));
-    };
-
-    for (core::u32 z = 0u; z < depth; ++z)
-        for (core::u32 x = 0u; x < width; ++x)
-        {
-            if (rock(static_cast<core::i32>(x), static_cast<core::i32>(z)))
-                continue;
-            const Rgb floorColour = zoneColour(space.zones.at(x, z));
-            const Rgb wallColour{floorColour.r * 0.78f, floorColour.g * 0.78f, floorColour.b * 0.70f};
-
-            const float x0 = static_cast<float>(x) - halfW;
-            const float x1 = x0 + 1.0f;
-            const float z0 = static_cast<float>(z) - halfD;
-            const float z1 = z0 + 1.0f;
-
-            quad(x0, 0.0f, z0, x1, 0.0f, z0, x1, 0.0f, z1, x0, 0.0f, z1, 0.0f, 1.0f, 0.0f, floorColour);
-            if (rock(static_cast<core::i32>(x) + 1, static_cast<core::i32>(z)))
-                quad(x1, 0.0f, z0, x1, wallHeight, z0, x1, wallHeight, z1, x1, 0.0f, z1, 1.0f, 0.0f, 0.0f, wallColour);
-            if (rock(static_cast<core::i32>(x) - 1, static_cast<core::i32>(z)))
-                quad(x0, 0.0f, z0, x0, wallHeight, z0, x0, wallHeight, z1, x0, 0.0f, z1, -1.0f, 0.0f, 0.0f, wallColour);
-            if (rock(static_cast<core::i32>(x), static_cast<core::i32>(z) + 1))
-                quad(x0, 0.0f, z1, x0, wallHeight, z1, x1, wallHeight, z1, x1, 0.0f, z1, 0.0f, 0.0f, 1.0f, wallColour);
-            if (rock(static_cast<core::i32>(x), static_cast<core::i32>(z) - 1))
-                quad(x0, 0.0f, z0, x0, wallHeight, z0, x1, wallHeight, z0, x1, 0.0f, z0, 0.0f, 0.0f, -1.0f, wallColour);
-        }
-    return vertices;
-}
+// The six meshers used to live here — six hundred lines of them. They are
+// procgen::MapMesh now, for the reason that matters more than tidiness: code in an
+// app has NO TEST TARGET. A mesher that winds a face inside out, drops a boundary
+// quad or shears a building into a staircase could only be caught by a human
+// looking at a picture, and all three of those happened. In a module a vertex
+// count is arithmetic and a fold is a fold — see test-map-mesh.
+//
+// What stays in this file is the plant mesher, which is the one piece of geometry
+// that reads the REGISTRY rather than a generated grid.
+using Vertex = procgen::MapVertex;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rendering
@@ -1408,6 +666,12 @@ void drawWaterPlane(const TerrainData &world, float level)
     glDisable(GL_BLEND);
 }
 
+// MapTerrain used to live here: engine::ITerrainQuery over this viewer's bounded
+// grid. It is engine::GridTerrain now, because the editor needs exactly the same
+// answers and a second copy of them would have drifted — which is what the
+// creature loop in this very file did before it was folded back.
+using MapTerrain = engine::GridTerrain;
+
 /**
  * @class LivingLayer
  * @brief The ai/ and ecology/ modules, running on top of the generated world.
@@ -1435,50 +699,24 @@ void drawWaterPlane(const TerrainData &world, float level)
 class LivingLayer {
 public:
     /**
-     * @struct Creature
-     * @brief One animal with a body on the map.
+     * @brief The layer's own state, and what it delegates.
      *
-     * A boid for the movement, a genome for the body, and an identifier for the
-     * temperament — which is *derived* from the id and never stored, so a herd of
-     * four hundred costs four hundred integers rather than four hundred
-     * personality structs. That is the module's own rule, and honouring it here is
-     * what makes the herd affordable at all.
-     */
-    /**
-     * @struct Plant
-     * @brief One scattered plant, as the ecology sees it.
+     * A plant is @c ecology::PlantCell and an animal is an ENTITY: both used to be
+     * structs declared right here, alongside a copy of flocking, scent following,
+     * grazing and locomotion. The copy had drifted BOTH ways — it had learned
+     * avoidance and stray containment the engine's systems lacked, and it had never
+     * learned that a scent channel means something, so a grazer climbed the very
+     * channel grazers deposit and followed itself instead of fleeing the wolf.
      *
-     * The producer level of a food web is usually a number nobody can point at. It
-     * does not have to be: the scatter already put several hundred plants on this
-     * map, at known positions, and those are exactly what a herbivore eats. So the
-     * producer population is not a parallel quantity that happens to be called
-     * "plants" — it IS the standing vegetation, counted. Graze a valley bare and the
-     * number in the HUD falls because the trees are gone, not because a differential
-     * equation said so.
+     * Two implementations of one idea do not stay equal; they take turns being
+     * right. What is left in this class is the ant colony, which the engine's layer
+     * has no notion of, and the diagnostics, which are genuinely a viewer's.
      */
-    struct Plant {
-        core::u32 cellX{0u};
-        core::u32 cellZ{0u};
-        core::u32 regrowth{0u}; ///< Ticks until it comes back; 0 when standing.
-        bool standing{true};
-    };
-
-    struct Creature {
-        ai::Boid body{};
-        ecology::Genome genome{};
-        core::u32 id{0u};
-        core::u32 species{0u};                       ///< 0 herbivore, 1 predator.
-        math::Fixed32 heading{math::Fixed32::one()}; ///< Unit facing, X.
-        math::Fixed32 headingZ{};                    ///< Unit facing, Z.
-        bool alive{true};
-    };
-
     /// Rebuilds the layer against a freshly generated world.
     void reset(const TerrainData &world, core::u32 seed, const lpl::pmr::vector<math::Vec3<math::Fixed32>> &props)
     {
         _width = world.height.width();
         _depth = world.height.depth();
-        _field = ai::StigmergyField{_width, _depth, 2u};
         if (_width == 0u || _depth == 0u)
             return;
 
@@ -1489,14 +727,12 @@ public:
         // to walk into it, and the spawn refuses to start inside it. Three separate
         // notions of "blocked" is how a creature ends up standing in a wall that the
         // pheromone flows around.
-        _blocked = procgen::Grid<core::u8>{_width, _depth, 0u};
-        for (core::u32 z = 0u; z < _depth; ++z)
-            for (core::u32 x = 0u; x < _width; ++x)
-            {
-                const bool drowned = world.height.at(x, z).toFloat() < world.seaLevel;
-                const bool steep = procgen::slopeAt(world.height, x, z).toFloat() > 2.2f;
-                _blocked.at(x, z) = (drowned || steep) ? 1u : 0u;
-            }
+        //
+        // The terrain half comes from the atlas, which computed it from the same
+        // sea level and slope limit while the builder was still alive. It was
+        // recomputed here for as long as the two structs were separate, which is
+        // two notions of "blocked" that merely happened to agree.
+        _blocked = world.blocked;
 
         // Buildings. A plot is a footprint the grammar raised into a solid, so it is
         // as impassable as a cliff; a plaza and a street are not.
@@ -1519,7 +755,30 @@ public:
                 _blocked.at(static_cast<core::u32>(px), static_cast<core::u32>(pz)) = 1u;
         }
 
-        _field.setObstacles(_blocked);
+        // ── The living layer, as the engine's ───────────────────────────────
+        //
+        // ONE field, six named channels. This file used to open its own
+        // two-channel field and read channel 1 uphill for every animal — so a
+        // grazer climbed the channel grazers deposit and was attracted to itself
+        // instead of fleeing the wolf. The ants keep their own channel, and it is
+        // the one ai::ScentChannel already names for them: Pheromone.
+        engine::LivingLayerParams living;
+        living.maxBodies = kMaxBodies;
+        living.speciesCount = 2u;
+        living.scentSpan = _width < _depth ? _width : _depth;
+        living.scentLayers = 6u;
+        living.webPeriod = kWebPeriod;
+
+        ecology::LivingRecipe recipe = ecology::parityLivingRecipe();
+        recipe.regrowthTicks = kRegrowthTicks;
+        recipe.stigmergy = _stigmergy;
+
+        _terrain.reset(&_blocked, _width, _depth, kRegrowthTicks);
+        _living.configure(living, recipe, seed);
+        _living.bind(_registry);
+        _living.openScent(living.scentSpan, living.scentLayers);
+        _living.scent().centreOn(0, 0);
+        _living.scent().field().setObstacles(_blocked);
 
         core::u32 blockedCells = 0u;
         for (core::u32 i = 0u; i < _blocked.cellCount(); ++i)
@@ -1530,419 +789,118 @@ public:
 
         // The nest goes where the town is, when there is one: a colony foraging out
         // of a settlement reads as something happening in the world rather than as a
-        // demo running beside it.
-        _nestX = _width / 2u;
-        _nestZ = _depth / 2u;
+        // demo running beside it. WHERE is this viewer's call; the colony itself is
+        // ai::AntColony, because holding the agents and the rule that sends them home
+        // is the one part of ant colony optimisation the module was missing.
+        core::u32 nestX = _width / 2u;
+        core::u32 nestZ = _depth / 2u;
         if (!world.settlement.empty())
             for (core::u32 z = 0u; z < _depth; ++z)
                 for (core::u32 x = 0u; x < _width; ++x)
                     if (world.settlement.at(x, z) == procgen::SettlementCell::Plaza)
                     {
-                        _nestX = x;
-                        _nestZ = z;
+                        nestX = x;
+                        nestZ = z;
                         z = _depth;
                         break;
                     }
 
-        const core::u32 nest = _nestZ * _width + _nestX;
-        ai::seedPheromoneField(_field, 0u, &nest, 1u, math::Fixed32::fromInt(60));
+        ai::AntColonyParams colony;
+        colony.agents = kAgents;
+        colony.forageRange = kForageRange;
+        colony.seed = seed;
+        colony.ants = _ants;
+        _colony.reset(_living.scent().field(), _width, _depth, colony, nestX, nestZ);
 
-        _agentX.clear();
-        _agentZ.clear();
-        procgen::Random spawn{seed ^ 0xA47C0011u};
-        for (core::u32 i = 0u; i < kAgents; ++i)
-        {
-            _agentX.push_back(_nestX);
-            _agentZ.push_back(_nestZ);
-            (void) spawn.next();
-        }
-        _stream = seed ^ 0xA57E0022u;
-
-        // A four-level web with the same shape the parity recipe uses, so what the
-        // HUD reports is the same dynamics the gate folds.
-        _web = ecology::TrophicWeb{};
-        ecology::SpeciesParams grass{};
-        grass.level = ecology::TrophicLevel::Producer;
-        grass.capacity = math::Fixed32::fromInt(1000);
-        const core::u32 producer = _web.add(grass, math::Fixed32::fromInt(800), ecology::Species::kNoPrey);
-        ecology::SpeciesParams herbivore{};
-        herbivore.level = ecology::TrophicLevel::Primary;
-        herbivore.capacity = math::Fixed32::fromInt(200);
-        const core::u32 primary = _web.add(herbivore, math::Fixed32::fromInt(120), producer);
-        ecology::SpeciesParams predator{};
-        predator.level = ecology::TrophicLevel::Secondary;
-        predator.capacity = math::Fixed32::fromInt(40);
-        _web.add(predator, math::Fixed32::fromInt(24), primary);
-        _ticks = 0u;
-
-        // The bodies. Head counts come from the web rather than from a constant:
-        // what is on screen is then the population the model says exists, and a
-        // collapse is something you watch happen rather than read in a number.
-        _creatures.clear();
-        _heredity = seed ^ 0x5EED0033u;
-        procgen::Random stock{seed ^ 0x11FE0044u};
         // The vegetation, taken from what the scatter actually placed. Capacity is
         // the map's own carrying capacity in the literal sense: how many plants fit
         // on it, which is a fact about the terrain rather than a tuning constant.
-        _plants.clear();
+        //
+        // World cells, not grid cells: ecology::PlantCell is documented as signed
+        // world coordinates, because a streamed world has no corner to count from.
         const float halfWidthGrid = static_cast<float>(_width) * 0.5f;
         const float halfDepthGrid = static_cast<float>(_depth) * 0.5f;
         for (core::usize i = 0u; i < props.size(); ++i)
         {
-            const core::i32 px = static_cast<core::i32>(props[i].x.toFloat() + halfWidthGrid);
-            const core::i32 pz = static_cast<core::i32>(props[i].z.toFloat() + halfDepthGrid);
-            Plant plant;
-            plant.cellX = px < 0 ? 0u : static_cast<core::u32>(px);
-            plant.cellZ = pz < 0 ? 0u : static_cast<core::u32>(pz);
-            _plants.push_back(plant);
+            (void) halfWidthGrid;
+            (void) halfDepthGrid;
+            _terrain.addPlant(static_cast<core::i32>(props[i].x.toFloat()), static_cast<core::i32>(props[i].z.toFloat()));
         }
-        if (!_plants.empty())
-        {
-            _web.species[0].params.capacity = math::Fixed32::fromInt(static_cast<core::i32>(_plants.size()));
-            _web.species[0].population = math::Fixed32::fromInt(static_cast<core::i32>(_plants.size()));
-        }
-        _grazed = 0u;
-        _regrown = 0u;
-        _floraDirty = false;
+        // The producer level is COUNTED, not integrated: it is the standing
+        // vegetation this seed actually grew.
+        _living.seedWeb(_terrain.standingPlants());
+        _ticks = 0u;
+        _births = 0u;
+        _deaths = 0u;
+        _measuredSpeed = 0.0;
+        _speedIds.clear();
+        _speedAt.clear();
 
-        const core::u32 herbivores = realisedCount(_web.species[1].population, _web.species[1].params.refuge);
-        const core::u32 predators = realisedCount(_web.species[2].population, _web.species[2].params.refuge);
-        for (core::u32 i = 0u; i < herbivores + predators; ++i)
-            spawnCreature(stock, i < herbivores ? 0u : 1u, stock.next());
+        // The six systems, in the order engine::systems::CreatureStage states.
+        // Rebuilt per world because the scent window is reopened. This viewer used
+        // to construct and step them itself, which was the SECOND place the order
+        // was written down — and a wrong order here is silent: flocking before
+        // steering overwrites the scent impulse and the pack just stops flanking.
+        _creatures.build(_registry, _living, _terrain);
+
+        // The bodies. Head counts come from the web rather than from a constant:
+        // what is on screen is then the population the model says exists, and a
+        // collapse is something you watch happen rather than read in a number.
+        _living.reconcile(0u, [this](math::Random &r, core::u32 a, math::Fixed32 &x, math::Fixed32 &z) {
+            return proposeSpawn(r, a, x, z);
+        });
     }
+
+    /// Where the pheromone window sits, for the creature systems.
+    [[nodiscard]] engine::systems::CreatureFieldView fieldView() const noexcept { return _living.fieldView(); }
 
     /**
-     * @brief How many bodies a head count is worth on screen.
+     * @brief Proposes somewhere an animal could actually stand.
      *
-     * @warning The obvious ratio is wrong, and it was measured wrong before it was
-     *          written right. One body per ten head reads as a sensible abstraction
-     *          until you look at what the web actually settles on: this world's
-     *          herbivores live around seven and its predators around four, so the
-     *          division floored to zero and the map stayed empty while the HUD
-     *          cheerfully reported a working ecosystem. The bug was not in the
-     *          spawning, the flocking or the drawing — all three were correct and
-     *          all three ran on an empty list.
-     *
-     *          So: one body per two head, and a floor of three for any species the
-     *          model still considers alive. A species above its refuge exists, and
-     *          a world where existing is invisible is not showing the model.
+     * Dropping a herd into the sea and letting the flocking rules sort it out
+     * produces a very confident-looking shoal of deer.
      */
-    [[nodiscard]] static core::u32 realisedCount(math::Fixed32 population, math::Fixed32 refuge) noexcept
+    [[nodiscard]] bool proposeSpawn(math::Random &random, core::u32 attempt, math::Fixed32 &outX,
+                                    math::Fixed32 &outZ) const
     {
-        if (population <= refuge)
-            return 0u;
-        core::i32 wanted = population.toInt() / 2;
-        if (wanted < 3)
-            wanted = 3;
-        return static_cast<core::u32>(wanted) > kMaxBodies ? kMaxBodies : static_cast<core::u32>(wanted);
-    }
-
-    /// Places one animal on walkable ground, with a genome drawn from the stock.
-    void spawnCreature(procgen::Random &random, core::u32 species, core::u32 id)
-    {
+        (void) attempt;
         if (_width == 0u)
-            return;
-        Creature creature;
-        creature.id = id;
-        creature.species = species;
-
-        // Mutation off a species archetype, so a herd is a spread rather than a
-        // row of clones — the same draw the heredity module makes between
-        // generations, used once at founding.
-        ecology::Genome archetype{};
-        if (species == 1u)
-        {
-            archetype.size = math::Fixed32::fromFloat(1.4f);
-            archetype.maxSpeed = math::Fixed32::fromFloat(5.5f);
-            archetype.strength = math::Fixed32::fromFloat(8.0f);
-        }
-        else
-        {
-            archetype.size = math::Fixed32::fromFloat(0.9f);
-            archetype.maxSpeed = math::Fixed32::fromFloat(4.0f);
-        }
-        creature.genome = ecology::mutate(archetype, 8u, 0.18f, _heredity);
-
-        // Somewhere it could actually stand: dropping a herd into the sea and
-        // letting the flocking rules sort it out produces a very confident-looking
-        // shoal of deer.
-        for (core::u32 attempt = 0u; attempt < 32u; ++attempt)
-        {
-            const core::u32 x = random.below(_width);
-            const core::u32 z = random.below(_depth);
-            if (_blocked.at(x, z) != 0u)
-                continue;
-            creature.body.x = math::Fixed32::fromInt(static_cast<core::i32>(x)) -
-                              math::Fixed32::fromInt(static_cast<core::i32>(_width / 2u));
-            creature.body.z = math::Fixed32::fromInt(static_cast<core::i32>(z)) -
-                              math::Fixed32::fromInt(static_cast<core::i32>(_depth / 2u));
-            creature.body.vx = random.unit() - math::Fixed32::half();
-            creature.body.vz = random.unit() - math::Fixed32::half();
-            _creatures.push_back(creature);
-            return;
-        }
+            return false;
+        const core::u32 x = random.below(_width);
+        const core::u32 z = random.below(_depth);
+        if (_blocked.at(x, z) != 0u)
+            return false;
+        outX = math::Fixed32::fromInt(static_cast<core::i32>(x) - static_cast<core::i32>(_width / 2u));
+        outZ = math::Fixed32::fromInt(static_cast<core::i32>(z) - static_cast<core::i32>(_depth / 2u));
+        return true;
     }
 
     /**
-     * @brief Moves the herd: flock, follow the scent, keep off the water.
+     * @brief Mean ground speed of the herd, in cells per second.
      *
-     * Three rules, and the order matters. Flocking first, because it is the only
-     * one that reads its neighbours and therefore needs a coherent snapshot; then
-     * the scent, which is what makes the herd go SOMEWHERE rather than mill about;
-     * then the terrain, which has the last word — the same "propose, then dispose"
-     * split the road grammar uses.
-     */
-    void stepCreatures(const TerrainData &world)
-    {
-        if (_creatures.empty() || world.height.empty())
-            return;
-
-        // Per species, so a predator flocks with predators and not with its lunch.
-        for (core::u32 species = 0u; species < 2u; ++species)
-        {
-            _flockScratch.clear();
-            for (core::u32 i = 0u; i < _creatures.size(); ++i)
-                if (_creatures[i].species == species && _creatures[i].alive)
-                    _flockScratch.push_back(_creatures[i].body);
-            if (_flockScratch.empty())
-                continue;
-
-            ai::BoidParams params;
-            // A predator holds a looser formation and a wider watch than a herd
-            // animal. One parameter set for both would make the pack move like a
-            // shoal, which is exactly what it must not look like.
-            params.separationWeight = species == 1u ? 1.1f : 0.9f;
-            params.alignmentWeight = species == 1u ? 0.5f : 0.8f;
-            params.cohesionWeight = species == 1u ? 0.25f : 0.5f;
-            params.neighbourRadius = math::Fixed32::fromInt(species == 1u ? 12 : 7);
-            params.separationRadius = math::Fixed32::fromFloat(species == 1u ? 2.5f : 1.6f);
-            ai::stepBoids(&_flockScratch[0], static_cast<core::u32>(_flockScratch.size()), params, kFixedStep);
-
-            // Only the velocity is taken back. The flock decides where an animal
-            // WANTS to go; where it may actually stand is the terrain's business,
-            // and letting the boid integrator write the position straight back would
-            // put bodies inside rock before any check downstream could refuse it.
-            core::u32 cursor = 0u;
-            for (core::u32 i = 0u; i < _creatures.size(); ++i)
-                if (_creatures[i].species == species && _creatures[i].alive)
-                {
-                    _creatures[i].body.vx = _flockScratch[cursor].vx;
-                    _creatures[i].body.vz = _flockScratch[cursor].vz;
-                    ++cursor;
-                }
-        }
-
-        const float halfW = static_cast<float>(_width) * 0.5f;
-        const float halfD = static_cast<float>(_depth) * 0.5f;
-
-        for (core::u32 i = 0u; i < _creatures.size(); ++i)
-        {
-            Creature &creature = _creatures[i];
-            if (!creature.alive)
-                continue;
-
-            const ai::PersonalityTraits traits = ai::personalityOf(creature.id, creature.species);
-
-            // Off the map, or standing in something: walk back toward the centre.
-            //
-            // This is where most of the "refused step" count came from, and it was
-            // not the herd bumping into scenery — it was the handful of animals the
-            // flocking rules had pushed over the border. Outside the grid EVERY
-            // direction is unwalkable, so an escapee refuses both axes on every tick
-            // for the rest of the run: a few bodies generating thousands of refusals
-            // and looking, from inside the counter, like a herd in constant collision.
-            if (!walkable(creature.body.x, creature.body.z, halfW, halfD))
-            {
-                const math::Fixed32 towardX = creature.body.x.raw() > 0 ? -math::Fixed32::one() : math::Fixed32::one();
-                const math::Fixed32 towardZ = creature.body.z.raw() > 0 ? -math::Fixed32::one() : math::Fixed32::one();
-                creature.body.x = creature.body.x + towardX;
-                creature.body.z = creature.body.z + towardZ;
-                creature.heading = towardX;
-                creature.headingZ = towardZ;
-                creature.body.vx = towardX;
-                creature.body.vz = towardZ;
-                {
-                    const core::i32 px = static_cast<core::i32>(creature.body.x.toFloat() + halfW);
-                    const core::i32 pz = static_cast<core::i32>(creature.body.z.toFloat() + halfD);
-                    if (!_blocked.contains(px, pz))
-                        ++_strayOutside;
-                    else
-                        ++_strayBlocked;
-                }
-                ++_strays;
-                continue;
-            }
-
-            const core::i32 gx = static_cast<core::i32>(creature.body.x.toFloat() + halfW);
-            const core::i32 gz = static_cast<core::i32>(creature.body.z.toFloat() + halfD);
-            if (world.height.contains(gx, gz))
-            {
-                const core::u32 x = static_cast<core::u32>(gx);
-                const core::u32 z = static_cast<core::u32>(gz);
-
-                // The scent channel is the herd's only shared memory: a herbivore
-                // climbs it toward grazing, a predator climbs the same field because
-                // it leads to the herd. One substrate, two readings — which is the
-                // claim the stigmergy module makes and the reason it is one class.
-                const core::u32 direction = _field.gradientDirection(1u, x, z, true);
-                if (direction != ai::StigmergyField::kNoDirection)
-                {
-                    const math::Fixed32 pull = math::Fixed32::fromFloat(creature.species == 1u ? 0.07f : 0.05f) *
-                                               (math::Fixed32::half() + traits.energy);
-                    creature.body.vx =
-                        creature.body.vx + math::Fixed32::fromInt(procgen::kNeighbor8X[direction]) * pull;
-                    creature.body.vz =
-                        creature.body.vz + math::Fixed32::fromInt(procgen::kNeighbor8Z[direction]) * pull;
-                }
-
-                // A herbivore leaves its own scent where it grazes; that is what a
-                // predator ends up following. Nothing tells the predator where the
-                // herd is — the map does.
-                if (creature.species == 0u)
-                {
-                    _field.deposit(1u, x, z, math::Fixed32::fromFloat(0.6f));
-                    graze(x, z);
-                }
-            }
-
-            // ── How far that is worth, in a second ──────────────────────────
-            //
-            // The boid rules give a DIRECTION and a normalised speed, not a
-            // displacement. Adding the velocity straight to the position advances a
-            // body by up to a full cell per fixed tick — sixty cells a second, which
-            // is what a herd of deer moving like tracer fire looks like. The step is
-            // the genome's speed in world units per second times the tick's own
-            // duration, so the herd moves at four cells a second whatever the tick
-            // rate is, and a faster machine does not make the animals faster.
-            // An animal WALKS. The boid rules produce a steering vector whose length
-            // means nothing in particular — separation and cohesion nearly cancel in
-            // a settled herd, so its magnitude collapses toward zero and a body that
-            // multiplies by it simply stops. Measured, the herd was moving at a tenth
-            // of a cell per second and grinding thousands of refused steps against
-            // the scenery. What the vector carries is a HEADING; the speed is the
-            // genome's. Normalising separates the two, which is the only reading
-            // under which "maxSpeed" is a property of the animal at all.
-            const math::Fixed32 lengthSquared =
-                creature.body.vx * creature.body.vx + creature.body.vz * creature.body.vz;
-            math::Fixed32 headingX = creature.body.vx;
-            math::Fixed32 headingZ = creature.body.vz;
-            const math::Fixed32 length = procgen::fixedSqrt(lengthSquared);
-            if (length.raw() > 256)
-            {
-                headingX = creature.body.vx / length;
-                headingZ = creature.body.vz / length;
-                creature.heading = headingX;
-                creature.headingZ = headingZ;
-            }
-            else
-            {
-                // Standing still is a valid boid state and not a valid animal one:
-                // keep the last heading rather than freezing on the spot.
-                headingX = creature.heading;
-                headingZ = creature.headingZ;
-            }
-
-            // Avoidance, before the move rather than after refusing it. Steering
-            // around an obstacle and being stopped by one look the same in a single
-            // frame and nothing alike over a second: the herd was refusing two steps
-            // in three and grinding along every treeline it met. Picking the free
-            // neighbour closest to where the animal was already going is the whole
-            // rule — an animal walks around a rock, it does not walk into it and
-            // reconsider.
-            if (!walkableAhead(creature, headingX, headingZ, halfW, halfD))
-            {
-                math::Fixed32 bestX = headingX;
-                math::Fixed32 bestZ = headingZ;
-                math::Fixed32 bestDot = math::Fixed32::fromInt(-2);
-                for (core::u32 n = 0u; n < 8u; ++n)
-                {
-                    const math::Fixed32 candidateX = math::Fixed32::fromInt(procgen::kNeighbor8X[n]) *
-                                                     (n < 4u ? math::Fixed32::one() : procgen::kInvSqrt2);
-                    const math::Fixed32 candidateZ = math::Fixed32::fromInt(procgen::kNeighbor8Z[n]) *
-                                                     (n < 4u ? math::Fixed32::one() : procgen::kInvSqrt2);
-                    if (!walkableAhead(creature, candidateX, candidateZ, halfW, halfD))
-                        continue;
-                    // Closest to the current heading: turning is cheap, reversing is
-                    // not, and a creature that picks the first free direction in
-                    // array order makes every herd drift east.
-                    const math::Fixed32 dot = candidateX * headingX + candidateZ * headingZ;
-                    if (dot > bestDot)
-                    {
-                        bestDot = dot;
-                        bestX = candidateX;
-                        bestZ = candidateZ;
-                    }
-                }
-                headingX = bestX;
-                headingZ = bestZ;
-                creature.heading = bestX;
-                creature.headingZ = bestZ;
-            }
-
-            const math::Fixed32 pace = creature.genome.maxSpeed * kFixedStep *
-                                       (math::Fixed32::fromFloat(0.7f) + traits.energy * math::Fixed32::half());
-            const math::Fixed32 stepX = headingX * pace;
-            const math::Fixed32 stepZ = headingZ * pace;
-
-            // The terrain disposes, one axis at a time: refusing BOTH axes on a
-            // single blocked corner is what made the movement look random. An animal
-            // walking into a wall slides along it — reversing its velocity instead
-            // sends it back the way it came, and with a herd of those the whole flock
-            // shudders in place.
-            const math::Fixed32 tryX = creature.body.x + stepX;
-            const math::Fixed32 tryZ = creature.body.z + stepZ;
-            // The DIAGONAL is checked too, and that is not pedantry: testing the two
-            // axes separately and then moving along both walks the corner between
-            // two free cells into the blocked one they share. That corner was the
-            // last source of strays — a creature stepping diagonally past a tree
-            // ended up standing inside it, which the next tick reads as "not on
-            // walkable ground" and hands to the containment rule.
-            const bool freeX = walkable(tryX, creature.body.z, halfW, halfD);
-            const bool freeZ = walkable(creature.body.x, tryZ, halfW, halfD);
-            const bool freeDiagonal = freeX && freeZ && walkable(tryX, tryZ, halfW, halfD);
-            if (freeDiagonal)
-            {
-                creature.body.x = tryX;
-                creature.body.z = tryZ;
-            }
-            else if (freeX)
-                creature.body.x = tryX;
-            else if (freeZ)
-                creature.body.z = tryZ;
-            if (!freeX && !freeZ)
-            {
-                // Cornered: turn around rather than vibrate against the obstacle. The
-                // HEADING is reversed, not the boid velocity — zeroing that was the
-                // other half of why the herd stalled, since it destroys the very
-                // state the flocking rules accumulate.
-                creature.heading = -headingX;
-                creature.headingZ = -headingZ;
-                creature.body.x = creature.body.x - stepX;
-                creature.body.z = creature.body.z - stepZ;
-                ++_refusals;
-            }
-        }
-    }
-
-    /**
-     * @brief Records how far the herd actually moved over the last second.
-     *
-     * Distance travelled, not the speed it was asked to travel at: a body that is
-     * pinned against a rock has a perfectly healthy velocity and goes nowhere, and
-     * only one of those two numbers would have caught it.
+     * Distance travelled, not the speed it was asked to travel at: a body pinned
+     * against a rock has a perfectly healthy velocity and goes nowhere, and only one
+     * of those two numbers would have caught it. It is measured rather than asserted
+     * because the first version of this layer moved bodies by their raw boid velocity
+     * per tick — a plausible-looking line that means sixty cells a second.
      */
     void measureSpeed()
     {
-        if (_creatures.empty())
+        const ecology::Herd &herd = _living.herd();
+        if (herd.empty())
         {
             _measuredSpeed = 0.0;
             return;
         }
-        if (_speedMarks.size() != _creatures.size())
+        if (_speedIds.size() != herd.size())
         {
-            _speedMarks.clear();
-            for (core::u32 i = 0u; i < _creatures.size(); ++i)
-                _speedMarks.push_back(_creatures[i].body);
+            _speedIds.clear();
+            _speedAt.clear();
+            for (core::u32 i = 0u; i < herd.size(); ++i)
+            {
+                _speedIds.push_back(herd.at(i));
+                _speedAt.push_back(positionOf(herd.at(i)));
+            }
             return;
         }
         if (_ticks % 60u != 0u)
@@ -1950,129 +908,47 @@ public:
 
         double total = 0.0;
         core::u32 counted = 0u;
-        for (core::u32 i = 0u; i < _creatures.size(); ++i)
+        for (core::u32 i = 0u; i < _speedIds.size(); ++i)
         {
-            if (!_creatures[i].alive)
-                continue;
-            const double dx = _creatures[i].body.x.toFloat() - _speedMarks[i].x.toFloat();
-            const double dz = _creatures[i].body.z.toFloat() - _speedMarks[i].z.toFloat();
+            const math::Vec3<math::Fixed32> at = positionOf(_speedIds[i]);
+            const double dx = at.x.toFloat() - _speedAt[i].x.toFloat();
+            const double dz = at.z.toFloat() - _speedAt[i].z.toFloat();
             total += std::sqrt(dx * dx + dz * dz);
             ++counted;
+            _speedAt[i] = at;
         }
-        _measuredSpeed = counted == 0u ? 0.0 : total / static_cast<double>(counted);
-        for (core::u32 i = 0u; i < _creatures.size(); ++i)
-            _speedMarks[i] = _creatures[i].body;
+        _measuredSpeed = counted != 0u ? total / static_cast<double>(counted) : 0.0;
     }
 
-    /**
-     * @brief A grazer eats whatever is standing on its cell.
-     *
-     * One plant at a time and only where the animal actually is — no radius, no
-     * probability. A herd therefore leaves a visible trail of cropped ground
-     * behind it, which is the point: the pressure on the producer level has a
-     * SHAPE on the map, and where the herd has been is readable without any
-     * overlay.
-     */
-    void graze(core::u32 x, core::u32 z)
+    /// Where one body is, read from the registry rather than from a second list.
+    [[nodiscard]] math::Vec3<math::Fixed32> positionOf(ecs::EntityId id) const
     {
-        // Reach, not exact cell. Measured with an exact match: sixty grazers on a
-        // 128x128 map with 360 plants ate NOTHING over a minute — two point sets
-        // that sparse almost never coincide, so the producer level sat at 360 while
-        // the herd walked over the trees. An animal's mouth has an extent; one cell
-        // of reach is the smallest honest version of that.
-        for (core::u32 i = 0u; i < _plants.size(); ++i)
-        {
-            if (!_plants[i].standing)
-                continue;
-            const core::i32 dx = static_cast<core::i32>(_plants[i].cellX) - static_cast<core::i32>(x);
-            const core::i32 dz = static_cast<core::i32>(_plants[i].cellZ) - static_cast<core::i32>(z);
-            if (dx > 1 || dx < -1 || dz > 1 || dz < -1)
-                continue;
-            _plants[i].standing = false;
-            // Regrowth is slow relative to a visit, so a valley grazed bare stays
-            // bare long enough to matter and the herd has to move on. That is the
-            // whole feedback loop, and it is one line.
-            _plants[i].regrowth = kRegrowthTicks;
-            ++_grazed;
-            _floraDirty = true;
-            return;
-        }
+        // ecs::Registry::chunkOf, which walks the partitions AND checks that the chunk
+        // really holds this entity. That walk was written out by hand here and in
+        // ecology::Herd; a third copy was about to appear in a test.
+        core::u32 row = 0u;
+        ecs::Chunk *chunk = _registry.chunkOf(id, row);
+        if (chunk == nullptr || !chunk->archetype().has(ecs::ComponentId::Creature))
+            return {};
+        // The WRITE side, like every creature system: nothing here swaps buffers, so
+        // the front one holds whatever a component was born with.
+        const auto *positions =
+            static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+        return positions != nullptr ? positions[row] : math::Vec3<math::Fixed32>{};
     }
 
-    /// Advances regrowth and republishes the standing count as the producer level.
-    void tickVegetation()
-    {
-        for (core::u32 i = 0u; i < _plants.size(); ++i)
-        {
-            if (_plants[i].standing || _plants[i].regrowth == 0u)
-                continue;
-            if (--_plants[i].regrowth == 0u)
-            {
-                _plants[i].standing = true;
-                ++_regrown;
-                _floraDirty = true;
-            }
-        }
-
-        // The producer population is not integrated by the web: it is COUNTED. A
-        // Lotka-Volterra producer term running alongside the real vegetation would
-        // be a second, disagreeing answer to the same question.
-        if (!_plants.empty())
-            _web.species[0].population = math::Fixed32::fromInt(static_cast<core::i32>(standingPlants()));
-    }
-
-    /// Whether the cell one body-length along @p heading is walkable.
-    [[nodiscard]] bool walkableAhead(const Creature &creature, math::Fixed32 headingX, math::Fixed32 headingZ,
-                                     float halfW, float halfD) const
-    {
-        // A full cell ahead, not the fraction the next step covers: looking only as
-        // far as one tick moves means the turn happens with the obstacle already
-        // underfoot, which is a collision reported as an intention.
-        const math::Fixed32 reach = math::Fixed32::one() + creature.genome.size;
-        return walkable(creature.body.x + headingX * reach, creature.body.z + headingZ * reach, halfW, halfD);
-    }
-
-    /// Whether a world-space point is ground an animal may stand on.
-    [[nodiscard]] bool walkable(math::Fixed32 x, math::Fixed32 z, float halfW, float halfD) const
-    {
-        const core::i32 gx = static_cast<core::i32>(x.toFloat() + halfW);
-        const core::i32 gz = static_cast<core::i32>(z.toFloat() + halfD);
-        if (!_blocked.contains(gx, gz))
-            return false;
-        return _blocked.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)) == 0u;
-    }
-
-    /// Brings the number of bodies back in line with what the web says exists.
+    /// Brings the bodies in line with the census; engine::LivingLayer keeps the ratio.
     void reconcilePopulation()
     {
-        procgen::Random stock{_heredity ^ (_ticks * 0x9E3779B9u)};
-        for (core::u32 species = 0u; species < 2u; ++species)
-        {
-            const core::u32 wanted =
-                realisedCount(_web.species[species + 1u].population, _web.species[species + 1u].params.refuge);
-            core::u32 have = 0u;
-            for (core::u32 i = 0u; i < _creatures.size(); ++i)
-                if (_creatures[i].species == species && _creatures[i].alive)
-                    ++have;
-
-            if (have < wanted)
-            {
-                spawnCreature(stock, species, _nextId++);
-                ++_births;
-            }
-            else if (have > wanted)
-            {
-                // Retire the oldest first, so a collapse thins the herd rather
-                // than deleting whatever the loop reached last.
-                for (core::u32 i = 0u; i < _creatures.size(); ++i)
-                    if (_creatures[i].species == species && _creatures[i].alive)
-                    {
-                        _creatures[i].alive = false;
-                        ++_deaths;
-                        break;
-                    }
-            }
-        }
+        const core::u32 before = _living.herd().size();
+        _living.reconcile(_ticks, [this](math::Random &r, core::u32 a, math::Fixed32 &x, math::Fixed32 &z) {
+            return proposeSpawn(r, a, x, z);
+        });
+        const core::u32 after = _living.herd().size();
+        if (after > before)
+            _births += after - before;
+        else
+            _deaths += before - after;
     }
 
     /// One simulation step: the agents move and deposit, then the field decays.
@@ -2082,38 +958,17 @@ public:
             return;
         ++_ticks;
 
-        for (core::u32 i = 0u; i < _agentX.size(); ++i)
-        {
-            bool explored = false;
-            const core::u32 direction = ai::chooseAntMove(_field, _ants, _agentX[i], _agentZ[i], _stream, explored);
-            if (direction != ai::StigmergyField::kNoDirection)
-            {
-                const core::i32 nx = static_cast<core::i32>(_agentX[i]) + procgen::kNeighbor8X[direction];
-                const core::i32 nz = static_cast<core::i32>(_agentZ[i]) + procgen::kNeighbor8Z[direction];
-                if (nx >= 0 && nz >= 0 && static_cast<core::u32>(nx) < _width && static_cast<core::u32>(nz) < _depth)
-                {
-                    _agentX[i] = static_cast<core::u32>(nx);
-                    _agentZ[i] = static_cast<core::u32>(nz);
-                }
-            }
-            // An agent that wandered far enough goes home. Without it the colony
-            // diffuses outward forever and the trail never closes into a route,
-            // which is the difference between a pheromone field and a stain.
-            const core::i32 dx = static_cast<core::i32>(_agentX[i]) - static_cast<core::i32>(_nestX);
-            const core::i32 dz = static_cast<core::i32>(_agentZ[i]) - static_cast<core::i32>(_nestZ);
-            if (dx * dx + dz * dz > static_cast<core::i32>(kForageRange * kForageRange))
-            {
-                _agentX[i] = _nestX;
-                _agentZ[i] = _nestZ;
-                ++_returns;
-            }
-            const core::u32 cell = _agentZ[i] * _width + _agentX[i];
-            _field.depositTrail(0u, &cell, 1u, _ants.depositQuality);
-        }
-        stepCreatures(world);
-        tickVegetation();
+        _colony.step(_living.scent().field());
+
+        // The animals, as systems, in the order the scheduler derives: mark, forget,
+        // steer, flock, graze, walk. Nothing about an animal is a loop in this file
+        // any more — which is the point, because the loop that used to be here had
+        // drifted from the engine's in both directions.
+        (void) world;
+        _creatures.step(0.016f);
+
+        _living.setProducerPopulation(_terrain.tickVegetation());
         measureSpeed();
-        _field.step(_stigmergy);
 
         // Demography on its own clock, once a second rather than sixty times.
         // A Lotka-Volterra step is a GENERATION, not a frame: stepped at the tick
@@ -2122,7 +977,7 @@ public:
         // that is a run, not a second.
         if (_ticks % kWebPeriod == 0u)
         {
-            _web.step(1u);
+            _living.stepWeb(1u);
             reconcilePopulation();
         }
     }
@@ -2150,7 +1005,7 @@ public:
         for (core::u32 z = 0u; z < _depth; ++z)
             for (core::u32 x = 0u; x < _width; ++x)
             {
-                const float strength = _field.value(0u, x, z).toFloat();
+                const float strength = _living.scent().field().value(kAntChannel, x, z).toFloat();
                 if (strength <= 0.25f)
                     continue;
                 float t = strength / ceiling;
@@ -2173,11 +1028,13 @@ public:
 
         glBegin(GL_QUADS);
         glColor3f(1.0f, 0.95f, 0.80f);
-        for (core::u32 i = 0u; i < _agentX.size(); ++i)
+        for (core::u32 i = 0u; i < _colony.agentCount(); ++i)
         {
-            const float y = world.height.at(_agentX[i], _agentZ[i]).toFloat() + 0.45f;
-            const float x0 = static_cast<float>(_agentX[i]) - halfW + 0.30f;
-            const float z0 = static_cast<float>(_agentZ[i]) - halfD + 0.30f;
+            const core::u32 ax = _colony.agentX(i);
+            const core::u32 az = _colony.agentZ(i);
+            const float y = world.height.at(ax, az).toFloat() + 0.45f;
+            const float x0 = static_cast<float>(ax) - halfW + 0.30f;
+            const float z0 = static_cast<float>(az) - halfD + 0.30f;
             glVertex3f(x0, y, z0);
             glVertex3f(x0 + 0.4f, y, z0);
             glVertex3f(x0 + 0.4f, y, z0 + 0.4f);
@@ -2198,7 +1055,7 @@ public:
      */
     void drawCreatures(const TerrainData &world) const
     {
-        if (_creatures.empty() || world.height.empty())
+        if (world.height.empty())
             return;
 
         const float halfW = static_cast<float>(_width) * 0.5f;
@@ -2207,38 +1064,36 @@ public:
         // The species mean, recomputed here rather than cached: it moves as the
         // herd breeds, and a stale mean would mark the wrong animals.
         _statScratch.clear();
-        for (core::u32 i = 0u; i < _creatures.size(); ++i)
-            if (_creatures[i].alive && _creatures[i].species == 0u)
-                _statScratch.push_back(_creatures[i].genome);
+        forEachBody([this](core::u32 species, core::u32, const ecology::Genome &genome,
+                           const math::Vec3<math::Fixed32> &) {
+            if (species == 0u)
+                _statScratch.push_back(genome);
+        });
         const ecology::PopulationStats stats = ecology::strengthStats(_statScratch.empty() ? nullptr : &_statScratch[0],
-                                                                      static_cast<core::u32>(_statScratch.size()));
+                                                                     static_cast<core::u32>(_statScratch.size()));
         ecology::HeredityParams heredity;
 
         glBegin(GL_QUADS);
-        for (core::u32 i = 0u; i < _creatures.size(); ++i)
-        {
-            const Creature &creature = _creatures[i];
-            if (!creature.alive)
-                continue;
-
-            const core::i32 gx = static_cast<core::i32>(creature.body.x.toFloat() + halfW);
-            const core::i32 gz = static_cast<core::i32>(creature.body.z.toFloat() + halfD);
+        forEachBody([&](core::u32 species, core::u32 id, const ecology::Genome &genome,
+                        const math::Vec3<math::Fixed32> &at) {
+            const core::i32 gx = static_cast<core::i32>(at.x.toFloat() + halfW);
+            const core::i32 gz = static_cast<core::i32>(at.z.toFloat() + halfD);
             if (!world.height.contains(gx, gz))
-                continue;
+                return;
             const float ground = world.height.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)).toFloat();
 
-            const ai::PersonalityTraits traits = ai::personalityOf(creature.id, creature.species);
-            const float half = 0.22f * creature.genome.size.toFloat();
+            const ai::PersonalityTraits traits = ai::personalityOf(id, species);
+            const float half = 0.22f * genome.size.toFloat();
 
-            Rgb colour = creature.species == 1u ? Rgb{0.72f, 0.20f, 0.18f} : Rgb{0.80f, 0.66f, 0.36f};
+            Rgb colour = species == 1u ? Rgb{0.72f, 0.20f, 0.18f} : Rgb{0.80f, 0.66f, 0.36f};
             // Temperament is visible, faintly: an aggressive animal runs hot.
             colour.r += 0.18f * traits.aggression.toFloat();
             colour.b += 0.12f * traits.nervousness.toFloat();
-            if (creature.species == 0u && stats.count > 4u && ecology::isAnomaly(creature.genome, stats, heredity))
+            if (species == 0u && stats.count > 4u && ecology::isAnomaly(genome, stats, heredity))
                 colour = {0.98f, 0.94f, 0.86f};
 
-            const float cx = creature.body.x.toFloat();
-            const float cz = creature.body.z.toFloat();
+            const float cx = at.x.toFloat();
+            const float cz = at.z.toFloat();
             const float cy = ground + half + 0.1f;
             const float x0 = cx - half;
             const float x1 = cx + half;
@@ -2270,73 +1125,63 @@ public:
             glVertex3f(x0, y1, z0);
             glVertex3f(x0, y1, z1);
             glVertex3f(x0, y0, z1);
-        }
+        });
         glEnd();
+    }
+
+    /**
+     * @brief Walks the bodies the way a system does: by chunk, through the registry.
+     *
+     * One traversal, three consumers (the stats pass, the draw pass, the census).
+     * Writing it three times is how a viewer ends up disagreeing with itself about
+     * which animals exist.
+     */
+    /// Every body, one at a time. engine::systems::forEachCreature does the walk:
+    /// this file had its own copy, and a third was about to be written.
+    template <typename Visit> void forEachBody(Visit &&visit) const
+    {
+        engine::systems::forEachCreature(_registry, visit);
     }
 
     [[nodiscard]] core::u32 aliveCount(core::u32 species) const noexcept
     {
-        core::u32 alive = 0u;
-        for (core::u32 i = 0u; i < _creatures.size(); ++i)
-            if (_creatures[i].alive && _creatures[i].species == species)
-                ++alive;
-        return alive;
+        return _living.herd().countSpecies(species);
     }
 
-    /**
-     * @brief Mean ground speed of the herd, in cells per second.
-     *
-     * The number that says whether the movement is an animal's or a projectile's.
-     * It is measured rather than asserted because the first version of this layer
-     * moved bodies by their raw boid velocity per tick — a plausible-looking line
-     * of code that means sixty cells a second, and the only way to see it was to
-     * ask how fast they were actually going.
-     */
     [[nodiscard]] double meanSpeed() const { return _measuredSpeed; }
-
     [[nodiscard]] core::u32 births() const noexcept { return _births; }
     [[nodiscard]] core::u32 deaths() const noexcept { return _deaths; }
-    [[nodiscard]] core::u32 refusals() const noexcept { return _refusals; }
-    [[nodiscard]] core::u32 strays() const noexcept { return _strays; }
-    [[nodiscard]] core::u32 standingPlants() const noexcept
-    {
-        core::u32 standing = 0u;
-        for (core::u32 i = 0u; i < _plants.size(); ++i)
-            if (_plants[i].standing)
-                ++standing;
-        return standing;
-    }
-
-    [[nodiscard]] core::u32 plantCount() const noexcept { return static_cast<core::u32>(_plants.size()); }
-    [[nodiscard]] core::u32 grazed() const noexcept { return _grazed; }
-    [[nodiscard]] core::u32 regrown() const noexcept { return _regrown; }
-    [[nodiscard]] bool plantStanding(core::usize index) const
-    {
-        return index < _plants.size() ? _plants[index].standing : true;
-    }
-    /// True when the standing set changed since the last @ref clearFloraDirty.
-    [[nodiscard]] bool floraDirty() const noexcept { return _floraDirty; }
-    void clearFloraDirty() noexcept { _floraDirty = false; }
-
-    [[nodiscard]] core::u32 strayOutside() const noexcept { return _strayOutside; }
-    [[nodiscard]] core::u32 strayBlocked() const noexcept { return _strayBlocked; }
-
+    /// Steps the terrain refused outright on the last tick.
+    [[nodiscard]] core::u32 refusals() const noexcept { return _creatures.locomotion() != nullptr ? _creatures.locomotion()->cornered() : 0u; }
+    /// Bodies recovered from somewhere they could not stand.
+    [[nodiscard]] core::u32 strays() const noexcept { return _creatures.locomotion() != nullptr ? _creatures.locomotion()->strays() : 0u; }
+    /// Bodies that steered AROUND an obstacle rather than into it.
+    [[nodiscard]] core::u32 avoided() const noexcept { return _creatures.locomotion() != nullptr ? _creatures.locomotion()->avoided() : 0u; }
+    [[nodiscard]] core::u32 standingPlants() const noexcept { return _terrain.standingPlants(); }
+    [[nodiscard]] core::u32 plantCount() const noexcept { return _terrain.plantCount(); }
+    [[nodiscard]] core::u32 grazed() const noexcept { return _terrain.grazed(); }
+    [[nodiscard]] core::u32 regrown() const noexcept { return _terrain.regrown(); }
+    [[nodiscard]] bool plantStanding(core::usize index) const { return _terrain.plantStanding(index); }
+    [[nodiscard]] bool floraDirty() const noexcept { return _terrain.floraDirty(); }
+    void clearFloraDirty() noexcept { _terrain.clearFloraDirty(); }
     [[nodiscard]] core::u32 trailCells() const
     {
         core::u32 cells = 0u;
         for (core::u32 z = 0u; z < _depth; ++z)
             for (core::u32 x = 0u; x < _width; ++x)
-                if (_field.value(0u, x, z).toFloat() > 0.25f)
+                if (_living.scent().field().value(kAntChannel, x, z).toFloat() > 0.25f)
                     ++cells;
         return cells;
     }
-
-    [[nodiscard]] core::u32 agents() const noexcept { return static_cast<core::u32>(_agentX.size()); }
-    [[nodiscard]] core::u32 returns() const noexcept { return _returns; }
+    [[nodiscard]] core::u32 agents() const noexcept { return _colony.agentCount(); }
+    [[nodiscard]] core::u32 returns() const noexcept { return _colony.returns(); }
     [[nodiscard]] core::u32 ticks() const noexcept { return _ticks; }
-    [[nodiscard]] const ecology::TrophicWeb &web() const noexcept { return _web; }
+    [[nodiscard]] const ecology::TrophicWeb &web() const noexcept { return _living.web(); }
 
 private:
+    /// The ants' channel, named for them by ai::ScentChannel itself.
+    static constexpr core::u32 kAntChannel = static_cast<core::u32>(ai::ScentChannel::Pheromone);
+
     static constexpr core::u32 kAgents = 48u;
     static constexpr core::u32 kForageRange = 26u;
     /// Bodies the map will hold, whatever the model says.
@@ -2345,40 +1190,35 @@ private:
     static constexpr core::u32 kWebPeriod = 60u;
     /// Ticks a cropped plant takes to come back: twenty seconds at 60 Hz.
     static constexpr core::u32 kRegrowthTicks = 1200u;
-    /// Duration of one fixed tick, as the engine's 60 Hz loop defines it.
-    static inline const math::Fixed32 kFixedStep = math::Fixed32::fromFloat(1.0f / 60.0f);
 
-    ai::StigmergyField _field;
+    /// The ants' own field parameters. The herd's arrive in the LivingRecipe.
     ai::StigmergyParams _stigmergy{};
     ai::AntParams _ants{};
-    ecology::TrophicWeb _web;
-    lpl::pmr::vector<Creature> _creatures;
-    lpl::pmr::vector<Plant> _plants;
-    /// Scratch reused every step: the flocking pass needs one species at a time.
-    mutable lpl::pmr::vector<ai::Boid> _flockScratch;
+
+    // ── The living world, which is now the ENGINE's ──────────────────────────
+    //
+    // A registry, the engine's living layer, this map as a terrain, and the six
+    // creature systems. What is left in this file is the ant colony (which the
+    // engine's layer has no notion of) and the diagnostics — the two things that
+    // are genuinely a viewer's.
+    mutable ecs::Registry _registry;
+    engine::LivingLayer _living;
+    MapTerrain _terrain;
+    /// The six stages of an animal's tick, ordered by engine::systems::CreatureStage.
+    engine::systems::CreaturePipeline _creatures;
+
     mutable lpl::pmr::vector<ecology::Genome> _statScratch;
     procgen::Grid<core::u8> _blocked;
-    lpl::pmr::vector<core::u32> _agentX;
-    lpl::pmr::vector<core::u32> _agentZ;
+    /// The foragers, in ai/ where the mechanisms they use already lived.
+    ai::AntColony _colony;
     core::u32 _width{0u};
     core::u32 _depth{0u};
-    core::u32 _nestX{0u};
-    core::u32 _nestZ{0u};
-    core::u32 _stream{1u};
-    core::u32 _returns{0u};
     core::u32 _ticks{0u};
-    core::u32 _heredity{1u};
-    core::u32 _nextId{1u};
     core::u32 _births{0u};
     core::u32 _deaths{0u};
-    core::u32 _refusals{0u};
-    core::u32 _strays{0u};
-    core::u32 _strayOutside{0u};
-    core::u32 _strayBlocked{0u};
-    core::u32 _grazed{0u};
-    core::u32 _regrown{0u};
-    bool _floraDirty{false};
-    lpl::pmr::vector<ai::Boid> _speedMarks;
+    /// Where each body was one second ago, for the measured ground speed.
+    lpl::pmr::vector<ecs::EntityId> _speedIds;
+    lpl::pmr::vector<math::Vec3<math::Fixed32>> _speedAt;
     double _measuredSpeed{0.0};
 };
 
@@ -2432,11 +1272,11 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
 
     if (options.shading == Shading::Climate)
         std::snprintf(line, sizeof(line), "view %s   shading %s:%s   vegetation %s", viewName(options.view),
-                      shadingName(options.shading), climateAxisName(options.climateAxis),
+                      procgen::mapShadingName(options.shading), procgen::climateAxisName(options.climateAxis),
                       options.vegetation ? "on" : "off");
     else
         std::snprintf(line, sizeof(line), "view %s   shading %s   vegetation %s", viewName(options.view),
-                      shadingName(options.shading), options.vegetation ? "on" : "off");
+                      procgen::mapShadingName(options.shading), options.vegetation ? "on" : "off");
     put(line, 0.90f, 0.90f, 0.88f);
 
     std::snprintf(line, sizeof(line), "noise %s  warp %s  terraces %s", noiseName(options.noise),
@@ -2444,14 +1284,14 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
     put(line, 0.72f, 0.74f, 0.76f);
 
     std::snprintf(line, sizeof(line), "erosion %s  rivers %s (%u cells)  wind %s", options.erosion ? "on" : "off",
-                  options.rivers ? "on" : "off", world.riverCells, windName(options.windDirection));
+                  options.rivers ? "on" : "off", world.stats.riverCells, windName(options.windDirection));
     put(line, 0.72f, 0.74f, 0.76f);
 
-    std::snprintf(line, sizeof(line), "lakes %u cells   trunk drains %u of %u", world.raisedCells,
-                  world.maxAccumulation, world.height.cellCount());
+    std::snprintf(line, sizeof(line), "lakes %u cells   trunk drains %u of %u", world.drainage.raisedCells,
+                  world.drainage.maxAccumulation, world.height.cellCount());
     put(line, 0.72f, 0.74f, 0.76f);
 
-    std::snprintf(line, sizeof(line), "roads %s (%u cells)", options.roads ? "on" : "off", world.roadCells);
+    std::snprintf(line, sizeof(line), "roads %s (%u cells)", options.roads ? "on" : "off", world.stats.roadCells);
     put(line, 0.72f, 0.74f, 0.76f);
 
     std::snprintf(line, sizeof(line), "regions %u (%s)   settlement %s", world.regions.regionCount,
@@ -2462,14 +1302,14 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
         // Entrances and reachability, not a floor count: a sealed system and an
         // open one have the same floor area, and only one of them is a cave.
         std::snprintf(line, sizeof(line), "underground layered  %u layers  %u entrances  %u/%u reachable",
-                      world.caveLayers, world.caveEntrances, world.caveReachable, world.caveHollow);
+                      world.stats.caveLayers, world.stats.caveEntrances, world.stats.caveReachable, world.stats.caveHollow);
     else
         std::snprintf(line, sizeof(line), "underground %s  %u floor  %s", caveName(options.caveKind),
-                      world.dungeonFloor, world.dungeonConnected ? "connected" : "SPLIT");
+                      world.stats.dungeonFloor, world.stats.dungeonConnected ? "connected" : "SPLIT");
     put(line, 0.72f, 0.74f, 0.76f);
 
     std::snprintf(line, sizeof(line), "town %s  %zu plots  roadside %u modules  liminal %u open",
-                  options.grammarBuildings ? "grammar" : "prisms", world.plots.size(), world.roadsideModules,
+                  options.grammarBuildings ? "grammar" : "prisms", world.plots.size(), world.stats.roadsideModules,
                   world.liminal.openCells);
     put(line, 0.72f, 0.74f, 0.76f);
 
@@ -2511,7 +1351,7 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
     {
         if (world.biomeCounts[i] == 0u)
             continue;
-        const Rgb colour = biomeColour(static_cast<procgen::BiomeId>(i));
+        const Rgb colour = procgen::biomeColour(static_cast<procgen::BiomeId>(i));
         glColor3f(colour.r, colour.g, colour.b);
         glBegin(GL_QUADS);
         glVertex2f(10.0f, y + 2.0f);
@@ -2636,165 +1476,6 @@ private:
 // The one system that is the game's business
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @class TerrainCollisionSystem
- * @brief Keeps loose bodies on top of the ground, and lets them slide downhill.
- *
- * The engine's built-in physics knows about gravity, damping and bodies hitting each
- * other. It does not know about *this* world's ground, because a heightfield is
- * content, not a host service — so the collision against it belongs to the World.
- * That is the split the World seam exists to make: generic systems come from the
- * Config, the ones that only make sense for this game come from `onInit`.
- *
- * Registered in @c PostPhysics, deliberately. Doing this work in @c Physics would
- * put a second system in the phase that already owns integration, and the engine's
- * own physics would then be stepping the same buffers alongside it. Correcting
- * positions *after* the step is both the right order physically and the only order
- * that keeps one writer per phase.
- */
-class TerrainCollisionSystem final : public ecs::ISystem {
-public:
-    TerrainCollisionSystem(ecs::Registry &registry, const procgen::Heightfield &terrain, core::f32 cellSize) noexcept
-        : _registry(registry), _terrain(terrain), _cellSize(cellSize)
-    {
-    }
-
-    [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override { return _descriptor; }
-
-    void execute(core::f32 /*dt*/) override
-    {
-        ++_executions;
-        // Reset per tick: what matters is how many bodies are in contact NOW, not how
-        // many contacts have ever happened.
-        _resting = 0u;
-        if (_terrain.empty())
-        {
-            if (_executions == 1u)
-                core::Log::warn("TerrainCollision: the terrain is empty, nothing to stand on");
-            return;
-        }
-
-        const core::f32 halfWidth = static_cast<core::f32>(_terrain.width()) * _cellSize * 0.5f;
-        const core::f32 halfDepth = static_cast<core::f32>(_terrain.depth()) * _cellSize * 0.5f;
-
-        for (const auto &partition : _registry.partitions())
-        {
-            if (!partition)
-                continue;
-            for (const auto &chunk : partition->chunks())
-            {
-                if (!chunk)
-                    continue;
-                auto *positions = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
-                auto *velocities = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Velocity));
-                auto *aabb = static_cast<const FVec3 *>(chunk->readComponent(ecs::ComponentId::AABB));
-                auto *mass = static_cast<const math::Fixed32 *>(chunk->readComponent(ecs::ComponentId::Mass));
-                // A chunk without Velocity is scenery: it was never going to move,
-                // so there is nothing to correct.
-                if (positions == nullptr || velocities == nullptr)
-                    continue;
-
-                const core::u32 count = chunk->count();
-                for (core::u32 i = 0u; i < count; ++i)
-                {
-                    // Zero mass means immovable. Correcting one to the ground would be
-                    // harmless, but the downhill slide below would hand it a velocity and
-                    // walk a tree off its own footing.
-                    if (mass != nullptr && mass[i].raw() == 0)
-                        continue;
-                    const core::f32 half = aabb != nullptr ? aabb[i].y.toFloat() * 0.5f : 0.25f;
-
-                    const core::f32 worldX = positions[i].x.toFloat() + halfWidth;
-                    const core::f32 worldZ = positions[i].z.toFloat() + halfDepth;
-                    const core::i32 cellX = static_cast<core::i32>(worldX / _cellSize);
-                    const core::i32 cellZ = static_cast<core::i32>(worldZ / _cellSize);
-
-                    // Keep bodies over the map. A body nudged past the edge by a
-                    // collision would otherwise sail off and hang in empty space,
-                    // which looks exactly like the collision having failed.
-                    const core::f32 limitX = halfWidth - _cellSize;
-                    const core::f32 limitZ = halfDepth - _cellSize;
-                    if (positions[i].x.toFloat() < -limitX)
-                    {
-                        positions[i].x = math::Fixed32::fromFloat(-limitX);
-                        velocities[i].x = math::Fixed32::zero();
-                    }
-                    else if (positions[i].x.toFloat() > limitX)
-                    {
-                        positions[i].x = math::Fixed32::fromFloat(limitX);
-                        velocities[i].x = math::Fixed32::zero();
-                    }
-                    if (positions[i].z.toFloat() < -limitZ)
-                    {
-                        positions[i].z = math::Fixed32::fromFloat(-limitZ);
-                        velocities[i].z = math::Fixed32::zero();
-                    }
-                    else if (positions[i].z.toFloat() > limitZ)
-                    {
-                        positions[i].z = math::Fixed32::fromFloat(limitZ);
-                        velocities[i].z = math::Fixed32::zero();
-                    }
-
-                    const core::f32 ground = _terrain.clamped(cellX, cellZ).toFloat() + half;
-                    if (positions[i].y.toFloat() >= ground)
-                        continue;
-
-                    // Land: sit on the surface and stop falling.
-                    ++_resting;
-                    positions[i].y = math::Fixed32::fromFloat(ground);
-                    if (velocities[i].y.toFloat() < 0.0f)
-                        velocities[i].y = math::Fixed32::zero();
-
-                    // Slide along the downhill gradient, and lose speed doing it.
-                    // Without the slide a boulder simply stops where it landed and
-                    // the terrain might as well be a floor; with it, the map's
-                    // drainage pattern becomes visible in where things collect.
-                    const core::f32 left = _terrain.clamped(cellX - 1, cellZ).toFloat();
-                    const core::f32 right = _terrain.clamped(cellX + 1, cellZ).toFloat();
-                    const core::f32 back = _terrain.clamped(cellX, cellZ - 1).toFloat();
-                    const core::f32 front = _terrain.clamped(cellX, cellZ + 1).toFloat();
-
-                    const core::f32 slide = 0.55f;
-                    const core::f32 friction = 0.86f;
-                    velocities[i].x =
-                        math::Fixed32::fromFloat(velocities[i].x.toFloat() * friction + (left - right) * slide);
-                    velocities[i].z =
-                        math::Fixed32::fromFloat(velocities[i].z.toFloat() * friction + (back - front) * slide);
-                }
-            }
-        }
-    }
-
-private:
-    using FVec3 = math::Vec3<math::Fixed32>;
-
-    static constexpr ecs::ComponentAccess kAccesses[] = {
-        {ecs::ComponentId::Position, ecs::AccessMode::ReadWrite},
-        {ecs::ComponentId::Velocity, ecs::AccessMode::ReadWrite},
-        {ecs::ComponentId::AABB,     ecs::AccessMode::ReadOnly },
-    };
-
-public:
-    [[nodiscard]] core::u32 executions() const noexcept { return _executions; }
-    /**
-     * @brief Bodies touching the ground on the most recent tick.
-     *
-     * The honest measure of "at rest". Testing the vertical velocity instead reports
-     * nothing ever settling: a body held up by position correction still has one
-     * tick of gravity applied to it every tick, so its velocity oscillates around
-     * zero forever even though it has not moved. What is stable is the contact.
-     */
-    [[nodiscard]] core::u32 resting() const noexcept { return _resting; }
-
-private:
-    core::u32 _executions{0u};
-    core::u32 _resting{0u};
-    ecs::SystemDescriptor _descriptor{"TerrainCollision", ecs::SchedulePhase::PostPhysics, kAccesses};
-    ecs::Registry &_registry;
-    const procgen::Heightfield &_terrain;
-    core::f32 _cellSize;
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // The game
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2814,7 +1495,8 @@ public:
         regenerate();
         // The game's own system, added on top of whatever the Config already put on
         // this scheduler. The engine's physics is registered before onInit runs.
-        auto collision = lpl::pmr::make_unique<TerrainCollisionSystem>(registry(), _terrain.height, 1.0f);
+        auto collision =
+            lpl::pmr::make_unique<engine::systems::HeightfieldCollisionSystem>(registry(), _terrain.height, 1.0f);
         _collision = collision.get();
         auto registered =
             scheduler().registerSystem(static_cast<lpl::pmr::unique_ptr<ecs::ISystem>>(std::move(collision)));
@@ -3040,6 +1722,18 @@ private:
         return _plotDatum;
     }
 
+    /// What the surface mesh should show, from the viewer's own options.
+    [[nodiscard]] procgen::MapSurfaceStyle surfaceStyle() const noexcept
+    {
+        procgen::MapSurfaceStyle style;
+        style.shading = _options.shading;
+        style.climateAxis = _options.climateAxis;
+        style.rivers = _options.rivers;
+        style.settlement = _options.settlement;
+        style.roads = _options.roads;
+        return style;
+    }
+
     /// Rebuilds the terrain and everything derived from it, entities included.
     void regenerate()
     {
@@ -3051,13 +1745,14 @@ private:
         _propIds.clear();
 
         _terrain = generateTerrain(_options, &registry(), &_propIds);
-        _surfaceMesh = buildSurfaceMesh(_terrain, _options);
+        _surfaceMesh = procgen::buildSurfaceMesh(_terrain, surfaceStyle());
 
         // The layered system replaces the flat plan entirely rather than being drawn
         // beside it: they are two answers to the same question, and showing both at
         // once would say nothing about either.
-        _undergroundMesh = _options.caveKind % 4u == 3u ? buildCaveSystemMesh(_terrain, kCaveDepth, kCaveLayerSpacing) :
-                                                          buildDungeonMesh(_terrain, kCaveDepth);
+        _undergroundMesh = _options.caveKind % 4u == 3u ?
+                               procgen::buildCaveSystemMesh(_terrain, kCaveDepth, kCaveLayerSpacing) :
+                               procgen::buildDungeonMesh(_terrain, kCaveDepth);
 
         // The grammar's own volume when there is one, the box heuristic otherwise.
         // What is on screen is then what the generator produced, not the viewer's
@@ -3070,11 +1765,19 @@ private:
                 {0.44f, 0.40f, 0.36f}, // base course
                 {0.42f, 0.24f, 0.20f}
             }; // roof
-            _townMesh = buildVoxelMesh(_terrain.townVolume, _terrain, -0.4f, palette, 4u);
+            // The footprint datum, at last CONNECTED. buildPlotDatum was written,
+            // documented as the fix for exactly this, and had no caller: the mesher
+            // fell back to the per-column ground every time, so a plot on a slope
+            // still sheared into a staircase and, along a ridge, into a long wall
+            // standing free of the hillside. The comment claiming otherwise was
+            // already there. Moving the mesher into a module is what surfaced it.
+            const std::vector<float> &datum = buildPlotDatum();
+            _townMesh = procgen::buildVoxelMesh(_terrain.townVolume, _terrain, -0.4f, palette, 4u, datum.data(),
+                                                datum.size());
         }
         else
         {
-            _townMesh = _options.settlement ? buildTownMesh(_terrain, _terrain.plots) : std::vector<Vertex>{};
+            _townMesh = _options.settlement ? procgen::buildTownMesh(_terrain) : procgen::MapMesh{};
         }
 
         if (_options.roads && _options.grammarBuildings && !_terrain.roadsideVolume.empty())
@@ -3085,7 +1788,7 @@ private:
                 {0.30f, 0.26f, 0.22f},
                 {0.95f, 0.80f, 0.35f}
             }; // lamp
-            _roadsideMesh = buildVoxelMesh(_terrain.roadsideVolume, _terrain, 0.0f, palette, 4u);
+            _roadsideMesh = procgen::buildVoxelMesh(_terrain.roadsideVolume, _terrain, 0.0f, palette, 4u);
         }
         else
         {
@@ -3100,7 +1803,7 @@ private:
             liminal.depth = _options.size;
             liminal.seed = _options.seed ^ 0x11B1A0u;
             _terrain.liminal = procgen::generateLiminal(liminal);
-            _liminalMesh = buildLiminalMesh(_terrain.liminal);
+            _liminalMesh = procgen::buildLiminalMesh(_terrain.liminal);
         }
 
         // The herd needs to know where the trees ARE, which is a question only the
@@ -3137,7 +1840,7 @@ private:
         std::printf("seed %u %ux%u noise=%s warp=%d erode=%d rivers=%d(%u) wind=%s metric=%s cave=%s "
                     "build=%.1fms tris=%zu flora=%zu boulders=%u plots=%zu townTris=%zu caveTris=%zu\n",
                     _options.seed, _options.size, _options.size, noiseName(_options.noise), int(_options.warp),
-                    int(_options.erosion), int(_options.rivers), _terrain.riverCells, windName(_options.windDirection),
+                    int(_options.erosion), int(_options.rivers), _terrain.stats.riverCells, windName(_options.windDirection),
                     metricName(_options.metric), caveName(_options.caveKind), _terrain.buildMilliseconds,
                     _surfaceMesh.size() / 3u, _propIds.size(), _boulderCount, _terrain.plots.size(),
                     _townMesh.size() / 3u, _undergroundMesh.size() / 3u);
@@ -3173,10 +1876,10 @@ private:
         if (_terrain.height.empty())
             return;
 
-        procgen::Random random = procgen::deriveStream(_options.seed, 0xB0DEu);
+        math::Random random = math::deriveStream(_options.seed, 0xB0DEu);
         const core::f32 halfWidth = static_cast<core::f32>(_terrain.height.width()) * 0.5f;
         const core::f32 halfDepth = static_cast<core::f32>(_terrain.height.depth()) * 0.5f;
-        const core::f32 ceiling = _terrain.high.toFloat() + 3.0f;
+        const core::f32 ceiling = _terrain.highest.toFloat() + 3.0f;
 
         for (core::usize n = 0u; n < _boulderIds.size(); ++n)
         {
@@ -3336,7 +2039,8 @@ private:
                     if (_options.living && !_living.plantStanding(thisPlant))
                         continue;
                     const core::f32 half = extent != nullptr ? extent[i].x.toFloat() * 0.5f : 0.3f;
-                    appendPlant(mesh, position[i].x.toFloat(), position[i].y.toFloat(), position[i].z.toFloat(), half);
+                    procgen::appendPlant(mesh, _terrain, position[i].x.toFloat(), position[i].y.toFloat(),
+                                         position[i].z.toFloat(), half);
                 }
             }
         }
@@ -3350,76 +2054,6 @@ private:
      * vegetation from a distance; a scatter drawn as flat squares tells you the
      * placement is right and nothing about whether the world looks like a world.
      */
-    void appendPlant(std::vector<Vertex> &mesh, core::f32 cx, core::f32 cy, core::f32 cz, core::f32 half) const
-    {
-        const core::f32 trunkHalf = half * 0.22f;
-        const core::f32 trunkTop = cy + half * 1.1f;
-        const core::f32 base = cy - half;
-
-        // Tint from the biome it stands in, so a conifer stand and a jungle differ.
-        Rgb canopy{0.16f, 0.42f, 0.20f};
-        if (!_terrain.biomes.empty())
-        {
-            const core::f32 halfWidth = static_cast<core::f32>(_terrain.height.width()) * 0.5f;
-            const core::f32 halfDepth = static_cast<core::f32>(_terrain.height.depth()) * 0.5f;
-            const core::i32 gx = static_cast<core::i32>(cx + halfWidth);
-            const core::i32 gz = static_cast<core::i32>(cz + halfDepth);
-            if (_terrain.biomes.contains(gx, gz))
-            {
-                switch (_terrain.biomes.at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)))
-                {
-                case procgen::BiomeId::Taiga: canopy = {0.13f, 0.33f, 0.25f}; break;
-                case procgen::BiomeId::Rainforest: canopy = {0.09f, 0.42f, 0.17f}; break;
-                case procgen::BiomeId::Savanna: canopy = {0.50f, 0.47f, 0.21f}; break;
-                case procgen::BiomeId::Desert: canopy = {0.30f, 0.50f, 0.28f}; break;
-                case procgen::BiomeId::Marsh: canopy = {0.29f, 0.46f, 0.27f}; break;
-                default: break;
-                }
-            }
-        }
-
-        const Rgb bark{0.33f, 0.23f, 0.15f};
-        const auto quad = [&mesh](float ax, float ay, float az, float bx, float by, float bz, float cx2, float cy2,
-                                  float cz2, float dx, float dy, float dz, float nx, float ny, float nz,
-                                  const Rgb &colour) {
-            const Vertex a{ax, ay, az, nx, ny, nz, colour};
-            const Vertex b{bx, by, bz, nx, ny, nz, colour};
-            const Vertex c{cx2, cy2, cz2, nx, ny, nz, colour};
-            const Vertex d{dx, dy, dz, nx, ny, nz, colour};
-            mesh.push_back(a);
-            mesh.push_back(b);
-            mesh.push_back(c);
-            mesh.push_back(a);
-            mesh.push_back(c);
-            mesh.push_back(d);
-        };
-        const auto tri = [&mesh](float ax, float ay, float az, float bx, float by, float bz, float cx2, float cy2,
-                                 float cz2, float nx, float ny, float nz, const Rgb &colour) {
-            mesh.push_back(Vertex{ax, ay, az, nx, ny, nz, colour});
-            mesh.push_back(Vertex{bx, by, bz, nx, ny, nz, colour});
-            mesh.push_back(Vertex{cx2, cy2, cz2, nx, ny, nz, colour});
-        };
-
-        // Trunk: two crossed faces are enough silhouette at this scale.
-        quad(cx - trunkHalf, base, cz, cx - trunkHalf, trunkTop, cz, cx + trunkHalf, trunkTop, cz, cx + trunkHalf, base,
-             cz, 0.0f, 0.0f, 1.0f, bark);
-        quad(cx, base, cz - trunkHalf, cx, trunkTop, cz - trunkHalf, cx, trunkTop, cz + trunkHalf, cx, base,
-             cz + trunkHalf, 1.0f, 0.0f, 0.0f, bark);
-
-        // Canopy: a four-sided pyramid, each face with its own normal so it catches
-        // the light unevenly and reads as volume rather than as a flat blob.
-        const core::f32 spread = half * 1.15f;
-        const core::f32 apex = trunkTop + half * 2.1f;
-        tri(cx, apex, cz, cx - spread, trunkTop, cz - spread, cx + spread, trunkTop, cz - spread, 0.0f, 0.45f, -0.89f,
-            canopy);
-        tri(cx, apex, cz, cx + spread, trunkTop, cz - spread, cx + spread, trunkTop, cz + spread, 0.89f, 0.45f, 0.0f,
-            canopy);
-        tri(cx, apex, cz, cx + spread, trunkTop, cz + spread, cx - spread, trunkTop, cz + spread, 0.0f, 0.45f, 0.89f,
-            canopy);
-        tri(cx, apex, cz, cx - spread, trunkTop, cz + spread, cx - spread, trunkTop, cz - spread, -0.89f, 0.45f, 0.0f,
-            canopy);
-    }
-
     /// One cube, six faces, each flat-shaded so the form reads. Emits into GL_QUADS.
     static void drawCube(core::f32 cx, core::f32 cy, core::f32 cz, core::f32 half)
     {
@@ -3490,7 +2124,7 @@ private:
 
         const procgen::StreamingPlan plan = procgen::planStreaming(&source, 1u, nullptr, 0u, params);
         const float chunk = 16.0f;
-        const float y = _terrain.high.toFloat() + 2.0f;
+        const float y = _terrain.highest.toFloat() + 2.0f;
 
         glDisable(GL_DEPTH_TEST);
         glBegin(GL_LINES);
@@ -3695,7 +2329,7 @@ private:
             regenerate();
         else if (remesh)
         {
-            _surfaceMesh = buildSurfaceMesh(_terrain, _options);
+            _surfaceMesh = procgen::buildSurfaceMesh(_terrain, surfaceStyle());
             compileLists();
         }
     }
@@ -3728,7 +2362,7 @@ private:
     LivingLayer _living;
     Camera _camera;
     engine::Engine *_engine{nullptr};
-    TerrainCollisionSystem *_collision{nullptr};
+    engine::systems::HeightfieldCollisionSystem *_collision{nullptr};
     lpl::pmr::vector<ecs::EntityId> _propIds;
     lpl::pmr::vector<ecs::EntityId> _boulderIds;
     lpl::pmr::vector<FVec3> _propPositions;

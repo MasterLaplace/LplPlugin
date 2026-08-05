@@ -38,7 +38,7 @@
 #    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/Climate.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
-#    include <lpl/procgen/Random.hpp>
+#    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/ValueNoise.hpp>
 
 namespace lpl::procgen {
@@ -117,7 +117,7 @@ template <typename EmitPlant>
     continentLayer.seed = params.worldSeed ^ 0xC0A57Du;
     continentLayer.frequency = params.noise.frequency * 0.25f;
 
-    Random thin{chunkSeed(params, coord)};
+    math::Random thin{chunkSeed(params, coord)};
     const auto clamp01 = [](core::f32 v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); };
 
     for (core::u32 z = 0u; z < size; ++z)

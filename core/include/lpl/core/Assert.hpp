@@ -74,4 +74,16 @@ namespace lpl::core::detail {
             __builtin_unreachable();                                                                                   \
         } while (false)
 
+/// Marks a declared-but-unwritten path. Distinct from LPL_UNREACHABLE, which
+/// asserts a state the program can never reach: this one asserts a state it will
+/// reach, on purpose, until someone implements it. Failing loudly at the call site
+/// is what keeps a scaffolded API honest — a stub that silently returns a default
+/// looks like a working feature in every test that touches it.
+#    define LPL_NOT_IMPLEMENTED(what)                                                                                  \
+        do                                                                                                             \
+        {                                                                                                              \
+            ::lpl::core::detail::assertFail("NOT IMPLEMENTED: " what);                                                 \
+            __builtin_unreachable();                                                                                   \
+        } while (false)
+
 #endif // LPL_CORE_ASSERT_HPP
