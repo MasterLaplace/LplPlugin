@@ -226,10 +226,10 @@ struct WaterParams {
  * @brief One evaluation of the surface: how high, which way it tilts, how broken.
  */
 struct WaveSample {
-    core::f32 height{0.0f};  ///< Normalised, in [-1, 1]. Multiply by @c swellHeight.
-    core::f32 slopeX{0.0f};  ///< Normalised surface gradient along x.
-    core::f32 slopeZ{0.0f};  ///< Along z.
-    core::f32 crest{0.0f};   ///< 0 away from a crest, 1 at a breaking one.
+    core::f32 height{0.0f}; ///< Normalised, in [-1, 1]. Multiply by @c swellHeight.
+    core::f32 slopeX{0.0f}; ///< Normalised surface gradient along x.
+    core::f32 slopeZ{0.0f}; ///< Along z.
+    core::f32 crest{0.0f};  ///< 0 away from a crest, 1 at a breaking one.
 };
 
 /**
@@ -270,7 +270,8 @@ struct WaveSample {
     // Broadens the troughs and narrows the peaks. u is the wave mapped to [0, 1];
     // squaring u pushes mass towards the trough, so the crest arrives late and
     // leaves early. d/dt of the blend comes out as a single multiply-add.
-    const core::f32 sharp = params.crestSharpness < 0.0f ? 0.0f : (params.crestSharpness > 1.0f ? 1.0f : params.crestSharpness);
+    const core::f32 sharp =
+        params.crestSharpness < 0.0f ? 0.0f : (params.crestSharpness > 1.0f ? 1.0f : params.crestSharpness);
     const auto skew = [sharp](core::f32 t, core::f32 &ioSlope) {
         const core::f32 u = (t + 1.0f) * 0.5f;
         const core::f32 squared = 2.0f * u * u - 1.0f;
@@ -291,10 +292,10 @@ struct WaveSample {
     };
     const core::f32 chop = params.chopStrength < 0.0f ? 0.0f : params.chopStrength;
     const Octave octaves[3] = {
-        {params.driftX, params.driftZ, params.rippleScale, 1.0f, 1.0f},
-        {params.crossX, params.crossZ, params.rippleScale * 2.3f, 0.42f * chop, -1.3f},
+        {params.driftX,                               params.driftZ,                               params.rippleScale,        1.0f,         1.0f },
+        {params.crossX,                               params.crossZ,                               params.rippleScale * 2.3f, 0.42f * chop, -1.3f},
         {params.driftX * 0.6f + params.crossX * 0.8f, params.driftZ * 0.6f + params.crossZ * 0.8f,
-         params.rippleScale * 6.7f, 0.15f * chop, 2.1f},
+         params.rippleScale * 6.7f,                                                                                           0.15f * chop, 2.1f },
     };
 
     WaveSample sample;
@@ -309,9 +310,8 @@ struct WaveSample {
         // travels along −dir and the water runs backwards up its own slope. The field is
         // called `drift` and every caller points it where the water goes; the arithmetic
         // was doing the opposite, which is exactly what a river flowing uphill looks like.
-        const core::f32 v =
-            (worldX * octave.dirX + worldZ * octave.dirZ) * octave.frequency -
-            params.phase * octave.speed * params.flowSpeed;
+        const core::f32 v = (worldX * octave.dirX + worldZ * octave.dirZ) * octave.frequency -
+                            params.phase * octave.speed * params.flowSpeed;
         core::f32 slope = 0.0f;
         const core::f32 value = skew(foldWave(v, slope), slope);
         sample.height += octave.amplitude * value;

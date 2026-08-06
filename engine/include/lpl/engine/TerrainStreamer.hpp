@@ -43,7 +43,7 @@ struct TerrainChunk {
     procgen::Heightfield height{};
     procgen::BiomeMap biomes{};
     procgen::Grid<core::u8> rivers{};
-    procgen::FlowDirection flow{}; ///< Which way the river runs; procgen::kNoFlow elsewhere.
+    procgen::FlowDirection flow{};   ///< Which way the river runs; procgen::kNoFlow elsewhere.
     procgen::Grid<core::u8> shade{}; ///< 0 lit, 255 shadowed; refreshed as the sun moves.
     lpl::pmr::vector<ecology::PlantCell> plants;
     core::f32 lowest{0.0f}; ///< Lowest cell: whether this chunk has water at all.

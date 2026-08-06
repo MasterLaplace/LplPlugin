@@ -99,9 +99,9 @@ struct CaveWarrenParams {
      */
     core::u32 halfSpan{20u};
 
-    core::u32 layers{3u};          ///< Stacked galleries; deeper ones open out.
-    core::u32 levelsPerLayer{2u};  ///< Voxel levels a gallery occupies.
-    core::f32 levelHeight{1.4f};   ///< World units per voxel level.
+    core::u32 layers{3u};         ///< Stacked galleries; deeper ones open out.
+    core::u32 levelsPerLayer{2u}; ///< Voxel levels a gallery occupies.
+    core::f32 levelHeight{1.4f};  ///< World units per voxel level.
 
     /**
      * @brief Solid levels ABOVE the shallowest gallery. The cave's roof.
@@ -142,8 +142,8 @@ struct CaveWarrenParams {
      */
     core::f32 coverMargin{0.4f};
 
-    core::u32 aditReach{18u};      ///< Cells the adit may be driven before giving up.
-    core::u32 aditHalfWidth{1u};   ///< Trench half-width, in cells.
+    core::u32 aditReach{18u};    ///< Cells the adit may be driven before giving up.
+    core::u32 aditHalfWidth{1u}; ///< Trench half-width, in cells.
     /**
      * @brief Cells the adit bores past the mouth before the plan takes over.
      *
@@ -153,13 +153,13 @@ struct CaveWarrenParams {
      */
     core::u32 aditBore{4u};
 
-    core::f32 topFill{0.46f};      ///< Fill probability of the shallowest gallery.
-    core::f32 deepFill{0.38f};     ///< Fill probability of the deepest.
+    core::f32 topFill{0.46f};  ///< Fill probability of the shallowest gallery.
+    core::f32 deepFill{0.38f}; ///< Fill probability of the deepest.
     core::u32 automatonSteps{5u};
     core::u32 minChamberSize{18u};
     core::u32 shaftsPerPair{3u};
 
-    core::u8 rockMaterial{1u};     ///< Material id written for solid rock.
+    core::u8 rockMaterial{1u}; ///< Material id written for solid rock.
 
     // ── What kind of place this is ──────────────────────────────────────────
 
@@ -182,7 +182,7 @@ struct CaveWarrenParams {
      * @c Auto.
      */
     LandmarkParams villages{settlementDefaults()};
-    core::f32 seaLevel{-1.0f};      ///< Where the water is, for the settlement query.
+    core::f32 seaLevel{-1.0f}; ///< Where the water is, for the settlement query.
     /**
      * @brief How far a settlement counts as "here", in world cells.
      *
@@ -231,15 +231,15 @@ struct CaveWarrenParams {
 struct CaveAdit {
     core::i32 cellX[kMaxAditCells]{}; ///< Trench cells, from the site centre outward.
     core::i32 cellZ[kMaxAditCells]{};
-    core::u32 length{0u};             ///< Trench cells actually cut.
-    core::i32 mouthX{0};              ///< First cell with rock over the gallery.
+    core::u32 length{0u}; ///< Trench cells actually cut.
+    core::i32 mouthX{0};  ///< First cell with rock over the gallery.
     core::i32 mouthZ{0};
-    core::i32 stepX{0};               ///< Uphill step, one cell.
+    core::i32 stepX{0}; ///< Uphill step, one cell.
     core::i32 stepZ{0};
-    core::i32 halfWidth{1};           ///< Trench half-width; travels with the plan so
-                                      ///< the carve and the cover mask agree on it.
-    core::f32 floorY{0.0f};           ///< The one level the trench is cut to.
-    bool found{false};                ///< False when no cell within reach had cover.
+    core::i32 halfWidth{1}; ///< Trench half-width; travels with the plan so
+                            ///< the carve and the cover mask agree on it.
+    core::f32 floorY{0.0f}; ///< The one level the trench is cut to.
+    bool found{false};      ///< False when no cell within reach had cover.
 };
 
 /**
@@ -258,8 +258,8 @@ struct CaveAdit {
  * @param drop    How far the shelf is cut below the site, @ref ChunkTerrainRule::caveMouthDrop.
  * @return The adit; @c found is false when the site cannot carry a cave.
  */
-[[nodiscard]] CaveAdit planCaveAdit(const ChunkParams &params, const LandmarkSite &site,
-                                    const CaveWarrenParams &warren, core::f32 drop);
+[[nodiscard]] CaveAdit planCaveAdit(const ChunkParams &params, const LandmarkSite &site, const CaveWarrenParams &warren,
+                                    core::f32 drop);
 
 /**
  * @brief The level a cave mouth cuts one world cell down to, if it cuts it at all.
@@ -291,12 +291,12 @@ struct CaveAdit {
 struct CaveWarren {
     LandmarkSite site{};
     CaveAdit adit{};
-    VoxelVolume volume{};      ///< Rock and air; layer 0 at the top, see @ref caveVolume.
-    Grid<core::u8> covered{};  ///< 1 where the ground can roof the gallery, 0 where the terrain rules.
+    VoxelVolume volume{};     ///< Rock and air; layer 0 at the top, see @ref caveVolume.
+    Grid<core::u8> covered{}; ///< 1 where the ground can roof the gallery, 0 where the terrain rules.
 
-    core::i32 originX{0};      ///< World column of the volume's (0, *, 0) corner.
-    core::i32 originZ{0};      ///< World row of it.
-    core::f32 baseY{0.0f};     ///< World Y at the bottom of level 0, for the renderer.
+    core::i32 originX{0};  ///< World column of the volume's (0, *, 0) corner.
+    core::i32 originZ{0};  ///< World row of it.
+    core::f32 baseY{0.0f}; ///< World Y at the bottom of level 0, for the renderer.
     core::f32 levelHeight{1.4f};
 
     /**
@@ -323,10 +323,10 @@ struct CaveWarren {
     core::u32 apertureCount{0u};
 
     core::u32 layerCount{0u};
-    core::u32 openCells{0u};       ///< Hollow cells of the system, over every layer.
-    core::u32 coveredColumns{0u};  ///< Columns with rock over the gallery roof.
-    core::u32 reachableCells{0u};  ///< Hollow cells the flood reaches from the mouth.
-    core::u32 pathLength{0u};      ///< Steps from the mouth to the deepest reachable cell.
+    core::u32 openCells{0u};      ///< Hollow cells of the system, over every layer.
+    core::u32 coveredColumns{0u}; ///< Columns with rock over the gallery roof.
+    core::u32 reachableCells{0u}; ///< Hollow cells the flood reaches from the mouth.
+    core::u32 pathLength{0u};     ///< Steps from the mouth to the deepest reachable cell.
     core::u32 repairedCells{0u};
     /**
      * @brief What kind of place this turned out to be. Never @c Auto.
@@ -343,7 +343,7 @@ struct CaveWarren {
      * player can feel: a warren that fails it is a mouth leading to one room.
      */
     bool navigable{false};
-    bool valid{false};             ///< False when the site carried no adit, or no cave.
+    bool valid{false}; ///< False when the site carried no adit, or no cave.
 
     [[nodiscard]] core::u32 levels() const noexcept { return volume.levels; }
     /** @brief World Y at the top of the volume: the top of the rock cap. */

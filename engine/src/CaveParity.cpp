@@ -167,8 +167,8 @@ constexpr core::i32 kSearchHalf = 6;
     // wish = (-forward * sin(yaw), -forward * cos(yaw)), so the heading that walks
     // along (stepX, stepZ) is atan2 of their negations — derived rather than tabulated,
     // or the gate would only work for a site whose adit happens to run north.
-    body.setYaw(math::Cordic::atan2(math::Fixed32::fromInt(-warren.adit.stepX),
-                                    math::Fixed32::fromInt(-warren.adit.stepZ)));
+    body.setYaw(
+        math::Cordic::atan2(math::Fixed32::fromInt(-warren.adit.stepX), math::Fixed32::fromInt(-warren.adit.stepZ)));
 
     CharacterParams params{};
     CharacterIntent walk{};

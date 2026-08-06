@@ -47,8 +47,12 @@ int main()
     // below, which did not move when the literals became dot products.
     {
         std::printf("== water: the swell runs where it is pointed ==\n");
-        for (const auto &dir : {std::pair{1.0f, 0.0f}, std::pair{0.0f, 1.0f}, std::pair{-1.0f, 0.0f},
-                               std::pair{0.6f, -0.8f}})
+        for (const auto &dir : {
+                 std::pair{1.0f,  0.0f },
+                 std::pair{0.0f,  1.0f },
+                 std::pair{-1.0f, 0.0f },
+                 std::pair{0.6f,  -0.8f}
+        })
         {
             lpl::render::WaterParams water;
             water.setDrift(dir.first, dir.second);
@@ -135,8 +139,7 @@ int main()
         // normal taken from the wave's VALUE is a quarter period out of phase and disagrees
         // on about half of all points, so two per cent is a fifty-fold margin, not a
         // threshold chosen to make today's numbers pass.
-        check(disagreements * 50 <= compared,
-              "the gradient is the derivative of the height, not a second guess at it");
+        check(disagreements * 50 <= compared, "the gradient is the derivative of the height, not a second guess at it");
 
         // A crest is the TOP of the wave and nothing else. A threshold that let the whole
         // surface count as a crest would make the sea milk and the scatter uniform.

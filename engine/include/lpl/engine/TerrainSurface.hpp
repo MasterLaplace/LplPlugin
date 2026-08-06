@@ -226,9 +226,8 @@ public:
      */
     template <typename BedDepthAt>
     core::u32 drawWaterWith(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
-                            const render::CameraBasis &basis, const core::f32 *quad,
-                            const render::WaterParams &water, core::f32 latticePitch,
-                            BedDepthAt &&bedDepthAt) const
+                            const render::CameraBasis &basis, const core::f32 *quad, const render::WaterParams &water,
+                            core::f32 latticePitch, BedDepthAt &&bedDepthAt) const
     {
         const auto shade = [&](core::f32 wx, core::f32 wy, core::f32 wz) {
             core::u32 colour = render::waterColour(wx, wy, wz, basis.eye, _sun, _skyParams, water, bedDepthAt(wx, wz));
@@ -314,9 +313,8 @@ public:
                 // Corners are evaluated from WORLD coordinates, so the cell shares its
                 // edge values with its neighbours — inside this quad and across the seam
                 // into the next chunk's — and the sheet cannot tear.
-                const core::f32 cell[12] = {
-                    lowX,  surfaceY(lowX, lowZ),   lowZ,  highX, surfaceY(highX, lowZ),  lowZ,
-                    highX, surfaceY(highX, highZ), highZ, lowX,  surfaceY(lowX, highZ), highZ};
+                const core::f32 cell[12] = {lowX,  surfaceY(lowX, lowZ),   lowZ,  highX, surfaceY(highX, lowZ), lowZ,
+                                            highX, surfaceY(highX, highZ), highZ, lowX,  surfaceY(lowX, highZ), highZ};
                 triangles += render::fillPolygonShadedClipped(rt, mvp, cell, 4u, shade);
             }
         }

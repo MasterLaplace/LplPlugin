@@ -164,8 +164,8 @@ struct LandmarkParams {
  * @brief One placed landmark, in world cells.
  */
 struct LandmarkSite {
-    core::i32 cellX{0};   ///< World column of its centre.
-    core::i32 cellZ{0};   ///< World row of its centre.
+    core::i32 cellX{0};     ///< World column of its centre.
+    core::i32 cellZ{0};     ///< World row of its centre.
     core::f32 height{0.0f}; ///< Raw ground height there. The pad and the floor come from it.
     core::f32 relief{0.0f}; ///< The height difference that qualified it.
     core::u32 seed{0u};     ///< Derived from its landmark cell; everything else derives from this.
@@ -194,7 +194,7 @@ struct LandmarkSite {
  * @return true when this cell carries a site.
  */
 [[nodiscard]] bool landmarkAt(const ChunkParams &params, const LandmarkParams &landmarks, LandmarkKind kind,
-                             core::f32 seaLevel, core::i32 landmarkX, core::i32 landmarkZ, LandmarkSite &out);
+                              core::f32 seaLevel, core::i32 landmarkX, core::i32 landmarkZ, LandmarkSite &out);
 
 /**
  * @brief Every site of one kind that can reach a chunk, whether or not its centre is in it.
@@ -299,12 +299,12 @@ void forEachLandmarkNear(const ChunkParams &params, const LandmarkParams &landma
  */
 struct VillagePlan {
     LandmarkSite site{};
-    SettlementMap map{};                       ///< Village-local grid of cells.
-    lpl::pmr::vector<BuildingPlot> plots{};    ///< Footprints, in village-local cells.
-    core::i32 originX{0};                      ///< World column of the map's (0, 0).
-    core::i32 originZ{0};                      ///< World row of it.
-    core::f32 padHeight{0.0f};                 ///< The one level the ground is flattened to.
-    core::u32 side{0u};                        ///< Cells along each edge of the map.
+    SettlementMap map{};                    ///< Village-local grid of cells.
+    lpl::pmr::vector<BuildingPlot> plots{}; ///< Footprints, in village-local cells.
+    core::i32 originX{0};                   ///< World column of the map's (0, 0).
+    core::i32 originZ{0};                   ///< World row of it.
+    core::f32 padHeight{0.0f};              ///< The one level the ground is flattened to.
+    core::u32 side{0u};                     ///< Cells along each edge of the map.
 };
 
 /**
@@ -339,10 +339,10 @@ struct LandmarkBuilding {
     core::f32 minZ{0.0f};
     core::f32 maxX{0.0f};
     core::f32 maxZ{0.0f};
-    core::f32 baseY{0.0f};   ///< The pad it stands on.
-    core::f32 height{0.0f};  ///< How far it rises above the pad.
-    core::u32 storeys{1u};   ///< Storeys, from the plot's own footprint area.
-    core::u16 district{0u};  ///< Which district, so a village is not one material.
+    core::f32 baseY{0.0f};  ///< The pad it stands on.
+    core::f32 height{0.0f}; ///< How far it rises above the pad.
+    core::u32 storeys{1u};  ///< Storeys, from the plot's own footprint area.
+    core::u16 district{0u}; ///< Which district, so a village is not one material.
 };
 
 /**
@@ -351,8 +351,7 @@ struct LandmarkBuilding {
  * @param plan  The village.
  * @param emit  Called with each building: `emit(const LandmarkBuilding &)`.
  */
-template <typename Emit>
-void forEachVillageBuilding(const VillagePlan &plan, Emit &&emit)
+template <typename Emit> void forEachVillageBuilding(const VillagePlan &plan, Emit &&emit)
 {
     for (core::u32 i = 0u; i < plan.plots.size(); ++i)
     {

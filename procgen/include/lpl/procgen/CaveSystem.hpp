@@ -109,8 +109,8 @@ struct CaveSystemParams {
     // nor say in its own parameters what it depends on. Both are ignored unless
     // @ref mixLayerKinds is set.
 
-    bool settled{false};      ///< People were here. People dig rooms, not fissures.
-    core::f32 wetness{0.5f};  ///< How much the ground dissolves; high ground branches.
+    bool settled{false};     ///< People were here. People dig rooms, not fissures.
+    core::f32 wetness{0.5f}; ///< How much the ground dissolves; high ground branches.
 };
 
 /**
@@ -122,9 +122,9 @@ struct CaveSystemParams {
  * evidence that has to be invented for the rule is not evidence.
  */
 struct CaveContext {
-    bool settled{false};       ///< A settlement stands within reach of this place.
-    core::f32 wetness{0.5f};   ///< Ground moisture in [0, 1].
-    core::u32 layerCount{1u};  ///< Floors the underground will have.
+    bool settled{false};      ///< A settlement stands within reach of this place.
+    core::f32 wetness{0.5f};  ///< Ground moisture in [0, 1].
+    core::u32 layerCount{1u}; ///< Floors the underground will have.
 };
 
 /// Moisture at or above which ground is taken to dissolve rather than fracture.

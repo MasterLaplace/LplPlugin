@@ -97,7 +97,8 @@ int main()
 
     std::printf("  %d landmark cells, %u sited mouths, %u caves, %u reach their bottom\n",
                 (2 * kHalf + 1) * (2 * kHalf + 1), sites, valid, navigable);
-    std::printf("  mean trench %.1f cells, mean %.0f open cells\n", valid ? static_cast<double>(aditTotal) / valid : 0.0,
+    std::printf("  mean trench %.1f cells, mean %.0f open cells\n",
+                valid ? static_cast<double>(aditTotal) / valid : 0.0,
                 valid ? static_cast<double>(openTotal) / valid : 0.0);
     std::printf("  kinds:");
     for (core::u32 i = 0u; i < 5u; ++i)
@@ -149,13 +150,13 @@ int main()
                     continue;
                 ++autoKind[static_cast<core::u32>(warren.kind)];
                 settled += procgen::settledNearSite(chunk, autoParams.villages, autoParams.seaLevel, site,
-                                                    autoParams.settlementReach)
-                               ? 1u
-                               : 0u;
+                                                    autoParams.settlementReach) ?
+                               1u :
+                               0u;
                 wet += procgen::sampleWorldMoisture(chunk, site.cellX, site.cellZ) >=
-                               math::Fixed32::fromFloat(procgen::kKarstWetness)
-                           ? 1u
-                           : 0u;
+                               math::Fixed32::fromFloat(procgen::kKarstWetness) ?
+                           1u :
+                           0u;
             }
         std::printf("  kinds:");
         for (core::u32 i = 0u; i < 5u; ++i)
@@ -225,18 +226,16 @@ int main()
 
         // The span, where it matters: a doorway column has rock over it and the shelf
         // it opens onto does not, and the collider is told both.
-        const procgen::VerticalSpan inside =
-            procgen::caveWarrenSpanAt(warren, warren.apertureX[0], warren.apertureZ[0],
-                                      math::Fixed32::fromFloat(warren.adit.floorY + 0.1f),
-                                      math::Fixed32::fromFloat(warren.adit.floorY));
+        const procgen::VerticalSpan inside = procgen::caveWarrenSpanAt(
+            warren, warren.apertureX[0], warren.apertureZ[0], math::Fixed32::fromFloat(warren.adit.floorY + 0.1f),
+            math::Fixed32::fromFloat(warren.adit.floorY));
         check(inside.enclosed, "the doorway has rock over it");
         check(inside.headroom() > math::Fixed32::fromFloat(1.8f), "and room enough for a body under it",
               static_cast<long long>(inside.headroom().toFloat() * 100.0f));
 
-        const procgen::VerticalSpan outside =
-            procgen::caveWarrenSpanAt(warren, warren.site.cellX, warren.site.cellZ,
-                                      math::Fixed32::fromFloat(warren.adit.floorY),
-                                      math::Fixed32::fromFloat(warren.adit.floorY));
+        const procgen::VerticalSpan outside = procgen::caveWarrenSpanAt(warren, warren.site.cellX, warren.site.cellZ,
+                                                                        math::Fixed32::fromFloat(warren.adit.floorY),
+                                                                        math::Fixed32::fromFloat(warren.adit.floorY));
         check(!outside.enclosed, "and the shelf it opens onto is open sky");
     }
 

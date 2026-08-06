@@ -36,7 +36,6 @@ inline constexpr core::f32 kWindOnWater = 0.03f;
 
 } // namespace detail
 
-
 inline void TerrainRenderer::selectChunks(const math::Mat4<core::f32> &mvp, const render::CameraBasis &basis,
                                           core::u32 targetWidth, core::u32 targetHeight,
                                           const render::ChunkedViewParams &view, const TerrainDrawParams &params,
@@ -149,11 +148,10 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
     // NOT gated on the draw budget. Whether the eye is under rock is a fact about the
     // world; how much cave geometry a host can afford is a fact about the host, and
     // tying them made a budget of zero mean "the sky is visible from inside a hill".
-    const bool underground =
-        streamer
-            .spanAt(static_cast<core::i32>(basis.eye.x), static_cast<core::i32>(basis.eye.z),
-                    math::Fixed32::fromFloat(basis.eye.y))
-            .enclosed;
+    const bool underground = streamer
+                                 .spanAt(static_cast<core::i32>(basis.eye.x), static_cast<core::i32>(basis.eye.z),
+                                         math::Fixed32::fromFloat(basis.eye.y))
+                                 .enclosed;
 
     const core::u64 skyBegan = now();
     if (underground)
@@ -287,13 +285,13 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
             // across the gallery. Measured by looking: it was the most conspicuous thing
             // in the first frame rendered from inside a cave.
             if (!underground)
-                triangles += render::drawPatchSkirts(target, matrix, patch, view.skirtDrop, heightAt,
-                                                 [&chunk, &palette, patchSize](core::u32 cx, core::u32 cz) {
-                                                     return render::modulate(
-                                                         palette(chunk.biomes.at(cx < patchSize ? cx : patchSize - 1u,
-                                                                                 cz < patchSize ? cz : patchSize - 1u)),
-                                                         0.45f);
-                                                 });
+                triangles += render::drawPatchSkirts(
+                    target, matrix, patch, view.skirtDrop, heightAt,
+                    [&chunk, &palette, patchSize](core::u32 cx, core::u32 cz) {
+                        return render::modulate(palette(chunk.biomes.at(cx < patchSize ? cx : patchSize - 1u,
+                                                                        cz < patchSize ? cz : patchSize - 1u)),
+                                                0.45f);
+                    });
 
             _groundCycles += now() - groundBegan;
 
@@ -331,10 +329,9 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                 // differ in size because each is tightened to its own drowned cells, so a
                 // per-quad division puts neighbouring vertices at different world
                 // positions and the sheet tears along every chunk border.
-                const core::f32 pitch = static_cast<core::f32>(view.chunkSize) /
-                                        static_cast<core::f32>(surface.waterTessellation() < 1u ?
-                                                                   1u :
-                                                                   surface.waterTessellation());
+                const core::f32 pitch =
+                    static_cast<core::f32>(view.chunkSize) /
+                    static_cast<core::f32>(surface.waterTessellation() < 1u ? 1u : surface.waterTessellation());
                 triangles += surface.drawWater(target, matrix, basis, sea, pitch, [&](core::f32 wx, core::f32 wz) {
                     return params.seaLevel - groundAt(static_cast<core::i32>(wx), static_cast<core::i32>(wz));
                 });
@@ -466,7 +463,6 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                         // wind was modelled for; a torrent's current buries it; and in between
                         // the two share without anyone having picked a threshold.
 
-
                         const core::f32 wx0 = static_cast<core::f32>(worldCellX);
                         const core::f32 wz0 = static_cast<core::f32>(worldCellZ);
                         const core::f32 cell[12] = {wx0,        y00, wz0,        wx0 + 1.0f, y10, wz0,
@@ -520,12 +516,12 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                     // colour, because drawBox lights a face from its normal and cannot know
                     // that this face is thatch.
                     const core::f32 wallTop = building.baseY + building.height * 0.76f;
-                    triangles += render::drawBox(target, matrix, building.minX, building.baseY, building.minZ,
-                                                 building.maxX, wallTop, building.maxZ,
-                                                 render::modulate(params.buildingTint,
-                                                                  0.86f + 0.07f * static_cast<core::f32>(
-                                                                                      building.district & 3u)),
-                                                 sunDirection, params.ambient);
+                    triangles += render::drawBox(
+                        target, matrix, building.minX, building.baseY, building.minZ, building.maxX, wallTop,
+                        building.maxZ,
+                        render::modulate(params.buildingTint,
+                                         0.86f + 0.07f * static_cast<core::f32>(building.district & 3u)),
+                        sunDirection, params.ambient);
                     triangles += render::drawBox(target, matrix, building.minX - 0.25f, wallTop, building.minZ - 0.25f,
                                                  building.maxX + 0.25f, building.baseY + building.height,
                                                  building.maxZ + 0.25f, params.roofTint, sunDirection, params.ambient);
@@ -544,8 +540,7 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                     // a hillside, which is exactly what it looks like.
                     bool real = false;
                     for (core::u32 w = 0u; w < chunk.warrens.size() && !real; ++w)
-                        real = chunk.warrens[w].site.cellX == site.cellX &&
-                               chunk.warrens[w].site.cellZ == site.cellZ;
+                        real = chunk.warrens[w].site.cellX == site.cellX && chunk.warrens[w].site.cellZ == site.cellZ;
                     if (real)
                         continue;
                     // The opening stands at the UPHILL edge of the shelf and faces downhill,
@@ -567,10 +562,9 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                     const core::f32 floorY = site.height - params.caveMouthDrop;
                     const core::f32 topY = floorY + params.mouthHeight;
 
-                    const core::f32 opening[12] = {backX - px * half, floorY, backZ - pz * half,
-                                                   backX + px * half, floorY, backZ + pz * half,
-                                                   backX + px * half, topY,   backZ + pz * half,
-                                                   backX - px * half, topY,   backZ - pz * half};
+                    const core::f32 opening[12] = {
+                        backX - px * half, floorY, backZ - pz * half, backX + px * half, floorY, backZ + pz * half,
+                        backX + px * half, topY,   backZ + pz * half, backX - px * half, topY,   backZ - pz * half};
                     triangles += render::fillPolygonClipped(target, matrix, opening, 4u, params.caveMouthTint);
                 }
             }
@@ -801,7 +795,8 @@ void TerrainRenderer::refreshProbe(TerrainStreamer &streamer, TerrainSurface &su
                     // Clamped rather than fetched, exactly as the ground pass clamps its
                     // own: at probe resolution a seam column tinted by its own chunk is
                     // invisible, and one that is not drawn is a slit to the horizon.
-                    return palette(chunk.biomes.at(x < patchSize ? x : patchSize - 1u, z < patchSize ? z : patchSize - 1u));
+                    return palette(
+                        chunk.biomes.at(x < patchSize ? x : patchSize - 1u, z < patchSize ? z : patchSize - 1u));
                 };
 
                 render::drawHeightfieldPatch(
@@ -907,8 +902,8 @@ inline core::u32 TerrainRenderer::drawWarrens(const render::RenderTarget &rt, co
             // standing in air: answering "empty" here would wrap the whole volume in a
             // shell of faces nobody can ever be on the outside of.
             [](core::i32, core::i32, core::i32) { return true; },
-            [&](const core::f32 quad[12], core::f32 nx, core::f32 ny, core::f32 nz, core::u8 /*material*/,
-                core::u32 x, core::u32 /*y*/, core::u32 z) {
+            [&](const core::f32 quad[12], core::f32 nx, core::f32 ny, core::f32 nz, core::u8 /*material*/, core::u32 x,
+                core::u32 /*y*/, core::u32 z) {
                 // A column with no rock over it is TERRAIN, whatever its voxels say, so
                 // a face pointing at one is a face pointing at open air — which is
                 // exactly what the doorway is made of. Reading the volume alone here
@@ -945,9 +940,8 @@ inline core::u32 TerrainRenderer::drawWarrens(const render::RenderTarget &rt, co
                 facing = facing < 0.0f ? 0.0f : facing;
 
                 const core::f32 lit = params.ambient + (1.0f - params.ambient) * facing;
-                const core::u32 shaded =
-                    render::applyAerialPerspective(render::modulate(params.caveRockTint, lit), params.caveDarkTint,
-                                                   distance, params.caveFogDensity);
+                const core::u32 shaded = render::applyAerialPerspective(
+                    render::modulate(params.caveRockTint, lit), params.caveDarkTint, distance, params.caveFogDensity);
                 triangles += render::fillPolygonClipped(rt, mvp, world, 4u, shaded);
             });
     });

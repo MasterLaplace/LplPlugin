@@ -16,10 +16,10 @@
  * @copyright MIT License
  */
 
-#include <lpl/engine/ViewProfile.hpp>
 #include <lpl/ecology/LivingRecipe.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/editor/GamePackBaker.hpp>
+#include <lpl/engine/ViewProfile.hpp>
 #include <lpl/pack/GamePack.hpp>
 #include <lpl/pack/ParityPackBlob.hpp>
 #include <lpl/pack/RecipeCodec.hpp>

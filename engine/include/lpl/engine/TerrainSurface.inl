@@ -74,8 +74,7 @@ inline void TerrainSurface::beginFrame(const render::RenderTarget &rt, const ren
     }
 }
 
-inline void TerrainSurface::beginCaveFrame(const render::RenderTarget &rt, core::u32 tint,
-                                           core::f32 density) noexcept
+inline void TerrainSurface::beginCaveFrame(const render::RenderTarget &rt, core::u32 tint, core::f32 density) noexcept
 {
     // Cleared rather than skipped. Leaving the last frame's sky in the buffer would
     // show it wherever nothing is drawn, and underground that is most of the screen.

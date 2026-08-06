@@ -80,8 +80,8 @@ inline TerrainChunk TerrainStreamer::buildChunk(procgen::ChunkCoord coord) const
     // twelve kibibytes each — and copying them would double the peak of the one
     // allocation in this function that is not bounded by the chunk size.
     for (core::u32 i = 0u; i < terrain.warrens.size(); ++i)
-        chunk.warrens.push_back(static_cast<procgen::CaveWarren &&>(
-            const_cast<procgen::CaveWarren &>(terrain.warrens[i])));
+        chunk.warrens.push_back(
+            static_cast<procgen::CaveWarren &&>(const_cast<procgen::CaveWarren &>(terrain.warrens[i])));
     chunk.shade = procgen::Grid<core::u8>{_chunkParams.size, _chunkParams.size, 0u};
     return chunk;
 }

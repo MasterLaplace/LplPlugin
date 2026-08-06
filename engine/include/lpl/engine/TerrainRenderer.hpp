@@ -28,7 +28,6 @@
 #    define LPL_ENGINE_TERRAIN_RENDERER_HPP
 
 #    include <lpl/ai/Personality.hpp>
-#    include <lpl/std/cmath.hpp>
 #    include <lpl/ecology/Genome.hpp>
 #    include <lpl/ecology/Herd.hpp>
 #    include <lpl/ecs/Archetype.hpp>
@@ -43,6 +42,7 @@
 #    include <lpl/render/ChunkedTerrainView.hpp>
 #    include <lpl/render/HeightfieldPatch.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
+#    include <lpl/std/cmath.hpp>
 
 namespace lpl::engine {
 

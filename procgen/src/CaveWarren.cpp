@@ -109,7 +109,7 @@ bool boreColumn(CaveSystem &system, const Grid<core::u8> &covered, core::i32 x, 
 
 /// @copydoc settledNearSite
 [[nodiscard]] bool settledNearImpl(const ChunkParams &params, const LandmarkParams &villages, core::f32 seaLevel,
-                               const LandmarkSite &site, core::u32 reach)
+                                   const LandmarkSite &site, core::u32 reach)
 {
     if (villages.cellSpan == 0u)
         return false;
@@ -255,8 +255,8 @@ CaveWarren buildCaveWarren(const ChunkParams &params, const LandmarkSite &site, 
         return out;
 
     const core::u32 span = warren.halfSpan * 2u + 1u;
-    const core::u32 layers = warren.layers == 0u ? 1u : (warren.layers > kMaxCaveLayers ? kMaxCaveLayers :
-                                                                                          warren.layers);
+    const core::u32 layers =
+        warren.layers == 0u ? 1u : (warren.layers > kMaxCaveLayers ? kMaxCaveLayers : warren.layers);
     const core::u32 perLayer = warren.levelsPerLayer == 0u ? 1u : warren.levelsPerLayer;
     const core::u32 galleryLevels = layers * perLayer;
     const core::u32 levels = galleryLevels + warren.capLevels;

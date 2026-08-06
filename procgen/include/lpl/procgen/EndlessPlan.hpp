@@ -45,7 +45,7 @@ namespace lpl::procgen {
  * why the shaping terms come with it: a walker needs somewhere flat to walk.
  */
 struct WalkScale {
-    core::f32 reliefScale{2.8f};      ///< Multiplies the recipe's amplitude.
+    core::f32 reliefScale{2.8f}; ///< Multiplies the recipe's amplitude.
     /**
      * @brief Multiplies the recipe's frequency: fewer, WIDER landforms.
      *
@@ -345,9 +345,8 @@ struct EndlessPlan {
     // absolute metre value broke this, in opposite directions.
     plan.rule.carveCaveMouths = scale.caveMouths;
     plan.rule.caveMouths = caveMouthDefaults();
-    plan.rule.caveMouths.minRelief =
-        calibrateLandmarkRelief(plan.chunk, plan.rule.caveMouths, LandmarkKind::CaveMouth, plan.rule.seaLevel,
-                                1.0f - scale.caveSteepestShare);
+    plan.rule.caveMouths.minRelief = calibrateLandmarkRelief(plan.chunk, plan.rule.caveMouths, LandmarkKind::CaveMouth,
+                                                             plan.rule.seaLevel, 1.0f - scale.caveSteepestShare);
     plan.rule.caveMouthDrop = scale.caveMouthDrop;
 
     plan.rule.raiseVillages = scale.villages;

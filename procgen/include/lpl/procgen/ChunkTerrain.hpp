@@ -154,8 +154,8 @@ struct ChunkTerrain {
     core::u32 seaMaxX{0u};
     core::u32 seaMinZ{0u};
     core::u32 seaMaxZ{0u};
-    bool hasSea{false};    ///< Whether any cell sits below the sea level.
-    bool hasRiver{false};  ///< Whether any cell carries running water.
+    bool hasSea{false};   ///< Whether any cell sits below the sea level.
+    bool hasRiver{false}; ///< Whether any cell carries running water.
 
     /**
      * @brief Landmarks this chunk OWNS, i.e. the ones it is this chunk's job to draw.
@@ -222,42 +222,42 @@ template <typename EmitPlant>
     {
         const core::i32 originX = coord.x * static_cast<core::i32>(size);
         const core::i32 originZ = coord.z * static_cast<core::i32>(size);
-        forEachLandmarkNear(
-            params, rule.caveMouths, LandmarkKind::CaveMouth, rule.seaLevel, coord, [&](const LandmarkSite &site) {
-                // The shelf AND the trench that leads off it, from the one function the
-                // warren measures its own rock cover with. Two statements of where a
-                // mouth cuts the ground would be two answers to where the cave's roof
-                // starts, and the mouth is the only place those two halves meet.
-                const CaveAdit adit = planCaveAdit(params, site, rule.warren, rule.caveMouthDrop);
-                for (core::u32 z = 0u; z < size; ++z)
-                    for (core::u32 x = 0u; x < size; ++x)
-                    {
-                        core::f32 floor = 0.0f;
-                        if (!caveMouthFloorAt(site, adit, originX + static_cast<core::i32>(x),
-                                              originZ + static_cast<core::i32>(z), floor))
-                            continue;
-                        // LOWERED, never raised: the shelf is cut out of the hill, so
-                        // ground already below the floor is left alone. Setting it
-                        // would build a plinth out into the valley.
-                        const math::Fixed32 level = math::Fixed32::fromFloat(floor);
-                        if (out.height.at(x, z) > level)
-                            out.height.at(x, z) = level;
-                    }
-                if (!chunkOwnsLandmark(params, site, coord))
-                    return;
-                out.caveMouths.push_back(site);
-                // The warren itself is the EXPENSIVE half — a cellular automaton per
-                // floor plus a reachability flood — and only the owner needs it, for
-                // the same reason only the owner lays out a village. Every chunk in
-                // reach still carved the ground above, which is what keeps the seam
-                // exact.
-                if (rule.buildWarrens)
-                {
-                    CaveWarren warren = buildCaveWarren(params, site, rule.warren, rule.caveMouthDrop);
-                    if (warren.valid)
-                        out.warrens.push_back(static_cast<CaveWarren &&>(warren));
-                }
-            });
+        forEachLandmarkNear(params, rule.caveMouths, LandmarkKind::CaveMouth, rule.seaLevel, coord,
+                            [&](const LandmarkSite &site) {
+                                // The shelf AND the trench that leads off it, from the one function the
+                                // warren measures its own rock cover with. Two statements of where a
+                                // mouth cuts the ground would be two answers to where the cave's roof
+                                // starts, and the mouth is the only place those two halves meet.
+                                const CaveAdit adit = planCaveAdit(params, site, rule.warren, rule.caveMouthDrop);
+                                for (core::u32 z = 0u; z < size; ++z)
+                                    for (core::u32 x = 0u; x < size; ++x)
+                                    {
+                                        core::f32 floor = 0.0f;
+                                        if (!caveMouthFloorAt(site, adit, originX + static_cast<core::i32>(x),
+                                                              originZ + static_cast<core::i32>(z), floor))
+                                            continue;
+                                        // LOWERED, never raised: the shelf is cut out of the hill, so
+                                        // ground already below the floor is left alone. Setting it
+                                        // would build a plinth out into the valley.
+                                        const math::Fixed32 level = math::Fixed32::fromFloat(floor);
+                                        if (out.height.at(x, z) > level)
+                                            out.height.at(x, z) = level;
+                                    }
+                                if (!chunkOwnsLandmark(params, site, coord))
+                                    return;
+                                out.caveMouths.push_back(site);
+                                // The warren itself is the EXPENSIVE half — a cellular automaton per
+                                // floor plus a reachability flood — and only the owner needs it, for
+                                // the same reason only the owner lays out a village. Every chunk in
+                                // reach still carved the ground above, which is what keeps the seam
+                                // exact.
+                                if (rule.buildWarrens)
+                                {
+                                    CaveWarren warren = buildCaveWarren(params, site, rule.warren, rule.caveMouthDrop);
+                                    if (warren.valid)
+                                        out.warrens.push_back(static_cast<CaveWarren &&>(warren));
+                                }
+                            });
     }
 
     if (rule.raiseVillages)
@@ -297,9 +297,8 @@ template <typename EmitPlant>
                 if (!chunkOwnsLandmark(params, site, coord))
                     return;
                 const VillagePlan plan = planVillage(params, site);
-                forEachVillageBuilding(plan, [&out](const LandmarkBuilding &building) {
-                    out.buildings.push_back(building);
-                });
+                forEachVillageBuilding(plan,
+                                       [&out](const LandmarkBuilding &building) { out.buildings.push_back(building); });
             });
     }
 
@@ -405,17 +404,17 @@ template <typename EmitPlant>
             //  - weirdness is the axis whose whole job is to be arbitrary, so it is noise.
             const core::f32 east = out.height.at(x + 1u < size ? x + 1u : x, z).toFloat();
             const core::f32 south = out.height.at(x, z + 1u < size ? z + 1u : z).toFloat();
-            const core::f32 slope = ((east > height ? east - height : height - east) +
-                                     (south > height ? south - height : height - south)) *
-                                    0.5f;
+            const core::f32 slope =
+                ((east > height ? east - height : height - east) + (south > height ? south - height : height - south)) *
+                0.5f;
             // Half is flat and one is a cliff, on the scale the relief actually has: a
             // fixed metre threshold would read every world of a different amplitude wrong.
             climate[ClimateAxis::Erosion] =
                 math::Fixed32::fromFloat(clamp01(0.5f + slope / (params.noise.amplitude * 0.25f)));
-            climate[ClimateAxis::Depth] = math::Fixed32::fromFloat(
-                height < rule.seaLevel ? clamp01((rule.seaLevel - height) / 16.0f) : 0.0f);
-            climate[ClimateAxis::Weirdness] =
-                math::Fixed32::fromFloat(clamp01(0.5f + sampleNoiseAt(worldX, worldZ, weirdnessLayer).toFloat() * 0.5f));
+            climate[ClimateAxis::Depth] =
+                math::Fixed32::fromFloat(height < rule.seaLevel ? clamp01((rule.seaLevel - height) / 16.0f) : 0.0f);
+            climate[ClimateAxis::Weirdness] = math::Fixed32::fromFloat(
+                clamp01(0.5f + sampleNoiseAt(worldX, worldZ, weirdnessLayer).toFloat() * 0.5f));
 
             math::Fixed32 distance{};
             BiomeId biome = nearestBiomeProfile(climate, distance);

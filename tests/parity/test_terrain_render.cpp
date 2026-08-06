@@ -82,11 +82,16 @@ struct Frame {
     std::vector<core::u32> colour;
     std::vector<core::f32> depth;
 
-    Frame() : colour(static_cast<std::size_t>(kWidth) * kHeight, 0u), depth(static_cast<std::size_t>(kWidth) * kHeight, 0.0f)
+    Frame()
+        : colour(static_cast<std::size_t>(kWidth) * kHeight, 0u),
+          depth(static_cast<std::size_t>(kWidth) * kHeight, 0.0f)
     {
     }
 
-    [[nodiscard]] render::RenderTarget target() noexcept { return render::RenderTarget{&colour[0], &depth[0], kWidth, kHeight}; }
+    [[nodiscard]] render::RenderTarget target() noexcept
+    {
+        return render::RenderTarget{&colour[0], &depth[0], kWidth, kHeight};
+    }
 };
 
 /// Fold of a frame, so "the picture changed" is a fact rather than an impression.
@@ -230,9 +235,7 @@ struct Harness {
     core::u32 draw(Frame &frame, core::u32 tick)
     {
         return renderer.drawStreamed(frame.target(), camera, streamer, surface, props, registry, drawParams(), tick,
-                                     palette, [this](core::i32 x, core::i32 z) {
-                                         return streamer.groundAt(x, z);
-                                     });
+                                     palette, [this](core::i32 x, core::i32 z) { return streamer.groundAt(x, z); });
     }
 };
 
@@ -243,8 +246,7 @@ struct Harness {
  * this file was taken on a window that happened to contain no water — and "every drowned
  * cell is inside its bounds" is trivially true of no cells at all.
  */
-template <typename Carries>
-[[nodiscard]] procgen::ChunkCoord findChunk(core::f32 seaLift, Carries &&carries)
+template <typename Carries> [[nodiscard]] procgen::ChunkCoord findChunk(core::f32 seaLift, Carries &&carries)
 {
     procgen::EndlessPlan plan = walkedPlan();
     plan.rule.seaLevel += seaLift;
@@ -287,10 +289,8 @@ int main()
     std::printf("== a streamed frame ==\n");
     // Found once, used by every block below: the nearest window that HAS a sea, and the
     // nearest that HAS a river. They are not the same place and neither is the origin.
-    const procgen::ChunkCoord seaFocus =
-        findChunk(kSeaLift, [](const procgen::ChunkTerrain &t) { return t.hasSea; });
-    const procgen::ChunkCoord riverFocus =
-        findChunk(0.0f, [](const procgen::ChunkTerrain &t) { return t.hasRiver; });
+    const procgen::ChunkCoord seaFocus = findChunk(kSeaLift, [](const procgen::ChunkTerrain &t) { return t.hasSea; });
+    const procgen::ChunkCoord riverFocus = findChunk(0.0f, [](const procgen::ChunkTerrain &t) { return t.hasRiver; });
     std::printf("    sea window at chunk (%d, %d), river window at (%d, %d)\n", seaFocus.x, seaFocus.z, riverFocus.x,
                 riverFocus.z);
 
@@ -404,10 +404,9 @@ int main()
         Frame dryFrame;
         engine::TerrainDrawParams noRiver = dry.drawParams();
         noRiver.riverSurfaceRise = 0.0f;
-        const core::u32 without =
-            dry.renderer.drawStreamed(dryFrame.target(), dry.camera, dry.streamer, dry.surface, dry.props, dry.registry,
-                                      noRiver, 0u, palette,
-                                      [&dry](core::i32 x, core::i32 z) { return dry.streamer.groundAt(x, z); });
+        const core::u32 without = dry.renderer.drawStreamed(
+            dryFrame.target(), dry.camera, dry.streamer, dry.surface, dry.props, dry.registry, noRiver, 0u, palette,
+            [&dry](core::i32 x, core::i32 z) { return dry.streamer.groundAt(x, z); });
 
         Harness wet{0u, false, 0.0f, riverFocus};
         wet.fill();
@@ -566,8 +565,8 @@ int main()
 
         if (resident != nullptr)
         {
-            const procgen::VerticalSpan span = harness.streamer.spanAt(
-                insideX, insideZ, math::Fixed32::fromFloat(located.adit.floorY + 0.5f));
+            const procgen::VerticalSpan span =
+                harness.streamer.spanAt(insideX, insideZ, math::Fixed32::fromFloat(located.adit.floorY + 0.5f));
             check(span.enclosed, "the collider agrees there is rock overhead there");
 
             // FIRST PERSON, and this is the check that caught itself being useless. The
@@ -640,8 +639,8 @@ int main()
                 if ((pixel & 0xFFu) > ((pixel >> 16) & 0xFFu) + 24u)
                     ++skyAbove;
             }
-            std::printf("    %u pixels bluer than the rock underground, %u on the surface path, %u lit of %u\n",
-                        skyish, skyAbove, rocky, kWidth * kHeight);
+            std::printf("    %u pixels bluer than the rock underground, %u on the surface path, %u lit of %u\n", skyish,
+                        skyAbove, rocky, kWidth * kHeight);
             check(skyish == 0u, "standing under a hill, no pixel of the frame is sky");
             check(skyAbove > 0u, "and the same eye on the surface path does see sky");
             check(rocky > (kWidth * kHeight) / 20u, "and the lamp reaches enough of it to see by");

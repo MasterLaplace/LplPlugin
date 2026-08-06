@@ -57,11 +57,11 @@ public:
      * @param y Y component.
      * @param x X component.
      * Resolves all four quadrants, in (-pi, pi]. Worth stating because the rotation
- * underneath cannot: its angle table sums to 1.7433 radians, so on its own it covers
- * the right half-plane and saturates everywhere else. See the implementation for the
- * half-turn that puts the rest back, and for how long that was missing.
- *
- * @return atan2(y, x) as Fixed32 radians.
+     * underneath cannot: its angle table sums to 1.7433 radians, so on its own it covers
+     * the right half-plane and saturates everywhere else. See the implementation for the
+     * half-turn that puts the rest back, and for how long that was missing.
+     *
+     * @return atan2(y, x) as Fixed32 radians.
      */
     [[nodiscard]] static Fixed32 atan2(Fixed32 y, Fixed32 x);
 };

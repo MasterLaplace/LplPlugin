@@ -21,9 +21,9 @@
  */
 
 #include <lpl/procgen/Chunking.hpp>
-#include <lpl/procgen/Landmark.hpp>
 #include <lpl/procgen/EndlessPlan.hpp>
 #include <lpl/procgen/Erosion.hpp>
+#include <lpl/procgen/Landmark.hpp>
 
 #include <cstdio>
 
@@ -337,7 +337,6 @@ void testTrunksCrossChunks()
     check(wetNeighbours >= 2u, "the trunk continues past the chunk it was found in");
 }
 
-
 /**
  * @brief Landmarks: sited once, agreed on by every chunk that touches them.
  *
@@ -379,15 +378,15 @@ void testLandmarksAreAgreedOn()
                                          });
             caves += ownedHere;
 
-            procgen::forEachLandmarkNear(plan.chunk, plan.rule.villages, procgen::LandmarkKind::Settlement,
-                                         plan.rule.seaLevel, coord, [&](const procgen::LandmarkSite &site) {
-                                             if (!procgen::chunkOwnsLandmark(plan.chunk, site, coord))
-                                                 return;
-                                             ++villages;
-                                             const procgen::VillagePlan village = procgen::planVillage(plan.chunk, site);
-                                             procgen::forEachVillageBuilding(
-                                                 village, [&](const procgen::LandmarkBuilding &) { ++buildings; });
-                                         });
+            procgen::forEachLandmarkNear(
+                plan.chunk, plan.rule.villages, procgen::LandmarkKind::Settlement, plan.rule.seaLevel, coord,
+                [&](const procgen::LandmarkSite &site) {
+                    if (!procgen::chunkOwnsLandmark(plan.chunk, site, coord))
+                        return;
+                    ++villages;
+                    const procgen::VillagePlan village = procgen::planVillage(plan.chunk, site);
+                    procgen::forEachVillageBuilding(village, [&](const procgen::LandmarkBuilding &) { ++buildings; });
+                });
         }
     const core::u32 chunksScanned = static_cast<core::u32>((2 * kSpan + 1) * (2 * kSpan + 1));
     std::printf("    over %u chunks: %u cave mouths, %u villages, %u buildings\n", chunksScanned, caves, villages,
@@ -412,26 +411,25 @@ void testLandmarksAreAgreedOn()
         {
             const procgen::ChunkCoord here{cx, cz};
             const procgen::ChunkCoord east{cx + 1, cz};
-            procgen::forEachLandmarkNear(
-                plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth, plan.rule.seaLevel, here,
-                [&](const procgen::LandmarkSite &mine) {
-                    // Does its footprint cross into the eastern chunk?
-                    const core::i32 border = (cx + 1) * 24;
-                    if (mine.cellX + static_cast<core::i32>(mine.radius) < border)
-                        return;
-                    ++shared;
-                    bool seen = false;
-                    procgen::forEachLandmarkNear(plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth,
-                                                 plan.rule.seaLevel, east,
-                                                 [&](const procgen::LandmarkSite &theirs) {
+            procgen::forEachLandmarkNear(plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth,
+                                         plan.rule.seaLevel, here, [&](const procgen::LandmarkSite &mine) {
+                                             // Does its footprint cross into the eastern chunk?
+                                             const core::i32 border = (cx + 1) * 24;
+                                             if (mine.cellX + static_cast<core::i32>(mine.radius) < border)
+                                                 return;
+                                             ++shared;
+                                             bool seen = false;
+                                             procgen::forEachLandmarkNear(
+                                                 plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth,
+                                                 plan.rule.seaLevel, east, [&](const procgen::LandmarkSite &theirs) {
                                                      if (theirs.cellX == mine.cellX && theirs.cellZ == mine.cellZ &&
                                                          theirs.height == mine.height && theirs.seed == mine.seed &&
                                                          theirs.facing == mine.facing)
                                                          seen = true;
                                                  });
-                    if (!seen)
-                        ++disagreements;
-                });
+                                             if (!seen)
+                                                 ++disagreements;
+                                         });
         }
     std::printf("    %u footprints cross a border, %u seen by only one side\n", shared, disagreements);
     check(shared > 0u, "some footprints do cross a chunk border");
