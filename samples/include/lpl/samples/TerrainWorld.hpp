@@ -1564,7 +1564,18 @@ private:
             case 'l': look(0.10f); break;
             case 'i': _camera.tilt(0.06f); break;
             case 'k': _camera.tilt(-0.06f); break;
-            case 'm': teleportToNearestCaveMouth(); break;
+            // 'm' on QWERTY, ';' on AZERTY — and this is the one alias the typed path CAN
+            // carry. Its own comment above explains why there are no others: 'q' and 'z'
+            // already mean zoom and walk, so a key cannot mean two things. ';' means
+            // nothing on either layout, so it is free.
+            //
+            // The hazard is worth spelling out because it cost a round trip: the physical
+            // key labelled M on an AZERTY keyboard is scancode 0x27, which the US table
+            // decodes as ';'. Pressing M on a QWERTY-built kernel therefore produced a
+            // character nothing was listening for, and "nothing happens" is exactly what
+            // an unbound key looks like from the outside.
+            case 'm':
+            case ';': teleportToNearestCaveMouth(); break;
             case 'o': setInfinite(!_infinite); break;
             // First person and orbit are one camera at two distances: collapse the
             // orbit onto the eye and the same code stands in the world. Nothing
@@ -1606,9 +1617,25 @@ private:
                 if (context.engine != nullptr)
                     context.engine->requestShutdown();
                 break;
-            // Anything this class does not bind goes to the game, which is the only
-            // one that knows what its own keys mean.
-            default: break;
+            // Unbound, and it SAYS so. "I press a key and nothing happens" has exactly
+            // one cause — the character is not in this switch — and naming the character
+            // turns that from a guess into a fact. It is the readout that was missing
+            // when the M key of a French keyboard turned out to be arriving as ';': the
+            // physical key is scancode 0x27, which the US table decodes that way, so a
+            // QWERTY-built kernel was handed a character nothing listened for.
+            //
+            // ⚠ This class's own file comment promises an @c onKey hook here for a game
+            // to bind its own keys through. There is no such hook: no virtual, no call
+            // site. Said rather than left standing, because a comment describing a seam
+            // that does not exist is worse than no comment — it stops the next reader
+            // looking for the real one.
+            default: {
+                const char shown[2] = {static_cast<char>(key), '\0'};
+                HudLine line;
+                line.text("input: nothing is bound to '").text(shown).text("'");
+                core::Log::info(line.c_str());
+                break;
+            }
             }
         }
     }
