@@ -675,6 +675,23 @@ int main()
             check(mouthPixels > 200u, "the doorway is a hole you can see a cave through");
             harness.caveDrawRadius = 12u;
 
+            // ── The lamp is a SPOT, not a glow ───────────────────────────────
+            //
+            // A bulb at the eye lights everything around you equally, which is a cave
+            // with no direction to walk in. The claim is that the beam has an AXIS, and
+            // the only way to assert that is to turn the eye and require the picture to
+            // change: a brightness measurement alone is satisfied by a glow.
+            harness.camera.setFocus(static_cast<core::f32>(insideX), static_cast<core::f32>(insideZ));
+            harness.focusHeight = span.floor.toFloat();
+            harness.camera.setYaw(0.0f);
+            Frame ahead;
+            (void) harness.draw(ahead, 0u);
+            harness.camera.setYaw(1.57079633f); // a quarter turn: same eye, same world
+            Frame aside;
+            (void) harness.draw(aside, 0u);
+            harness.camera.setYaw(0.0f);
+            check(foldFrame(ahead.colour) != foldFrame(aside.colour), "turning the head moves the beam");
+
             if (const char *dump = std::getenv("LPL_DUMP_CAVE_PPM"); dump != nullptr)
             {
                 std::FILE *out = std::fopen(dump, "wb");
@@ -683,7 +700,7 @@ int main()
                     std::fprintf(out, "P6\n%u %u\n255\n", kWidth, kHeight);
                     for (core::u32 i = 0u; i < kWidth * kHeight; ++i)
                     {
-                        const core::u32 pixel = porch.colour[i];
+                        const core::u32 pixel = ahead.colour[i];
                         const unsigned char rgb[3] = {static_cast<unsigned char>((pixel >> 16) & 0xFFu),
                                                       static_cast<unsigned char>((pixel >> 8) & 0xFFu),
                                                       static_cast<unsigned char>(pixel & 0xFFu)};
@@ -691,6 +708,69 @@ int main()
                     }
                     std::fclose(out);
                 }
+            }
+        }
+    }
+
+    // ── The lamp at night ────────────────────────────────────────────────────
+    //
+    // The same carried light, on the surface after dark. Two claims, and neither is
+    // provable from one frame: that night is dark at all, and that the lamp puts a
+    // DIRECTED pool of light on the ground rather than a uniform lift. So three frames —
+    // noon, midnight, and midnight turned a quarter — and the comparisons between them.
+    std::printf("== the lamp at night ==\n");
+    {
+        Harness harness{0u, false};
+        harness.fill();
+        harness.camera.setFirstPerson(true);
+        harness.camera.setPitch(0.0f);
+        harness.camera.setYaw(0.0f);
+
+        harness.surface.advance(0.0f, 0.0f); // whatever the configured hour is: noon-ish
+        Frame day;
+        (void) harness.draw(day, 0u);
+
+        // Half a day on, so the sun is under the horizon and SunState::intensity is zero.
+        harness.surface.advance(0.5f, 0.0f);
+        Frame night;
+        (void) harness.draw(night, 0u);
+        harness.camera.setYaw(1.57079633f);
+        Frame nightAside;
+        (void) harness.draw(nightAside, 0u);
+
+        const auto brightness = [](const std::vector<core::u32> &pixels) {
+            core::u64 total = 0u;
+            for (core::u32 pixel : pixels)
+                total += ((pixel >> 16) & 0xFFu) + ((pixel >> 8) & 0xFFu) + (pixel & 0xFFu);
+            return total / (pixels.size() * 3u);
+        };
+        const core::u64 dayLight = brightness(day.colour);
+        const core::u64 nightLight = brightness(night.colour);
+        std::printf("    mean brightness: %llu by day, %llu by night\n", static_cast<unsigned long long>(dayLight),
+                    static_cast<unsigned long long>(nightLight));
+        check(nightLight < dayLight, "night is darker than day");
+        // The lamp has an AXIS on the surface too. A uniform night-time lift would pass
+        // "night is darker" and leave you unable to tell which way the path goes.
+        check(foldFrame(night.colour) != foldFrame(nightAside.colour),
+              "and turning at night moves the light with you");
+
+        if (const char *dump = std::getenv("LPL_DUMP_NIGHT_PPM"); dump != nullptr)
+        {
+            std::FILE *out = std::fopen(dump, "wb");
+            if (out != nullptr)
+            {
+                // Day above, night below, so the lamp is judged against the same view.
+                std::fprintf(out, "P6\n%u %u\n255\n", kWidth, kHeight * 2u);
+                for (const std::vector<core::u32> *frame : {&day.colour, &night.colour})
+                    for (core::u32 i = 0u; i < kWidth * kHeight; ++i)
+                    {
+                        const core::u32 pixel = (*frame)[i];
+                        const unsigned char rgb[3] = {static_cast<unsigned char>((pixel >> 16) & 0xFFu),
+                                                      static_cast<unsigned char>((pixel >> 8) & 0xFFu),
+                                                      static_cast<unsigned char>(pixel & 0xFFu)};
+                        std::fwrite(rgb, 1u, 3u, out);
+                    }
+                std::fclose(out);
             }
         }
     }

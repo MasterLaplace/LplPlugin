@@ -488,6 +488,29 @@ private:
     static constexpr core::f32 kLookSensitivity = 0.004f;
     /// Eye height of the detached camera, which floats rather than stands.
     static constexpr core::f32 kDetachedEyeHeight = 2.0f;
+
+    /**
+     * @brief How far the cave warp searches, and how much it may spend looking.
+     *
+     * Derived from the measured DENSITY rather than from one seed's distance, which is
+     * the mistake the first attempt made: eight rings is about two hundred cells, and the
+     * shipped seed's nearest real cave is a little past that, so the key reported "no
+     * cave" on the one world anybody runs.
+     *
+     * The density is one valid cave per roughly thirty-four cells of the mouth lattice,
+     * so a disc of r rings holds about (2r + 1)^2 / 34 of them. Fourteen rings is some
+     * two dozen expected caves — a margin that makes "usually finds one" into "finds one
+     * unless the world genuinely has none", which is the only honest way to bound a
+     * search whose subject is scattered.
+     *
+     * The COST is bounded separately and that is the number that matters: confirming a
+     * site carries a cave is a full buildCaveWarren, about 1.4 ms, so ninety-six of them
+     * is a fifth of a second spent inside one keystroke. Fine for a debug key pressed by
+     * hand; never acceptable on a tick.
+     */
+    static constexpr core::u32 kCaveWarpRings = 14u;
+    static constexpr core::u32 kCaveWarpBuilds = 96u;
+
     /**
      * @brief How far the spawn search may wander looking for dry, walkable ground.
      *
@@ -1415,7 +1438,7 @@ private:
 
             image::drawText8x16(
                 _surface.buffer, pitchPixels, 8u, _surface.height - 20u,
-                "WASD=walk SPACE=jump C=sprint mouse/JL=turn IK=tilt V=detach F=view T/Y/R/G=shading O=bounded X=exit",
+                "WASD=walk SPACE=jump C=sprint mouse/JL=turn IK=tilt M=warp to cave V=detach F=view O=bounded X=exit",
                 0x00808890u);
             return;
         }
@@ -1541,6 +1564,7 @@ private:
             case 'l': look(0.10f); break;
             case 'i': _camera.tilt(0.06f); break;
             case 'k': _camera.tilt(-0.06f); break;
+            case 'm': teleportToNearestCaveMouth(); break;
             case 'o': setInfinite(!_infinite); break;
             // First person and orbit are one camera at two distances: collapse the
             // orbit onto the eye and the same code stands in the world. Nothing
@@ -1804,6 +1828,89 @@ private:
         // went unnoticed while the reach was too short to clear a bay.
         core::Log::warn("TerrainWorld: no dry ground within the spawn search — starting in the water");
         _body.placeAt(math::Fixed32{}, math::Fixed32{}, ground(0, 0), space);
+    }
+
+    /**
+     * @brief Puts the walker in the trench of the nearest cave, facing the way in.
+     *
+     * A debug affordance, and it exists because of a measurement: on the shipped viewer
+     * seed the nearest cave to the origin is 224 cells away, and caves are sited about
+     * one per twenty-four chunks. Walking to one to look at it is minutes of holding a
+     * key, so the cave rendering could only ever be checked on the host — which is a
+     * poor substitute for standing in the thing.
+     *
+     * Three details separate this from a bare coordinate assignment, and each is the
+     * difference between arriving somewhere useful and arriving confused:
+     *
+     *  - it lands OUTSIDE the doorway, in the trench, so the approach and the mouth are
+     *    both in front of you rather than behind;
+     *  - it sets the HEADING, so forward walks in. Arriving on the threshold pointing at
+     *    a hillside looks exactly like arriving nowhere;
+     *  - it takes the body and puts the eye in it, because an orbit camera sixty cells
+     *    back is usually inside the hill — which was the original report.
+     *
+     * Says what it did either way. A teleport that silently fails is indistinguishable
+     * from a key that is not bound, which is how J/L went unnoticed for a whole session.
+     */
+    void teleportToNearestCaveMouth()
+    {
+        if (!_infinite)
+        {
+            core::Log::info("cave warp: only the endless world has cave mouths in it");
+            return;
+        }
+
+        procgen::CaveWarren nearest;
+        const procgen::ChunkTerrainRule &rule = _streamer.rule();
+        if (!procgen::findNearestCaveWarren(_streamer.chunkParams(), rule.caveMouths, rule.warren, rule.seaLevel,
+                                            rule.caveMouthDrop, static_cast<core::i32>(_camera.focusX()),
+                                            static_cast<core::i32>(_camera.focusZ()), kCaveWarpRings, kCaveWarpBuilds,
+                                            nearest))
+        {
+            core::Log::info("cave warp: no cave within the search — this world may have none nearby");
+            return;
+        }
+
+        // The SITE CENTRE, which is the middle of the shelf — not a fixed number of cells
+        // back down the adit. Six back was measured landing 7.4 m BELOW the trench floor,
+        // out on the raw hillside: the shelf is only about four cells across and the
+        // trench a couple more, so a constant standoff overshoots the flat ground and
+        // drops you on a slope too steep to climb. The centre of the shelf is flat by
+        // construction — it is the one cell the carve guarantees is at the trench floor —
+        // and the mouth is a few cells ahead of it, in view.
+        const core::i32 standX = nearest.site.cellX;
+        const core::i32 standZ = nearest.site.cellZ;
+
+        const auto space = [this](core::i32 x, core::i32 z, math::Fixed32 y) { return _streamer.spanAt(x, z, y); };
+        _body.placeAt(math::Fixed32::fromInt(standX), math::Fixed32::fromInt(standZ),
+                      math::Fixed32::fromFloat(nearest.adit.floorY), space);
+        // Facing the mouth, derived the way the parity walk derives it: the body's own
+        // convention is wish = (-forward * sin(yaw), -forward * cos(yaw)), so the heading
+        // that walks along the adit is atan2 of its negated step.
+        _body.setYaw(math::Cordic::atan2(math::Fixed32::fromInt(-nearest.adit.stepX),
+                                         math::Fixed32::fromInt(-nearest.adit.stepZ)));
+        _pendingTurn = math::Fixed32{};
+        _jumpPressed = false;
+        _bodySpawned = true;
+
+        _embodied = true;
+        _camera.setFirstPerson(true);
+        _camera.setPitch(kFirstPersonPitch);
+        _camera.setEyeHeight(_bodyParams.eyeHeight.toFloat());
+        _camera.setFocus(static_cast<core::f32>(standX), static_cast<core::f32>(standZ));
+        _camera.setYaw(_body.yaw().toFloat());
+
+        HudLine line;
+        line.text("cave warp: ")
+            .integer(standX)
+            .text(",")
+            .integer(standZ)
+            .text("  open ")
+            .number(nearest.openCells)
+            .text("  deep ")
+            .number(nearest.navigable ? 1u : 0u)
+            .text(" - walk forward");
+        core::Log::info(line.c_str());
     }
 
     /// Whether the body is what movement keys act on this frame.

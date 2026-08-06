@@ -155,6 +155,50 @@ struct TerrainDrawParams {
     core::u32 caveDrawRadius{0u};
 
     /**
+     * @brief The lamp you carry, as a cone rather than a glow.
+     *
+     * A cave has no sun in it, so something has to light it or the geometry is drawn and
+     * invisible. What was here first was closer to a bare bulb at the eye — brightness
+     * from the angle between a face and the view — which lights everything around you
+     * equally and gives a cave no direction to look IN.
+     *
+     * A spot has an axis, and the axis is where you are looking: turn your head and the
+     * beam goes with it, which is the thing that makes a passage readable. It belongs to
+     * the EYE and not to an entity — a @c ComponentId::Light with exactly one instance
+     * and one consumer would be the orphan this repository keeps deleting — but the
+     * numbers are content, so they live here beside the rock colour.
+     *
+     * @c coneInner is the cosine of the half-angle of the full-strength core and
+     * @c coneOuter of the edge where it has fallen to nothing; cosines rather than
+     * angles because comparing a dot product against one is a multiply, and getting an
+     * angle out of it is an arccosine nothing in a kernel path may call.
+     */
+    core::f32 lampConeInner{0.70f};
+    core::f32 lampConeOuter{0.10f};
+    /// How far the beam carries, in world units. Beyond it, only the ambient floor.
+    core::f32 lampReach{20.0f};
+    /**
+     * @brief What a surface outside the beam still receives.
+     *
+     * Not zero, deliberately: a cave lit by the cone alone is a bright disc in absolute
+     * blackness, and you cannot tell a wall a step to your left from an open passage.
+     * A little bounce is what makes the shape of a gallery legible.
+     */
+    core::f32 lampAmbient{0.22f};
+
+    /**
+     * @brief What the lamp is bright enough to make of a rock face.
+     *
+     * Separate from @ref caveRockTint, which is what unlit rock is. The first pass used
+     * one colour for both and the result was a cave you could not play in: a torch on
+     * stone a couple of metres away reads as light grey-brown, and modulating a dark
+     * rock colour by a beam can only ever make it darker. Measured by looking — the lit
+     * patches came out around thirty of two hundred and fifty-five, which is a shape you
+     * can just about infer rather than a surface you can walk along.
+     */
+    core::u32 lampLitTint{0x009A8C7Au};
+
+    /**
      * @brief Cull the resident set through a spatial hierarchy rather than linearly.
      *
      * Off is not a fallback, it is the right answer for a small set: below a few

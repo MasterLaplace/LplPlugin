@@ -446,8 +446,81 @@ CaveWarren buildCaveWarren(const ChunkParams &params, const LandmarkSite &site, 
         }
     }
 
-    out.valid = out.openCells != 0u && out.reachableCells != 0u && out.apertureCount != 0u;
+    // A cave has to be bigger than the pockets this generator FILLS IN. `openCells != 0`
+    // was the bar, and it let a single hollow cell through as a cave: the debug warp
+    // dutifully teleported to the nearest one and reported "open 1", which is a hole you
+    // can stand in and nothing else. `minChamberSize` is already the number that says
+    // what is too small to be a room, so a whole warren under it is too small to be a
+    // cave — a threshold the params already carry rather than one chosen here.
+    const core::u32 leastCave = warren.minChamberSize == 0u ? 1u : warren.minChamberSize;
+    out.valid = out.openCells >= leastCave && out.reachableCells != 0u && out.apertureCount != 0u;
     return out;
+}
+
+bool findNearestCaveWarren(const ChunkParams &params, const LandmarkParams &mouths, const CaveWarrenParams &warren,
+                           core::f32 seaLevel, core::f32 drop, core::i32 fromCellX, core::i32 fromCellZ,
+                           core::u32 maxRings, core::u32 maxBuilds, CaveWarren &out)
+{
+    if (mouths.cellSpan == 0u)
+        return false;
+
+    const core::i32 span = static_cast<core::i32>(mouths.cellSpan);
+    const core::i32 homeX = floorDivChunk(fromCellX, span);
+    const core::i32 homeZ = floorDivChunk(fromCellZ, span);
+
+    core::u32 builds = 0u;
+    long long bestDistance = -1;
+    bool found = false;
+    // Rings are searched one PAST the first hit, because the far corner of ring r is
+    // further off than the near edge of ring r + 1 — stopping at the first ring that
+    // contains anything would hand back something that is not the nearest.
+    core::u32 grace = 0u;
+
+    for (core::u32 ring = 0u; ring <= maxRings; ++ring)
+    {
+        const core::i32 radius = static_cast<core::i32>(ring);
+        for (core::i32 lz = homeZ - radius; lz <= homeZ + radius; ++lz)
+            for (core::i32 lx = homeX - radius; lx <= homeX + radius; ++lx)
+            {
+                // The ring only, not the filled square: the interior was searched at a
+                // smaller radius, and re-testing it makes the search quadratic in the
+                // ring for nothing.
+                if (lx != homeX - radius && lx != homeX + radius && lz != homeZ - radius && lz != homeZ + radius)
+                    continue;
+                if (builds >= maxBuilds)
+                    return found;
+
+                LandmarkSite site;
+                if (!landmarkAt(params, mouths, LandmarkKind::CaveMouth, seaLevel, lx, lz, site))
+                    continue;
+                // Cheap first. Planning the adit is a handful of noise samples and
+                // rejects the quarter of sites with no cover within reach; building the
+                // warren to find that out costs about 1.4 ms.
+                if (!planCaveAdit(params, site, warren, drop).found)
+                    continue;
+
+                CaveWarren candidate = buildCaveWarren(params, site, warren, drop);
+                ++builds;
+                if (!candidate.valid)
+                    continue;
+
+                const long long dx = static_cast<long long>(site.cellX) - fromCellX;
+                const long long dz = static_cast<long long>(site.cellZ) - fromCellZ;
+                const long long distance = dx * dx + dz * dz;
+                if (found && distance >= bestDistance)
+                    continue;
+                bestDistance = distance;
+                out = static_cast<CaveWarren &&>(candidate);
+                found = true;
+            }
+
+        if (!found)
+            continue;
+        if (grace != 0u)
+            return true;
+        grace = 1u;
+    }
+    return found;
 }
 
 VerticalSpan caveWarrenSpanAt(const CaveWarren &warren, core::i32 worldX, core::i32 worldZ, math::Fixed32 y,

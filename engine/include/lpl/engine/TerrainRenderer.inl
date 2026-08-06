@@ -153,6 +153,37 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                                          math::Fixed32::fromFloat(basis.eye.y))
                                  .enclosed;
 
+    // ── The lamp you carry ───────────────────────────────────────────────────
+    //
+    // Darkness is two things and one lamp: being under rock, and being out at night.
+    // render::SunState::intensity is already zero at night, so "dark" is read off the
+    // sky rather than defined a second time here — a second definition is a thing to
+    // keep in step with the first, and it would drift at dusk.
+    {
+        TerrainSurface::LampState lamp;
+        lamp.on = underground || surface.sun().intensity <= 0.03f;
+        lamp.x = basis.eye.x;
+        lamp.z = basis.eye.z;
+        // The heading in the GROUND plane, renormalised: pitching the view down shortens
+        // the horizontal part of forward, and a cone measured against an unnormalised
+        // axis narrows as you look at your feet.
+        core::f32 headingX = basis.forward.x;
+        core::f32 headingZ = basis.forward.z;
+        const core::f32 flat = render::approximateLength(headingX, headingZ);
+        if (flat > 0.0001f)
+        {
+            headingX /= flat;
+            headingZ /= flat;
+        }
+        lamp.headingX = headingX;
+        lamp.headingZ = headingZ;
+        lamp.coneInner = params.lampConeInner;
+        lamp.coneOuter = params.lampConeOuter;
+        lamp.reach = params.lampReach;
+        lamp.tint = params.lampLitTint;
+        surface.setLamp(lamp);
+    }
+
     const core::u64 skyBegan = now();
     if (underground)
         surface.beginCaveFrame(rt, params.caveDarkTint, params.caveFogDensity);
@@ -919,12 +950,19 @@ inline core::u32 TerrainRenderer::drawWarrens(const render::RenderTarget &rt, co
                     world[v * 3u + 2u] = originZ + quad[v * 3u + 2u];
                 }
 
-                // Lit from the EYE, not from the sun. Underground the sun is behind a
+                // ── The lamp ─────────────────────────────────────────────────
+                //
+                // Lit from the EYE, not from the sun: underground the sun is behind a
                 // hill, so a lambert against it leaves every face equally black and the
-                // cave reads as a flat silhouette; a lamp at the eye is what makes a
-                // corner a corner. The distance term is the surface's aerial
-                // perspective, already pointed at the cave's own darkness by
-                // TerrainSurface::beginCaveFrame — one fade, not a second one here.
+                // cave reads as a flat silhouette. And as a SPOT rather than a glow —
+                // the beam's axis is the view direction, so turning your head lights
+                // what you turned towards, which is what makes a passage readable. A
+                // bulb at the eye lights everything around you the same and gives a
+                // gallery no direction to go in.
+                //
+                // The distance term is the surface's aerial perspective, already pointed
+                // at the cave's own darkness by TerrainSurface::beginCaveFrame — one
+                // fade, not a second one competing with it.
                 const core::f32 midX = (world[0] + world[6]) * 0.5f;
                 const core::f32 midY = (world[1] + world[7]) * 0.5f;
                 const core::f32 midZ = (world[2] + world[8]) * 0.5f;
@@ -939,9 +977,30 @@ inline core::u32 TerrainRenderer::drawWarrens(const render::RenderTarget &rt, co
                 core::f32 facing = nx * toEyeX + ny * toEyeY + nz * toEyeZ;
                 facing = facing < 0.0f ? 0.0f : facing;
 
-                const core::f32 lit = params.ambient + (1.0f - params.ambient) * facing;
-                const core::u32 shaded = render::applyAerialPerspective(
-                    render::modulate(params.caveRockTint, lit), params.caveDarkTint, distance, params.caveFogDensity);
+                // How far off the beam's axis this face sits. The vector FROM the eye is
+                // the negation of the one to it, so the dot against forward is a cosine
+                // straight away — no angle is ever formed, which is what keeps this off
+                // any transcendental.
+                const core::f32 offAxis = -(toEyeX * basis.forward.x + toEyeY * basis.forward.y +
+                                            toEyeZ * basis.forward.z);
+                const core::f32 band = params.lampConeInner - params.lampConeOuter;
+                core::f32 cone = band > 0.0001f ? (offAxis - params.lampConeOuter) / band : 1.0f;
+                cone = cone < 0.0f ? 0.0f : (cone > 1.0f ? 1.0f : cone);
+                // Squared, so the edge of the beam softens instead of ending on a line.
+                cone *= cone;
+
+                core::f32 reach = params.lampReach > 0.0001f ? 1.0f - distance / params.lampReach : 0.0f;
+                reach = reach < 0.0f ? 0.0f : reach;
+
+                const core::f32 beam = facing * cone * reach;
+                // Between unlit rock and rock under a torch, rather than a single colour
+                // scaled down: scaling can only darken, so one tint means the brightest
+                // thing in the cave is still as dark as its darkest.
+                const core::f32 lit = params.lampAmbient + (1.0f - params.lampAmbient) * beam;
+                const core::u32 stone = render::mixColours(params.caveRockTint, params.lampLitTint, beam);
+                const core::u32 shaded = render::applyAerialPerspective(render::modulate(stone, lit),
+                                                                        params.caveDarkTint, distance,
+                                                                        params.caveFogDensity);
                 triangles += render::fillPolygonClipped(rt, mvp, world, 4u, shaded);
             });
     });

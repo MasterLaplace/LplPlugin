@@ -168,6 +168,46 @@ public:
     void beginCaveFrame(const render::RenderTarget &rt, core::u32 tint, core::f32 density) noexcept;
 
     /**
+     * @struct LampState
+     * @brief The light a walker carries, as the surface shading needs it.
+     *
+     * Set once a frame rather than passed per pixel: a lamp does not move between two
+     * pixels of the same frame, and threading nine more arguments through a shader
+     * called a hundred thousand times a frame to say so would be nine arguments.
+     *
+     * ⚠ The cone here is HORIZONTAL — about the view's heading in the ground plane, with
+     * no vertical term. The shading callback is given a world x and z and no y (see
+     * @ref shadeSurface), so a true 3D cone would mean threading a height through four
+     * call sites of a shared signature. The approximation is also the friendlier one for
+     * a surface: the pool of light stays on the ground when you look up, where a real
+     * torch would swing it into the sky. The cave path, which has full positions, uses a
+     * proper 3D cone — see engine::TerrainRenderer::drawWarrens.
+     */
+    struct LampState {
+        bool on{false};
+        core::f32 x{0.0f}; ///< Where the lamp is, world.
+        core::f32 z{0.0f};
+        core::f32 headingX{0.0f}; ///< The beam's axis, normalised in the ground plane.
+        core::f32 headingZ{-1.0f};
+        core::f32 coneInner{0.70f};
+        core::f32 coneOuter{0.10f};
+        core::f32 reach{20.0f};
+        core::u32 tint{0x00C8B79Eu}; ///< What ground under the beam looks like.
+    };
+
+    /**
+     * @brief Hands the surface the lamp for this frame.
+     *
+     * Whether it is ON is the caller's call and not a threshold invented here: darkness
+     * is either being under rock or being at night, and render::SunState::intensity is
+     * already zero at night — a second definition of "dark" would be a second thing to
+     * keep in step with the sky.
+     *
+     * @param lamp The lamp, or one with @c on false to light nothing.
+     */
+    void setLamp(const LampState &lamp) noexcept { _lamp = lamp; }
+
+    /**
      * @brief Surface colour for one point: grain, light, haze.
      *
      * The grain is sampled at WORLD coordinates rather than per-vertex UVs. A cell
@@ -450,6 +490,10 @@ private:
     core::f32 _dayFraction{0.32f};
     core::u32 _haze{0u};
     core::f32 _caveFog{0.10f};
+    LampState _lamp{};
+
+    /** @brief Brightens a shaded colour by the carried lamp. */
+    [[nodiscard]] core::u32 applyLamp(core::u32 colour, core::f32 worldX, core::f32 worldZ) const noexcept;
     bool _underground{false};
     core::u32 _skyBlock{1u};
     core::u32 _waterTessellation{0u};

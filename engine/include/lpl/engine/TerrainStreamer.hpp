@@ -83,6 +83,15 @@ public:
     [[nodiscard]] core::u32 releasedCount() const noexcept { return _residency.releasedCount(); }
     [[nodiscard]] core::u32 maxResident() const noexcept { return _residency.maxResident(); }
     [[nodiscard]] const procgen::ChunkParams &chunkParams() const noexcept { return _chunkParams; }
+    /**
+     * @brief The content rule the resident chunks were generated from.
+     *
+     * The streamer is what OWNS it — a world hands it over at configure time and then
+     * has no second copy to drift from. Anything asking a question about the content of
+     * this world (where its sea is, how its caves are sited) should ask here rather than
+     * keep its own.
+     */
+    [[nodiscard]] const procgen::ChunkTerrainRule &rule() const noexcept { return _rule; }
     [[nodiscard]] core::u32 chunkSize() const noexcept { return _chunkParams.size; }
 
     /**

@@ -148,17 +148,54 @@ inline core::u32 TerrainSurface::shadePhysical(core::f32 worldX, core::f32 world
     return render::applyAerialPerspective(shaded, _haze, distance, fogDensity());
 }
 
+inline core::u32 TerrainSurface::applyLamp(core::u32 colour, core::f32 worldX, core::f32 worldZ) const noexcept
+{
+    if (!_lamp.on)
+        return colour;
+
+    const core::f32 dx = worldX - _lamp.x;
+    const core::f32 dz = worldZ - _lamp.z;
+    const core::f32 distance = render::approximateLength(dx, dz);
+    const core::f32 inverse = 1.0f / (distance + 0.001f);
+    // A cosine straight from the dot product. No angle is ever formed, which is what
+    // keeps a lamp off any transcendental on a target that has none.
+    const core::f32 offAxis = (dx * inverse) * _lamp.headingX + (dz * inverse) * _lamp.headingZ;
+
+    const core::f32 band = _lamp.coneInner - _lamp.coneOuter;
+    core::f32 cone = band > 0.0001f ? (offAxis - _lamp.coneOuter) / band : 1.0f;
+    cone = cone < 0.0f ? 0.0f : (cone > 1.0f ? 1.0f : cone);
+    cone *= cone; // squared, so the edge of the beam softens instead of ending on a line
+
+    core::f32 reach = _lamp.reach > 0.0001f ? 1.0f - distance / _lamp.reach : 0.0f;
+    reach = reach < 0.0f ? 0.0f : reach;
+
+    const core::f32 beam = cone * reach;
+    if (beam <= 0.0f)
+        return colour;
+
+    // BRIGHTENS what is there rather than replacing it: a torch on grass is warm-lit
+    // grass, and mixing straight to the lamp's own colour would paint every surface in
+    // the world the same beige and throw away the only thing that says where you are.
+    // The small blend toward the tint is the warmth; the multiply is the light.
+    return render::mixColours(render::modulate(colour, 1.0f + beam * 2.5f), _lamp.tint, beam * 0.25f);
+}
+
 inline core::u32 TerrainSurface::shadeSurface(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
                                               core::f32 nx, core::f32 nz, core::f32 occlusion,
                                               const render::CameraBasis &basis) const noexcept
 {
     const core::f32 distance = render::approximateLength(worldX - basis.eye.x, worldZ - basis.eye.z);
     const bool rocky = (nx * nx + nz * nz) > 1.2f;
+    // One funnel, so the lamp is applied ONCE rather than in each of the three shading
+    // paths — three copies of a light are three chances for one of them to stay dark.
+    core::u32 colour;
     if (_physicallyBased)
-        return shadePhysical(worldX, worldZ, base, nx, nz, occlusion, distance, rocky, basis);
-    if (_perPixel)
-        return shade(worldX, worldZ, base, lit, distance, rocky);
-    return render::applyAerialPerspective(render::modulate(base, lit), _haze, distance, fogDensity());
+        colour = shadePhysical(worldX, worldZ, base, nx, nz, occlusion, distance, rocky, basis);
+    else if (_perPixel)
+        colour = shade(worldX, worldZ, base, lit, distance, rocky);
+    else
+        colour = render::applyAerialPerspective(render::modulate(base, lit), _haze, distance, fogDensity());
+    return applyLamp(colour, worldX, worldZ);
 }
 
 } // namespace lpl::engine

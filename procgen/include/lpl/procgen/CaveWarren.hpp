@@ -403,6 +403,46 @@ struct CaveWarren {
                                          const CaveWarrenParams &warren, core::f32 drop);
 
 /**
+ * @brief The nearest cave to a point, searched outward over the landmark lattice.
+ *
+ * A cave is sited on a lattice sparser than a chunk and unrelated to the resident set,
+ * so "the nearest one" is not a question the streamer can answer: most of the time
+ * there is none loaded at all. Measured on the shipped viewer seed, the nearest cave to
+ * the origin is 224 cells away — well past a resident set of twenty-five chunks — which
+ * is why a search that only looked at what is loaded would almost never find anything.
+ *
+ * Rings of lattice cells outward, and the ring AFTER the first hit is searched too: the
+ * far corner of ring r is further away than the near edge of ring r + 1, so stopping at
+ * the first ring that contains anything would return something that is not the nearest.
+ * Within the candidates it keeps the smallest true cell distance.
+ *
+ * ⚠ Bounded by @p maxBuilds as well as by @p maxRings, because confirming a site
+ * actually carries a cave costs a full @ref buildCaveWarren — about 1.4 ms. The adit is
+ * planned first as a cheap filter (a handful of noise samples), which rejects the
+ * quarter of sites that have no cover within reach before any of that is paid.
+ *
+ * @ref CaveParity keeps its own search on purpose and is not folded into this one: its
+ * window and its traversal order are part of what the gate MEANS, so a change here that
+ * merely reordered candidates would move a signature.
+ *
+ * @param params     World parameters.
+ * @param mouths     Cave-mouth siting rule.
+ * @param warren     Gallery geometry.
+ * @param seaLevel   Where the water is.
+ * @param drop       The shelf depth the chunk carves with.
+ * @param fromCellX  Where to search from, world cells.
+ * @param fromCellZ  Where to search from, world cells.
+ * @param maxRings   Lattice rings to search before giving up.
+ * @param maxBuilds  Warrens that may be built while searching.
+ * @param out        Receives the nearest cave found.
+ * @return true when one was found.
+ */
+[[nodiscard]] bool findNearestCaveWarren(const ChunkParams &params, const LandmarkParams &mouths,
+                                         const CaveWarrenParams &warren, core::f32 seaLevel, core::f32 drop,
+                                         core::i32 fromCellX, core::i32 fromCellZ, core::u32 maxRings,
+                                         core::u32 maxBuilds, CaveWarren &out);
+
+/**
  * @brief The gap a body stands in at one column of a warren.
  *
  * @param warren   The warren.
