@@ -751,8 +751,7 @@ int main()
         check(nightLight < dayLight, "night is darker than day");
         // The lamp has an AXIS on the surface too. A uniform night-time lift would pass
         // "night is darker" and leave you unable to tell which way the path goes.
-        check(foldFrame(night.colour) != foldFrame(nightAside.colour),
-              "and turning at night moves the light with you");
+        check(foldFrame(night.colour) != foldFrame(nightAside.colour), "and turning at night moves the light with you");
 
         if (const char *dump = std::getenv("LPL_DUMP_NIGHT_PPM"); dump != nullptr)
         {

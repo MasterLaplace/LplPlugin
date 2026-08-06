@@ -981,8 +981,8 @@ inline core::u32 TerrainRenderer::drawWarrens(const render::RenderTarget &rt, co
                 // the negation of the one to it, so the dot against forward is a cosine
                 // straight away — no angle is ever formed, which is what keeps this off
                 // any transcendental.
-                const core::f32 offAxis = -(toEyeX * basis.forward.x + toEyeY * basis.forward.y +
-                                            toEyeZ * basis.forward.z);
+                const core::f32 offAxis =
+                    -(toEyeX * basis.forward.x + toEyeY * basis.forward.y + toEyeZ * basis.forward.z);
                 const core::f32 band = params.lampConeInner - params.lampConeOuter;
                 core::f32 cone = band > 0.0001f ? (offAxis - params.lampConeOuter) / band : 1.0f;
                 cone = cone < 0.0f ? 0.0f : (cone > 1.0f ? 1.0f : cone);
@@ -998,9 +998,8 @@ inline core::u32 TerrainRenderer::drawWarrens(const render::RenderTarget &rt, co
                 // thing in the cave is still as dark as its darkest.
                 const core::f32 lit = params.lampAmbient + (1.0f - params.lampAmbient) * beam;
                 const core::u32 stone = render::mixColours(params.caveRockTint, params.lampLitTint, beam);
-                const core::u32 shaded = render::applyAerialPerspective(render::modulate(stone, lit),
-                                                                        params.caveDarkTint, distance,
-                                                                        params.caveFogDensity);
+                const core::u32 shaded = render::applyAerialPerspective(
+                    render::modulate(stone, lit), params.caveDarkTint, distance, params.caveFogDensity);
                 triangles += render::fillPolygonClipped(rt, mvp, world, 4u, shaded);
             });
     });
