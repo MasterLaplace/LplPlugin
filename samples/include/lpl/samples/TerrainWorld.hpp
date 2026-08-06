@@ -197,7 +197,7 @@ public:
         else
         {
             _hasSurface = true;
-            core::Log::info("TerrainWorld: WASD=walk SPACE=jump mouse=look O=map V=detach X=exit");
+            core::Log::info("TerrainWorld: WASD=walk SPACE=jump mouse or J/L=turn I/K=tilt O=map V=detach X=exit");
         }
 
         // A body is an entity now, so the herd needs its registry BEFORE the first
@@ -1415,7 +1415,7 @@ private:
 
             image::drawText8x16(
                 _surface.buffer, pitchPixels, 8u, _surface.height - 20u,
-                "WASD=walk SPACE=jump C=sprint mouse=look V=detach F=view I/K=tilt T/Y/R/G=shading O=bounded X=exit",
+                "WASD=walk SPACE=jump C=sprint mouse/JL=turn IK=tilt V=detach F=view T/Y/R/G=shading O=bounded X=exit",
                 0x00808890u);
             return;
         }
@@ -1537,8 +1537,8 @@ private:
                 else if (!bodyDrivesMovement(context))
                     nudge(0.0f, 1.0f);
                 break;
-            case 'j': _camera.turn(-0.10f); break;
-            case 'l': _camera.turn(0.10f); break;
+            case 'j': look(-0.10f); break;
+            case 'l': look(0.10f); break;
             case 'i': _camera.tilt(0.06f); break;
             case 'k': _camera.tilt(-0.06f); break;
             case 'o': setInfinite(!_infinite); break;
@@ -1647,13 +1647,7 @@ private:
         // walk direction and that makes it authoritative. Tilt stays on the camera:
         // looking up does not move you, so it is presentation and may be float.
         if (turnAccumulator != 0)
-        {
-            if (_embodied && _infinite)
-                _pendingTurn =
-                    _pendingTurn - math::Fixed32::fromFloat(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
-            else
-                _camera.turn(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
-        }
+            look(static_cast<core::f32>(turnAccumulator) * kLookSensitivity);
         if (tiltAccumulator != 0)
             _camera.tilt(static_cast<core::f32>(tiltAccumulator) * kLookSensitivity);
     }
@@ -1696,6 +1690,31 @@ private:
     // ── Small helpers ────────────────────────────────────────────────────────
 
     /// Walks along the camera's heading, in world cells.
+
+    /**
+     * @brief Turns the view, and sends the turn wherever it belongs.
+     *
+     * ONE statement of that routing, because there are two ways to ask for it — a
+     * pointer and a pair of keys — and they were giving two different answers. A turn
+     * goes to the BODY when there is one: the heading picks the walk direction, which
+     * makes it authoritative, and @ref stepBody writes it into the camera every fixed
+     * step. The key path turned the CAMERA instead, so the body overwrote it a few
+     * milliseconds later and J/L did nothing whatsoever in first person — which reads
+     * as the keys being unbound rather than as a turn going to the wrong place.
+     *
+     * The sign is inverted for the body deliberately: its yaw and the camera's turn
+     * run opposite ways, and this is where that is reconciled rather than at each of
+     * the two call sites.
+     *
+     * @param yawRadians Radians to turn by, in the camera's sense.
+     */
+    void look(core::f32 yawRadians) noexcept
+    {
+        if (_embodied && _infinite)
+            _pendingTurn = _pendingTurn - math::Fixed32::fromFloat(yawRadians);
+        else
+            _camera.turn(yawRadians);
+    }
 
     void walk(core::f32 sign) noexcept { _camera.walk(sign * kWalkStep); }
 
