@@ -56,6 +56,59 @@ using DungeonMap = Grid<DungeonCell>;
 [[nodiscard]] constexpr bool isWalkable(DungeonCell cell) noexcept { return cell != DungeonCell::Wall; }
 
 /**
+ * @enum CaveKind
+ * @brief Which underground generator a recipe asks for.
+ *
+ * Four generators existed and a recipe could name exactly one of them, so the other
+ * three were reachable only by writing @ref WorldBuilder calls by hand — which is
+ * what a viewer did, and why its world could not be saved, baked, replayed in ring 0
+ * or asked for by an intelligence. A director who cannot name what it wants is not a
+ * director.
+ *
+ * @c Cellular stays the default because it is what @ref parityWorldRecipe bakes and
+ * what every existing document therefore means.
+ */
+enum class CaveKind : core::u32 {
+    Cellular = 0u, ///< Automaton smoothing with connectivity repair. The default.
+    Bsp = 1u,      ///< Recursive partition into rooms joined by corridors.
+    Dla = 2u,      ///< Diffusion-limited aggregation: thin, branching, organic.
+
+    /**
+     * @brief A stack of plans joined by shafts, at least one reaching the surface.
+     *
+     * The gate judges this one in three dimensions — see @ref evaluateCaveSystem. It
+     * did not, for a while: @ref GateCriteria was asked of the flat @c DungeonMap,
+     * which this generator leaves empty, so a layered recipe reported zero open cells
+     * and failed a world that was perfectly navigable, and a document had to switch
+     * @c checkPlayability off to use the generator at all.
+     *
+     * Worth keeping in mind because the first test written for it passed for exactly
+     * that reason and proved nothing: the layered cave "differed from the default" by
+     * reporting nothing at all.
+     */
+    Layered = 3u,
+
+    /**
+     * @brief Let the PLACE decide. The default a document gets when it says nothing.
+     *
+     * The other four are the developer's answer, and an editor must be able to give
+     * one — a director who cannot name what it wants is not a director, which is the
+     * whole reason this enum exists. But naming one for every world is also how every
+     * cave in a world ends up identical, and a streamed world has thousands of them.
+     *
+     * So this value is not "random". It is @ref chooseCaveKind: the evidence a site
+     * actually offers — were there people here, does the ground dissolve, how deep is
+     * this layer — resolved into one of the four above. It is a pure function of that
+     * evidence, so two targets asking about one place get one answer.
+     *
+     * @warning Never reaches a generator. Every consumer resolves it first, and
+     *          @ref generateCaveSystem clamps it to @c Cellular if one forgets, rather
+     *          than indexing a switch that has no case for it.
+     */
+    Auto = 4u
+};
+
+/**
  * @struct Room
  * @brief An axis-aligned rectangle carved out of the rock.
  */

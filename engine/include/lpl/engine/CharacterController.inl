@@ -42,12 +42,16 @@ namespace detail {
 
 } // namespace detail
 
-template <typename GroundAt>
-void CharacterController::placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, GroundAt &&groundAt) noexcept
+template <typename SpaceAt>
+void CharacterController::placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, math::Fixed32 startY,
+                                  SpaceAt &&spaceAt) noexcept
 {
     _x = worldX;
     _z = worldZ;
-    _groundHeight = groundAt(worldX.toInt(), worldZ.toInt());
+    const procgen::VerticalSpan span = spaceAt(worldX.toInt(), worldZ.toInt(), startY);
+    _groundHeight = span.floor;
+    _ceiling = span.ceiling;
+    _enclosed = span.enclosed;
     _y = _groundHeight;
     _vx = math::Fixed32{};
     _vy = math::Fixed32{};
@@ -59,9 +63,9 @@ void CharacterController::placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, Gr
     _airborneTicks = 0u;
 }
 
-template <typename GroundAt>
+template <typename SpaceAt>
 void CharacterController::moveAxis(const CharacterParams &params, math::Fixed32 &coordinate, math::Fixed32 delta,
-                                   GroundAt &&groundAt)
+                                   SpaceAt &&spaceAt)
 {
     if (delta == math::Fixed32{})
         return;
@@ -75,8 +79,8 @@ void CharacterController::moveAxis(const CharacterParams &params, math::Fixed32 
     if (!_grounded)
         return;
 
-    const math::Fixed32 ahead = groundAt(_x.toInt(), _z.toInt());
-    const math::Fixed32 rise = ahead - _y;
+    const procgen::VerticalSpan ahead = spaceAt(_x.toInt(), _z.toInt(), _y);
+    const math::Fixed32 rise = ahead.floor - _y;
     if (rise > params.stepHeight)
     {
         // A wall. Undo the axis rather than the whole move: refusing both axes at
@@ -89,16 +93,33 @@ void CharacterController::moveAxis(const CharacterParams &params, math::Fixed32 
         return;
     }
 
+    // A gap too low to stand in is a wall the OTHER way round, and it has to be
+    // refused here rather than resolved vertically afterwards. Let the move through
+    // and the body is inside rock: the vertical pass then has to put it somewhere,
+    // and every somewhere is either a teleport onto the hill or a fall through the
+    // floor. Refusing the step is the only answer that leaves the body where it was.
+    //
+    // Measured against the FLOOR IT WOULD STAND ON, not against its current height:
+    // stepping up into a gap and standing in it are the same act, and a test against
+    // the old height passes a body under a slab it cannot then fit beneath.
+    const math::Fixed32 standingAt = rise > math::Fixed32{} ? ahead.floor : _y;
+    if (ahead.ceiling - standingAt < params.standHeight)
+    {
+        coordinate = previous;
+        ++_ducked;
+        return;
+    }
+
     // A rise the body CAN take is taken immediately, feet first: a heightfield has
     // no ramp between two cells, so a walker that waited for gravity would spend
     // every step falling a few centimetres and never report as grounded.
     if (rise > math::Fixed32{})
-        _y = ahead;
+        _y = ahead.floor;
 }
 
-template <typename GroundAt>
+template <typename SpaceAt>
 void CharacterController::step(const CharacterParams &params, const CharacterIntent &intent, math::Fixed32 dt,
-                               GroundAt &&groundAt)
+                               SpaceAt &&spaceAt)
 {
     // ── Heading ─────────────────────────────────────────────────────────────
     //
@@ -175,8 +196,8 @@ void CharacterController::step(const CharacterParams &params, const CharacterInt
     // cancel the other. Then vertically, against the ground under wherever the
     // horizontal move ended up — the other order tests the fall against the cell
     // being left rather than the one being entered.
-    moveAxis(params, _x, _vx * dt, groundAt);
-    moveAxis(params, _z, _vz * dt, groundAt);
+    moveAxis(params, _x, _vx * dt, spaceAt);
+    moveAxis(params, _z, _vz * dt, spaceAt);
 
     // ── Slope ───────────────────────────────────────────────────────────────
     //
@@ -190,12 +211,18 @@ void CharacterController::step(const CharacterParams &params, const CharacterInt
     // The steepness is measured by sampling one cell along each axis rather than by
     // an angle: comparing a rise against a run is a subtraction, and an angle would
     // need an arctangent nothing here is allowed to call.
+    //
+    // NOT under a roof, and that exclusion is load-bearing rather than tidy. A gallery
+    // floor is quantised to whole voxel levels, so every level change reads as a slope
+    // steeper than any walkable one and a body underground would slide continuously —
+    // into a wall, where the vertical pass has to put it somewhere and every somewhere
+    // is wrong. A cave floor is a floor: it is what it is, and you stand on it.
     _sliding = false;
-    if (_grounded)
+    if (_grounded && !_enclosed)
     {
-        const math::Fixed32 here = groundAt(_x.toInt(), _z.toInt());
-        const math::Fixed32 eastward = groundAt(_x.toInt() + 1, _z.toInt()) - here;
-        const math::Fixed32 southward = groundAt(_x.toInt(), _z.toInt() + 1) - here;
+        const math::Fixed32 here = spaceAt(_x.toInt(), _z.toInt(), _y).floor;
+        const math::Fixed32 eastward = spaceAt(_x.toInt() + 1, _z.toInt(), _y).floor - here;
+        const math::Fixed32 southward = spaceAt(_x.toInt(), _z.toInt() + 1, _y).floor - here;
 
         if (detail::absolute(eastward) > params.maxSlope || detail::absolute(southward) > params.maxSlope)
         {
@@ -217,7 +244,10 @@ void CharacterController::step(const CharacterParams &params, const CharacterInt
     // than the one being entered, which is how a body walks into the air and stays
     // there — or, as above, drops into the floor.
     _y = _y + _vy * dt;
-    _groundHeight = groundAt(_x.toInt(), _z.toInt());
+    const procgen::VerticalSpan here = spaceAt(_x.toInt(), _z.toInt(), _y);
+    _groundHeight = here.floor;
+    _ceiling = here.ceiling;
+    _enclosed = here.enclosed;
 
     const bool wasGrounded = _grounded;
     if (_y <= _groundHeight)
@@ -245,6 +275,29 @@ void CharacterController::step(const CharacterParams &params, const CharacterInt
         else if (_coyote != 0u)
             --_coyote;
     }
+
+    // ── Head ────────────────────────────────────────────────────────────────
+    //
+    // After the ground, because a body that is both standing and scraping is standing:
+    // clamping to the ceiling first and then to the floor would let a gap shorter than
+    // the body push it under its own floor, which is the one place it can never be.
+    // The clamp is floored at the ground for the same reason — in a gap it should not
+    // have been able to enter, it stands crushed rather than sinking.
+    if (_enclosed)
+    {
+        math::Fixed32 highest = _ceiling - params.standHeight;
+        if (highest < _groundHeight)
+            highest = _groundHeight;
+        if (_y > highest)
+        {
+            _y = highest;
+            // Upward speed only. Killing a downward one here would hold a body up
+            // against a ceiling it is falling away from.
+            if (_vy > math::Fixed32{})
+                _vy = math::Fixed32{};
+            ++_headBumps;
+        }
+    }
 }
 
 inline core::u32 CharacterController::fold(core::u32 seed) const noexcept
@@ -263,6 +316,10 @@ inline core::u32 CharacterController::fold(core::u32 seed) const noexcept
     mix(static_cast<core::u32>(_yaw.raw()));
     mix(_grounded ? 1u : 0u);
     mix(_sliding ? 1u : 0u);
+    // Enclosed decides whether the body slides, so it decides where the body will be:
+    // it is state, not presentation, and a signature that omitted it would call two
+    // diverging runs identical for exactly one tick.
+    mix(_enclosed ? 1u : 0u);
     return hash;
 }
 

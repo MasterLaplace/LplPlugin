@@ -91,6 +91,15 @@ inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile p
             .enablePerPixelSurface(true)
             .enablePbrSurface(false)
             .enableWaterReflection(true)
+            // Six divisions per water quad: enough that a swell reads as geometry at
+            // 480x300, and 72 triangles per water chunk rather than two. The cost is
+            // quadratic, so this is where a low-resolution target stops.
+            .waterTessellation(6u)
+            // Ten cells of cave lit around the eye. The gallery is 2.8 m tall and the
+            // fog closes at about nine metres, so this is a little past what the lamp
+            // reaches — drawing further would be geometry the aerial perspective has
+            // already faded to the background colour.
+            .caveDrawRadius(10u)
             .skyBlockSize(1u);
         break;
 
@@ -117,6 +126,11 @@ inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile p
             .enablePerPixelSurface(false)
             .enablePbrSurface(false)
             .enableWaterReflection(false)
+            .waterTessellation(0u)
+            // A server draws nothing, so it walks no voxels. The caves still EXIST on
+            // it — they are authoritative and a body collides with them — which is the
+            // distinction this budget draws and the sea one next to it does not.
+            .caveDrawRadius(0u)
             .skyBlockSize(4u);
         break;
 
@@ -138,6 +152,8 @@ inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile p
             .enablePerPixelSurface(true)
             .enablePbrSurface(true)
             .enableWaterReflection(true)
+            .waterTessellation(14u)
+            .caveDrawRadius(24u)
             .skyBlockSize(1u);
         break;
 
@@ -158,6 +174,11 @@ inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile p
             .enablePerPixelSurface(false)
             .enablePbrSurface(false)
             .enableWaterReflection(false)
+            .waterTessellation(0u)
+            // A server draws nothing, so it walks no voxels. The caves still EXIST on
+            // it — they are authoritative and a body collides with them — which is the
+            // distinction this budget draws and the sea one next to it does not.
+            .caveDrawRadius(0u)
             .skyBlockSize(4u);
         break;
     }

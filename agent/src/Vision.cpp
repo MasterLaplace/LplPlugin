@@ -16,6 +16,7 @@
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/image/Codec.hpp>
 #include <lpl/math/Vec3.hpp>
+#include <lpl/render/Box.hpp>
 #include <lpl/render/Lighting.hpp>
 #include <lpl/render/OrbitCamera.hpp>
 #include <lpl/render/SoftwareRasterizer.hpp>
@@ -111,31 +112,24 @@ std::vector<Box> collectBoxes(const ecs::Registry &registry)
 /// Draws one axis-aligned box as six shaded quads.
 core::u32 drawBox(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp, const Box &box)
 {
-    const core::f32 x0 = box.cx - box.hx;
-    const core::f32 x1 = box.cx + box.hx;
-    const core::f32 y0 = box.cy - box.hy;
-    const core::f32 y1 = box.cy + box.hy;
-    const core::f32 z0 = box.cz - box.hz;
-    const core::f32 z1 = box.cz + box.hz;
-
-    // Fixed per-face brightness rather than a light: the picture exists to be
-    // READ, and a consistent key light makes a box legible at any orientation.
-    struct Face {
-        core::f32 v[12];
-        core::f32 lit;
-    };
-    const Face faces[6] = {
-        {{x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1}, 1.00f}, // top
-        {{x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0}, 0.35f}, // bottom
-        {{x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1}, 0.78f}, // +Z
-        {{x1, y0, z0, x0, y0, z0, x0, y1, z0, x1, y1, z0}, 0.60f}, // -Z
-        {{x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1}, 0.70f}, // +X
-        {{x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0}, 0.50f}, // -X
-    };
+    // Fixed per-face brightness rather than a light, and that is why this does not call
+    // render::drawBox: the picture exists to be READ, and a consistent key light makes a
+    // box legible at any orientation. What IS shared is the geometry — the same six faces
+    // wound the same way — because two hand-written copies of a box disagree about winding
+    // and then one of them culls its own front faces.
+    //
+    // The table is indexed by FACE ORDER, which render::forEachBoxFace documents as part of
+    // its contract: top, bottom, +Z, -Z, +X, -X.
+    constexpr core::f32 kKeyLight[6] = {1.00f, 0.35f, 0.78f, 0.60f, 0.70f, 0.50f};
 
     core::u32 triangles = 0u;
-    for (const Face &face : faces)
-        triangles += render::fillPolygonClipped(rt, mvp, face.v, 4u, render::modulate(box.colour, face.lit));
+    core::u32 face = 0u;
+    render::forEachBoxFace(box.cx - box.hx, box.cy - box.hy, box.cz - box.hz, box.cx + box.hx, box.cy + box.hy,
+                           box.cz + box.hz, [&](const core::f32 *quad, core::f32, core::f32, core::f32) {
+                               triangles += render::fillPolygonClipped(rt, mvp, quad, 4u,
+                                                                       render::modulate(box.colour, kKeyLight[face]));
+                               ++face;
+                           });
     return triangles;
 }
 

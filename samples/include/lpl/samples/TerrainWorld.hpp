@@ -178,6 +178,7 @@ public:
         _terrainSurface.attachProbe(_probeColor, _probeDepth, kProbeWidth, kProbeHeight);
         _maxResident =
             context.config.maxResidentChunks() == 0u ? kMaxResidentCeiling : context.config.maxResidentChunks();
+        _caveDrawRadius = context.config.caveDrawRadius();
 
         _platform = &context.platform;
         _renderer.setClock(&context.platform.clock());
@@ -313,8 +314,12 @@ public:
         // moving rather than flickering, short enough to see a sunset without
         // waiting for one.
         ++_windowTicks;
-        // One tick of the world's clock: the sun moves, the ripples travel.
-        _terrainSurface.advance(kDayStep);
+        // One tick of the world's clock: the sun moves, the ripples travel — both scaled by
+        // dt, so both are rates per SECOND rather than per tick. This loop runs about
+        // seventeen fixed steps per rendered frame (the HUD's f/100t said 6), so a per-tick
+        // constant made the sea's speed a property of the tick counter. That is the defect
+        // the creatures had before they were put on the scheduler.
+        _terrainSurface.advance(kDayFractionPerSecond * dt, kRipplePhasePerSecond * dt);
 
         if (_infinite)
         {
@@ -450,6 +455,7 @@ private:
     static constexpr core::u32 kMaxCreatures = 48u;
     static constexpr core::u32 kWebPeriod = 60u;
     /// Cells per chunk edge in endless mode.
+    core::u32 _caveDrawRadius{0u};
     static constexpr core::u32 kChunkSize = 24u;
     /// Chunks the streamer keeps around the focus.
     static constexpr core::u32 kStreamRadius = 2u;
@@ -482,14 +488,55 @@ private:
     static constexpr core::f32 kLookSensitivity = 0.004f;
     /// Eye height of the detached camera, which floats rather than stands.
     static constexpr core::f32 kDetachedEyeHeight = 2.0f;
-    /// How far the spawn search may wander looking for dry, walkable ground.
-    static constexpr core::i32 kSpawnSearchCells = 40;
+    /**
+     * @brief How far the spawn search may wander looking for dry, walkable ground.
+     *
+     * DERIVED from the terrain, not chosen. Forty cells was chosen, and it was nine
+     * short: for the shipped viewer seed the nearest standable dry cell is at radius
+     * 49, so the search failed, the fallback put the walker at the origin, and the
+     * origin is twelve metres under the sea. The demo opened underwater and nothing
+     * said why — the fallback's comment calls an all-ocean seed "legitimate", which is
+     * true and was not what had happened.
+     *
+     * A coastline's size is set by the noise, so the reach has to be too: one full
+     * wavelength of the LOWEST octave is the largest feature the terrain can make, and
+     * therefore the widest bay it can put between the origin and dry land. Anything
+     * smaller is a number that works until the frequency changes.
+     */
+    [[nodiscard]] core::i32 spawnSearchCells() const noexcept
+    {
+        const procgen::NoiseParams &noise = _streamer.chunkParams().noise;
+        if (noise.frequency <= 0.0f)
+            return 64;
+        core::f32 wavelength = 1.0f / noise.frequency;
+        for (core::u32 octave = 1u; octave < noise.octaves; ++octave)
+            wavelength *= noise.lacunarity > 1.0f ? noise.lacunarity : 2.0f;
+        const core::i32 cells = static_cast<core::i32>(wavelength);
+        return cells < 64 ? 64 : (cells > 512 ? 512 : cells);
+    }
     /// Standing in the world, looking very slightly up.
     static constexpr core::f32 kFirstPersonPitch = 0.05f;
     /// Orbiting it, looking down at the map.
     static constexpr core::f32 kOrbitPitch = 0.6f;
     /// One tick of the day: a full cycle takes about four minutes at 60 Hz.
-    static constexpr core::f32 kDayStep = 1.0f / 14400.0f;
+    /**
+     * @brief A day every four minutes, as a rate per second.
+     *
+     * Was 1/14400 per TICK, which is the same thing only while the loop runs at exactly
+     * sixty ticks a second. Sixty of them per second is 1/240.
+     */
+    static constexpr core::f32 kDayFractionPerSecond = 1.0f / 240.0f;
+
+    /**
+     * @brief How fast the swell travels, as wave phase per second.
+     *
+     * The wave folds with a period of two, and its spatial frequency is the water's
+     * rippleScale — so a crest moves `ripplePhase / rippleScale` world cells per second.
+     * At 0.42 and a scale of 0.85 that is half a cell a second: a swell that breathes.
+     * 1.2 was tried first and still read as agitated — the eye judges a sea by how long a
+     * crest takes to cross its own wavelength, and at 1.2 that was under two seconds.
+     */
+    static constexpr core::f32 kRipplePhasePerSecond = 0.42f;
     /// Cells across the pheromone window that follows the walker.
     static constexpr core::u32 kFieldSpan = 64u;
     /// Ambient floor: what a surface facing away from the sun still receives.
@@ -598,6 +645,12 @@ private:
             _riverCells = snapshot.stats.riverCells;
             _caveFloor = snapshot.stats.dungeonFloor;
             _gatePassed = snapshot.gatePassed;
+            // The lowest cell already answers this, so the renderer never has to walk the
+            // grid to find out whether the sea it is about to draw is behind the terrain.
+            // toFloat() rather than a Fixed32 comparison: the sea level is a float here,
+            // and it belongs to the RENDER — the only thing this decides is whether a water
+            // pass is worth submitting, so there is nothing authoritative to preserve.
+            _boundedHasSea = _low.toFloat() < seaLevel();
 
             // Vegetation: the producer level of the food web. Counted, never
             // integrated, so grazing a valley bare moves the number because the
@@ -756,6 +809,33 @@ private:
         // One call says what the endless world is: the terrain parameters, the
         // streaming policy and the memory ceiling. The rule below is the CONTENT —
         // where the sea and the snow line are, how much erosion, how dense the woods.
+        // The river parameters come from the PLAN, not from a default-constructed member.
+        // They used to be the latter, and the two then disagreed about where the sea was —
+        // -1.0 against the rule's -4.0 — while the threshold stayed the one calibrated for a
+        // map read from above. One derivation, one answer.
+        _riverParams = plan.rivers;
+        // One product, derived by the plan. See EndlessPlan::riverSurfaceRise.
+        _riverSurfaceRise = plan.riverSurfaceRise;
+        _caveMouthDrop = plan.rule.caveMouthDrop;
+
+        // The swell runs with the PREVAILING WIND, which this world already models — the same
+        // `climate.windDirection` its rain shadow is built from. Before this the two crest
+        // directions were constants in the ripple function, so a lake and a river rippled
+        // identically and both ignored the weather the recipe declares. Open water takes the
+        // wind; a river's own current is the next step and needs the per-cell water surface.
+        // Read from `seeded`, the very description the plan above was derived from, rather than
+        // from the member: the wind has to be the one this world was built with.
+        const core::u32 wind = seeded.climate.windDirection & 3u;
+        _view.water.setDrift(static_cast<core::f32>(procgen::kNeighbor4X[wind]),
+                             static_cast<core::f32>(procgen::kNeighbor4Z[wind]));
+
+        // And the RENDER's sea level too, which was a fourth independent answer to "where is
+        // the water" — the view profile's default of -1.0, against the classifier's -4.0 and
+        // the river pass's own. The renderer floods a PLANE at this height, so a plane three
+        // metres above the sea the world was classified against drowns the coast it drew as
+        // land. §33 caught two answers to "how high is the ground"; this is the same shape.
+        _view.surface.seaLevel = plan.rule.seaLevel;
+
         _streamer.configure(_chunkParams, _riverParams, _streamParams, _maxResident, plan.rule);
 
         seedHerd();
@@ -801,8 +881,11 @@ private:
         _pendingTurn = math::Fixed32{};
         _jumpPressed = false;
 
+        // The SPACE, not the height. Above ground this is exactly the height field
+        // with open sky over it; inside a warren it is the gallery the body is in,
+        // and the body has no way to tell — which is the whole point of the seam.
         _body.step(_bodyParams, intent, math::Fixed32::fromFloat(dt),
-                   [this](core::i32 x, core::i32 z) { return _streamer.groundHeightAt(x, z); });
+                   [this](core::i32 x, core::i32 z, math::Fixed32 y) { return _streamer.spanAt(x, z, y); });
 
         // The camera is told where the body IS; it is not what moves. Reading the
         // authoritative yaw into the float camera is the allowed direction of that
@@ -1055,6 +1138,19 @@ private:
         params.skirtDrop = kSkirtDrop;
         params.chunkCentreY = kChunkCentreY;
         params.chunkHalfHeight = kChunkHalfHeight;
+        // The same number the generator carved with, from the same plan — see
+        // TerrainDrawParams::riverSurfaceRise for why it may not be a second answer.
+        params.riverSurfaceRise = _riverSurfaceRise;
+        params.boundedHasSea = _boundedHasSea;
+        // Same number the generator cut with. See TerrainDrawParams::caveMouthDrop.
+        params.caveMouthDrop = _caveMouthDrop;
+        // No `underground` here any more, and it is worth saying why rather than just
+        // deleting it: it used to be `_embodied && _body.isEnclosed()`, and detaching
+        // the camera made `_embodied` false — so in the orbit view the cave path was
+        // switched off entirely, sky and all, with the eye sixty cells back and often
+        // inside a hill. The renderer asks the streamer about the EYE now, which is the
+        // thing it actually needs to know.
+        params.caveDrawRadius = _caveDrawRadius;
 
         const auto palette = [this](procgen::BiomeId biome) { return biomeColour(biome); };
 
@@ -1282,6 +1378,40 @@ private:
                 .text("  sky/")
                 .number(_skyBlock);
             drawShadowedText(pitchPixels, 8u, 134u, line, 0x00A0B4C8u);
+
+            // ⚠ The landmark readout used to live BELOW this branch, and this branch
+            // returns — so in endless mode, the only mode that has landmarks in it, it
+            // was never drawn at all. Not overdrawn: unreachable. It is the line that
+            // answers "I cannot see a cave entrance" against "there are no cave
+            // entrances", which is the distinction TerrainStreamer's own docstring says
+            // no amount of looking can make, and it had never once been on screen.
+            core::u32 navigable = 0u;
+            const core::u32 warrens = _streamer.residentWarrens(&navigable);
+            line.clear()
+                .text("landmarks: ")
+                .number(_streamer.residentCaveMouths())
+                .text(" mouths  ")
+                .number(warrens)
+                .text(" caves (")
+                .number(navigable)
+                .text(" deep)  ")
+                .number(_streamer.residentBuildings())
+                .text(" buildings");
+            drawShadowedText(pitchPixels, 8u, 152u, line, 0x00C8A050u);
+
+            // Where the body IS, vertically. The only readout that separates "the cave
+            // is unlit" from "I never got inside it" — two completely different faults
+            // that look identical from a dark screen.
+            line.clear()
+                .text(_body.isEnclosed() ? "UNDERGROUND  y " : "surface      y ")
+                .integer(static_cast<core::i32>(_body.y().toFloat()))
+                .text("  ceiling ")
+                .integer(_body.isEnclosed() ? static_cast<core::i32>(_body.ceilingHeight().toFloat()) : 0)
+                .text("  head ")
+                .number(_body.headBumpCount())
+                .text("  ducked ")
+                .number(_body.duckedCount());
+            drawShadowedText(pitchPixels, 8u, 170u, line, _body.isEnclosed() ? 0x00E08040u : 0x00708090u);
 
             image::drawText8x16(
                 _surface.buffer, pitchPixels, 8u, _surface.height - 20u,
@@ -1613,9 +1743,11 @@ private:
     void spawnBody()
     {
         const auto ground = [this](core::i32 x, core::i32 z) { return _streamer.groundHeightAt(x, z); };
+        const auto space = [this](core::i32 x, core::i32 z, math::Fixed32 y) { return _streamer.spanAt(x, z, y); };
         const math::Fixed32 shore = math::Fixed32::fromFloat(seaLevel() + 0.5f);
 
-        for (core::i32 radius = 0; radius <= kSpawnSearchCells; ++radius)
+        const core::i32 reach = spawnSearchCells();
+        for (core::i32 radius = 0; radius <= reach; ++radius)
         {
             for (core::i32 offsetZ = -radius; offsetZ <= radius; ++offsetZ)
                 for (core::i32 offsetX = -radius; offsetX <= radius; ++offsetX)
@@ -1638,15 +1770,21 @@ private:
                         slopeZ > _bodyParams.maxSlope || -slopeZ > _bodyParams.maxSlope)
                         continue;
 
-                    _body.placeAt(math::Fixed32::fromInt(offsetX), math::Fixed32::fromInt(offsetZ), ground);
+                    // Spawned at the SURFACE and settled from there: the search above
+                    // looked at the terrain, so the gap the body means is the one over
+                    // the terrain and not whatever gallery happens to run under it.
+                    _body.placeAt(math::Fixed32::fromInt(offsetX), math::Fixed32::fromInt(offsetZ), here, space);
                     _camera.setFocus(static_cast<core::f32>(offsetX), static_cast<core::f32>(offsetZ));
                     return;
                 }
         }
 
         // Nothing dry within the search: an all-ocean seed is a legitimate world, and
-        // starting at the origin is a better answer than refusing to start.
-        _body.placeAt(math::Fixed32{}, math::Fixed32{}, ground);
+        // starting at the origin is a better answer than refusing to start. SAID, though
+        // — silently drowning the walker and letting the player work out why is how this
+        // went unnoticed while the reach was too short to clear a bay.
+        core::Log::warn("TerrainWorld: no dry ground within the spawn search — starting in the water");
+        _body.placeAt(math::Fixed32{}, math::Fixed32{}, ground(0, 0), space);
     }
 
     /// Whether the body is what movement keys act on this frame.
@@ -1777,6 +1915,9 @@ private:
     core::u32 _gridWidth{0u};
     core::u32 _gridDepth{0u};
     core::u32 _propCount{0u};
+    core::f32 _riverSurfaceRise{0.0f};
+    core::f32 _caveMouthDrop{0.0f};
+    bool _boundedHasSea{true};
     core::u32 _plotCount{0u};
     core::u32 _roadCells{0u};
     core::u32 _riverCells{0u};

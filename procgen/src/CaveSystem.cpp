@@ -10,6 +10,7 @@
 #include <lpl/procgen/CaveSystem.hpp>
 
 #include <lpl/math/Random.hpp>
+#include <lpl/procgen/Aggregation.hpp>
 #include <lpl/procgen/QualityGate.hpp>
 
 namespace lpl::procgen {
@@ -151,7 +152,125 @@ void recountReachability(CaveSystem &system)
     system.reachableCells = floodFromEntrances(system, distance);
 }
 
+/**
+ * @brief Which generator a layer gets, and why it is a function of the seed alone.
+ *
+ * A stack whose layers all came out of one automaton is one cave drawn three times.
+ * Drawing the generator per layer is what makes a descent read as going somewhere: a
+ * natural mouth over a warren of rooms is a place with a history, and both halves
+ * already exist in this module.
+ *
+ * The draw is over (seed, layer index) and nothing else, so the same stack comes back
+ * the same way on any target and in any order — the property the whole module rests on.
+ *
+ * @param params Generator selection.
+ * @param layer  Which layer, shallowest first.
+ * @return The kind to fill it with; never @c Layered.
+ */
+[[nodiscard]] CaveKind kindForLayer(const CaveSystemParams &params, core::u32 layer)
+{
+    if (!params.mixLayerKinds)
+    {
+        // Neither of the two non-fillings may reach a generator. Clamping rather than
+        // switching on them is deliberate: a stack inside a stack has no meaning, and
+        // an unresolved Auto is a caller that forgot @ref chooseCaveKind — both are
+        // better as the default cave than as an unhandled case.
+        if (params.layerKind == CaveKind::Layered || params.layerKind == CaveKind::Auto)
+            return CaveKind::Cellular;
+        return params.layerKind;
+    }
+
+    // The shallowest floor is always the natural one: it is the floor a mouth opens
+    // into, and a corridor of dressed rooms starting at a hole in a hillside reads as
+    // a mistake rather than as a ruin.
+    if (layer == 0u)
+        return CaveKind::Cellular;
+
+    // Below that, the same evidence @ref chooseCaveKind reads, applied a floor at a
+    // time so a descent can pass through more than one thing. What is dug sits under
+    // what is lived on and over what dissolved long before either.
+    const bool deepest = layer + 1u >= params.layers;
+    if (params.settled && !deepest)
+        return CaveKind::Bsp;
+    if (params.wetness >= kKarstWetness)
+        return CaveKind::Dla;
+    return params.settled ? CaveKind::Bsp : CaveKind::Cellular;
+}
+
+/**
+ * @brief Fills one layer with the generator its kind names.
+ *
+ * The three cases are three of the four generators a document can already spell,
+ * called with the budget this stack was given rather than with a second set of
+ * parameters — a layer of a warren is not a bounded dungeon and has no business
+ * carrying one.
+ *
+ * @param params Stack parameters.
+ * @param layer  Layer index, shallowest first.
+ * @param fill   Fill probability for this depth.
+ * @return The plan.
+ */
+[[nodiscard]] DungeonMap generateLayer(const CaveSystemParams &params, core::u32 layer, core::f32 fill)
+{
+    // Each layer gets its own stream, derived from its index. Reusing one stream
+    // across layers would make layer 2 a continuation of layer 1's sequence, so
+    // changing the layer count would change every layer.
+    const core::u32 seed = params.seed ^ (0x1A7E5u * (layer + 1u));
+
+    switch (kindForLayer(params, layer))
+    {
+    case CaveKind::Bsp: {
+        BspDungeonParams rooms;
+        rooms.width = params.width;
+        rooms.depth = params.depth;
+        rooms.seed = seed;
+        return generateBspDungeon(rooms);
+    }
+    case CaveKind::Dla: {
+        DlaParams aggregation;
+        aggregation.width = params.width;
+        aggregation.depth = params.depth;
+        aggregation.seed = seed;
+        // Scaled to the floor's AREA. The default is tuned for the 64-cell map the
+        // struct declares, and a particle budget left at that on a forty-cell warren
+        // packs the fractal solid — a branching cave stops branching and becomes a
+        // room with a ragged edge.
+        aggregation.particles = (params.width * params.depth) / 5u;
+        return generateDlaCave(aggregation);
+    }
+    case CaveKind::Cellular:
+    case CaveKind::Layered:
+    default: break;
+    }
+
+    CaveParams cave;
+    cave.width = params.width;
+    cave.depth = params.depth;
+    cave.seed = seed;
+    cave.fillProbability = fill;
+    cave.steps = params.automatonSteps;
+    cave.minRegionSize = params.minChamberSize;
+    return generateCellularCave(cave);
+}
+
 } // namespace
+
+void recountCaveReachability(CaveSystem &system) { recountReachability(system); }
+
+CaveKind chooseCaveKind(const CaveContext &context)
+{
+    // A place with room for several floors has had time to become several things, and
+    // the mixed stack is the only answer that says so. Asked first because it is a
+    // statement about the SHAPE of the underground, and the two below are statements
+    // about one floor's material.
+    if (context.layerCount > 1u && context.settled && context.wetness >= kKarstWetness)
+        return CaveKind::Layered;
+    if (context.settled)
+        return CaveKind::Bsp;
+    if (context.wetness >= kKarstWetness)
+        return CaveKind::Dla;
+    return CaveKind::Cellular;
+}
 
 CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield &surface, const BiomeMap *biomes)
 {
@@ -171,17 +290,7 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
         const math::Fixed32 top = math::Fixed32::fromFloat(params.topFill);
         const math::Fixed32 deep = math::Fixed32::fromFloat(params.deepFill);
 
-        CaveParams cave;
-        cave.width = params.width;
-        cave.depth = params.depth;
-        // Each layer gets its own stream, derived from its index. Reusing one
-        // stream across layers would make layer 2 a continuation of layer 1's
-        // sequence, so changing the layer count would change every layer.
-        cave.seed = params.seed ^ (0x1A7E5u * (l + 1u));
-        cave.fillProbability = (top + (deep - top) * t).toFloat();
-        cave.steps = params.automatonSteps;
-        cave.minRegionSize = params.minChamberSize;
-        system.layer[l] = generateCellularCave(cave);
+        system.layer[l] = generateLayer(params, l, (top + (deep - top) * t).toFloat());
     }
 
     math::Random random{params.seed ^ 0x5AF75u};

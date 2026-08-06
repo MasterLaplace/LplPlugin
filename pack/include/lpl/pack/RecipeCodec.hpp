@@ -158,9 +158,15 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     recipe.provinces.metric = static_cast<procgen::DistanceMetric>(wire.provinceMetric);
 
     recipe.terraceSteps = wire.terraceSteps;
-    // Clamped rather than trusted: a byte from disk naming a fifth generator would
-    // otherwise index a switch that has four.
-    recipe.caveKind = wire.caveKind <= static_cast<core::u32>(procgen::CaveKind::Layered) ?
+    // Clamped rather than trusted: a byte from disk naming a generator that does not
+    // exist would otherwise index a switch that has no case for it.
+    //
+    // ⚠ The bound is the enum's LAST value and must stay that way. It was written out
+    // as `Layered` and went stale the moment `Auto` was added: a cartridge that said
+    // "auto" baked a 4, the decoder clamped it back to Cellular, and the document's
+    // word was silently discarded on the way in. Nothing failed — the world just was
+    // not the one the document asked for, which is the quietest way a format can lie.
+    recipe.caveKind = wire.caveKind <= static_cast<core::u32>(procgen::CaveKind::Auto) ?
                           static_cast<procgen::CaveKind>(wire.caveKind) :
                           procgen::CaveKind::Cellular;
 

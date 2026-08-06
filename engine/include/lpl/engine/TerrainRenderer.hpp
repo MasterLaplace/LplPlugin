@@ -28,6 +28,8 @@
 #    define LPL_ENGINE_TERRAIN_RENDERER_HPP
 
 #    include <lpl/ai/Personality.hpp>
+#    include <lpl/std/cmath.hpp>
+#    include <lpl/ecology/Genome.hpp>
 #    include <lpl/ecology/Herd.hpp>
 #    include <lpl/ecs/Archetype.hpp>
 #    include <lpl/ecs/Partition.hpp>
@@ -37,6 +39,7 @@
 #    include <lpl/engine/TerrainSurface.hpp>
 #    include <lpl/physics/Octree.hpp>
 #    include <lpl/platform/IClockBackend.hpp>
+#    include <lpl/render/Box.hpp>
 #    include <lpl/render/ChunkedTerrainView.hpp>
 #    include <lpl/render/HeightfieldPatch.hpp>
 #    include <lpl/render/OrbitCamera.hpp>
@@ -61,6 +64,95 @@ struct TerrainDrawParams {
     core::u32 grazerTint{0x00D0A852u};
     core::u32 hunterTint{0x00C03028u};
     core::f32 bodyScale{0.35f}; ///< World units per unit of genome size.
+
+    /**
+     * @brief How far the water stands above a river's carved bed, in world units.
+     *
+     * Zero — the default — draws no river water at all, which is what this renderer did:
+     * a river cell was a Lake-coloured cell of TERRAIN, so the blue on screen was ground
+     * that happened to be blue. It had no reflection, no Fresnel, no depth and no
+     * current, and no amount of shading fixes that because there was no water there.
+     *
+     * Necessarily the same number the generator carved with — `riverDepth * riverFill`
+     * of procgen::ChunkTerrainRule — or the surface floats over its bed or sinks under
+     * it. procgen::endlessPlanFromRecipe derives both from one description, and this
+     * comes from the same plan.
+     */
+    core::f32 riverSurfaceRise{0.0f};
+
+    /**
+     * @brief Whether a BOUNDED field dips below the sea level at all.
+     *
+     * The streamed path answers this per chunk from what it generated; a bounded field
+     * is one patch, so the answer is one bit and its owner is whoever built the field.
+     * Defaults to true because the two mistakes are not symmetric: drawing a sea nobody
+     * needed costs a pass, and skipping one that was needed loses an ocean.
+     */
+    bool boundedHasSea{true};
+
+    /**
+     * @brief What a cave mouth and a village are made of.
+     *
+     * Content, like the creature tints beside them: a world of whitewashed houses and one
+     * of black timber are two worlds, and neither is a host budget. The mouth is very dark
+     * but NOT black — a black opening in a heightfield reads as a hole in the render, and
+     * a hint of warmth in it reads as depth.
+     */
+    core::u32 caveMouthTint{0x00120E0Cu};
+    core::u32 buildingTint{0x00B4A183u};
+    core::u32 roofTint{0x00714634u};
+
+    /**
+     * @brief How far a cave mouth's shelf was cut, so the opening can stand in it.
+     *
+     * Necessarily the same number the generator carved with —
+     * procgen::ChunkTerrainRule::caveMouthDrop — or the opening floats above its own floor
+     * or is buried under it. Same hazard as @ref riverSurfaceRise, and derived from the
+     * same plan for the same reason.
+     */
+    core::f32 caveMouthDrop{2.0f};
+
+    /**
+     * @brief How tall the dark opening stands above the shelf floor, in metres.
+     *
+     * Human scale and its own number, rather than a multiple of the shelf depth: tying the
+     * two meant that calibrating the shelf against the world's relief silently resized the
+     * door with it.
+     */
+    core::f32 mouthHeight{2.8f};
+
+    // ── Underground ─────────────────────────────────────────────────────────
+
+    // ⚠ There is no `underground` flag here, and there was: it was fed from
+    // engine::CharacterController::isEnclosed on the argument that the body already
+    // resolves it, so the renderer should read rather than re-derive. That argument is
+    // wrong, and wrong in a way that switched the whole feature off. The body is not
+    // the EYE. Detach the camera and the eye is sixty cells behind the walker, often
+    // inside a hill while the body stands in daylight — and the flag said "surface",
+    // so the sky was drawn over an eye buried in rock and no cave was lit. What a
+    // renderer needs is a fact about the eye, so @ref drawStreamed asks the streamer
+    // where the eye is. Non-authoritative: it picks a shading path, nothing else.
+
+    /**
+     * @brief What a cave is made of, and what it fades into.
+     *
+     * Very dark but NOT black, for the reason the mouth tint gives: black reads as a
+     * hole in the render, and a hint of warmth in it reads as depth. The fog density
+     * is what makes a lamp a lamp — its reciprocal is roughly how far you see.
+     */
+    core::u32 caveRockTint{0x00595049u};
+    core::u32 caveDarkTint{0x00080706u};
+    core::f32 caveFogDensity{0.11f};
+
+    /**
+     * @brief Cells around the eye whose cave geometry is drawn. Zero draws none.
+     *
+     * A host budget, in the shape engine::Config::waterTessellation already has: a
+     * warren is thirteen thousand voxels and a body underground can see a few hundred
+     * of them, so the cost is set by how far the light reaches rather than by how big
+     * the cave is. The first knob to turn down.
+     */
+    core::u32 caveDrawRadius{0u};
 
     /**
      * @brief Cull the resident set through a spatial hierarchy rather than linearly.
@@ -151,6 +243,18 @@ private:
     template <typename Palette>
     void refreshProbe(TerrainStreamer &streamer, TerrainSurface &surface, const render::CameraBasis &basis,
                       core::u32 frame, const TerrainDrawParams &params, Palette &&palette);
+
+    /**
+     * @brief The cave around the eye: exposed rock faces, within the lamp's reach.
+     *
+     * Walked from the volume rather than meshed once and cached, because the window is
+     * the part the eye can see and it moves every frame. procgen::forEachVoxelFace is
+     * the same walk procgen::appendVoxelFaces uses — one enumeration, two sinks, and
+     * neither of them is a sixth copy of the six faces of a cube.
+     */
+    core::u32 drawWarrens(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
+                          const TerrainStreamer &streamer, const render::CameraBasis &basis,
+                          const TerrainDrawParams &params, const render::SunState &sun) const;
 
     /** @brief The herd, as billboards standing on the ground the eye is looking at. */
     template <typename GroundAt>

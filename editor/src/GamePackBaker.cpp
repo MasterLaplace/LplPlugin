@@ -287,6 +287,17 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     wire.rippleAmplitude = 0.16f;
     wire.glintPower = 48.0f;
     wire.depthScale = 0.22f;
+    // The swell defaults OFF, exactly as render::WaterParams does: a document that says
+    // nothing about a sea gets the flat rippling water it has always got.
+    wire.swellHeight = 0.0f;
+    wire.crestSharpness = 0.0f;
+    wire.chopStrength = 1.0f;
+    wire.foamColour = 0x00E8F4F8u;
+    wire.scatterColour = 0x0048D0B0u;
+    wire.foamGain = 0.0f;
+    wire.foamWidth = 1.6f;
+    wire.foamCrest = 0.78f;
+    wire.scatterStrength = 0.0f;
     wire.grazerTint = 0x00D0A852u;
     wire.hunterTint = 0x00C03028u;
     wire.bodyScale = 0.35f;
@@ -329,6 +340,15 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
         wire.rippleAmplitude = readF32(*water, "rippleAmplitude", wire.rippleAmplitude);
         wire.glintPower = readF32(*water, "glintPower", wire.glintPower);
         wire.depthScale = readF32(*water, "depthScale", wire.depthScale);
+        wire.swellHeight = readF32(*water, "swellHeight", wire.swellHeight);
+        wire.crestSharpness = readF32(*water, "crestSharpness", wire.crestSharpness);
+        wire.chopStrength = readF32(*water, "chopStrength", wire.chopStrength);
+        wire.foamColour = readU32(*water, "foam", wire.foamColour);
+        wire.scatterColour = readU32(*water, "scatter", wire.scatterColour);
+        wire.foamGain = readF32(*water, "foamGain", wire.foamGain);
+        wire.foamWidth = readF32(*water, "foamWidth", wire.foamWidth);
+        wire.foamCrest = readF32(*water, "foamCrest", wire.foamCrest);
+        wire.scatterStrength = readF32(*water, "scatterStrength", wire.scatterStrength);
     }
 
     // An ABSENT palette and an EMPTY one are different documents: absent keeps the
@@ -564,7 +584,7 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         procgen::CaveKind resolved = recipe.caveKind;
         if (!procgen::caveKindByName(kind->str.c_str(), resolved))
             return core::makeError(core::ErrorCode::kDeserializationFailed,
-                                   lpl::pmr::string{"unknown caveKind; expected cellular, bsp, dla or layered"});
+                                   lpl::pmr::string{"unknown caveKind; expected cellular, bsp, dla, layered or auto"});
         recipe.caveKind = resolved;
     }
 
@@ -901,7 +921,7 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
     appendU32(out, "minRegionSize", recipe.caves.minRegionSize);
     out += '}';
 
-    // The four-way choice, as a word. See procgen::caveKindName.
+    // The choice, as a word — four generators plus "auto". See procgen::caveKindName.
     out += ",\"caveKind\":\"";
     out += procgen::caveKindName(recipe.caveKind);
     out += '"';

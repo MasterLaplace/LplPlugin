@@ -37,6 +37,7 @@
 #    include <lpl/core/Types.hpp>
 #    include <lpl/procgen/Grid.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
+#    include <lpl/procgen/Hydrology.hpp>
 #    include <lpl/procgen/WaveFunctionCollapse.hpp>
 
 namespace lpl::procgen {
@@ -129,6 +130,26 @@ struct ChunkParams {
  * @return The elevation there.
  */
 [[nodiscard]] math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ);
+
+/**
+ * @brief Ground moisture at one world cell, in [0, 1].
+ *
+ * The climate layer @ref generateChunkTerrain classifies biomes with, asked at a
+ * single cell. Promoted out of that loop rather than copied beside it because a
+ * SECOND moisture field would be a world whose caves are wet where its forests are
+ * dry — and the two would drift the first time either was retuned.
+ *
+ * ⚠ Derived from `params.noise.frequency` and NOT from its amplitude, base height or
+ * shaping. Those are instructions for a heightfield; applied to weather they say
+ * nothing, and inheriting them is what once pinned this axis to zero over an entire
+ * world.
+ *
+ * @param params World parameters.
+ * @param worldX World column.
+ * @param worldZ World row.
+ * @return Moisture, clamped to [0, 1].
+ */
+[[nodiscard]] math::Fixed32 sampleWorldMoisture(const ChunkParams &params, core::i32 worldX, core::i32 worldZ);
 
 /**
  * @struct EndlessRiverParams
@@ -299,8 +320,86 @@ struct EndlessRiverParams {
  * @param coord       Chunk to mark.
  * @return A 0/1 mask of the chunk's cells, 1 where water runs.
  */
+/**
+ * @brief The upstream count that makes a target SHARE of cells carry a river.
+ *
+ * ⚠ `EndlessRiverParams::riverThreshold` is an ABSOLUTE count, and an absolute threshold
+ * against a distribution that moves is this repository's most-repeated mistake — four
+ * occurrences before this one. It moves here for a specific reason: `endlessPlanFromRecipe`
+ * lowers the noise frequency to make landforms wide enough to walk across, and a smoother
+ * terrain routes more cells through each coarse cell. The same 6 that marks 1.5% of a map
+ * read from above marked **13.2%** of the world a walker gets — measured, and visible as
+ * sheets of water lying across hillsides.
+ *
+ * So the threshold is calibrated instead of chosen: this returns the smallest count whose
+ * river share is at or under @p targetShare.
+ *
+ * **Chunk independence is preserved, and it is the whole difficulty.** A quantile over "the
+ * world" does not exist — there is no total. So the calibration window is a fixed block of
+ * chunks at the origin: a function of the parameters alone, identical for every chunk that
+ * asks, computed ONCE when a plan is built and never per chunk. A window that followed the
+ * walker would give two chunks two thresholds and a river would change its mind at a border.
+ *
+ * @param params      World parameters.
+ * @param rivers      River parameters; its own @c riverThreshold is ignored.
+ * @param targetShare Share of cells that should carry a river, in (0, 1).
+ * @return The calibrated count, at least one.
+ */
+[[nodiscard]] core::u32 calibrateRiverThreshold(const ChunkParams &params, const EndlessRiverParams &rivers,
+                                                core::f32 targetShare);
+
+/**
+ * @brief The share of cells a given threshold marks, over the calibration window.
+ *
+ * Exposed because the calibrator's answer is only as good as what it measured, and a caller
+ * that wants to report what it got should not have to re-derive the window.
+ *
+ * @param params    World parameters.
+ * @param rivers    River parameters, threshold included.
+ * @return The share, in [0, 1].
+ */
+[[nodiscard]] core::f32 measureRiverShare(const ChunkParams &params, const EndlessRiverParams &rivers);
+
 [[nodiscard]] Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverParams &rivers,
                                              ChunkCoord coord);
+
+/**
+ * @brief Which way water runs out of one coarse cell, as an index into kNeighbor8.
+ *
+ * @ref trunkFlowDirection one level down, and deliberately the same shape: steepest
+ * descent over the eight neighbouring coarse centres. Nine height samples, all of them
+ * a function of the position alone — so two chunks sharing a river agree on which way
+ * it flows, which is the property that lets a renderer point a current at a seam
+ * without the water changing its mind halfway across.
+ *
+ * The alternative — the steepest descent of the CARVED chunk heights — would have been
+ * cheaper and wrong: a cell on the chunk's edge has neighbours in the next chunk, so it
+ * would be judged on a truncated stencil and the two chunks would disagree.
+ *
+ * @param params  World parameters.
+ * @param rivers  How a river is decided.
+ * @param coarseX Coarse column, absolute.
+ * @param coarseZ Coarse row, absolute.
+ * @return Index into kNeighbor8X/Z, or 0xFFFFFFFF where the water stops.
+ */
+[[nodiscard]] core::u32 coarseFlowDirection(const ChunkParams &params, const EndlessRiverParams &rivers,
+                                            core::i32 coarseX, core::i32 coarseZ);
+
+/**
+ * @brief Which way the water runs at each cell of a chunk that carries river.
+ *
+ * Computed once at generation and kept, because a renderer needs it per cell per frame
+ * and a coarse verdict costs nine noise samples: derived at draw time it would be some
+ * hundreds of fBm evaluations per frame for water that has not moved.
+ *
+ * @param params World parameters.
+ * @param rivers How a river is decided.
+ * @param coord  Chunk to describe.
+ * @param mask   That chunk's river mask, from @ref markChunkRivers.
+ * @return A @ref FlowDirection: kNeighbor8 indices, @ref kNoFlow where no water runs.
+ */
+[[nodiscard]] FlowDirection markChunkRiverFlow(const ChunkParams &params, const EndlessRiverParams &rivers,
+                                               ChunkCoord coord, const Grid<core::u8> &mask);
 
 /**
  * @brief Checks that two neighbouring chunks agree along their shared edge.

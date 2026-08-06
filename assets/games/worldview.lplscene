@@ -45,6 +45,8 @@
         "rivers": {
           "enabled": true
         },
+        "_comment_caveKind": "auto: let the place choose. The four generators are still nameable here, and a document that names one gets it everywhere; what a streamed world wants is a rule, because it has thousands of caves and one word would make them all the same. See procgen::chooseCaveKind.",
+        "caveKind": "auto",
         "climate": {
           "enabled": true
         },
@@ -160,10 +162,19 @@
           "duskB": 0.2
         },
         "water": {
-          "shallow": 2387596,
-          "deep": 662326,
+          "shallow": 3718322,
+          "deep": 668746,
           "rippleScale": 0.85,
-          "depthScale": 0.24
+          "depthScale": 0.24,
+          "swellHeight": 0.55,
+          "crestSharpness": 0.6,
+          "chopStrength": 1.0,
+          "foam": 15267576,
+          "scatter": 4772016,
+          "foamGain": 0.85,
+          "foamWidth": 1.8,
+          "foamCrest": 0.52,
+          "scatterStrength": 0.6
         }
       },
       "entities": []

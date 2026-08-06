@@ -147,7 +147,7 @@ struct Options {
     procgen::DistanceMetric metric{procgen::DistanceMetric::Euclidean};
     Shading shading{Shading::Biome};
     View view{View::Surface};
-    core::u32 caveKind{3u};      ///< 0 cellular, 1 BSP, 2 DLA, 3 layered system.
+    core::u32 caveKind{3u};      ///< 0 cellular, 1 BSP, 2 DLA, 3 layered system, 4 auto.
     core::u32 climateAxis{0u};   ///< Which of the six axes @c Shading::Climate shows.
     bool grammarBuildings{true}; ///< Raise the town with the shape grammar rather than as prisms.
     bool living{true};           ///< Run the ai/ecology layer on top of the world.
@@ -221,12 +221,13 @@ const char *viewName(View view)
 
 const char *caveName(core::u32 kind)
 {
-    switch (kind % 4u)
+    switch (kind % 5u)
     {
     case 0u: return "cellular";
     case 1u: return "bsp";
     case 2u: return "dla";
-    default: return "layered";
+    case 3u: return "layered";
+    default: return "auto";
     }
 }
 
@@ -314,35 +315,33 @@ double nowMilliseconds()
     // The layered system is a stack of plans joined by shafts, at least one of which
     // pierces the surface; the three flat kinds are buried voids with no way in, which
     // is exactly what looking at them makes obvious and what a floor count never did.
-    switch (options.caveKind % 4u)
+    // Every generator is SIZED, and then one is named. Sizing only the named one was
+    // harmless while the name was always concrete; with "auto" the recipe does not know
+    // at this point which of them will run, and a generator that runs at its default
+    // width on a map of another size produces an underground that does not fit its world.
+    recipe.rooms.width = options.size;
+    recipe.rooms.depth = options.size;
+    recipe.rooms.seed = options.seed;
+    recipe.aggregation.width = options.size;
+    recipe.aggregation.depth = options.size;
+    recipe.aggregation.seed = options.seed;
+    recipe.aggregation.particles = options.size * 8u;
+    recipe.caveSystem.width = options.size;
+    recipe.caveSystem.depth = options.size;
+    recipe.caveSystem.seed = options.seed;
+    recipe.caveSystem.layers = 3u;
+    recipe.caveSystem.entrances = 3u;
+    recipe.caves.width = options.size;
+    recipe.caves.depth = options.size;
+    recipe.caves.seed = options.seed;
+
+    switch (options.caveKind % 5u)
     {
-    case 1u:
-        recipe.caveKind = procgen::CaveKind::Bsp;
-        recipe.rooms.width = options.size;
-        recipe.rooms.depth = options.size;
-        recipe.rooms.seed = options.seed;
-        break;
-    case 2u:
-        recipe.caveKind = procgen::CaveKind::Dla;
-        recipe.aggregation.width = options.size;
-        recipe.aggregation.depth = options.size;
-        recipe.aggregation.seed = options.seed;
-        recipe.aggregation.particles = options.size * 8u;
-        break;
-    case 3u:
-        recipe.caveKind = procgen::CaveKind::Layered;
-        recipe.caveSystem.width = options.size;
-        recipe.caveSystem.depth = options.size;
-        recipe.caveSystem.seed = options.seed;
-        recipe.caveSystem.layers = 3u;
-        recipe.caveSystem.entrances = 3u;
-        break;
-    default:
-        recipe.caveKind = procgen::CaveKind::Cellular;
-        recipe.caves.width = options.size;
-        recipe.caves.depth = options.size;
-        recipe.caves.seed = options.seed;
-        break;
+    case 1u: recipe.caveKind = procgen::CaveKind::Bsp; break;
+    case 2u: recipe.caveKind = procgen::CaveKind::Dla; break;
+    case 3u: recipe.caveKind = procgen::CaveKind::Layered; break;
+    case 4u: recipe.caveKind = procgen::CaveKind::Auto; break;
+    default: recipe.caveKind = procgen::CaveKind::Cellular; break;
     }
 
     // The town's third dimension. `extrudeTown` gives prisms and the viewer used to
@@ -1307,7 +1306,7 @@ void drawHud(const TerrainData &world, const Options &options, int width, int he
                   metricName(options.metric), options.settlement ? "on" : "off");
     put(line, 0.72f, 0.74f, 0.76f);
 
-    if (options.caveKind % 4u == 3u)
+    if (world.stats.caveLayers != 0u)
         // Entrances and reachability, not a floor count: a sealed system and an
         // open one have the same floor area, and only one of them is a cave.
         std::snprintf(line, sizeof(line), "underground layered  %u layers  %u entrances  %u/%u reachable",
@@ -1760,7 +1759,11 @@ private:
         // The layered system replaces the flat plan entirely rather than being drawn
         // beside it: they are two answers to the same question, and showing both at
         // once would say nothing about either.
-        _undergroundMesh = _options.caveKind % 4u == 3u ?
+        // Which mesher, decided by what the world CONTAINS rather than by what the key
+        // asked for. The two used to be the same question and are not any more: under
+        // "auto" the option index no longer names the generator that ran, and a viewer
+        // that meshed the request would draw an empty flat plan over a layered stack.
+        _undergroundMesh = _terrain.stats.caveLayers != 0u ?
                                procgen::buildCaveSystemMesh(_terrain, kCaveDepth, kCaveLayerSpacing) :
                                procgen::buildDungeonMesh(_terrain, kCaveDepth);
 
@@ -2289,7 +2292,7 @@ private:
                     rebuild = true;
                     break;
                 case XK_c:
-                    _options.caveKind = (_options.caveKind + 1u) % 4u;
+                    _options.caveKind = (_options.caveKind + 1u) % 5u;
                     // Look at what just changed. Cycling the underground while the
                     // camera is on the surface changes nothing you can see, which
                     // reads as a key that does not work.

@@ -74,6 +74,116 @@ struct ExtrusionParams {
 };
 
 /**
+ * @struct VoxelWindow
+ * @brief The part of a volume a walk should look at. Default is all of it.
+ *
+ * Exists because the second consumer of the face walk draws into a software rasterizer
+ * on a kernel budget, and a warren is ten thousand voxels of which a body underground
+ * can see a few hundred. Clamped by the walk rather than trusted, so a caller that
+ * computes a window from a camera position cannot walk off the end of the array.
+ */
+struct VoxelWindow {
+    core::u32 minX{0u};
+    core::u32 minY{0u};
+    core::u32 minZ{0u};
+    core::u32 maxX{0xFFFFFFFFu}; ///< Exclusive.
+    core::u32 maxY{0xFFFFFFFFu};
+    core::u32 maxZ{0xFFFFFFFFu};
+};
+
+/**
+ * @brief Hands each exposed face of a volume to @p emit, with its outward normal.
+ *
+ * The walk, with no opinion about what a face becomes. It was written once to append
+ * to a vertex buffer, and then a second consumer arrived that has no vertex buffer —
+ * a software rasterizer filling polygons one at a time — so the choice was to write
+ * the walk again or to separate it from its sink. This repository already knows what
+ * writing it again costs: @ref appendVoxelFaces' own comment counts five copies of
+ * "emit a quad per exposed face" and says every copy is a chance to wind one the wrong
+ * way round.
+ *
+ * A face is emitted where a solid voxel touches a non-solid one, and NOT at the
+ * volume's border in the window's sense: whether the outside of the array is solid is
+ * the @p solidOutside predicate's business, because a building floats in air and a
+ * cave is surrounded by rock.
+ *
+ * @param volume       What to walk.
+ * @param window       Which part; clamped to the volume.
+ * @param solidOutside Called for coordinates outside the ARRAY: (x, y, z) -> bool.
+ * @param emit         `emit(const core::f32 quad[12], f32 nx, f32 ny, f32 nz, u8 material,
+ *                      u32 x, u32 y, u32 z)`, in volume-local units where one voxel is
+ *                      one unit and level 0 spans y in [0, 1).
+ */
+template <typename SolidOutside, typename Emit>
+void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, SolidOutside &&solidOutside, Emit &&emit)
+{
+    if (volume.empty())
+        return;
+
+    const core::u32 highX = window.maxX < volume.width ? window.maxX : volume.width;
+    const core::u32 highY = window.maxY < volume.levels ? window.maxY : volume.levels;
+    const core::u32 highZ = window.maxZ < volume.depth ? window.maxZ : volume.depth;
+
+    const auto solid = [&volume, &solidOutside](core::i32 x, core::i32 y, core::i32 z) {
+        if (x < 0 || y < 0 || z < 0 || static_cast<core::u32>(x) >= volume.width ||
+            static_cast<core::u32>(y) >= volume.levels || static_cast<core::u32>(z) >= volume.depth)
+            return static_cast<bool>(solidOutside(x, y, z));
+        return volume.at(static_cast<core::u32>(x), static_cast<core::u32>(y), static_cast<core::u32>(z)) != 0u;
+    };
+
+    for (core::u32 y = window.minY; y < highY; ++y)
+        for (core::u32 z = window.minZ; z < highZ; ++z)
+            for (core::u32 x = window.minX; x < highX; ++x)
+            {
+                const core::u8 material = volume.at(x, y, z);
+                if (material == 0u)
+                    continue;
+
+                const core::f32 x0 = static_cast<core::f32>(x);
+                const core::f32 x1 = x0 + 1.0f;
+                const core::f32 y0 = static_cast<core::f32>(y);
+                const core::f32 y1 = y0 + 1.0f;
+                const core::f32 z0 = static_cast<core::f32>(z);
+                const core::f32 z1 = z0 + 1.0f;
+
+                const core::i32 ix = static_cast<core::i32>(x);
+                const core::i32 iy = static_cast<core::i32>(y);
+                const core::i32 iz = static_cast<core::i32>(z);
+
+                if (!solid(ix, iy + 1, iz))
+                {
+                    const core::f32 quad[12] = {x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1};
+                    emit(quad, 0.0f, 1.0f, 0.0f, material, x, y, z);
+                }
+                if (!solid(ix, iy - 1, iz))
+                {
+                    const core::f32 quad[12] = {x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0};
+                    emit(quad, 0.0f, -1.0f, 0.0f, material, x, y, z);
+                }
+                if (!solid(ix + 1, iy, iz))
+                {
+                    const core::f32 quad[12] = {x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1};
+                    emit(quad, 1.0f, 0.0f, 0.0f, material, x, y, z);
+                }
+                if (!solid(ix - 1, iy, iz))
+                {
+                    const core::f32 quad[12] = {x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0};
+                    emit(quad, -1.0f, 0.0f, 0.0f, material, x, y, z);
+                }
+                if (!solid(ix, iy, iz + 1))
+                {
+                    const core::f32 quad[12] = {x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1};
+                    emit(quad, 0.0f, 0.0f, 1.0f, material, x, y, z);
+                }
+                if (!solid(ix, iy, iz - 1))
+                {
+                    const core::f32 quad[12] = {x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0};
+                    emit(quad, 0.0f, 0.0f, -1.0f, material, x, y, z);
+                }
+            }
+}
+
+/**
  * @brief Extrudes a tile plan by a fixed height per tile id.
  *
  * The height rule is a lookup table: tile 3 is four levels tall, tile 0 is

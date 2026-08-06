@@ -43,9 +43,24 @@ struct TerrainChunk {
     procgen::Heightfield height{};
     procgen::BiomeMap biomes{};
     procgen::Grid<core::u8> rivers{};
+    procgen::FlowDirection flow{}; ///< Which way the river runs; procgen::kNoFlow elsewhere.
     procgen::Grid<core::u8> shade{}; ///< 0 lit, 255 shadowed; refreshed as the sun moves.
     lpl::pmr::vector<ecology::PlantCell> plants;
     core::f32 lowest{0.0f}; ///< Lowest cell: whether this chunk has water at all.
+
+    /// Cells genuinely under the sea. See procgen::ChunkTerrain for why `lowest` is not enough.
+    core::u32 seaMinX{0u};
+    core::u32 seaMaxX{0u};
+    core::u32 seaMinZ{0u};
+    core::u32 seaMaxZ{0u};
+    bool hasSea{false};
+    bool hasRiver{false};
+
+    /// Landmarks this chunk OWNS the drawing of. See procgen::ChunkTerrain.
+    lpl::pmr::vector<procgen::LandmarkSite> caveMouths;
+    lpl::pmr::vector<procgen::LandmarkBuilding> buildings;
+    /// The caves behind those mouths. Owned whole; they spill into the neighbours.
+    lpl::pmr::vector<procgen::CaveWarren> warrens;
 };
 
 /**
@@ -84,6 +99,83 @@ public:
             focusCellX, focusCellZ, headingX, headingZ, [this](procgen::ChunkCoord coord) { return buildChunk(coord); },
             onGenerated);
     }
+
+    /**
+     * @brief Landmarks in the resident set, counted.
+     *
+     * For a diagnostic line, and it earns its place: "I cannot see a cave entrance" and
+     * "there are no cave entrances" are different problems with the same symptom, and no
+     * amount of looking distinguishes them. Summed on demand over a few dozen chunks
+     * rather than kept as a running total, so a chunk released cannot leave the count
+     * ahead of the world.
+     */
+    [[nodiscard]] core::u32 residentCaveMouths() const noexcept
+    {
+        core::u32 total = 0u;
+        for (core::u32 i = 0u; i < _residency.size(); ++i)
+            total += static_cast<core::u32>(_residency.at(i).caveMouths.size());
+        return total;
+    }
+
+    /** @brief Village buildings in the resident set. */
+    [[nodiscard]] core::u32 residentBuildings() const noexcept
+    {
+        core::u32 total = 0u;
+        for (core::u32 i = 0u; i < _residency.size(); ++i)
+            total += static_cast<core::u32>(_residency.at(i).buildings.size());
+        return total;
+    }
+
+    /** @brief Caves in the resident set, and how many of them reach their bottom. */
+    [[nodiscard]] core::u32 residentWarrens(core::u32 *outNavigable = nullptr) const noexcept
+    {
+        core::u32 total = 0u;
+        core::u32 navigable = 0u;
+        for (core::u32 i = 0u; i < _residency.size(); ++i)
+            for (core::u32 w = 0u; w < _residency.at(i).warrens.size(); ++w)
+            {
+                ++total;
+                navigable += _residency.at(i).warrens[w].navigable ? 1u : 0u;
+            }
+        if (outNavigable != nullptr)
+            *outNavigable = navigable;
+        return total;
+    }
+
+    /**
+     * @brief The cave a world cell belongs to, or nullptr when the terrain answers.
+     *
+     * "Belongs to" means CAVERNOUS, not "inside the footprint": a warren's volume is a
+     * square and the cave inside it is the part with rock over it, so most of the
+     * square is ordinary hillside. See procgen::CaveWarren::isCavernous.
+     */
+    [[nodiscard]] const procgen::CaveWarren *warrenAt(core::i32 worldX, core::i32 worldZ) const noexcept;
+
+    /**
+     * @brief Every resident cave, once.
+     *
+     * @param emit `emit(const procgen::CaveWarren &)`.
+     */
+    template <typename Emit> void forEachResidentWarren(Emit &&emit) const
+    {
+        for (core::u32 i = 0u; i < _residency.size(); ++i)
+            for (core::u32 w = 0u; w < _residency.at(i).warrens.size(); ++w)
+                emit(_residency.at(i).warrens[w]);
+    }
+
+    /**
+     * @brief The gap a body stands in at a world cell: floor, ceiling, and whether it is under rock.
+     *
+     * The streamed world's answer to the question a heightfield cannot be asked. Safe
+     * to call anywhere — outside every warren it is exactly @ref groundHeightAt with
+     * an open sky over it, so a caller never has to know whether there is a cave here.
+     *
+     * @param worldX World column.
+     * @param worldZ World row.
+     * @param y      Where the body is; which gap it is in depends on it.
+     * @return The span.
+     */
+    [[nodiscard]] procgen::VerticalSpan spanAt(core::i32 worldX, core::i32 worldZ, math::Fixed32 y) const;
 
     /** @brief Ground height at a world cell — the resident field first, then the noise. */
     [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ) const;

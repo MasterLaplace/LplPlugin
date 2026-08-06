@@ -108,7 +108,7 @@ enum class ParamKind : core::u8 {
 enum class DynamicEnum : core::u8 {
     None = 0,      ///< Any string of the declared kind is accepted.
     ComponentName, ///< One of @c ecs::allSchemas() names.
-    CaveKind       ///< One of @c procgen::caveKindName's four words.
+    CaveKind       ///< One of @c procgen::caveKindName's words, "auto" included.
 };
 
 /**
@@ -132,7 +132,7 @@ template <typename Sink> void forEachChoice(DynamicEnum choices, Sink &&sink)
             sink(schema.name);
         return;
     case DynamicEnum::CaveKind:
-        for (core::u32 i = 0u; i <= static_cast<core::u32>(procgen::CaveKind::Layered); ++i)
+        for (core::u32 i = 0u; i <= static_cast<core::u32>(procgen::CaveKind::Auto); ++i)
             sink(std::string_view{procgen::caveKindName(static_cast<procgen::CaveKind>(i))});
         return;
     case DynamicEnum::None: return;

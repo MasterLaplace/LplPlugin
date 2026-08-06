@@ -23,6 +23,7 @@ inline void TerrainSurface::configure(const Config &config, const TerrainSurface
     _shadows = config.enableTerrainShadows();
     _shadowChunksPerTick = config.shadowChunksPerTick();
     _reflection = config.enableWaterReflection();
+    _waterTessellation = config.waterTessellation();
     _skyBlock = config.skyBlockSize() == 0u ? 1u : config.skyBlockSize();
 
     // Two textures, not one: rock and vegetation want different grain, and one
@@ -42,13 +43,13 @@ inline void TerrainSurface::attachProbe(core::u32 *colour, core::f32 *depth, cor
     _probePixels = render::Texture{width, height};
 }
 
-inline void TerrainSurface::advance(core::f32 dayStep, core::f32 rippleStep) noexcept
+inline void TerrainSurface::advance(core::f32 dayFraction, core::f32 ripplePhase) noexcept
 {
-    _dayFraction += dayStep;
+    _dayFraction += dayFraction;
     if (_dayFraction >= 1.0f)
         _dayFraction -= 1.0f;
     _sun = render::sunAt(_dayFraction);
-    _water.phase += rippleStep;
+    _water.phase += ripplePhase;
     if (_water.phase > 512.0f)
         _water.phase -= 512.0f;
 }
@@ -57,6 +58,7 @@ inline void TerrainSurface::beginFrame(const render::RenderTarget &rt, const ren
 {
     render::drawSky(rt, basis, _sun, _skyParams, 0.5773502692f, _skyBlock);
     _haze = render::hazeTint(basis, _sun, _skyParams);
+    _underground = false;
 
     // Re-integrate the sky only when the sun has moved enough to change it. A day
     // that advances by a thousandth per frame would otherwise pay for a projection
@@ -70,6 +72,17 @@ inline void TerrainSurface::beginFrame(const render::RenderTarget &rt, const ren
             _irradianceElevation = _sun.elevation;
         }
     }
+}
+
+inline void TerrainSurface::beginCaveFrame(const render::RenderTarget &rt, core::u32 tint,
+                                           core::f32 density) noexcept
+{
+    // Cleared rather than skipped. Leaving the last frame's sky in the buffer would
+    // show it wherever nothing is drawn, and underground that is most of the screen.
+    render::clearTarget(rt, tint);
+    _haze = tint;
+    _caveFog = density;
+    _underground = true;
 }
 
 inline core::u32 TerrainSurface::shade(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
@@ -93,7 +106,7 @@ inline core::u32 TerrainSurface::shade(core::f32 worldX, core::f32 worldZ, core:
         // base colour would throw away the only thing that says where you are.
         tinted = render::modulate(base, 0.72f + 0.55f * static_cast<core::f32>(sampled & 0xFFu) / 255.0f);
     }
-    return render::applyAerialPerspective(render::modulate(tinted, lit), _haze, distance, _params.fogDensity);
+    return render::applyAerialPerspective(render::modulate(tinted, lit), _haze, distance, fogDensity());
 }
 
 inline core::u32 TerrainSurface::shadePhysical(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 nx,
@@ -133,7 +146,7 @@ inline core::u32 TerrainSurface::shadePhysical(core::f32 worldX, core::f32 world
     const render::Vec3f fragment(worldX, _params.seaLevel, worldZ);
     const core::u32 shaded =
         render::pbrShadeToRgb(material, &sun, 1u, normal, fragment, basis.eye, ambient, render::ToneMap::Aces);
-    return render::applyAerialPerspective(shaded, _haze, distance, _params.fogDensity);
+    return render::applyAerialPerspective(shaded, _haze, distance, fogDensity());
 }
 
 inline core::u32 TerrainSurface::shadeSurface(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
@@ -146,7 +159,7 @@ inline core::u32 TerrainSurface::shadeSurface(core::f32 worldX, core::f32 worldZ
         return shadePhysical(worldX, worldZ, base, nx, nz, occlusion, distance, rocky, basis);
     if (_perPixel)
         return shade(worldX, worldZ, base, lit, distance, rocky);
-    return render::applyAerialPerspective(render::modulate(base, lit), _haze, distance, _params.fogDensity);
+    return render::applyAerialPerspective(render::modulate(base, lit), _haze, distance, fogDensity());
 }
 
 } // namespace lpl::engine

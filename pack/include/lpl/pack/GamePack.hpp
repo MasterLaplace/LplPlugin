@@ -543,6 +543,24 @@ struct ViewV1 {
     core::f32 glintPower;
     core::f32 depthScale;
 
+    // ── The swell ───────────────────────────────────────────────────────────
+    //
+    // A sea is not a bigger lake, and until these existed the format could not tell the
+    // two apart: it could name a water COLOUR and a ripple frequency, and every body of
+    // water the document could express came out as the same flat rippling mirror.
+    //
+    // All default to zero, which is off, so a cartridge baked before them describes the
+    // same water it always described. See render::WaterParams for what each one buys.
+    core::f32 swellHeight;
+    core::f32 crestSharpness;
+    core::f32 chopStrength;
+    core::u32 foamColour;
+    core::u32 scatterColour;
+    core::f32 foamGain;
+    core::f32 foamWidth;
+    core::f32 foamCrest;
+    core::f32 scatterStrength;
+
     // ── Creatures ───────────────────────────────────────────────────────────
     core::u32 grazerTint;
     core::u32 hunterTint;
@@ -558,7 +576,7 @@ struct ViewV1 {
 
     core::u32 flags; ///< kViewFlag* bits.
 };
-static_assert(sizeof(ViewV1) == 196u, "GamePack view profile layout is wire format");
+static_assert(sizeof(ViewV1) == 232u, "GamePack view profile layout is wire format");
 
 /**
  * @brief FNV-1a over a byte range — the pack's integrity check.

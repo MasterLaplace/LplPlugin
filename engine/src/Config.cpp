@@ -240,6 +240,18 @@ Config::Builder &Config::Builder::enableWaterReflection(bool enabled) noexcept
     return *this;
 }
 
+Config::Builder &Config::Builder::caveDrawRadius(core::u32 cells) noexcept
+{
+    _caveDrawRadius = cells;
+    return *this;
+}
+
+Config::Builder &Config::Builder::waterTessellation(core::u32 divisions) noexcept
+{
+    _waterTessellation = divisions;
+    return *this;
+}
+
 Config::Builder &Config::Builder::skyBlockSize(core::u32 pixels) noexcept
 {
     _skyBlockSize = pixels;
@@ -284,6 +296,8 @@ Config Config::Builder::build() const noexcept
     cfg._viewDistance = _viewDistance;
     cfg._shadowChunksPerTick = _shadowChunksPerTick;
     cfg._skyBlockSize = _skyBlockSize;
+    cfg._waterTessellation = _waterTessellation;
+    cfg._caveDrawRadius = _caveDrawRadius;
     cfg._enableTerrainShadows = _enableTerrainShadows;
     cfg._enablePerPixelSurface = _enablePerPixelSurface;
     cfg._enablePbrSurface = _enablePbrSurface;

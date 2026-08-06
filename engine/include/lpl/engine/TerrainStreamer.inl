@@ -66,9 +66,50 @@ inline TerrainChunk TerrainStreamer::buildChunk(procgen::ChunkCoord coord) const
     chunk.height = terrain.height;
     chunk.biomes = terrain.biomes;
     chunk.rivers = terrain.rivers;
+    chunk.flow = terrain.flow;
     chunk.lowest = terrain.lowest;
+    chunk.seaMinX = terrain.seaMinX;
+    chunk.seaMaxX = terrain.seaMaxX;
+    chunk.seaMinZ = terrain.seaMinZ;
+    chunk.seaMaxZ = terrain.seaMaxZ;
+    chunk.hasSea = terrain.hasSea;
+    chunk.hasRiver = terrain.hasRiver;
+    chunk.caveMouths = terrain.caveMouths;
+    chunk.buildings = terrain.buildings;
+    // MOVED, not copied. A warren carries a voxel volume and a cover mask — about
+    // twelve kibibytes each — and copying them would double the peak of the one
+    // allocation in this function that is not bounded by the chunk size.
+    for (core::u32 i = 0u; i < terrain.warrens.size(); ++i)
+        chunk.warrens.push_back(static_cast<procgen::CaveWarren &&>(
+            const_cast<procgen::CaveWarren &>(terrain.warrens[i])));
     chunk.shade = procgen::Grid<core::u8>{_chunkParams.size, _chunkParams.size, 0u};
     return chunk;
+}
+
+inline const procgen::CaveWarren *TerrainStreamer::warrenAt(core::i32 worldX, core::i32 worldZ) const noexcept
+{
+    // A linear scan over the resident set, and it stays one: a warren is owned WHOLE
+    // by one chunk and spills into its neighbours, so "the chunk holding this cell"
+    // is not the chunk holding the warren, and an index keyed on the cell would have
+    // to be rebuilt every time a chunk streamed. Measured against the alternative it
+    // is a few dozen rectangle tests per query.
+    for (core::u32 i = 0u; i < _residency.size(); ++i)
+    {
+        const TerrainChunk &chunk = _residency.at(i);
+        for (core::u32 w = 0u; w < chunk.warrens.size(); ++w)
+            if (chunk.warrens[w].isCavernous(worldX, worldZ))
+                return &chunk.warrens[w];
+    }
+    return nullptr;
+}
+
+inline procgen::VerticalSpan TerrainStreamer::spanAt(core::i32 worldX, core::i32 worldZ, math::Fixed32 y) const
+{
+    const math::Fixed32 ground = groundHeightAt(worldX, worldZ);
+    const procgen::CaveWarren *warren = warrenAt(worldX, worldZ);
+    if (warren == nullptr)
+        return procgen::VerticalSpan{ground, procgen::openSky(), false};
+    return procgen::caveWarrenSpanAt(*warren, worldX, worldZ, y, ground);
 }
 
 } // namespace lpl::engine

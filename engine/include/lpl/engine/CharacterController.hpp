@@ -20,9 +20,19 @@
  * build its matrices, which is the allowed direction — authoritative state feeds
  * presentation, never the reverse.
  *
- * IT KNOWS NOTHING ABOUT TERRAIN. The ground arrives as one callback returning a
- * Fixed32 height for a world cell. A streamed heightfield, a bounded grid, a flat
- * plane and a unit test all satisfy it, which is why this is engine and not sample.
+ * IT KNOWS NOTHING ABOUT TERRAIN. The world arrives as one callback answering, for a
+ * world cell and a height, the GAP a body would occupy there — its floor and its
+ * ceiling. A streamed heightfield, a bounded grid, a flat plane and a unit test all
+ * satisfy it, which is why this is engine and not sample.
+ *
+ * That callback used to return a single height, and the change is the one thing in
+ * this file worth arguing about. A height per column is a complete description of a
+ * world only while a column has one surface; under a hill there is ground beneath a
+ * body and rock above it, and the body can be between them. Adding a second callback
+ * for the ceiling would have been the smaller diff and the wrong shape — a floor and
+ * the ceiling over it are ONE fact about ONE gap, and two calls could return halves of
+ * two different gaps in a stack of galleries. Callers with no caves in them wrap their
+ * height function in @ref procgen::surfaceSpan and nothing else changes.
  *
  * What it deliberately does NOT do: collide against other entities (that is the
  * broad-phase's job, and a character that resolved its own would resolve them
@@ -44,6 +54,7 @@
 #    include <lpl/math/Cordic.hpp>
 #    include <lpl/math/FixedMath.hpp>
 #    include <lpl/math/FixedPoint.hpp>
+#    include <lpl/procgen/VerticalSpan.hpp>
 
 namespace lpl::engine {
 
@@ -75,6 +86,15 @@ struct CharacterParams {
     math::Fixed32 jumpSpeed{math::Fixed32::fromFloat(7.4f)};     ///< Upward speed at take-off.
 
     math::Fixed32 eyeHeight{math::Fixed32::fromFloat(1.7f)}; ///< Eye above the feet.
+    /**
+     * @brief How tall the body is, for deciding what it fits under.
+     *
+     * Its own number rather than the eye height, and a little above it: a person's eyes
+     * are not at the top of their head, and a doorway sized to the eye is a doorway
+     * every walker scrapes through. Only read where there is a ceiling, so a surface
+     * world is unaffected by it.
+     */
+    math::Fixed32 standHeight{math::Fixed32::fromFloat(1.8f)};
     /**
      * @brief Rise a single step may absorb without being a wall.
      *
@@ -134,8 +154,17 @@ struct CharacterIntent {
  */
 class CharacterController {
 public:
-    /** @brief Places the body, snapped onto whatever ground is under it. */
-    template <typename GroundAt> void placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, GroundAt &&groundAt) noexcept;
+    /**
+     * @brief Places the body, snapped onto whatever it comes to rest on.
+     *
+     * @param startY  Where to look from. It matters the moment a column has more than
+     *                one floor: dropped in at the surface a body lands on the hill,
+     *                dropped in inside a gallery it lands on the gallery. A caller that
+     *                has no caves passes the ground height and the argument does nothing.
+     * @param spaceAt (worldX, worldZ, y) -> procgen::VerticalSpan.
+     */
+    template <typename SpaceAt>
+    void placeAt(math::Fixed32 worldX, math::Fixed32 worldZ, math::Fixed32 startY, SpaceAt &&spaceAt) noexcept;
 
     /**
      * @brief One authoritative tick: intent, gravity, ground, slope, jump.
@@ -144,12 +173,12 @@ public:
      *                deterministic step is that it is the same length every time,
      *                and a controller integrated with a frame-dependent dt puts the
      *                player somewhere else on a faster machine.
-     * @param groundAt (worldX, worldZ) -> Fixed32 terrain height. Integer cells:
-     *                 the heightfield IS defined per cell, and pretending to
-     *                 interpolate would invent a surface the renderer does not draw.
+     * @param spaceAt (worldX, worldZ, y) -> procgen::VerticalSpan. Integer cells: the
+     *                heightfield IS defined per cell, and pretending to interpolate
+     *                would invent a surface the renderer does not draw.
      */
-    template <typename GroundAt>
-    void step(const CharacterParams &params, const CharacterIntent &intent, math::Fixed32 dt, GroundAt &&groundAt);
+    template <typename SpaceAt>
+    void step(const CharacterParams &params, const CharacterIntent &intent, math::Fixed32 dt, SpaceAt &&spaceAt);
 
     [[nodiscard]] math::Fixed32 x() const noexcept { return _x; }
     [[nodiscard]] math::Fixed32 y() const noexcept { return _y; } ///< Feet, not eye.
@@ -162,6 +191,20 @@ public:
 
     [[nodiscard]] bool isGrounded() const noexcept { return _grounded; }
     [[nodiscard]] bool isSliding() const noexcept { return _sliding; }
+    /**
+     * @brief Whether there was rock over the body on the last tick.
+     *
+     * Authoritative, and therefore folded: it is what stops the body sliding, so two
+     * targets that disagreed about it would put the walker in two places. A renderer
+     * reads it to decide there is no sky, which is the allowed direction.
+     */
+    [[nodiscard]] bool isEnclosed() const noexcept { return _enclosed; }
+    /** @brief Underside of the rock over the body; procgen::openSky under the open sky. */
+    [[nodiscard]] math::Fixed32 ceilingHeight() const noexcept { return _ceiling; }
+    /** @brief Times a move was refused because the gap ahead was too low to enter. */
+    [[nodiscard]] core::u32 duckedCount() const noexcept { return _ducked; }
+    /** @brief Times the body's head met a ceiling. */
+    [[nodiscard]] core::u32 headBumpCount() const noexcept { return _headBumps; }
     /** @brief Ticks since the body last touched ground; 0 while standing. */
     [[nodiscard]] core::u32 airborneTicks() const noexcept { return _airborneTicks; }
     /** @brief Jumps taken since the body was placed — a cheap liveness readout. */
@@ -181,9 +224,9 @@ public:
     [[nodiscard]] core::u32 fold(core::u32 seed = 0x811C9DC5u) const noexcept;
 
 private:
-    /** @brief Advances one axis, refusing the move if it walks into a wall. */
-    template <typename GroundAt>
-    void moveAxis(const CharacterParams &params, math::Fixed32 &coordinate, math::Fixed32 delta, GroundAt &&groundAt);
+    /** @brief Advances one axis, refusing the move if it walks into a wall or under a low roof. */
+    template <typename SpaceAt>
+    void moveAxis(const CharacterParams &params, math::Fixed32 &coordinate, math::Fixed32 delta, SpaceAt &&spaceAt);
 
     math::Fixed32 _x{};
     math::Fixed32 _y{};
@@ -193,13 +236,17 @@ private:
     math::Fixed32 _vz{};
     math::Fixed32 _yaw{};
     math::Fixed32 _groundHeight{};
+    math::Fixed32 _ceiling{procgen::openSky()};
     bool _grounded{false};
     bool _sliding{false};
+    bool _enclosed{false};
     core::u32 _coyote{0u};
     core::u32 _jumpBuffer{0u};
     core::u32 _airborneTicks{0u};
     core::u32 _jumps{0u};
     core::u32 _blocked{0u};
+    core::u32 _ducked{0u};
+    core::u32 _headBumps{0u};
 };
 
 } // namespace lpl::engine

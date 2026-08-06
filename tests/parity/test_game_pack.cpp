@@ -16,6 +16,7 @@
  * @copyright MIT License
  */
 
+#include <lpl/engine/ViewProfile.hpp>
 #include <lpl/ecology/LivingRecipe.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/editor/GamePackBaker.hpp>
@@ -267,6 +268,30 @@ int main()
         // That is what makes this worth an assertion rather than a fix.
         const procgen::WorldRecipe viewerRecipe = pack::toEngineRecipe(viewerWorld);
         check(viewerRecipe.biomes.seaLevel == viewerLook.seaLevel, "and the sea it classifies is the sea it draws");
+
+        // ── The document can name a SEA, not only a water colour ─────────────
+        //
+        // Before these fields the format could say what colour water was and how fast it
+        // rippled, and every body of water it could express came out as the same flat
+        // rippling mirror: no swell, no surf, no light coming through a crest. A viewer
+        // that wanted a sea had to have it compiled in, which is the state this whole
+        // format exists to get out of.
+        check(viewerLook.swellHeight > 0.0f, "the viewer's cartridge asks for a swell");
+        check(viewerLook.foamGain > 0.0f, "and for foam");
+        check(viewerLook.scatterStrength > 0.0f, "and for light through the crests");
+        check(viewerLook.foamCrest > 0.0f && viewerLook.foamCrest < 1.0f, "with a crest threshold inside the wave");
+
+        // And it survives the trip out and back. Field-by-field codecs are exactly where a
+        // rename on one side silently drops a value, and a dropped swell is a sea that
+        // quietly goes flat with nothing to say why.
+        const engine::ViewProfile decodedLook = engine::toEngineView(viewerLook);
+        const pack::ViewV1 reWired = engine::toWireView(decodedLook);
+        check(reWired.swellHeight == viewerLook.swellHeight && reWired.crestSharpness == viewerLook.crestSharpness &&
+                  reWired.chopStrength == viewerLook.chopStrength && reWired.foamColour == viewerLook.foamColour &&
+                  reWired.scatterColour == viewerLook.scatterColour && reWired.foamGain == viewerLook.foamGain &&
+                  reWired.foamWidth == viewerLook.foamWidth && reWired.foamCrest == viewerLook.foamCrest &&
+                  reWired.scatterStrength == viewerLook.scatterStrength,
+              "and every field of it round-trips through the codec");
     }
 
     // ── Every pass is IN the recipe ───────────────────────────────────────────
@@ -316,6 +341,18 @@ int main()
 
         check(decoded.seed == layered.seed, "the terrain survives");
         check(decoded.caveKind == procgen::CaveKind::Layered, "the cave kind round-trips");
+        // EVERY kind, not one of them. The bound in the decoder's clamp was spelled out
+        // as a specific enum value and went stale the day another was added, so a
+        // document that said "auto" came back saying "cellular" — and a test that
+        // round-trips a single kind cannot see that, because the one it picked was
+        // under the old bound.
+        for (core::u32 k = 0u; k <= static_cast<core::u32>(procgen::CaveKind::Auto); ++k)
+        {
+            procgen::WorldRecipe every = layered;
+            every.caveKind = static_cast<procgen::CaveKind>(k);
+            check(pack::toEngineRecipe(pack::toWireRecipe(every)).caveKind == every.caveKind,
+                  procgen::caveKindName(every.caveKind));
+        }
         check(decoded.terraceSteps == 5u, "so do the terraces");
         check(decoded.partitionRegions, "and the provinces");
         check(decoded.raiseBuildings && decoded.buildings.maxFloors == 4u, "and the shape grammar");

@@ -116,11 +116,13 @@ int main()
                   std::string{"the grammar carries the component name "} + std::string{schema.name});
 
     // The second closed set, and the reason DWG-010 asks for sets in the grammar at
-    // all: the four underground generators are WORDS, so a director cannot even
-    // generate a fifth one. Before the recipe could name them, three of the four were
-    // reachable only by hand-written builder calls — a world nothing could save, bake
-    // or replay.
-    for (core::u32 i = 0u; i <= static_cast<core::u32>(procgen::CaveKind::Layered); ++i)
+    // all: the underground generators are WORDS, so a director cannot even generate a
+    // kind that does not exist. Before the recipe could name them, three of the four
+    // were reachable only by hand-written builder calls — a world nothing could save,
+    // bake or replay. "auto" is in the set too, and has to be: it is the only way a
+    // director can decline to choose, and a set that omits it forces a choice on every
+    // world whether or not the director has an opinion.
+    for (core::u32 i = 0u; i <= static_cast<core::u32>(procgen::CaveKind::Auto); ++i)
     {
         const char *word = procgen::caveKindName(static_cast<procgen::CaveKind>(i));
         check(gFull.find(std::string{"\\\""} + std::string{word} + std::string{"\\\""}) != std::string::npos,

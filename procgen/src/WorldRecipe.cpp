@@ -167,11 +167,35 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
     // hand-written builder calls — a world nothing could save, bake or replay.
     if (recipe.carveCaves)
     {
-        switch (recipe.caveKind)
+        CaveKind kind = recipe.caveKind;
+        if (kind == CaveKind::Auto)
+        {
+            // The evidence is the map that has already been built, not a guess about
+            // it: the moisture field is computed above, at line `builder.climate`, and
+            // whether people live here is a thing the recipe states outright. Reading
+            // a field that exists is the difference between a procedural default and
+            // one invented for the occasion.
+            CaveContext context;
+            context.settled = recipe.placeSettlement;
+            context.layerCount = recipe.caveSystem.layers;
+            const Heightfield &wet = builder.moisture();
+            if (!wet.empty())
+            {
+                math::Fixed32 total{};
+                for (core::u32 z = 0u; z < wet.depth(); ++z)
+                    for (core::u32 x = 0u; x < wet.width(); ++x)
+                        total = total + wet.at(x, z);
+                context.wetness = total.toFloat() / static_cast<core::f32>(wet.cellCount());
+            }
+            kind = chooseCaveKind(context);
+        }
+
+        switch (kind)
         {
         case CaveKind::Bsp: builder.dungeon(recipe.rooms); break;
         case CaveKind::Dla: builder.dlaCaves(recipe.aggregation); break;
         case CaveKind::Layered: builder.caveSystem(recipe.caveSystem); break;
+        case CaveKind::Auto: // resolved above; the case exists so a new kind cannot
         case CaveKind::Cellular: builder.caves(recipe.caves); break;
         }
     }

@@ -76,7 +76,82 @@ struct CaveSystemParams {
     core::u32 shaftsPerPair{3u};      ///< Shafts attempted between each pair of layers.
     core::u32 entrances{2u};          ///< Shafts attempted through the surface.
     core::f32 entranceMaxSlope{1.5f}; ///< Steepest ground an entrance may open on.
+
+    /**
+     * @brief Which generator fills a FLOOR.
+     *
+     * Three of the four kinds are fillings and one is the container: a stack is what
+     * @c Layered names, so a floor that claimed to be @c Layered would be a stack
+     * inside a stack. It is clamped to @c Cellular rather than switched on, and a
+     * caller that wants a mixed stack asks for it through @ref mixLayerKinds — which
+     * is exactly what resolving a recipe's @c Layered does.
+     *
+     * @c Auto never arrives here either: @ref chooseCaveKind resolves it, because the
+     * evidence it needs is about a PLACE and this struct describes a cave.
+     */
+    CaveKind layerKind{CaveKind::Cellular};
+
+    /**
+     * @brief Give every floor its own character. This is what @c Layered resolves to.
+     *
+     * The claim this file opens with — "several plans stacked, EACH WITH ITS OWN
+     * CHARACTER, is a system" — was implemented as nothing but a fill probability that
+     * drifted with depth. Every floor was the same automaton, so the sentence was not
+     * true of the code under it. With this set, the generator itself varies with depth,
+     * and a stack can be a natural cave over a warren of rooms.
+     */
+    bool mixLayerKinds{false};
+
+    // ── What the PLACE is like, for a mixed stack ───────────────────────────
+    //
+    // Two scalars rather than a callback, for the reason ITerrainQuery gives: a
+    // generator that took a lambda from its owner could not be given a fake in a test
+    // nor say in its own parameters what it depends on. Both are ignored unless
+    // @ref mixLayerKinds is set.
+
+    bool settled{false};      ///< People were here. People dig rooms, not fissures.
+    core::f32 wetness{0.5f};  ///< How much the ground dissolves; high ground branches.
 };
+
+/**
+ * @struct CaveContext
+ * @brief The evidence a place offers about what kind of underground it should have.
+ *
+ * What @c CaveKind::Auto is resolved from. Everything in it is already to hand
+ * wherever the question is asked, which is the test a rule like this has to pass:
+ * evidence that has to be invented for the rule is not evidence.
+ */
+struct CaveContext {
+    bool settled{false};       ///< A settlement stands within reach of this place.
+    core::f32 wetness{0.5f};   ///< Ground moisture in [0, 1].
+    core::u32 layerCount{1u};  ///< Floors the underground will have.
+};
+
+/// Moisture at or above which ground is taken to dissolve rather than fracture.
+inline constexpr core::f32 kKarstWetness = 0.58f;
+
+/**
+ * @brief Resolves @c CaveKind::Auto from what a place actually offers.
+ *
+ * Not a die roll. Each branch is a claim about the world that a player can read off
+ * the result, which is the difference between a procedural default and noise:
+ *
+ *  - people leave ROOMS. A settlement within reach means somebody dug here, and what
+ *    they dug is a partition of rectangles joined by corridors, not a fissure.
+ *  - wet ground DISSOLVES. Above @ref kKarstWetness the underground is karst, and
+ *    karst branches — which is what diffusion-limited aggregation produces and why it
+ *    is in this enum at all.
+ *  - anything deep enough to have several floors has had time to become several
+ *    things, so it gets the mixed stack.
+ *  - otherwise the automaton, which is what the default has always been.
+ *
+ * A pure function of its argument: no seed, no clock, no global. Two targets asking
+ * about one place get one answer, and so does the same target asked twice.
+ *
+ * @param context What the place offers.
+ * @return A concrete kind; never @c Auto.
+ */
+[[nodiscard]] CaveKind chooseCaveKind(const CaveContext &context);
 
 /**
  * @struct CaveShaft
@@ -161,6 +236,23 @@ struct CaveSystem {
 [[nodiscard]] LevelQuality evaluateCaveSystem(const CaveSystem &system);
 
 core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed);
+
+/**
+ * @brief Recounts @c hollowCells and @c reachableCells after a caller edits the layers.
+ *
+ * @ref generateCaveSystem leaves both correct and @ref repairCaveReachability keeps
+ * them so, which is enough for a caller that only reads. It is not enough for one that
+ * WRITES — masking cells out or forcing a passage open changes what is hollow, and the
+ * repair reads @c hollowCells to decide when it is finished. A stale count makes it
+ * hunt for cells that are no longer there.
+ *
+ * Exported rather than left private because the caller that edits is the only one that
+ * knows it has edited; deriving it inside the repair would recount on every round for
+ * every caller that never touched anything.
+ *
+ * @param system System to recount, in place.
+ */
+void recountCaveReachability(CaveSystem &system);
 
 /**
  * @brief Turns the stack into one voxel volume.

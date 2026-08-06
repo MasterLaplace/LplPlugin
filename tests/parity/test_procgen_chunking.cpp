@@ -21,6 +21,7 @@
  */
 
 #include <lpl/procgen/Chunking.hpp>
+#include <lpl/procgen/Landmark.hpp>
 #include <lpl/procgen/EndlessPlan.hpp>
 #include <lpl/procgen/Erosion.hpp>
 
@@ -336,6 +337,131 @@ void testTrunksCrossChunks()
     check(wetNeighbours >= 2u, "the trunk continues past the chunk it was found in");
 }
 
+
+/**
+ * @brief Landmarks: sited once, agreed on by every chunk that touches them.
+ *
+ * A landmark is the first thing in this world that OCCUPIES AN AREA. Terrain needs no
+ * siting rule because a height is a function of a position; a village is either here or
+ * it is not, and every chunk overlapping it has to reach the same verdict — including
+ * the one holding only its far corner.
+ *
+ * Three things are measured rather than asserted from the code: how many sites there
+ * actually are (a rule that places none passes every other check vacuously), that a
+ * site in reach of two chunks is seen by BOTH, and that exactly one chunk claims to own
+ * each of them.
+ */
+void testLandmarksAreAgreedOn()
+{
+    std::printf("landmarks are sited once and agreed on\n");
+
+    const procgen::WorldRecipe recipe = procgen::parityWorldRecipe();
+    const procgen::EndlessPlan plan = procgen::endlessPlanFromRecipe(recipe, 24u);
+
+    check(plan.rule.carveCaveMouths, "the walked world asks for cave mouths");
+    check(plan.rule.raiseVillages, "and for villages");
+
+    // ── Density, over a patch big enough to mean something ───────────────────
+    constexpr core::i32 kSpan = 6;
+    core::u32 caves = 0u;
+    core::u32 villages = 0u;
+    core::u32 buildings = 0u;
+    core::u32 doubleOwned = 0u;
+    for (core::i32 cz = -kSpan; cz <= kSpan; ++cz)
+        for (core::i32 cx = -kSpan; cx <= kSpan; ++cx)
+        {
+            const procgen::ChunkCoord coord{cx, cz};
+            core::u32 ownedHere = 0u;
+            procgen::forEachLandmarkNear(plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth,
+                                         plan.rule.seaLevel, coord, [&](const procgen::LandmarkSite &site) {
+                                             if (procgen::chunkOwnsLandmark(plan.chunk, site, coord))
+                                                 ++ownedHere;
+                                         });
+            caves += ownedHere;
+
+            procgen::forEachLandmarkNear(plan.chunk, plan.rule.villages, procgen::LandmarkKind::Settlement,
+                                         plan.rule.seaLevel, coord, [&](const procgen::LandmarkSite &site) {
+                                             if (!procgen::chunkOwnsLandmark(plan.chunk, site, coord))
+                                                 return;
+                                             ++villages;
+                                             const procgen::VillagePlan village = procgen::planVillage(plan.chunk, site);
+                                             procgen::forEachVillageBuilding(
+                                                 village, [&](const procgen::LandmarkBuilding &) { ++buildings; });
+                                         });
+        }
+    const core::u32 chunksScanned = static_cast<core::u32>((2 * kSpan + 1) * (2 * kSpan + 1));
+    std::printf("    over %u chunks: %u cave mouths, %u villages, %u buildings\n", chunksScanned, caves, villages,
+                buildings);
+    check(caves > 0u, "the world has cave mouths in it");
+    check(villages > 0u, "and villages");
+    check(buildings > 0u, "and the villages have buildings in them");
+    // A landmark cell that placed a site in EVERY chunk would be a lattice, and one that
+    // placed one every few chunks is a world. The upper bound is what catches a runaway
+    // rule; the lower is what catches a rule that never fires.
+    check(caves < chunksScanned * 4u, "cave mouths are not one per cell of the lattice");
+
+    // ── A site in reach of two chunks is seen by both ────────────────────────
+    //
+    // The property the carve depends on. If only the owner saw it, its shelf would stop
+    // dead at the chunk border and the ground either side would disagree by the whole
+    // drop — the most visible seam a world can have.
+    core::u32 shared = 0u;
+    core::u32 disagreements = 0u;
+    for (core::i32 cz = -kSpan; cz <= kSpan; ++cz)
+        for (core::i32 cx = -kSpan; cx <= kSpan; ++cx)
+        {
+            const procgen::ChunkCoord here{cx, cz};
+            const procgen::ChunkCoord east{cx + 1, cz};
+            procgen::forEachLandmarkNear(
+                plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth, plan.rule.seaLevel, here,
+                [&](const procgen::LandmarkSite &mine) {
+                    // Does its footprint cross into the eastern chunk?
+                    const core::i32 border = (cx + 1) * 24;
+                    if (mine.cellX + static_cast<core::i32>(mine.radius) < border)
+                        return;
+                    ++shared;
+                    bool seen = false;
+                    procgen::forEachLandmarkNear(plan.chunk, plan.rule.caveMouths, procgen::LandmarkKind::CaveMouth,
+                                                 plan.rule.seaLevel, east,
+                                                 [&](const procgen::LandmarkSite &theirs) {
+                                                     if (theirs.cellX == mine.cellX && theirs.cellZ == mine.cellZ &&
+                                                         theirs.height == mine.height && theirs.seed == mine.seed &&
+                                                         theirs.facing == mine.facing)
+                                                         seen = true;
+                                                 });
+                    if (!seen)
+                        ++disagreements;
+                });
+        }
+    std::printf("    %u footprints cross a border, %u seen by only one side\n", shared, disagreements);
+    check(shared > 0u, "some footprints do cross a chunk border");
+    check(disagreements == 0u, "and both chunks see them identically");
+
+    // ── Exactly one owner ────────────────────────────────────────────────────
+    //
+    // Ownership decides who DRAWS. Two owners is a village rendered twice — z-fighting on
+    // every wall — and none is a village whose ground was flattened for nothing.
+    core::u32 unowned = 0u;
+    for (core::i32 lz = -3; lz <= 3; ++lz)
+        for (core::i32 lx = -3; lx <= 3; ++lx)
+        {
+            procgen::LandmarkSite site;
+            if (!procgen::landmarkAt(plan.chunk, plan.rule.villages, procgen::LandmarkKind::Settlement,
+                                     plan.rule.seaLevel, lx, lz, site))
+                continue;
+            core::u32 owners = 0u;
+            for (core::i32 cz = -kSpan * 2; cz <= kSpan * 2; ++cz)
+                for (core::i32 cx = -kSpan * 2; cx <= kSpan * 2; ++cx)
+                    if (procgen::chunkOwnsLandmark(plan.chunk, site, {cx, cz}))
+                        ++owners;
+            if (owners != 1u)
+                ++unowned;
+            doubleOwned += owners > 1u ? 1u : 0u;
+        }
+    std::printf("    %u sites with anything other than one owner, %u with more than one\n", unowned, doubleOwned);
+    check(unowned == 0u, "every site has exactly one owning chunk");
+}
+
 } // namespace
 
 /**
@@ -403,6 +529,73 @@ void testTheEndlessWorldComesFromTheRecipe()
     std::printf("    tallest span at relief x4: %.2f m\n", static_cast<double>(previousSpan));
 }
 
+/**
+ * @brief What the walked world is actually MADE of.
+ *
+ * An instrument before a change, not a check. Looking at the client, the endless world
+ * reads as overwhelmingly blue, and there are two candidate explanations that call for
+ * opposite fixes: too many rivers, or a sea level sitting in the middle of the noise
+ * range. Guessing between them is how a threshold gets tuned to make today's screenshot
+ * look right.
+ *
+ * So this measures the composition of the terrain a walker actually gets — the recipe run
+ * through `endlessPlanFromRecipe` with the default `WalkScale`, which is what
+ * `TerrainWorld::setInfinite` builds — and prints it. It asserts only what must be true
+ * whatever the tuning: the shares add up, and water is not the whole world.
+ */
+void testWhatTheWalkedWorldIsMadeOf()
+{
+    std::printf("what the walked world is made of\n");
+
+    procgen::WorldRecipe recipe = procgen::parityWorldRecipe();
+    const procgen::EndlessPlan plan = procgen::endlessPlanFromRecipe(recipe, 32u);
+
+    // The plan's OWN river parameters, which is the point of them being in the plan: a test
+    // that built its own set would be measuring a configuration nothing runs.
+    const procgen::EndlessRiverParams &rivers = plan.rivers;
+
+    core::u32 cells = 0u;
+    core::u32 sea = 0u;
+    core::u32 shore = 0u;
+    core::u32 river = 0u;
+    core::f32 lowest = 1.0e9f;
+    core::f32 highest = -1.0e9f;
+
+    for (core::i32 cz = -2; cz <= 2; ++cz)
+        for (core::i32 cx = -2; cx <= 2; ++cx)
+        {
+            const procgen::ChunkTerrain terrain = procgen::generateChunkTerrain(
+                plan.chunk, rivers, procgen::ChunkCoord{cx, cz}, plan.rule, [](core::i32, core::i32) {});
+            for (core::u32 z = 0u; z < plan.chunk.size; ++z)
+                for (core::u32 x = 0u; x < plan.chunk.size; ++x)
+                {
+                    const core::f32 h = terrain.height.at(x, z).toFloat();
+                    ++cells;
+                    lowest = h < lowest ? h : lowest;
+                    highest = h > highest ? h : highest;
+                    if (h < plan.rule.seaLevel)
+                        ++sea;
+                    else if (h < plan.rule.seaLevel + plan.rule.beachBand)
+                        ++shore;
+                    if (terrain.rivers.at(x, z) != 0u)
+                        ++river;
+                }
+        }
+
+    const auto share = [cells](core::u32 n) { return cells == 0u ? 0.0 : (100.0 * n) / cells; };
+    std::printf("    relief [%.2f .. %.2f], sea level %.2f\n", static_cast<double>(lowest),
+                static_cast<double>(highest), static_cast<double>(plan.rule.seaLevel));
+    std::printf("    %u cells: %.1f%% under the sea, %.1f%% shore, %.1f%% river\n", cells, share(sea), share(shore),
+                share(river));
+
+    check(cells > 0u, "the walked world generates cells");
+    check(sea + shore <= cells, "the shares are a partition of the cells");
+    // The only claim worth asserting without a measurement to back a number: a world that
+    // is ENTIRELY water is not a world you can walk through, and that is what the client
+    // looked like.
+    check(sea < cells, "the walked world is not entirely sea");
+}
+
 int main()
 {
     std::printf("== procgen chunking: a world with no edges ==\n");
@@ -412,6 +605,8 @@ int main()
     testErodedSeamsAreExact();
     testTrunksCrossChunks();
     testTheEndlessWorldComesFromTheRecipe();
+    testWhatTheWalkedWorldIsMadeOf();
+    testLandmarksAreAgreedOn();
     testDeterminism();
 
     // ── The signatures the kernel must reproduce ────────────────────────────

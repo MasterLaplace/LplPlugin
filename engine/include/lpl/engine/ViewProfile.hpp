@@ -112,6 +112,15 @@ struct ViewProfile {
     out.water.rippleAmplitude = wire.rippleAmplitude;
     out.water.glintPower = wire.glintPower;
     out.water.depthScale = wire.depthScale;
+    out.water.swellHeight = wire.swellHeight;
+    out.water.crestSharpness = wire.crestSharpness;
+    out.water.chopStrength = wire.chopStrength;
+    out.water.foam = wire.foamColour;
+    out.water.scatter = wire.scatterColour;
+    out.water.foamGain = wire.foamGain;
+    out.water.foamWidth = wire.foamWidth;
+    out.water.foamCrest = wire.foamCrest;
+    out.water.scatterStrength = wire.scatterStrength;
     // phase is not carried: it is where the ripples HAPPEN to be, which is state,
     // not content. A cartridge that pinned it would restart every load mid-swell.
 
@@ -166,6 +175,15 @@ struct ViewProfile {
     wire.rippleAmplitude = profile.water.rippleAmplitude;
     wire.glintPower = profile.water.glintPower;
     wire.depthScale = profile.water.depthScale;
+    wire.swellHeight = profile.water.swellHeight;
+    wire.crestSharpness = profile.water.crestSharpness;
+    wire.chopStrength = profile.water.chopStrength;
+    wire.foamColour = profile.water.foam;
+    wire.scatterColour = profile.water.scatter;
+    wire.foamGain = profile.water.foamGain;
+    wire.foamWidth = profile.water.foamWidth;
+    wire.foamCrest = profile.water.foamCrest;
+    wire.scatterStrength = profile.water.scatterStrength;
 
     wire.grazerTint = profile.grazerTint;
     wire.hunterTint = profile.hunterTint;

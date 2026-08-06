@@ -106,6 +106,8 @@ public:
         Builder &enablePerPixelSurface(bool enabled) noexcept;
         Builder &enablePbrSurface(bool enabled) noexcept;
         Builder &enableWaterReflection(bool enabled) noexcept;
+        Builder &waterTessellation(core::u32 divisions) noexcept;
+        Builder &caveDrawRadius(core::u32 cells) noexcept;
         Builder &skyBlockSize(core::u32 pixels) noexcept;
 
         [[nodiscard]] Config build() const noexcept;
@@ -146,6 +148,8 @@ public:
         core::f32 _viewDistance{70.0f};
         core::u32 _shadowChunksPerTick{1};
         core::u32 _skyBlockSize{1};
+        core::u32 _waterTessellation{0};
+        core::u32 _caveDrawRadius{0};
         bool _enableTerrainShadows{true};
         bool _enablePerPixelSurface{true};
         bool _enablePbrSurface{false};
@@ -422,6 +426,34 @@ public:
     [[nodiscard]] bool enableWaterReflection() const noexcept { return _enableWaterReflection; }
 
     /**
+     * @brief How finely a water surface is subdivided so its swell can be GEOMETRY.
+     *
+     * Zero or one keeps the flat quad this engine drew for a year: a mirror that
+     * ripples, whose silhouette against the horizon is a straight line. Above that the
+     * quad becomes an n-by-n grid whose vertices ride @ref render::waterHeight, which is
+     * what makes a sea heave rather than shimmer.
+     *
+     * A host's number and not a world's: the cost is quadratic in it and it buys nothing
+     * on a machine drawing four hundred pixels. A world says how high its swell is; this
+     * says how many triangles this machine will spend rendering it.
+     *
+     * @return Divisions per water quad edge.
+     */
+    [[nodiscard]] core::u32 waterTessellation() const noexcept { return _waterTessellation; }
+
+    /**
+     * @brief Cells around the eye whose cave geometry is drawn. Zero draws none.
+     *
+     * A host budget in the same shape as @ref waterTessellation, and for the same
+     * reason: the cost is quadratic in it, and what it buys is how far you can see
+     * underground rather than whether the cave exists. A headless profile sets zero
+     * and never pays; the desktop can afford to light a whole gallery.
+     *
+     * @return Draw radius, in world cells.
+     */
+    [[nodiscard]] core::u32 caveDrawRadius() const noexcept { return _caveDrawRadius; }
+
+    /**
      * @brief Sky evaluation block: one ray per NxN pixels. 1 is per-pixel.
      * @return The sky block size.
      */
@@ -463,6 +495,8 @@ private:
     core::f32 _viewDistance{70.0f};
     core::u32 _shadowChunksPerTick{1};
     core::u32 _skyBlockSize{1};
+    core::u32 _waterTessellation{0};
+    core::u32 _caveDrawRadius{0};
     bool _enableTerrainShadows{true};
     bool _enablePerPixelSurface{true};
     bool _enablePbrSurface{false};

@@ -73,39 +73,8 @@ inline constexpr core::u32 kMaxScatterRules = 8u;
  */
 inline constexpr core::u32 kMaxRoadsidePattern = 64u;
 
-/**
- * @enum CaveKind
- * @brief Which underground generator a recipe asks for.
- *
- * Four generators existed and a recipe could name exactly one of them, so the other
- * three were reachable only by writing @ref WorldBuilder calls by hand — which is
- * what a viewer did, and why its world could not be saved, baked, replayed in ring 0
- * or asked for by an intelligence. A director who cannot name what it wants is not a
- * director.
- *
- * @c Cellular stays the default because it is what @ref parityWorldRecipe bakes and
- * what every existing document therefore means.
- */
-enum class CaveKind : core::u32 {
-    Cellular = 0u, ///< Automaton smoothing with connectivity repair. The default.
-    Bsp = 1u,      ///< Recursive partition into rooms joined by corridors.
-    Dla = 2u,      ///< Diffusion-limited aggregation: thin, branching, organic.
-
-    /**
-     * @brief A stack of plans joined by shafts, at least one reaching the surface.
-     *
-     * The gate judges this one in three dimensions — see @ref evaluateCaveSystem. It
-     * did not, for a while: @ref GateCriteria was asked of the flat @c DungeonMap,
-     * which this generator leaves empty, so a layered recipe reported zero open cells
-     * and failed a world that was perfectly navigable, and a document had to switch
-     * @c checkPlayability off to use the generator at all.
-     *
-     * Worth keeping in mind because the first test written for it passed for exactly
-     * that reason and proved nothing: the layered cave "differed from the default" by
-     * reporting nothing at all.
-     */
-    Layered = 3u
-};
+// CaveKind moved to Dungeon.hpp, where the four generators it names are declared.
+// A document still spells it here through @ref caveKindName / @ref caveKindByName.
 
 namespace detail {
 
@@ -133,6 +102,7 @@ namespace detail {
     case CaveKind::Bsp: return "bsp";
     case CaveKind::Dla: return "dla";
     case CaveKind::Layered: return "layered";
+    case CaveKind::Auto: return "auto";
     }
     return "cellular";
 }
@@ -150,7 +120,7 @@ namespace detail {
  */
 [[nodiscard]] constexpr bool caveKindByName(const char *name, CaveKind &outKind) noexcept
 {
-    for (core::u32 i = 0u; i <= static_cast<core::u32>(CaveKind::Layered); ++i)
+    for (core::u32 i = 0u; i <= static_cast<core::u32>(CaveKind::Auto); ++i)
     {
         const CaveKind kind = static_cast<CaveKind>(i);
         if (detail::sameName(name, caveKindName(kind)))

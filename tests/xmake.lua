@@ -135,6 +135,13 @@ target("test-procgen-caves")
     add_files("parity/test_procgen_caves.cpp")
 target_end()
 
+target("test-cave-warren")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-engine")
+    add_files("parity/test_cave_warren.cpp")
+target_end()
+
 target("test-procgen-streaming")
     set_kind("binary")
     set_group("tests")
@@ -215,7 +222,10 @@ target_end()
 target("test-game-pack")
     set_kind("binary")
     set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-pack", "lpl-editor", "lpl-ai", "lpl-ecology")
+    -- lpl-engine for engine::toEngineView / toWireView: the two halves of the view
+    -- codec live there, and asserting a round trip means calling both of them.
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-pack", "lpl-editor", "lpl-ai", "lpl-ecology",
+             "lpl-engine")
     add_files("parity/test_game_pack.cpp")
 target_end()
 
@@ -507,4 +517,15 @@ target("test-history-parity")
     set_group("tests")
     add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-history")
     add_files("parity/test_history_parity.cpp")
+target_end()
+
+target("test-terrain-render")
+    set_kind("binary")
+    set_group("tests")
+    -- lpl-samples for the include that type-checks samples::TerrainWorld: it is a plain
+    -- class, so a host TU that merely includes it checks every one of its members, and
+    -- until this target existed the kernel was the only thing that compiled them.
+    add_deps("lpl-core", "lpl-math", "lpl-render", "lpl-procgen", "lpl-ecs", "lpl-ecology", "lpl-ai", "lpl-engine",
+             "lpl-samples")
+    add_files("parity/test_terrain_render.cpp")
 target_end()

@@ -97,8 +97,21 @@ public:
     /** @brief Allocates the reflection probe's target once, out of the render path. */
     void attachProbe(core::u32 *colour, core::f32 *depth, core::u32 width, core::u32 height);
 
-    /** @brief Advances the time of day and the water's ripples. */
-    void advance(core::f32 dayStep, core::f32 rippleStep = 0.035f) noexcept;
+    /**
+     * @brief Advances the time of day and the water's ripples, in SECONDS.
+     *
+     * Both arguments are per-second rates multiplied by the caller's dt, not per-tick
+     * constants — and the difference is the whole point. A per-tick constant makes the
+     * speed of the sea a function of how many fixed steps the loop happens to run, and
+     * this loop runs about seventeen of them per rendered frame: the swell came out
+     * seventeen times too fast, the same defect the creatures had when they teleported
+     * across the map. There is no default for the ripple any more, because a default is
+     * exactly how a caller comes to forget that this quantity has a unit.
+     *
+     * @param dayFraction How far the day advanced, as a fraction of one.
+     * @param ripplePhase How far the wave phase advanced.
+     */
+    void advance(core::f32 dayFraction, core::f32 ripplePhase) noexcept;
 
     [[nodiscard]] const render::SunState &sun() const noexcept { return _sun; }
     [[nodiscard]] const render::SkyParams &skyParams() const noexcept { return _skyParams; }
@@ -108,11 +121,51 @@ public:
     [[nodiscard]] bool shadowsEnabled() const noexcept { return _shadows; }
     [[nodiscard]] core::u32 shadowChunksPerTick() const noexcept { return _shadowChunksPerTick; }
     [[nodiscard]] core::u32 haze() const noexcept { return _haze; }
+    /** @brief Whether the last frame began underground. */
+    [[nodiscard]] bool underground() const noexcept { return _underground; }
+    /**
+     * @brief How fast distance fades, this frame.
+     *
+     * One accessor rather than two call sites choosing: the four places that apply
+     * aerial perspective all want the same answer, and one of them reading the surface
+     * density underground is a lit corridor stretching into a black cave.
+     */
+    [[nodiscard]] core::f32 fogDensity() const noexcept { return _underground ? _caveFog : _params.fogDensity; }
+    [[nodiscard]] core::u32 waterTessellation() const noexcept { return _waterTessellation; }
+
+    /**
+     * @brief Whether the reflection probe holds a picture the shader may sample.
+     *
+     * Exposed so a test can assert that the pass RAN or did not. Its cost is a whole
+     * second render of the world, and a saving that nothing can observe is a saving
+     * nobody can keep: the day someone drops the water-in-sight test, this is what
+     * notices.
+     */
+    [[nodiscard]] bool probeValid() const noexcept { return _probe.valid; }
     [[nodiscard]] const TerrainSurfaceParams &params() const noexcept { return _params; }
     [[nodiscard]] const render::IrradianceProbe &irradiance() const noexcept { return _irradiance; }
 
     /** @brief Paints the sky and remembers the haze the terrain fades into. */
     void beginFrame(const render::RenderTarget &rt, const render::CameraBasis &basis) noexcept;
+
+    /**
+     * @brief Paints the dark a cave has instead of a sky, and fades everything into it.
+     *
+     * Not a colour swap: the haze is what @ref shadeSurface fades distance into, so
+     * setting it to the same near-black the frame was cleared with turns the existing
+     * aerial-perspective term into the only lighting a cave needs. A separate cave
+     * lighting model would have been a second answer to how far you can see, and the
+     * two would have disagreed at the mouth.
+     *
+     * The sun keeps moving and the day keeps advancing while this runs. That is
+     * deliberate: the surface is still out there, and a walker who spends ten minutes
+     * underground should come out to a different hour.
+     *
+     * @param rt      Target to clear.
+     * @param tint    The dark; also what distance fades into.
+     * @param density Reciprocal is roughly how far a lamp reaches.
+     */
+    void beginCaveFrame(const render::RenderTarget &rt, core::u32 tint, core::f32 density) noexcept;
 
     /**
      * @brief Surface colour for one point: grain, light, haze.
@@ -145,16 +198,40 @@ public:
     /**
      * @brief Draws a water surface: reflection, Fresnel, glint, and the probe.
      *
+     * @param latticePitch World-space spacing of the displacement grid. See
+     *                      @ref drawWaterWith for why it may not be derived from the quad.
      * @param bedDepthAt (worldX, worldZ) -> how far the bed is below the surface.
      *                   Zero at the shoreline, which is what fades a beach instead
      *                   of ending it on a hard line.
      */
     template <typename BedDepthAt>
     core::u32 drawWater(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
-                        const render::CameraBasis &basis, const core::f32 *quad, BedDepthAt &&bedDepthAt) const
+                        const render::CameraBasis &basis, const core::f32 *quad, core::f32 latticePitch,
+                        BedDepthAt &&bedDepthAt) const
     {
-        return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, [&](core::f32 wx, core::f32 wy, core::f32 wz) {
-            core::u32 colour = render::waterColour(wx, wy, wz, basis.eye, _sun, _skyParams, _water, bedDepthAt(wx, wz));
+        return drawWaterWith(rt, mvp, basis, quad, _water, latticePitch, bedDepthAt);
+    }
+
+    /**
+     * @brief The same water, shaded with a surface the CALLER chose.
+     *
+     * The open sea takes @ref water; a river takes its own, because its swell runs with
+     * its current rather than with the wind and its body is shallower. Two entry points
+     * over one implementation rather than two implementations: a river drawn by a copy
+     * of this arithmetic would be a second place for Fresnel to be got wrong.
+     *
+     * @param water     The surface to shade with.
+     * @param latticePitch World-space spacing of the displacement grid, in cells.
+     * @param bedDepthAt (worldX, worldZ) -> how far the bed is below the surface.
+     */
+    template <typename BedDepthAt>
+    core::u32 drawWaterWith(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
+                            const render::CameraBasis &basis, const core::f32 *quad,
+                            const render::WaterParams &water, core::f32 latticePitch,
+                            BedDepthAt &&bedDepthAt) const
+    {
+        const auto shade = [&](core::f32 wx, core::f32 wy, core::f32 wz) {
+            core::u32 colour = render::waterColour(wx, wy, wz, basis.eye, _sun, _skyParams, water, bedDepthAt(wx, wz));
             // The probe carries what the sky cannot: the terrain standing over
             // the water. Where it has nothing to say — off its edge, behind its
             // near plane — the sky mirror already answered.
@@ -163,7 +240,87 @@ public:
                 colour = render::mixColours(colour, reflected, 0.45f);
             return render::applyAerialPerspective(
                 colour, _haze, render::approximateLength(wx - basis.eye.x, wz - basis.eye.z), _params.fogDensity);
-        });
+        };
+
+        // A flat quad is a mirror that ripples: its silhouette against the horizon is a
+        // straight line however good the shading is. The swell becomes GEOMETRY only when
+        // there are vertices to move, which is what the divisions buy.
+        //
+        // Two conditions, and both are necessary: a world with no swell has nothing to
+        // displace, and a host that declined the cost gets the quad. Either alone would
+        // spend triangles on a flat surface.
+        const core::u32 divisions = (water.swellHeight > 0.0f && _waterTessellation > 1u) ? _waterTessellation : 1u;
+        if (divisions == 1u)
+            return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, shade);
+
+        // The grid is built from the quad's own corners, which the callers lay out as
+        // (x0,z0) (x1,z0) (x1,z1) (x0,z1) at one height. A quad that is not that — one
+        // corner lifted, a river cell on a slope — falls back rather than being
+        // subdivided wrongly: a tessellator that assumed the layout would silently
+        // flatten anything else.
+        const core::f32 y = quad[1];
+        if (quad[4] != y || quad[7] != y || quad[10] != y)
+            return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, shade);
+
+        const core::f32 x0 = quad[0];
+        const core::f32 z0 = quad[2];
+        const core::f32 x1 = quad[6];
+        const core::f32 z1 = quad[8];
+        if (latticePitch <= 0.0f || x1 <= x0 || z1 <= z0)
+            return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, shade);
+
+        // Displacement is damped to nothing as the bed rises to meet the surface. Two
+        // reasons, and the second is the one that would have shown: a crest lifted over a
+        // beach pokes through the sand it is supposed to lap against, and the waterline
+        // then crawls up and down the shore every frame.
+        const core::f32 fade = 1.0f / (2.0f * water.swellHeight);
+        const auto surfaceY = [&](core::f32 wx, core::f32 wz) {
+            const core::f32 depth = bedDepthAt(wx, wz);
+            core::f32 damp = depth * fade;
+            damp = damp < 0.0f ? 0.0f : (damp > 1.0f ? 1.0f : damp);
+            return y + render::waterHeight(wx, wz, water) * damp;
+        };
+
+        // ⚠ The grid lines are snapped to an ABSOLUTE WORLD LATTICE, not divided out of this
+        // quad's own extent — and that is the difference between a watertight sheet and a
+        // cracked one. Quads differ in size, because each is tightened to the cells its own
+        // chunk has under water: dividing each by the same count puts their vertices at
+        // different world positions, so two neighbours interpolate the same wave function
+        // along two different piecewise-linear paths and the surface splits along every
+        // chunk border. It is the same discipline the terrain follows for the same reason —
+        // sample at absolute coordinates and neighbours agree for free.
+        //
+        // Both quads also put a vertex exactly ON their shared border, because the walk is
+        // clamped to the quad, so the lattice never has to line up with the border itself.
+        const auto latticeFloor = [latticePitch](core::f32 v) {
+            const core::f32 scaled = v / latticePitch;
+            const core::f32 truncated = static_cast<core::f32>(static_cast<core::i32>(scaled));
+            return (scaled < truncated ? truncated - 1.0f : truncated) * latticePitch;
+        };
+
+        core::u32 triangles = 0u;
+        for (core::f32 az = latticeFloor(z0); az < z1; az += latticePitch)
+        {
+            const core::f32 lowZ = az < z0 ? z0 : az;
+            const core::f32 highZ = az + latticePitch > z1 ? z1 : az + latticePitch;
+            if (highZ <= lowZ)
+                continue;
+            for (core::f32 ax = latticeFloor(x0); ax < x1; ax += latticePitch)
+            {
+                const core::f32 lowX = ax < x0 ? x0 : ax;
+                const core::f32 highX = ax + latticePitch > x1 ? x1 : ax + latticePitch;
+                if (highX <= lowX)
+                    continue;
+                // Corners are evaluated from WORLD coordinates, so the cell shares its
+                // edge values with its neighbours — inside this quad and across the seam
+                // into the next chunk's — and the sheet cannot tear.
+                const core::f32 cell[12] = {
+                    lowX,  surfaceY(lowX, lowZ),   lowZ,  highX, surfaceY(highX, lowZ),  lowZ,
+                    highX, surfaceY(highX, highZ), highZ, lowX,  surfaceY(lowX, highZ), highZ};
+                triangles += render::fillPolygonShadedClipped(rt, mvp, cell, 4u, shade);
+            }
+        }
+        return triangles;
     }
 
     /**
@@ -176,11 +333,19 @@ public:
      *
      * Amortised by @p frame: a reflection one frame stale is invisible on water that
      * is rippling anyway, and the pass is a whole extra render of the world.
+     *
+     * @param waterInSight Whether anything on screen will sample the probe. Required
+     *                     rather than defaulted: this pass is the single most expensive
+     *                     thing the surface layer does — a whole second render of the
+     *                     world — and it was running over dry land for every frame of
+     *                     every world without water in it, because nothing ever asked.
+     *                     A default of true would keep that, silently, for any caller
+     *                     that did not know to pass it.
      */
     template <typename DrawWorld>
-    void refreshProbe(core::u32 frame, const render::CameraBasis &basis, DrawWorld &&drawWorld)
+    void refreshProbe(core::u32 frame, const render::CameraBasis &basis, bool waterInSight, DrawWorld &&drawWorld)
     {
-        if (!_reflection || _probeColour == nullptr || _probeDepth == nullptr)
+        if (!_reflection || _probeColour == nullptr || _probeDepth == nullptr || !waterInSight)
         {
             _probe.valid = false;
             return;
@@ -286,7 +451,10 @@ private:
     core::f32 *_probeDepth{nullptr};
     core::f32 _dayFraction{0.32f};
     core::u32 _haze{0u};
+    core::f32 _caveFog{0.10f};
+    bool _underground{false};
     core::u32 _skyBlock{1u};
+    core::u32 _waterTessellation{0u};
     core::u32 _shadowChunksPerTick{1u};
     bool _perPixel{true};
     bool _physicallyBased{false};

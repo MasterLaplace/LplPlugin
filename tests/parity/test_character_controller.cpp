@@ -38,25 +38,33 @@ static void check(bool condition, const char *what)
 /// One sixtieth of a second, as the fixed step actually is.
 static const math::Fixed32 kStep = math::Fixed32::fromFloat(1.0f / 60.0f);
 
+// Every world below is a SURFACE, so each answers with procgen::surfaceSpan: this
+// ground, and open sky over it. That is what a heightfield always meant, and writing
+// it out is the point — the body now asks for a gap rather than for a height, and a
+// world with no roof in it has to say so rather than have it assumed.
+
 /// Flat ground at y = 0.
-static math::Fixed32 flatGround(core::i32, core::i32) { return math::Fixed32{}; }
+static procgen::VerticalSpan flatGround(core::i32, core::i32, math::Fixed32)
+{
+    return procgen::surfaceSpan(math::Fixed32{});
+}
 
 /// A wall: everything east of x = 5 is ten cells higher.
-static math::Fixed32 wallGround(core::i32 x, core::i32)
+static procgen::VerticalSpan wallGround(core::i32 x, core::i32, math::Fixed32)
 {
-    return x >= 5 ? math::Fixed32::fromFloat(10.0f) : math::Fixed32{};
+    return procgen::surfaceSpan(x >= 5 ? math::Fixed32::fromFloat(10.0f) : math::Fixed32{});
 }
 
 /// A kerb: one cell of rise, low enough to step onto.
-static math::Fixed32 kerbGround(core::i32 x, core::i32)
+static procgen::VerticalSpan kerbGround(core::i32 x, core::i32, math::Fixed32)
 {
-    return x >= 5 ? math::Fixed32::fromFloat(0.4f) : math::Fixed32{};
+    return procgen::surfaceSpan(x >= 5 ? math::Fixed32::fromFloat(0.4f) : math::Fixed32{});
 }
 
 /// A plateau that ends at x = 3: beyond it, a drop.
-static math::Fixed32 ledgeGround(core::i32 x, core::i32)
+static procgen::VerticalSpan ledgeGround(core::i32 x, core::i32, math::Fixed32)
 {
-    return x <= 3 ? math::Fixed32{} : math::Fixed32::fromFloat(-40.0f);
+    return procgen::surfaceSpan(x <= 3 ? math::Fixed32{} : math::Fixed32::fromFloat(-40.0f));
 }
 
 int main()
@@ -68,7 +76,7 @@ int main()
     //    the ground, and must not oscillate around it.
     {
         engine::CharacterController body;
-        body.placeAt(math::Fixed32{}, math::Fixed32{}, flatGround);
+        body.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, flatGround);
         check(body.isGrounded(), "a placed body starts standing on the ground");
 
         // Shove it upward and let it come back.
@@ -105,7 +113,7 @@ int main()
     // 2. Walking. Forward must move forward, and the speed must be the stated one.
     {
         engine::CharacterController body;
-        body.placeAt(math::Fixed32{}, math::Fixed32{}, flatGround);
+        body.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, flatGround);
         engine::CharacterIntent walk{};
         walk.forward = math::Fixed32::one();
 
@@ -128,8 +136,8 @@ int main()
     {
         engine::CharacterController straight;
         engine::CharacterController diagonal;
-        straight.placeAt(math::Fixed32{}, math::Fixed32{}, flatGround);
-        diagonal.placeAt(math::Fixed32{}, math::Fixed32{}, flatGround);
+        straight.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, flatGround);
+        diagonal.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, flatGround);
 
         engine::CharacterIntent one{};
         one.forward = math::Fixed32::one();
@@ -151,7 +159,7 @@ int main()
     // 4. A wall stops it; a kerb does not.
     {
         engine::CharacterController body;
-        body.placeAt(math::Fixed32{}, math::Fixed32{}, wallGround);
+        body.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, wallGround);
         engine::CharacterIntent east{};
         east.strafe = math::Fixed32::one(); // +X at yaw 0
 
@@ -162,7 +170,7 @@ int main()
         check(body.blockedCount() > 0u, "and the body says so rather than silently sticking");
 
         engine::CharacterController stepper;
-        stepper.placeAt(math::Fixed32{}, math::Fixed32{}, kerbGround);
+        stepper.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, kerbGround);
         for (core::u32 i = 0u; i < 240u; ++i)
             stepper.step(params, east, kStep, kerbGround);
         std::printf("  kerb: walked to x = %.2f, y = %.2f\n", stepper.x().toFloat(), stepper.y().toFloat());
@@ -173,7 +181,7 @@ int main()
     // 5. Coyote time: a jump pressed just after walking off a ledge still fires.
     {
         engine::CharacterController body;
-        body.placeAt(math::Fixed32{}, math::Fixed32{}, ledgeGround);
+        body.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, ledgeGround);
         engine::CharacterIntent east{};
         east.strafe = math::Fixed32::one();
 
@@ -205,7 +213,7 @@ int main()
     // tick AFTER touchdown. That is exactly what the buffer's six ticks are for.
     {
         engine::CharacterController body;
-        body.placeAt(math::Fixed32{}, math::Fixed32{}, flatGround);
+        body.placeAt(math::Fixed32{}, math::Fixed32{}, math::Fixed32{}, flatGround);
         const engine::CharacterIntent idle{};
         engine::CharacterIntent jump{};
         jump.jump = true;
@@ -245,7 +253,7 @@ int main()
     {
         const auto run = [&params]() {
             engine::CharacterController body;
-            body.placeAt(math::Fixed32::fromFloat(3.0f), math::Fixed32::fromFloat(-2.0f), kerbGround);
+            body.placeAt(math::Fixed32::fromFloat(3.0f), math::Fixed32::fromFloat(-2.0f), math::Fixed32{}, kerbGround);
             for (core::u32 i = 0u; i < 300u; ++i)
             {
                 engine::CharacterIntent intent{};

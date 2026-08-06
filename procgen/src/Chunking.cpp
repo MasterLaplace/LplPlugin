@@ -40,6 +40,18 @@ math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, cor
     return sampleNoiseAt(worldX, worldZ, layer);
 }
 
+math::Fixed32 sampleWorldMoisture(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
+{
+    NoiseParams moisture{};
+    moisture.amplitude = 1.0f;
+    moisture.octaves = 3u;
+    moisture.seed = params.worldSeed ^ 0x3A15E7u;
+    moisture.frequency = params.noise.frequency * 0.6f;
+
+    const core::f32 wet = 0.5f + sampleNoiseAt(worldX, worldZ, moisture).toFloat() * 0.5f;
+    return math::Fixed32::fromFloat(wet < 0.0f ? 0.0f : (wet > 1.0f ? 1.0f : wet));
+}
+
 Heightfield generateChunkTerrain(const ChunkParams &params, ChunkCoord coord)
 {
     if (params.size == 0u)
@@ -427,6 +439,146 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
             mask.at(x, z) = 1u;
         }
     return mask;
+}
+
+core::u32 coarseFlowDirection(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 coarseX,
+                              core::i32 coarseZ)
+{
+    if (rivers.coarseCells == 0u)
+        return 0xFFFFFFFFu;
+
+    const core::i32 span = static_cast<core::i32>(rivers.coarseCells);
+    const core::i32 half = span / 2;
+    const auto centreHeight = [&](core::i32 cx, core::i32 cz) {
+        return sampleWorldHeight(params, cx * span + half, cz * span + half);
+    };
+
+    const math::Fixed32 here = centreHeight(coarseX, coarseZ);
+    core::u32 best = 0xFFFFFFFFu;
+    math::Fixed32 bestDrop = math::Fixed32::zero();
+    for (core::u32 n = 0u; n < 8u; ++n)
+    {
+        // Strictly greater, so ties break on the lowest neighbour index: a flat reach
+        // has to route the same way on every machine and in every chunk that asks.
+        const math::Fixed32 drop = here - centreHeight(coarseX + kNeighbor8X[n], coarseZ + kNeighbor8Z[n]);
+        if (drop > bestDrop)
+        {
+            bestDrop = drop;
+            best = n;
+        }
+    }
+    return best;
+}
+
+FlowDirection markChunkRiverFlow(const ChunkParams &params, const EndlessRiverParams &rivers, ChunkCoord coord,
+                                 const Grid<core::u8> &mask)
+{
+    if (params.size == 0u || rivers.coarseCells == 0u || mask.empty())
+        return FlowDirection{};
+
+    const core::u32 coarsePerChunk = (params.size + rivers.coarseCells - 1u) / rivers.coarseCells;
+    // One verdict per coarse cell, memoised: nine noise samples each, and every fine
+    // cell of a coarse cell shares its answer. Asking per fine cell would cost the
+    // square of the coarse ratio for the same result.
+    lpl::pmr::vector<core::u8> coarse(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, kNoFlow);
+    lpl::pmr::vector<core::u8> known(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, 0u);
+
+    FlowDirection flow{params.size, params.size, kNoFlow};
+    for (core::u32 z = 0u; z < params.size; ++z)
+        for (core::u32 x = 0u; x < params.size; ++x)
+        {
+            if (mask.at(x, z) == 0u)
+                continue;
+            const core::u32 coarseX = x / rivers.coarseCells;
+            const core::u32 coarseZ = z / rivers.coarseCells;
+            if (coarseX >= coarsePerChunk || coarseZ >= coarsePerChunk)
+                continue;
+            const core::usize slot = static_cast<core::usize>(coarseZ) * coarsePerChunk + coarseX;
+            if (known[slot] == 0u)
+            {
+                const core::u32 direction = coarseFlowDirection(
+                    params, rivers, coord.x * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(coarseX),
+                    coord.z * static_cast<core::i32>(coarsePerChunk) + static_cast<core::i32>(coarseZ));
+                coarse[slot] = direction == 0xFFFFFFFFu ? kNoFlow : static_cast<core::u8>(direction);
+                known[slot] = 1u;
+            }
+            flow.at(x, z) = coarse[slot];
+        }
+    return flow;
+}
+
+namespace {
+
+/// Chunks sampled along each edge of the calibration window.
+constexpr core::i32 kCalibrationSide = 3;
+
+/**
+ * @brief Chunks between one sampled chunk and the next.
+ *
+ * ⚠ The window used to be nine ADJACENT chunks, and that stopped being enough the moment
+ * the walked world's landforms were widened: at a relief frequency of 0.06 a landform spans
+ * about a hundred and ten cells, while three chunks of twenty-four span seventy-two. The
+ * calibration was measuring less than one landform — sampling a corner and generalising to
+ * the world, which is the mistake calibration exists to prevent, one level up. Measured: a
+ * two per cent target produced fourteen per cent of the world in river.
+ *
+ * Spreading the same nine samples over a stride instead of widening the window keeps the
+ * cost identical — a bisection already pays nine `markChunkRivers`, and each of those is the
+ * expensive part — while covering ground several landforms across.
+ */
+constexpr core::i32 kCalibrationStride = 7;
+
+} // namespace
+
+core::f32 measureRiverShare(const ChunkParams &params, const EndlessRiverParams &rivers)
+{
+    if (params.size == 0u)
+        return 0.0f;
+
+    core::u32 cells = 0u;
+    core::u32 marked = 0u;
+    const core::i32 half = kCalibrationSide / 2;
+    for (core::i32 cz = -half; cz <= half; ++cz)
+        for (core::i32 cx = -half; cx <= half; ++cx)
+        {
+            const Grid<core::u8> mask =
+                markChunkRivers(params, rivers, ChunkCoord{cx * kCalibrationStride, cz * kCalibrationStride});
+            for (core::u32 z = 0u; z < params.size; ++z)
+                for (core::u32 x = 0u; x < params.size; ++x)
+                {
+                    ++cells;
+                    if (mask.at(x, z) != 0u)
+                        ++marked;
+                }
+        }
+    return cells == 0u ? 0.0f : static_cast<core::f32>(marked) / static_cast<core::f32>(cells);
+}
+
+core::u32 calibrateRiverThreshold(const ChunkParams &params, const EndlessRiverParams &rivers, core::f32 targetShare)
+{
+    if (params.size == 0u || targetShare <= 0.0f)
+        return 1u;
+
+    // Raising the threshold can only mark fewer cells, so the share is monotonically
+    // non-increasing in it and a bisection is exact rather than approximate. The upper bound
+    // is the largest basin a bounded radius can hold — beyond it every candidate is rejected
+    // and the share is zero, which the loop finds on its own.
+    EndlessRiverParams probe = rivers;
+    core::u32 low = 1u;
+    core::u32 high = (2u * rivers.basinRadius + 1u) * (2u * rivers.basinRadius + 1u);
+    if (high < 2u)
+        high = 2u;
+
+    while (low < high)
+    {
+        const core::u32 middle = low + (high - low) / 2u;
+        probe.riverThreshold = middle;
+        if (measureRiverShare(params, probe) > targetShare)
+            low = middle + 1u; // still too wet: the threshold has to rise
+        else
+            high = middle;
+    }
+    return low;
 }
 
 Heightfield generateErodedChunkTerrain(const ChunkParams &params, ChunkCoord coord, core::u32 iterations,

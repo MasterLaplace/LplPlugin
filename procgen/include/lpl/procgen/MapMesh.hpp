@@ -358,6 +358,58 @@ struct MapSurfaceStyle {
 }
 
 /**
+ * @brief Meshes a voxel volume into world coordinates, exposed faces only.
+ *
+ * The core of it, with no opinion about where the volume SITS. Extracted because a
+ * streamed village needs exactly this walk and cannot supply a @ref WorldAtlas — an atlas
+ * is a bounded map's product, and an endless world has no such thing. Writing the walk a
+ * second time would have been the sixth copy of "emit a quad per exposed face" in this
+ * repository, and every copy is a chance to wind one the wrong way round.
+ *
+ * @param mesh        Appended to.
+ * @param volume      What to mesh.
+ * @param originX     World x of the volume's (0, *, 0) corner.
+ * @param originZ     World z of it.
+ * @param groundAt    (localX, localZ) -> the ground this COLUMN stands on. A building
+ *                    passes one level for its whole footprint: a plot on a slope with each
+ *                    column at its own ground shears into a staircase.
+ * @param baseLift    World units between that ground and level 0.
+ * @param palette     Colour per material id; index 0 is never drawn.
+ * @param paletteSize Entries in @p palette.
+ */
+template <typename GroundAt>
+void appendVoxelFaces(MapMesh &mesh, const VoxelVolume &volume, float originX, float originZ, GroundAt &&groundAt,
+                      float baseLift, const Rgb *palette, core::u32 paletteSize)
+{
+    if (volume.empty() || palette == nullptr || paletteSize == 0u)
+        return;
+
+    // The walk itself is @ref forEachVoxelFace's, and this is now only its sink: place
+    // the face in world units and give it a colour. A second consumer arrived that has
+    // no vertex buffer to append to, and rewriting the walk for it would have been the
+    // sixth copy of the six faces — with the winding to get right a sixth time.
+    forEachVoxelFace(
+        volume, VoxelWindow{},
+        // Outside the array is EMPTY for a building: it stands in the air, so its outer
+        // faces are the ones a viewer sees. A cave answers the opposite way.
+        [](core::i32, core::i32, core::i32) { return false; },
+        [&](const float quad[12], float nx, float ny, float nz, core::u8 material, core::u32 x, core::u32 /*y*/,
+            core::u32 z) {
+            const Rgb colour = palette[material < paletteSize ? material : 0u];
+            const float lift = groundAt(x, z) + baseLift;
+            float world[12];
+            for (core::u32 v = 0u; v < 4u; ++v)
+            {
+                world[v * 3u] = originX + quad[v * 3u];
+                world[v * 3u + 1u] = lift + quad[v * 3u + 1u];
+                world[v * 3u + 2u] = originZ + quad[v * 3u + 2u];
+            }
+            appendQuad(mesh, world[0], world[1], world[2], world[3], world[4], world[5], world[6], world[7], world[8],
+                       world[9], world[10], world[11], nx, ny, nz, colour);
+        });
+}
+
+/**
  * @brief Meshes a voxel volume, emitting only the faces that border empty space.
  *
  * The generic mesher the grammar's products need: the town raised by @ref buildTown
@@ -379,62 +431,25 @@ struct MapSurfaceStyle {
                                             core::usize datumCount = 0u)
 {
     MapMesh mesh;
-    if (volume.empty() || atlas.height.empty() || palette == nullptr || paletteSize == 0u)
+    if (volume.empty() || atlas.height.empty())
         return mesh;
 
     const float halfW = static_cast<float>(atlas.height.width()) * 0.5f;
     const float halfD = static_cast<float>(atlas.height.depth()) * 0.5f;
-    const float cell = 1.0f;
 
-    const auto solid = [&volume](core::i32 x, core::i32 y, core::i32 z) {
-        if (x < 0 || y < 0 || z < 0 || static_cast<core::u32>(x) >= volume.width ||
-            static_cast<core::u32>(y) >= volume.levels || static_cast<core::u32>(z) >= volume.depth)
-            return false;
-        return volume.at(static_cast<core::u32>(x), static_cast<core::u32>(y), static_cast<core::u32>(z)) != 0u;
-    };
-
-    for (core::u32 y = 0u; y < volume.levels; ++y)
-        for (core::u32 z = 0u; z < volume.depth; ++z)
-            for (core::u32 x = 0u; x < volume.width; ++x)
-            {
-                const core::u8 material = volume.at(x, y, z);
-                if (material == 0u)
-                    continue;
-                const Rgb colour = palette[material < paletteSize ? material : 0u];
-
-                // The ground under the whole FOOTPRINT, not under this column. The
-                // difference is visible from across the map: a plot on a slope with
-                // each column at its own ground level shears into a staircase and,
-                // along a ridge, into a long wall standing free of the hillside.
-                const core::usize index = static_cast<core::usize>(z) * volume.width + x;
-                const float ground =
-                    datum != nullptr && index < datumCount ?
-                        datum[index] :
-                        atlas.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
-                const float y0 = ground + baseLift + static_cast<float>(y) * cell;
-                const float y1 = y0 + cell;
-                const float x0 = static_cast<float>(x) - halfW;
-                const float x1 = x0 + cell;
-                const float z0 = static_cast<float>(z) - halfD;
-                const float z1 = z0 + cell;
-
-                const core::i32 ix = static_cast<core::i32>(x);
-                const core::i32 iy = static_cast<core::i32>(y);
-                const core::i32 iz = static_cast<core::i32>(z);
-
-                if (!solid(ix, iy + 1, iz))
-                    appendQuad(mesh, x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1, 0.0f, 1.0f, 0.0f, colour);
-                if (!solid(ix, iy - 1, iz))
-                    appendQuad(mesh, x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0, 0.0f, -1.0f, 0.0f, colour);
-                if (!solid(ix + 1, iy, iz))
-                    appendQuad(mesh, x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1, 1.0f, 0.0f, 0.0f, colour);
-                if (!solid(ix - 1, iy, iz))
-                    appendQuad(mesh, x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0, -1.0f, 0.0f, 0.0f, colour);
-                if (!solid(ix, iy, iz + 1))
-                    appendQuad(mesh, x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1, 0.0f, 0.0f, 1.0f, colour);
-                if (!solid(ix, iy, iz - 1))
-                    appendQuad(mesh, x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0, 0.0f, 0.0f, -1.0f, colour);
-            }
+    // The ground under the whole FOOTPRINT, not under this column. The difference is
+    // visible from across the map: a plot on a slope with each column at its own ground
+    // level shears into a staircase and, along a ridge, into a long wall standing free of
+    // the hillside.
+    appendVoxelFaces(
+        mesh, volume, -halfW, -halfD,
+        [&](core::u32 x, core::u32 z) {
+            const core::usize index = static_cast<core::usize>(z) * volume.width + x;
+            return datum != nullptr && index < datumCount ?
+                       datum[index] :
+                       atlas.height.clamped(static_cast<core::i32>(x), static_cast<core::i32>(z)).toFloat();
+        },
+        baseLift, palette, paletteSize);
     return mesh;
 }
 

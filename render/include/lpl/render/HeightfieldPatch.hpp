@@ -50,6 +50,11 @@ struct HeightfieldPatchParams {
     core::f32 maxLight{1.25f}; ///< Ceiling on the lighting term.
 };
 
+/// The default hole rule: a heightfield is a continuous surface.
+struct NoPatchHoles {
+    [[nodiscard]] constexpr bool operator()(core::u32, core::u32) const noexcept { return false; }
+};
+
 /**
  * @brief Draws one patch, one quad per (stride x stride) block.
  *
@@ -60,12 +65,21 @@ struct HeightfieldPatchParams {
  *                   colour, called PER PIXEL when @p perPixel is set, and once per
  *                   quad otherwise. One functor for both paths, so the flat path
  *                   cannot drift from the shaded one.
+ * @param skipAt     (x, z) -> bool, patch-local. True leaves the quad UNDRAWN.
+ *
+ * The one way a heightfield can have a hole in it, and it needs one: a cave mouth is
+ * an opening in a hillside, and the surface passes straight across it. Nothing else
+ * about a heightfield changes — the hole is a decision the caller makes about a few
+ * named cells, not a property of the field. Defaults to no holes, so a surface world
+ * is exactly what it was.
+ *
  * @return Triangles submitted.
  */
-template <typename HeightAt, typename ShadeAt, typename ColourAt, typename Shader>
+template <typename HeightAt, typename ShadeAt, typename ColourAt, typename Shader, typename SkipAt = NoPatchHoles>
 core::u32 drawHeightfieldPatch(const RenderTarget &rt, const math::Mat4<core::f32> &mvp,
                                const HeightfieldPatchParams &params, const SunState &sun, HeightAt &&heightAt,
-                               ShadeAt &&shadeAt, ColourAt &&colourAt, Shader &&shade, bool perPixel)
+                               ShadeAt &&shadeAt, ColourAt &&colourAt, Shader &&shade, bool perPixel,
+                               SkipAt &&skipAt = SkipAt{})
 {
     const core::u32 stride = params.stride == 0u ? 1u : params.stride;
     const core::f32 strideF = static_cast<core::f32>(stride);
@@ -85,6 +99,8 @@ core::u32 drawHeightfieldPatch(const RenderTarget &rt, const math::Mat4<core::f3
     {
         for (core::u32 x = 0u; x + stride <= params.size; x += stride)
         {
+            if (skipAt(x, z))
+                continue;
             const core::f32 y00 = heightAt(x, z);
             const core::f32 y10 = heightAt(x + stride, z);
             const core::f32 y11 = heightAt(x + stride, z + stride);
