@@ -28,6 +28,28 @@
 namespace lpl::render {
 
 /**
+ * @brief Derives the vertical field of view that reproduces a physical viewing
+ * geometry, so the screen subtends the same angle as the real display would
+ * at the given eye distance.
+ *
+ * FOV = 2 * atan((screenHeight / 2) / eyeDistance), computed through CORDIC
+ * atan2 so the result is the same deterministic Fixed32 radians on the Linux
+ * oracle and the i686 kernel — this is meant to feed perspectiveFov() below,
+ * and matters most for VR, where the per-eye FOV must match the headset's
+ * physical lens geometry rather than an arbitrary aesthetic angle.
+ *
+ * @param screenHeight  Physical screen height (e.g. monitor height in cm, or
+ *                       a per-eye lens frustum height for VR), in any unit.
+ * @param eyeDistance    Distance from the eye to the screen, same unit as
+ *                       screenHeight, must be > 0.
+ */
+[[nodiscard]] inline math::Fixed32 fovFromScreen(math::Fixed32 screenHeight, math::Fixed32 eyeDistance) noexcept
+{
+    const math::Fixed32 halfHeight = screenHeight / math::Fixed32::fromInt(2);
+    return math::Fixed32::fromInt(2) * math::Cordic::atan2(halfHeight, eyeDistance);
+}
+
+/**
  * @brief Builds a perspective projection matrix from a Fixed32 field-of-view.
  *
  * @param fovRad      Vertical field of view, in Fixed32 radians.
