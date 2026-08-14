@@ -281,6 +281,10 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     wire.ambient = 0.28f;
     wire.grainTiles = 0.25f;
     wire.shadowSteps = 24u;
+    // Defaults off, exactly as the swell does: a document that says nothing about a
+    // horizon gets the flat infinite plate it has always got.
+    wire.curvatureFactor = 0.0f;
+    wire.curvatureAltitudeGain = 0.0f;
     wire.waterShallow = 0x00246E8Cu;
     wire.waterDeep = 0x000C1E3Cu;
     wire.rippleScale = 0.85f;
@@ -308,6 +312,8 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     wire.ambient = readF32(*view, "ambient", wire.ambient);
     wire.grainTiles = readF32(*view, "grainTiles", wire.grainTiles);
     wire.shadowSteps = readU32(*view, "shadowSteps", wire.shadowSteps);
+    wire.curvatureFactor = readF32(*view, "curvatureFactor", wire.curvatureFactor);
+    wire.curvatureAltitudeGain = readF32(*view, "curvatureAltitudeGain", wire.curvatureAltitudeGain);
     wire.grazerTint = readU32(*view, "grazerTint", wire.grazerTint);
     wire.hunterTint = readU32(*view, "hunterTint", wire.hunterTint);
     wire.bodyScale = readF32(*view, "bodyScale", wire.bodyScale);
@@ -386,6 +392,10 @@ std::string emitSceneView(const pack::ViewV1 &view)
     appendF32(out, "grainTiles", view.grainTiles);
     out += ',';
     appendU32(out, "shadowSteps", view.shadowSteps);
+    out += ',';
+    appendF32(out, "curvatureFactor", view.curvatureFactor);
+    out += ',';
+    appendF32(out, "curvatureAltitudeGain", view.curvatureAltitudeGain);
     out += ',';
     appendU32(out, "grazerTint", view.grazerTint);
     out += ',';

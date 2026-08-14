@@ -48,6 +48,19 @@ struct HeightfieldPatchParams {
     core::i32 originZ{0};
     core::f32 ambient{0.28f};  ///< What a surface facing away still receives.
     core::f32 maxLight{1.25f}; ///< Ceiling on the lighting term.
+
+    /// World-space camera position on the horizontal plane. Only read when
+    /// curvatureFactor is non-zero.
+    core::f32 cameraX{0.0f};
+    core::f32 cameraZ{0.0f};
+    /// Per-metre-squared drop applied to a vertex as it recedes from the
+    /// camera on the XZ plane, so the ground falls away toward a false
+    /// horizon instead of staying a flat plate to infinity. 0 disables it
+    /// (every existing call site, and the default, is unaffected). This is a
+    /// display-only bend of already-computed heights: no trigonometry, one
+    /// multiply-add per corner, so it costs nothing to leave wired in and
+    /// runs anywhere plain arithmetic does, kernel included.
+    core::f32 curvatureFactor{0.0f};
 };
 
 /// The default hole rule: a heightfield is a continuous surface.
@@ -126,7 +139,26 @@ core::u32 drawHeightfieldPatch(const RenderTarget &rt, const math::Mat4<core::f3
                                    0.0f, params.maxLight);
             const core::u32 base = colourAt(x, z);
 
-            const core::f32 quad[12] = {x0, y00, z0, x1, y10, z0, x1, y11, z1, x0, y01, z1};
+            // Curvature bends the DRAWN position only, after the normal is taken from
+            // the true local slope: a corner near the camera drops by nothing, one at
+            // the edge of view drops by distanceXZ^2 * factor, so the ground recedes
+            // below a false horizon the farther out it goes. Skipped entirely at the
+            // default (0), so every caller that never asked for it pays nothing.
+            core::f32 cy00 = y00, cy10 = y10, cy11 = y11, cy01 = y01;
+            if (params.curvatureFactor != 0.0f)
+            {
+                const auto drop = [&](core::f32 wx, core::f32 wz) noexcept -> core::f32 {
+                    const core::f32 dx = wx - params.cameraX;
+                    const core::f32 dz = wz - params.cameraZ;
+                    return (dx * dx + dz * dz) * params.curvatureFactor;
+                };
+                cy00 -= drop(x0, z0);
+                cy10 -= drop(x1, z0);
+                cy11 -= drop(x1, z1);
+                cy01 -= drop(x0, z1);
+            }
+
+            const core::f32 quad[12] = {x0, cy00, z0, x1, cy10, z0, x1, cy11, z1, x0, cy01, z1};
             if (perPixel)
                 triangles += fillPolygonShadedClipped(rt, mvp, quad, 4u, [&](core::f32 wx, core::f32 wy, core::f32 wz) {
                     (void) wy;

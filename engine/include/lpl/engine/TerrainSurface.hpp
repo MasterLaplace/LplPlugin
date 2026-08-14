@@ -60,7 +60,35 @@ struct TerrainSurfaceParams {
     core::f32 ambient{0.28f};     ///< What a surface facing away from the sun receives.
     core::f32 grainTiles{0.25f};  ///< Texture tiles per world cell.
     core::u32 shadowSteps{24u};   ///< Cells a shadow ray marches; also its longest shadow.
+    /// Per-metre-squared drop of distant terrain toward a false horizon (see
+    /// render::HeightfieldPatchParams::curvatureFactor). 0 disables it. Content, not
+    /// host: a world declares how far its horizon curves the same way it declares fog.
+    core::f32 curvatureFactor{0.0f};
+    /// Added to curvatureFactor per metre the eye sits above seaLevel, so the horizon
+    /// bends more the higher a body climbs — the ground-level plate a walker sees and
+    /// the tighter arc an aircraft or a mountain sees are the same field, evaluated at
+    /// a different altitude. 0 disables it: a dev who does not want the dynamic mode
+    /// sets only curvatureFactor and this stays a flat, fixed bend. Altitude below sea
+    /// level (diving, a cave) does not SUBTRACT from the base curve — a submarine
+    /// should not un-bend the world below what the surface already has.
+    core::f32 curvatureAltitudeGain{0.0f};
 };
+
+/**
+ * @brief The curvature strength to feed a frame's terrain draw, at this eye height.
+ *
+ * One formula, one place: every call site that draws a heightfield patch reads it
+ * from here instead of re-deriving it, so the static bend and the altitude-scaled
+ * one cannot drift apart between the streamed pass, the bounded pass and the
+ * reflection probe. Altitude BELOW seaLevel is clamped to 0 rather than let it
+ * subtract from curvatureFactor: diving or standing in a cave should not un-bend a
+ * world the surface already curves.
+ */
+[[nodiscard]] inline core::f32 effectiveCurvature(const TerrainSurfaceParams &params, core::f32 eyeY) noexcept
+{
+    const core::f32 altitude = eyeY - params.seaLevel;
+    return params.curvatureFactor + (altitude > 0.0f ? altitude : 0.0f) * params.curvatureAltitudeGain;
+}
 
 /**
  * @class TerrainSurface

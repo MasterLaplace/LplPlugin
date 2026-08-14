@@ -105,6 +105,8 @@ struct ViewProfile {
     out.surface.ambient = wire.ambient;
     out.surface.grainTiles = wire.grainTiles;
     out.surface.shadowSteps = wire.shadowSteps;
+    out.surface.curvatureFactor = wire.curvatureFactor;
+    out.surface.curvatureAltitudeGain = wire.curvatureAltitudeGain;
 
     out.water.shallow = wire.waterShallow;
     out.water.deep = wire.waterDeep;
@@ -168,6 +170,8 @@ struct ViewProfile {
     wire.ambient = profile.surface.ambient;
     wire.grainTiles = profile.surface.grainTiles;
     wire.shadowSteps = profile.surface.shadowSteps;
+    wire.curvatureFactor = profile.surface.curvatureFactor;
+    wire.curvatureAltitudeGain = profile.surface.curvatureAltitudeGain;
 
     wire.waterShallow = profile.water.shallow;
     wire.waterDeep = profile.water.deep;

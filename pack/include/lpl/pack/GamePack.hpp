@@ -574,9 +574,21 @@ struct ViewV1 {
     core::u32 biomeColour[kWireBiomeColours];
     core::u32 biomeColourCount;
 
+    // ── Horizon ─────────────────────────────────────────────────────────────
+    //
+    // Per-metre-squared drop applied to terrain as it recedes from the camera
+    // (see render::HeightfieldPatchParams::curvatureFactor). 0 is off, so a
+    // cartridge baked before this field still shows an infinite flat plate,
+    // exactly as it always did.
+    core::f32 curvatureFactor;
+    /// Growth of curvatureFactor per metre of altitude above seaLevel. 0 keeps the
+    /// bend fixed; a document opts into the dynamic mode by naming a value here,
+    /// and a dev who never wants it never has to.
+    core::f32 curvatureAltitudeGain;
+
     core::u32 flags; ///< kViewFlag* bits.
 };
-static_assert(sizeof(ViewV1) == 232u, "GamePack view profile layout is wire format");
+static_assert(sizeof(ViewV1) == 240u, "GamePack view profile layout is wire format");
 
 /**
  * @brief FNV-1a over a byte range — the pack's integrity check.

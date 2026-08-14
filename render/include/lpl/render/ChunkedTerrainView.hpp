@@ -53,6 +53,9 @@ struct ChunkedViewParams {
                                  ///< vanishes.
     core::f32 ambient{0.28f};
     core::f32 skirtDrop{6.0f};
+    core::f32 cameraX{0.0f}; ///< Only read when curvatureFactor is non-zero.
+    core::f32 cameraZ{0.0f};
+    core::f32 curvatureFactor{0.0f}; ///< See HeightfieldPatchParams::curvatureFactor.
 };
 
 /** @brief One chunk that survived the cull, and how far away it is. */
@@ -212,6 +215,9 @@ public:
             patch.size = params.chunkSize;
             patch.stride = strideForRing(ref.ring, params.lodRings);
             patch.ambient = params.ambient;
+            patch.cameraX = params.cameraX;
+            patch.cameraZ = params.cameraZ;
+            patch.curvatureFactor = params.curvatureFactor;
             // The origin is the caller's to fill: it knows the chunk's coordinates.
             _stats.triangles += forEachChunk(rt, mvp, sun, ref, patch, params);
         }

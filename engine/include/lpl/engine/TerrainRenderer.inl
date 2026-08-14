@@ -203,6 +203,9 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
     viewParams.halfHeight = params.chunkHalfHeight;
     viewParams.ambient = params.ambient;
     viewParams.skirtDrop = params.skirtDrop;
+    viewParams.cameraX = basis.eye.x;
+    viewParams.cameraZ = basis.eye.z;
+    viewParams.curvatureFactor = effectiveCurvature(surface.params(), basis.eye.y);
 
     props.beginFrame();
     selectChunks(mvp, basis, rt.width, rt.height, viewParams, params, focusChunkX, focusChunkZ, streamer);
@@ -662,6 +665,9 @@ core::u32 TerrainRenderer::drawBounded(const render::RenderTarget &rt, const ren
     patch.originX = -static_cast<core::i32>(halfX);
     patch.originZ = -static_cast<core::i32>(halfZ);
     patch.ambient = params.ambient;
+    patch.cameraX = basis.eye.x;
+    patch.cameraZ = basis.eye.z;
+    patch.curvatureFactor = effectiveCurvature(surface.params(), basis.eye.y);
 
     _triangles += render::drawHeightfieldPatch(
         rt, mvp, patch, surface.sun(), heightAt, [](core::u32, core::u32) { return 0.0f; }, colourAt,
@@ -806,6 +812,9 @@ void TerrainRenderer::refreshProbe(TerrainStreamer &streamer, TerrainSurface &su
                 patch.originX = chunk.coord.x * static_cast<core::i32>(params.chunkSize);
                 patch.originZ = chunk.coord.z * static_cast<core::i32>(params.chunkSize);
                 patch.ambient = params.ambient;
+                patch.cameraX = basis.eye.x;
+                patch.cameraZ = basis.eye.z;
+                patch.curvatureFactor = effectiveCurvature(surface.params(), basis.eye.y);
 
                 // Index == size is legitimate and expected — it is the shared edge with
                 // the next chunk, which is why the ground pass answers it from the world
