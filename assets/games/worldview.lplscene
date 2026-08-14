@@ -150,6 +150,9 @@
         "seaLevel": -1.0,
         "fogDensity": 0.009,
         "ambient": 0.3,
+        "_curvature_comment": "Off is the flat infinite plate this world always had. A small base bend reads as a horizon rather than a wall of fog at the resident set's own edge, tuned so 50 units out (mid-view, still walked on) drops well under a unit while 150 (near the edge of the resident rings) drops a few units. The altitude term is deliberately tiny here — this world is walked, not flown — and exists so a future vantage far above the ground bends more without this document changing again.",
+        "curvatureFactor": 0.00015,
+        "curvatureAltitudeGain": 0.0000005,
         "sky": {
           "zenithR": 0.18,
           "zenithG": 0.38,
