@@ -87,6 +87,20 @@ WorldBuilder &WorldBuilder::terrain(core::u32 width, core::u32 depth, const Nois
     return *this;
 }
 
+WorldBuilder &WorldBuilder::relief(const ReliefBlend &blend)
+{
+    if (blend.mosaic == nullptr || !blend.mosaic->valid() || _height.width() == 0u)
+        return *this;
+
+    // A bounded grid cell is a world cell: the bounded world is a WINDOW on the same coordinates
+    // the streamed one uses, so a survey lands in both at the same place.
+    for (core::u32 z = 0u; z < _height.depth(); ++z)
+        for (core::u32 x = 0u; x < _height.width(); ++x)
+            _height.at(x, z) = applyRelief(blend, static_cast<core::i32>(x), static_cast<core::i32>(z),
+                                           _height.at(x, z));
+    return *this;
+}
+
 WorldBuilder &WorldBuilder::addLayer(const NoiseParams &noise)
 {
     ensureTerrain();

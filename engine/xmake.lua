@@ -24,6 +24,10 @@ target("lpl-engine")
         "lpl-procgen",
         "lpl-ai",
         "lpl-ecology",
+        -- @warning engine/ hosts the JOURNEY, which writes into a history chronicle: the arrow points
+        -- this way and never back. history/ stays corpus-only and freestanding, which is what
+        -- lets LplKnowledge compile it without an ECS.
+        "lpl-history",
         -- engine/ HOSTS the demon (DemonHost), so the arrow points this way. agent/
         -- deliberately knows nothing about engine/, which is what keeps it acyclic.
         "lpl-agent"

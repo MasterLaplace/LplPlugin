@@ -53,6 +53,52 @@ struct RoutingParams {
     core::f32 waterLevel{0.0f};    ///< Height at or below which a cell counts as water.
     core::f32 reuseDiscount{0.8f}; ///< Share of the base cost waived on an existing road, in [0, 1].
     core::u32 maxExpansions{0u};   ///< Search budget; 0 means the whole grid.
+
+    /**
+     * Columns the world wraps at, or zero for a grid with real edges.
+     *
+     * @warning **A closed world without this is worse than an open one.** Two places either side of
+     * the antimeridian are neighbours; a router that cannot step across it lays a road all the way
+     * round the planet instead -- and that road is a perfectly valid, perfectly expensive route, so
+     * nothing downstream can tell it was the wrong one.
+     *
+     * @warning **The heuristic depends on it, and that is the dangerous half.** A* only returns the
+     * cheapest road while its heuristic never OVERESTIMATES. Near the seam an unwrapped distance
+     * overestimates enormously -- 990 cells where the real gap is 10 -- so the search discards the
+     * short way before evaluating it and returns a plausible road instead of the best one, in
+     * silence. This file has already been bitten once by exactly that, when the cheapest step was
+     * stated as `base` and `reuseDiscount` falsified it.
+     *
+     * @warning East-west only. A pole crossing IS a real shortcut between two high-latitude places on
+     * opposite meridians, and it is deliberately not offered: it would need a heuristic that stays
+     * admissible across a reflection plus a half-turn, and an inadmissible heuristic is worse than
+     * a missing shortcut -- the first returns wrong roads quietly, the second returns long ones
+     * honestly. Same line `math::shortestDelta` draws, for the same reason.
+     *
+     * Must equal the grid's width when set: the grid IS the circumference, which is why a global
+     * route is planned at a coarse level. At 30 km a cell the whole earth is 1336 by 667.
+     */
+    core::u32 wrapColumns{0u};
+
+    /**
+     * Whether a road may cross a pole.
+     *
+     * @warning **A pole crossing is a real shortcut and it is NOT a wrap.** Going north off the top of
+     * the grid does not arrive at the bottom -- that is a torus, and it would join the Arctic to the
+     * Antarctic. On a sphere you come back at the SAME edge, half a world away in longitude, walking
+     * south again. So the step from row zero northward lands on row zero at column x + columns/2.
+     *
+     * @warning **The heuristic is the dangerous half, and it is why this was left out until now.** A*
+     * returns the cheapest road only while its heuristic never overestimates, and offering a
+     * shortcut in the graph without teaching the heuristic about it makes the estimate too LARGE for
+     * routes that use it -- so the search thrashes and, worse, can settle for a route that is merely
+     * plausible. @ref routeLeastCost therefore estimates the minimum of three route classes: the
+     * direct one, over the north pole, and over the south. Each is a lower bound on its class, so
+     * their minimum is a lower bound on every path, which is exactly what admissibility asks.
+     *
+     * Requires @ref wrapColumns; a pole makes no sense on a grid that does not close east-west.
+     */
+    bool wrapPoles{false};
 };
 
 /**

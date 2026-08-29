@@ -118,13 +118,77 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
     // The heuristic must never overestimate, or A* stops returning the cheapest
     // road and starts returning a plausible one. Chebyshev distance times the
     // cheapest possible cell is the largest value that still cannot: no route can
-    // reach the goal in fewer steps, and no step can cost less than base.
+    // reach the goal in fewer steps, and no step can cost less than this.
+    //
+    // @warning The cheapest step is `base` MINUS the reuse discount, and getting that wrong made
+    // the two halves of this file contradict each other. The bound used to be `base` on the
+    // stated grounds that "no step can cost less than base" -- which `reuseDiscount` is
+    // precisely designed to falsify, since entering an existing road costs
+    // base * (1 - discount). The heuristic therefore overestimated exactly when a road was
+    // available, so the search discarded the merge before evaluating it: measured on two
+    // parallel attested roads two cells apart, both were laid in full (82 cells painted,
+    // 82 cells expanded) at every discount from 0 to 1. The feature documented as "the whole
+    // reason routes merge into a network instead of piling up as parallel lines" did nothing
+    // at all, and nothing noticed because the pass had no caller.
+    const math::Fixed32 cheapestStep = base - base * discount;
+    // @warning On a closed world the column distance is the SHORTER way round, and this line is the
+    // one that decides whether a wrapped route is correct or merely plausible. An unwrapped
+    // distance near the seam overestimates by nearly a circumference, so the heuristic stops being
+    // admissible exactly where the answer matters and A* discards the short way unevaluated.
+    const bool wraps = params.wrapColumns > 0u && params.wrapColumns == width;
+    // A pole is only meaningful on a grid that already closes east-west: crossing one turns the
+    // longitude by half a world, and half of nothing is nothing.
+    const bool poles = wraps && params.wrapPoles;
+    const core::i32 columns = static_cast<core::i32>(params.wrapColumns);
+    const core::i32 rows = static_cast<core::i32>(field.depth());
+
+    const auto foldColumns = [&](core::i32 dx) {
+        if (!wraps)
+            return dx;
+        if (dx > columns / 2)
+            return dx - columns;
+        if (dx < -(columns / 2))
+            return dx + columns;
+        return dx;
+    };
+
     const auto heuristic = [&](core::u32 cell) {
-        const core::i32 dx = static_cast<core::i32>(cell % width) - static_cast<core::i32>(goalX);
-        const core::i32 dz = static_cast<core::i32>(cell / width) - static_cast<core::i32>(goalZ);
+        const core::i32 x = static_cast<core::i32>(cell % width);
+        const core::i32 z = static_cast<core::i32>(cell / width);
+        const core::i32 dx = foldColumns(x - static_cast<core::i32>(goalX));
+        const core::i32 dz = z - static_cast<core::i32>(goalZ);
         const core::i32 ax = dx < 0 ? -dx : dx;
         const core::i32 az = dz < 0 ? -dz : dz;
-        return base * math::Fixed32::fromInt(ax > az ? ax : az);
+        core::i32 best = ax > az ? ax : az;
+
+        if (poles)
+        {
+            // @warning Three route classes, and the estimate is their MINIMUM. Any path either stays
+            // in the sheet, crosses the north pole, or crosses the south; each expression below is a
+            // lower bound on the steps its class needs, so the smallest is a lower bound on every
+            // path -- which is exactly what keeps A* returning the cheapest road rather than a
+            // plausible one. Offering the shortcut in the graph and NOT here would leave the
+            // estimate too large for the routes that use it.
+            //
+            // Crossing lands half a world away in longitude, so the horizontal work is measured
+            // from there.
+            const core::i32 acrossX = foldColumns(x + columns / 2 - static_cast<core::i32>(goalX));
+            const core::i32 acrossAbs = acrossX < 0 ? -acrossX : acrossX;
+
+            // North: up to row zero, one step over, then down to the goal. Steps are diagonal, so
+            // the bound is the larger of the vertical and horizontal totals, never their sum.
+            const core::i32 northVertical = z + static_cast<core::i32>(goalZ) + 1;
+            const core::i32 north = northVertical > acrossAbs ? northVertical : acrossAbs;
+            if (north < best)
+                best = north;
+
+            const core::i32 southVertical =
+                (rows - 1 - z) + (rows - 1 - static_cast<core::i32>(goalZ)) + 1;
+            const core::i32 south = southVertical > acrossAbs ? southVertical : acrossAbs;
+            if (south < best)
+                best = south;
+        }
+        return cheapestStep * math::Fixed32::fromInt(best);
     };
 
     lpl::pmr::vector<math::Fixed32> best(cells, math::Fixed32::max());
@@ -160,8 +224,28 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
 
         for (core::u32 n = 0u; n < 8u; ++n)
         {
-            const core::i32 nx = static_cast<core::i32>(x) + kNeighbor8X[n];
-            const core::i32 nz = static_cast<core::i32>(z) + kNeighbor8Z[n];
+            core::i32 nx = static_cast<core::i32>(x) + kNeighbor8X[n];
+            core::i32 nz = static_cast<core::i32>(z) + kNeighbor8Z[n];
+            // @warning A pole is NOT a wrap: stepping north off the top row comes back on the top
+            // row, half a world away in longitude, walking south again. Sending it to the bottom
+            // row instead would be a torus, joining the Arctic to the Antarctic.
+            if (poles && nz < 0)
+            {
+                nz = 0;
+                nx += columns / 2;
+            }
+            else if (poles && nz >= rows)
+            {
+                nz = rows - 1;
+                nx += columns / 2;
+            }
+            // The column past the last IS the first: a step across the seam is an ordinary step.
+            if (wraps)
+            {
+                nx %= columns;
+                if (nx < 0)
+                    nx += columns;
+            }
             if (!field.contains(nx, nz))
                 continue;
             const core::u32 next = field.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
@@ -317,8 +401,18 @@ core::u32 connectPlaces(const Heightfield &field, const lpl::pmr::vector<core::u
 
             for (core::u32 n = 0u; n < 8u; ++n)
             {
-                const core::i32 nx = static_cast<core::i32>(x) + kNeighbor8X[n];
+                core::i32 nx = static_cast<core::i32>(x) + kNeighbor8X[n];
                 const core::i32 nz = static_cast<core::i32>(z) + kNeighbor8Z[n];
+                // @warning The SAME wrap as the router above. This file has already been bitten by its
+                // two halves disagreeing about the cost model; letting only one of them cross the
+                // seam would be the same fault in a new place.
+                if (params.wrapColumns > 0u && params.wrapColumns == field.width())
+                {
+                    const core::i32 columns = static_cast<core::i32>(params.wrapColumns);
+                    nx %= columns;
+                    if (nx < 0)
+                        nx += columns;
+                }
                 if (!field.contains(nx, nz))
                     continue;
                 const core::u32 next = field.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz));

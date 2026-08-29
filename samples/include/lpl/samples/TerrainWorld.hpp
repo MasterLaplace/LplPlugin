@@ -36,6 +36,7 @@
 #ifndef LPL_SAMPLES_TERRAINWORLD_HPP
 #    define LPL_SAMPLES_TERRAINWORLD_HPP
 
+#    include <lpl/samples/ReliefBlob.hpp>
 #    include <lpl/ai/Personality.hpp>
 #    include <lpl/ai/ScentWindow.hpp>
 #    include <lpl/ai/StigmergyField.hpp>
@@ -99,6 +100,63 @@
 namespace lpl::samples {
 
 /**
+ * @brief Builds a field over the checked-in window of real ground.
+ *
+ * @warning **A free function of the recipe, not a method, because that is what it IS.** Which ground
+ * the blob describes and where it lands depends on the recipe and on nothing about a world instance
+ * -- and a world cannot be driven from a test without an `engine::WorldContext`, so a method here
+ * would have been logic reachable only by booting. Extracting it is what let the join below be
+ * measured rather than asserted from the outside.
+ *
+ * @warning **The projection is built here rather than carried in the blob**: a blob is an array of
+ * metres, a projection is a decision about where those metres go. Its sea level comes from the
+ * recipe, so elevation zero lands exactly where the biome classifier thinks the coast is. Those two
+ * disagreeing is the pattern this repository has already paid for three times.
+ *
+ * @param recipe        The world being built.
+ * @param noiseAmplitude The recipe's terrain amplitude, already scaled for walking.
+ * @return The field, centred on the world origin so a body starts on measured ground.
+ */
+[[nodiscard]] inline math::ReliefField makeRealReliefField(const procgen::WorldRecipe &recipe,
+                                                           core::f32 noiseAmplitude) noexcept
+{
+    math::GeoProjection spec{};
+    // The blob names the tile's SOUTH-west corner; a projection wants the NORTH-west one, and a
+    // tile is one degree tall. One addition, done once, rather than a mirror in the sampler.
+    spec.originLatitudeRaw = (kReliefBlobSouthLatitude + 1) * 65536;
+    spec.originLongitudeRaw = kReliefBlobWestLongitude * 65536;
+    spec.referenceLatitude = kReliefBlobSouthLatitude;
+    spec.metresPerCell = kReliefBlobMetresPerCell;
+
+    // Derived from the recipe rather than picked: the measured range is several kilometres of
+    // rock, and at true scale it would tower over a world whose noise is tens of units tall.
+    const core::f32 span = static_cast<core::f32>(kReliefBlobHighest - kReliefBlobLowest);
+    const core::f32 wanted = noiseAmplitude * 2.0f;
+    spec.unitsPerMetre = math::Fixed32::fromFloat(span > 1.0f ? wanted / span : 1.0f);
+    // THE reconciliation: elevation zero is mean sea level by construction of the data, so it
+    // lands on the sea the recipe declares and nowhere else.
+    spec.seaLevelUnits = math::Fixed32::fromFloat(recipe.biomes.seaLevel);
+
+    math::ReliefField field{};
+    field.samples = kReliefBlobSamples;
+    field.width = kReliefBlobSide;
+    field.height = kReliefBlobSide;
+    // @warning **At its TRUE projection cells, starting at the origin, and NOT centred on it.** A
+    // centred window spans negative columns, and a closed world folds those to the far side of the
+    // planet -- so the survey's western half would be cut off and reappear an ocean away, which
+    // reads as a coastline in the wrong place rather than as an error. The blob is the north-west
+    // corner of its tile, and the projection's origin is that same corner, so cells 0..side-1 are
+    // exactly where this ground really is.
+    field.originCellX = 0;
+    field.originCellZ = 0;
+    field.projection = math::makeReliefProjection(spec);
+    field.blendCells = kReliefBlobSide / 6u;
+    field.exposedEdges = 0xFu; // A lone survey: every side faces invented country.
+    field.level = 0u;
+    return field;
+}
+
+/**
  * @class TerrainWorld
  * @brief A world on a heightfield: generated, streamed, lit, walked and grazed.
  *
@@ -110,6 +168,16 @@ namespace lpl::samples {
  */
 class TerrainWorld final : public engine::World, public engine::ITerrainQuery {
 public:
+    /**
+     * @brief The parameters this world generates its ground from.
+     *
+     * @warning Exposed so a test can ask whether the survey is actually READ, which no assertion
+     * about rendering can answer: a world that carried a relief field and ignored it would draw
+     * exactly the same picture as one that consulted it, and both would look like terrain.
+     *
+     * @return The chunk parameters, survey included.
+     */
+    [[nodiscard]] const procgen::ChunkParams &chunkParamsForTest() const noexcept { return _chunkParams; }
     /**
      * @brief Builds the viewer around a recipe.
      *
@@ -645,8 +713,23 @@ private:
             // Building a world from a seed is procgen's business, and freeing the
             // passes' intermediate grids the moment the few this game reads have
             // been copied out is procgen::buildSnapshot's.
+            // @warning **The bounded map stands on the same survey the streamed world does.** Without
+            // this, pressing O to look at the map showed invented ground while the world underfoot
+            // was measured -- a map of somewhere else, and the one place a player would compare the
+            // two. The blend is the shared one; a second implementation here would be two answers to
+            // how a survey meets invented ground.
+            attachRealRelief(recipe.terrain.amplitude);
+            procgen::ReliefBlend blend{};
+            blend.mosaic = _reliefMosaic.valid() ? &_reliefMosaic : nullptr;
+            blend.detail = recipe.terrain;
+            blend.detail.amplitude = recipe.terrain.amplitude * 0.12f;
+            blend.detail.frequency = recipe.terrain.frequency * 3.0f;
+            blend.detail.octaves = 3u;
+            blend.seed = _seed;
+
             const procgen::WorldSnapshot snapshot = procgen::buildSnapshot(
-                recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f});
+                recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f},
+                &blend);
 
             _height = snapshot.height;
             _biomes = snapshot.biomes;
@@ -766,6 +849,22 @@ private:
      * level and constraining the fine chunks from it is exactly what the cascade
      * rule exists to make mechanical.
      */
+    /**
+     * @brief Builds the survey this world stands on, for whichever path is generating.
+     *
+     * @warning Both the streamed world and the bounded map call it, because a map that showed
+     * invented ground while the world underfoot was measured would be a map of somewhere else --
+     * and the map is the one place a player compares the two.
+     *
+     * @param amplitude The terrain amplitude the survey is scaled against.
+     */
+    void attachRealRelief(core::f32 amplitude)
+    {
+        _reliefField = makeRealReliefField(_recipe, amplitude);
+        _reliefMosaic = math::ReliefMosaic{};
+        (void) _reliefMosaic.add(&_reliefField);
+    }
+
     void setInfinite(bool infinite)
     {
         if (_infinite == infinite)
@@ -790,6 +889,38 @@ private:
         seeded.terrain.seed = _seed;
         const procgen::EndlessPlan plan = procgen::endlessPlanFromRecipe(seeded, kChunkSize);
         _chunkParams = plan.chunk;
+
+        // Real ground under the generated ground. The measured window displaces the lowest
+        // frequency where it reaches, the recipe's noise keeps the rest, and the blend band makes
+        // the join instead of a cliff -- so a body can walk out of the survey and off into invented
+        // country without meeting an edge.
+        attachRealRelief(_chunkParams.noise.amplitude);
+        _chunkParams.relief = _reliefMosaic.valid() ? &_reliefMosaic : nullptr;
+
+        // The high frequencies 1200-metre samples cannot carry. Without it the measured window is
+        // visibly smoother than the country around it, which reads as a flaw in the terrain rather
+        // than as the resolution of a survey.
+        _chunkParams.reliefDetail = _chunkParams.noise;
+        _chunkParams.reliefDetail.amplitude = _chunkParams.noise.amplitude * 0.12f;
+        _chunkParams.reliefDetail.frequency = _chunkParams.noise.frequency * 3.0f;
+        _chunkParams.reliefDetail.octaves = 3u;
+
+        // @warning **The world closes on itself, and it is DERIVED rather than typed.** How many cells
+        // go round is a fact about the projection -- 360 degrees at its own scale over its cell size
+        // -- so asking the projection is the only way the answer cannot disagree with the ground it
+        // measures. Walking east far enough now returns from the west, and the seam does not exist
+        // rather than being hidden: the column past the last IS the first, same cell, same survey
+        // lookup, same noise lattice.
+        _chunkParams.globe = _reliefField.projection.globe();
+
+        // Said out loud, because "the world carries a survey" is otherwise invisible from a boot:
+        // a world that silently failed to attach one draws invented ground that looks exactly like
+        // terrain, and nothing in the log would differ. The numbers live in the generated header
+        // rather than being formatted here -- Log takes a string, and hand-rolled integer
+        // formatting has already been removed from this project once as speculative.
+        core::Log::info(_chunkParams.relief != nullptr
+                            ? "TerrainWorld: standing on measured earth (SRTM, southern Peloponnese)"
+                            : "TerrainWorld: no survey attached, ground is invented");
 
         _streamParams.generateRadius = kStreamRadius;
         // 1.5x: the hysteresis that stops a camera sitting on a boundary from
@@ -1402,7 +1533,7 @@ private:
                 .number(_skyBlock);
             drawShadowedText(pitchPixels, 8u, 134u, line, 0x00A0B4C8u);
 
-            // ⚠ The landmark readout used to live BELOW this branch, and this branch
+            // @warning The landmark readout used to live BELOW this branch, and this branch
             // returns — so in endless mode, the only mode that has landmarks in it, it
             // was never drawn at all. Not overdrawn: unreachable. It is the line that
             // answers "I cannot see a cave entrance" against "there are no cave
@@ -1624,7 +1755,7 @@ private:
             // physical key is scancode 0x27, which the US table decodes that way, so a
             // QWERTY-built kernel was handed a character nothing listened for.
             //
-            // ⚠ This class's own file comment promises an @c onKey hook here for a game
+            // @warning This class's own file comment promises an @c onKey hook here for a game
             // to bind its own keys through. There is no such hook: no virtual, no call
             // site. Said rather than left standing, because a comment describing a seam
             // that does not exist is worse than no comment — it stops the next reader
@@ -2049,6 +2180,16 @@ private:
     /// The resident set: procgen::ChunkResidency owns the policy, this owns the payload.
 
     procgen::ChunkParams _chunkParams{};
+
+    /**
+     * The measured window, and the mosaic that offers it.
+     *
+     * @warning The mosaic holds a POINTER to the field, so the two must live and die together and
+     * neither may move. Members of the world, so their lifetime is the world's -- which outlives
+     * every chunk that reads through them.
+     */
+    math::ReliefField _reliefField{};
+    math::ReliefMosaic _reliefMosaic{};
     procgen::StreamingParams _streamParams{};
     procgen::EndlessRiverParams _riverParams{};
     /// World cell the endless stigmergy window's corner sits on.

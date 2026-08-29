@@ -113,14 +113,15 @@ inline void captureAtlas(const WorldBuilder &builder, const WalkabilityRule &rul
  */
 [[nodiscard]] inline WorldAtlas buildAtlas(WorldRecipe recipe, ecs::Registry *registry,
                                            lpl::pmr::vector<ecs::EntityId> *outPropIds,
-                                           const WalkabilityRule &rule = WalkabilityRule{})
+                                           const WalkabilityRule &rule = WalkabilityRule{},
+                                           const ReliefBlend *relief = nullptr)
 {
     WorldAtlas out;
 
     WorldBuilder builder{recipe.seed};
     // See buildSnapshot: the rule and the reported sea level both travel with the lift,
     // or every absolute height an instrument reads is off by it.
-    const core::f32 lift = applyRecipe(builder, recipe);
+    const core::f32 lift = applyRecipe(builder, recipe, relief);
     WalkabilityRule lifted = rule;
     lifted.seaLevel += lift;
 

@@ -515,8 +515,51 @@ target_end()
 target("test-history-parity")
     set_kind("binary")
     set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-history")
+    -- @warning Depends on lpl-engine because the JOURNEY half of this gate lives there: a walk needs a
+    -- Registry and terrain, both of which are the engine's, while history/ stays corpus-only.
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-history", "lpl-engine")
     add_files("parity/test_history_parity.cpp")
+target_end()
+
+-- @warning The double-buffer contract had no test until a bug on top of it made five wrong hypotheses
+-- possible. A base feature with no test is the one every future bug gets blamed on.
+target("test-ecs-buffers")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs")
+    add_files("parity/test_ecs_buffers.cpp")
+target_end()
+
+-- @warning Every absolute day number in this one was computed with an independent tool, because
+-- writing one by hand had already produced an off-by-one.
+target("test-calendar")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-history")
+    add_files("parity/test_calendar.cpp")
+target_end()
+
+-- @warning procgen::routeLeastCost had no caller anywhere in the tree, so it had no test either.
+-- This covers the first one: the roads a corpus attests, laid across relief by the engine.
+target("test-terrain-routes")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-history", "lpl-engine")
+    add_files("parity/test_terrain_routes.cpp")
+target_end()
+
+target("test-relief-parity")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-engine")
+    add_files("parity/test_relief_parity.cpp")
+target_end()
+
+target("test-geo-projection")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-procgen")
+    add_files("parity/test_geo_projection.cpp")
 target_end()
 
 target("test-terrain-render")

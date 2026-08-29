@@ -35,6 +35,7 @@
 #    define LPL_PROCGEN_CHUNKING_HPP
 
 #    include <lpl/core/Types.hpp>
+#    include <lpl/math/Geo.hpp>
 #    include <lpl/procgen/Grid.hpp>
 #    include <lpl/procgen/Heightfield.hpp>
 #    include <lpl/procgen/Hydrology.hpp>
@@ -64,6 +65,64 @@ struct ChunkParams {
     core::u32 size{32u};        ///< Cells per chunk edge.
     core::u32 worldSeed{1337u}; ///< The one seed the whole world comes from.
     NoiseParams noise{};        ///< Terrain sampling; its own seed is ignored.
+
+    /**
+     * Real ground, when there is any, displacing @ref noise as the lowest frequency.
+     *
+     * @warning A MOSAIC and not a lone field, even for a world with one tile. Two ways to attach
+     * ground would be two code paths that could disagree about what the ground is; a mosaic of one
+     * behaves exactly as a lone field did, and gate P21 folding unchanged is what says so.
+     *
+     * @warning **Null is the whole world today, and must stay costless.** A world with no survey
+     * behind it takes exactly the path it always took -- @ref sampleWorldHeight returns the noise
+     * and nothing else -- so every signature already under a parity gate is unmoved by this field
+     * existing. That is asserted by the gates rather than argued here.
+     *
+     * @warning A raw pointer and not a value: in ring 0 this points into a section of a baked image
+     * that was never copied, and the field itself is non-owning for the same reason. Its lifetime
+     * is the image's, which outlives every chunk.
+     */
+    const math::ReliefMosaic *relief{nullptr};
+
+    /**
+     * The high frequencies real relief does not have.
+     *
+     * @warning **This is what makes measured ground octave ZERO rather than a replacement.** Thirty-metre
+     * samples carry a mountain range and cannot carry a boulder, so @ref noise is displaced by the
+     * real ground and this layer is added back on top. Declared as its own noise layer rather than
+     * as a scale factor on @ref noise, because scaling a five-octave field down keeps its low
+     * octaves too -- gentle, wrong, and indistinguishable from real terrain that happens to be
+     * smooth.
+     *
+     * @warning **Silent by default, and the default had to be written out.** `NoiseParams` carries an
+     * amplitude of sixteen, so a world that said nothing about detail was getting sixteen units of
+     * roughness nobody asked for -- measured ground, quietly overwritten by invention. A caller who
+     * declares real relief and leaves this alone has asked for real relief.
+     *
+     * @warning It lives here rather than on the field because a field is a SURVEY, and how rough a
+     * world is on top of its survey is a decision about the world.
+     */
+    NoiseParams reliefDetail{.amplitude = 0.0f};
+
+    /**
+     * What happens when a body walks off the edge of the world.
+     *
+     * @warning **Applied BEFORE anything else reads the coordinate, which is what makes the seam
+     * disappear rather than merely move.** Wrapping the cell first means the column just past the
+     * last one IS the first one -- same cell, same survey lookup, same noise lattice -- so the
+     * ground matches by construction instead of by two surfaces happening to agree. Wrapping only
+     * the relief and leaving the noise unwrapped would put a cliff of invented terrain along the
+     * antimeridian of an otherwise closed world.
+     *
+     * @warning Unset by default: a region-sized world has real edges, and closing it would join two
+     * places that are nowhere near each other.
+     *
+     * @warning A pole is a singularity in any cylindrical projection, so the noise pattern is
+     * discontinuous across it however this is done. The GROUND is not, because the survey is
+     * continuous there; the invented layer simply cannot be, and that is a property of the
+     * projection rather than of this field.
+     */
+    math::GlobeWrap globe{};
 };
 
 /**
@@ -129,6 +188,34 @@ struct ChunkParams {
  * @param worldZ  World row.
  * @return The elevation there.
  */
+/**
+ * @struct ReliefBlend
+ * @brief What it takes to lay measured ground over invented ground.
+ *
+ * @warning **Extracted so there is exactly ONE blend.** The streamed world reads it through
+ * @ref sampleWorldHeight and the bounded world through `WorldBuilder::displaceWithRelief`, and the
+ * two must agree at every cell or a map and the ground it describes are two different places. A
+ * second copy is how a chunked world drifts from the unchunked one -- the failure this file's own
+ * header already warns about for the noise layer.
+ */
+struct ReliefBlend {
+    const math::ReliefMosaic *mosaic{nullptr}; ///< The survey, or null for a world without one.
+    NoiseParams detail{.amplitude = 0.0f};     ///< The high frequencies a survey cannot carry.
+    core::u32 seed{0u};                        ///< The world seed the detail layer derives from.
+};
+
+/**
+ * @brief Lays measured ground over invented ground at one cell.
+ *
+ * @param blend    The survey and its detail layer.
+ * @param worldX   World column, already wrapped if the world is closed.
+ * @param worldZ   World row.
+ * @param invented What the generator would have produced here.
+ * @return The ground, blended across the survey's border band.
+ */
+[[nodiscard]] math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ,
+                                        math::Fixed32 invented);
+
 [[nodiscard]] math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ);
 
 /**
@@ -139,7 +226,7 @@ struct ChunkParams {
  * SECOND moisture field would be a world whose caves are wet where its forests are
  * dry — and the two would drift the first time either was retuned.
  *
- * ⚠ Derived from `params.noise.frequency` and NOT from its amplitude, base height or
+ * @warning Derived from `params.noise.frequency` and NOT from its amplitude, base height or
  * shaping. Those are instructions for a heightfield; applied to weather they say
  * nothing, and inheriting them is what once pinned this axis to zero over an entire
  * world.
@@ -323,7 +410,7 @@ struct EndlessRiverParams {
 /**
  * @brief The upstream count that makes a target SHARE of cells carry a river.
  *
- * ⚠ `EndlessRiverParams::riverThreshold` is an ABSOLUTE count, and an absolute threshold
+ * @warning `EndlessRiverParams::riverThreshold` is an ABSOLUTE count, and an absolute threshold
  * against a distribution that moves is this repository's most-repeated mistake — four
  * occurrences before this one. It moves here for a specific reason: `endlessPlanFromRecipe`
  * lowers the noise frequency to make landforms wide enough to walk across, and a smoother

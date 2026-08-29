@@ -46,6 +46,7 @@
 #    include <lpl/math/Random.hpp>
 #    include <lpl/procgen/Aggregation.hpp>
 #    include <lpl/procgen/Biome.hpp>
+#    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/CaveSystem.hpp>
 #    include <lpl/procgen/Chunking.hpp>
 #    include <lpl/procgen/Dungeon.hpp>
@@ -224,6 +225,28 @@ public:
 
     /// @brief Generates a heightfield with explicit noise settings.
     WorldBuilder &terrain(core::u32 width, core::u32 depth, const NoiseParams &noise);
+
+    /**
+     * @brief Lays measured ground over the terrain already generated.
+     *
+     * @warning **The same blend the streamed world uses, called per cell** -- @ref applyRelief, not a
+     * copy of it. A bounded map and the streamed world it is a map OF must agree at every cell, and
+     * two implementations of "how does a survey meet invented ground" would be two different places
+     * wearing one name. This file's own header already makes that argument about the pass order.
+     *
+     * @warning It runs BEFORE normalisation, terracing and erosion, because it displaces the LOWEST
+     * frequency: erosion softening real ground is what makes a survey look like terrain rather than
+     * like a photograph pasted onto one, and normalising afterwards keeps the whole field in the
+     * frame the rest of the recipe expects.
+     *
+     * @warning A bounded grid cell (x, z) is world cell (x, z). The bounded world is a WINDOW on the
+     * same coordinates the streamed one uses, so a survey lands in both at the same place; an origin
+     * of its own here would be a second answer to where the ground is.
+     *
+     * @param blend The survey and its detail layer. A null mosaic is a no-op.
+     * @return This builder.
+     */
+    WorldBuilder &relief(const ReliefBlend &blend);
 
     /// @brief Adds a second noise layer (ridges, roughness) over the terrain.
     WorldBuilder &addLayer(const NoiseParams &noise);

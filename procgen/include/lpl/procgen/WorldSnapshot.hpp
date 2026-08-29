@@ -124,7 +124,8 @@ inline void captureSnapshot(const WorldBuilder &builder, const WalkabilityRule &
  */
 [[nodiscard]] inline WorldSnapshot buildSnapshot(WorldRecipe recipe, ecs::Registry *registry,
                                                  lpl::pmr::vector<ecs::EntityId> *outPropIds,
-                                                 const WalkabilityRule &rule = WalkabilityRule{})
+                                                 const WalkabilityRule &rule = WalkabilityRule{},
+                                                 const ReliefBlend *relief = nullptr)
 {
     WorldSnapshot out;
 
@@ -135,7 +136,7 @@ inline void captureSnapshot(const WorldBuilder &builder, const WalkabilityRule &
     // world after its own thresholds were written. Shifting the rule by the applied
     // lift is what stops "below sea level" from meaning a different altitude than the
     // classifier used — the failure looks like walkable water, and it is silent.
-    const core::f32 lift = applyRecipe(builder, recipe);
+    const core::f32 lift = applyRecipe(builder, recipe, relief);
     WalkabilityRule lifted = rule;
     lifted.seaLevel += lift;
 

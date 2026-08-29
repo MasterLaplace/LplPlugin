@@ -63,7 +63,7 @@ constexpr core::u32 kChunkSize = 24u;
 /**
  * @brief How far the fixture raises the sea so the origin window HAS water in it.
  *
- * ⚠ Not a tuning knob, a fixture requirement, and it came back from the dead once. The
+ * @warning Not a tuning knob, a fixture requirement, and it came back from the dead once. The
  * walked world's landforms are about a hundred and ten cells across; this harness streams a
  * five-by-five block of twenty-four-cell chunks, which is a hundred and twenty. The whole
  * window therefore fits on ONE landform — and when that landform is above the waterline
@@ -140,7 +140,7 @@ struct Harness {
     /**
      * @brief Streams the window around @p focusChunk rather than always around the origin.
      *
-     * ⚠ Not a convenience. The walked world's landforms are about a hundred and ten cells
+     * @warning Not a convenience. The walked world's landforms are about a hundred and ten cells
      * across and this window is a hundred and twenty, so it fits on ONE of them — and the
      * one at the origin has neither sea nor river in it. Every block below that measures
      * water was passing or failing on an empty set. The repository already knows this shape:
@@ -772,6 +772,123 @@ int main()
                 std::fclose(out);
             }
         }
+    }
+
+    std::printf("-- the showcase world stands on measured earth, not only on noise\n");
+    {
+        // @warning **The check that stops the whole relief chain being an inert field on a struct.**
+        // Everything before it is exercised by gates and tests of their own; this asks whether the
+        // ground the client walks on is actually changed by the survey. A world that carried one
+        // and ignored it would draw the same picture and pass every other assertion in this file.
+        // @warning The plan this file ALREADY derived, not a second one. endlessPlanFromRecipe
+        // calibrates a river threshold by bisecting over a nine-chunk window -- the most expensive
+        // thing here by an order of magnitude -- and a second call is both a second bill and a
+        // second answer to how this world is scaled. Building one cost this test ninety seconds and
+        // is exactly the mistake walkedPlan() exists to prevent.
+        const procgen::WorldRecipe recipe = procgen::parityWorldRecipe();
+        const procgen::EndlessPlan &plan = walkedPlan();
+
+        static const math::ReliefField field =
+            samples::makeRealReliefField(recipe, plan.chunk.noise.amplitude);
+        check(field.valid(), "the checked-in survey is a usable field");
+
+        math::ReliefMosaic mosaic{};
+        check(mosaic.add(&field), "and it goes into a mosaic");
+
+        // Centred on the origin, so the origin is measured ground and somewhere far away is not.
+        // Both must hold, or the survey covers everything or nothing.
+        // @warning The window sits at its TRUE projection cells -- 0 to side-1 -- and NOT centred on
+        // the origin, because a centred one spans negative columns and a closed world folds those to
+        // the far side of the planet. So the origin is the survey's north-west corner, and the
+        // sampling below has to look where the ground actually is rather than around zero.
+        const core::i32 side = static_cast<core::i32>(samples::kReliefBlobSide);
+        math::Fixed32 measured{};
+        check(mosaic.heightAt(0, 0, measured), "the origin is on measured ground");
+        check(mosaic.heightAt(side / 2, side / 2, measured), "and so is the middle of the survey");
+        check(!mosaic.heightAt(100000, 100000, measured), "and far away is not");
+
+        procgen::ChunkParams params = plan.chunk;
+        params.relief = &mosaic;
+        params.reliefDetail = params.noise;
+        params.reliefDetail.amplitude = params.noise.amplitude * 0.12f;
+        params.reliefDetail.frequency = params.noise.frequency * 3.0f;
+        params.reliefDetail.octaves = 3u;
+
+        // @warning The ground must actually DIFFER from the world without it. A survey that is read
+        // and then contributes nothing is indistinguishable from no survey at all.
+        core::u32 differing = 0u;
+        core::u32 sampled = 0u;
+        for (core::i32 z = 2; z < side - 2; z += 4)
+        {
+            for (core::i32 x = 2; x < side - 2; x += 4)
+            {
+                ++sampled;
+                if (procgen::sampleWorldHeight(params, x, z).raw() !=
+                    procgen::sampleWorldHeight(plan.chunk, x, z).raw())
+                    ++differing;
+            }
+        }
+        check(differing == sampled, "the survey changes the ground it stands on");
+        std::printf("     %u of %u sampled cells differ from the survey-less world\n", differing, sampled);
+
+        // And far outside the window the two worlds must AGREE again, or the survey is leaking into
+        // country it does not cover.
+        check(procgen::sampleWorldHeight(params, 100000, 100000).raw() ==
+                  procgen::sampleWorldHeight(plan.chunk, 100000, 100000).raw(),
+              "and leaves the country beyond it alone");
+
+        // The window carries bathymetry, so both sides of sea level must appear. A world entirely
+        // above water never exercises the reconciliation the projection exists to make.
+        core::u32 wet = 0u;
+        core::u32 dry = 0u;
+        const math::Fixed32 sea = math::Fixed32::fromFloat(recipe.biomes.seaLevel);
+        for (core::i32 z = 0; z < side; z += 2)
+            for (core::i32 x = 0; x < side; x += 2)
+                (procgen::sampleWorldHeight(params, x, z) <= sea ? wet : dry)++;
+        check(wet > 0u, "there is sea in the measured window");
+        check(dry > 0u, "and land");
+
+        // @warning **The bounded map must stand on the SAME survey.** Before this, pressing O to look
+        // at the map drew invented ground while the world underfoot was measured -- a map of
+        // somewhere else, shown in the one place a player compares the two. A bounded build with the
+        // survey injected must differ from one without it, at the same cells.
+        procgen::WorldRecipe bounded = recipe;
+        bounded.materializeGround = false;
+        procgen::ReliefBlend blend{};
+        blend.mosaic = &mosaic;
+        blend.detail = bounded.terrain;
+        blend.detail.amplitude = bounded.terrain.amplitude * 0.12f;
+        blend.detail.frequency = bounded.terrain.frequency * 3.0f;
+        blend.detail.octaves = 3u;
+        blend.seed = bounded.seed;
+
+        lpl::pmr::vector<ecs::EntityId> ids;
+        const procgen::WorldSnapshot plain =
+            procgen::buildSnapshot(bounded, nullptr, &ids, procgen::WalkabilityRule{}, nullptr);
+        lpl::pmr::vector<ecs::EntityId> ids2;
+        const procgen::WorldSnapshot surveyed =
+            procgen::buildSnapshot(bounded, nullptr, &ids2, procgen::WalkabilityRule{}, &blend);
+
+        check(plain.width == surveyed.width && plain.depth == surveyed.depth,
+              "the two bounded builds are the same shape");
+        core::u32 mapDiffer = 0u;
+        core::u32 mapSampled = 0u;
+        const core::u32 span = plain.width < static_cast<core::u32>(side) ? plain.width
+                                                                         : static_cast<core::u32>(side);
+        for (core::u32 z = 0u; z < span; z += 2u)
+        {
+            for (core::u32 x = 0u; x < span; x += 2u)
+            {
+                ++mapSampled;
+                if (plain.height.at(x, z).raw() != surveyed.height.at(x, z).raw())
+                    ++mapDiffer;
+            }
+        }
+        check(mapSampled > 0u, "the map overlaps the survey at all");
+        check(mapDiffer > mapSampled / 2u, "the bounded map stands on the survey too");
+        std::printf("     bounded map: %u of %u sampled cells differ from the survey-less build\n",
+                    mapDiffer, mapSampled);
+        std::printf("     %u wet, %u dry cells across the measured window\n", wet, dry);
     }
 
     std::printf("\n%s (%d failures, %d checks)\n", failures == 0 ? "ALL PASS" : "FAILURES", failures, checks);

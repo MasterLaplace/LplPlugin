@@ -25,19 +25,61 @@ core::u32 chunkSeed(const ChunkParams &params, ChunkCoord coord)
     return math::deriveStream(mixed, 0xC804Bu).state();
 }
 
+math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ,
+                          math::Fixed32 invented)
+{
+    // No survey behind this world: exactly the path it always took, so nothing already folded moves
+    // because this branch exists.
+    if (blend.mosaic == nullptr || !blend.mosaic->valid())
+        return invented;
+
+    math::Fixed32 measured{};
+    if (!blend.mosaic->heightAt(worldX, worldZ, measured))
+        return invented;
+
+    // The weight is asked for AFTER the sample, because a cell can be inside the field and still be
+    // a gap in the survey -- and a gap must fall back to invented ground at full strength rather
+    // than to a fade towards nothing.
+    const math::Fixed32 weight = blend.mosaic->weightAt(worldX, worldZ);
+    if (weight.raw() <= 0)
+        return invented;
+
+    // Real ground is the lowest frequency; the detail layer is what thirty-metre samples cannot
+    // carry. Added only where the real ground counts, so the border band does not gain roughness
+    // the invented side does not have.
+    NoiseParams detail = blend.detail;
+    detail.seed = blend.seed ^ 0x5E1F1Eu;
+    const math::Fixed32 roughness =
+        detail.amplitude > 0.0f ? sampleNoiseAt(worldX, worldZ, detail) : math::Fixed32::zero();
+
+    const math::Fixed32 real = measured + roughness;
+    if (weight.raw() >= math::Fixed32::one().raw())
+        return real;
+    // Linear across the band. A body walking out of the survey must not meet a cliff made of
+    // whatever the two surfaces happened to differ by.
+    return real * weight + invented * (math::Fixed32::one() - weight);
+}
+
 math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
 {
-    // World coordinates, not chunk-local ones. This single choice is what makes
-    // the whole scheme seamless: the shared edge of two chunks is the same
-    // world position, so it evaluates to the same height in both.
-    //
-    // The layer itself is evaluated by the shared sampler rather than spelled out
-    // again here. Spelling it out twice is how a chunked world drifts away from
-    // the unchunked one: the copy that is not on the common path stops receiving
-    // new parameters, and a chunk then disagrees with the map it belongs to.
+    // First, before anything reads the coordinate: on a closed world the cell past the last column
+    // IS the first column, so the survey lookup and the noise lattice both land on the same cell and
+    // the seam does not exist rather than being hidden. Costless when the world has real edges.
+    math::wrapCell(params.globe, worldX, worldZ);
+
+    // World coordinates, not chunk-local ones. This single choice is what makes the whole scheme
+    // seamless: the shared edge of two chunks is the same world position, so it evaluates to the
+    // same height in both.
     NoiseParams layer = params.noise;
     layer.seed = params.worldSeed;
-    return sampleNoiseAt(worldX, worldZ, layer);
+    const math::Fixed32 invented = sampleNoiseAt(worldX, worldZ, layer);
+
+    // One blend, shared with the bounded builder: see ReliefBlend for why it is not written twice.
+    ReliefBlend blend{};
+    blend.mosaic = params.relief;
+    blend.detail = params.reliefDetail;
+    blend.seed = params.worldSeed;
+    return applyRelief(blend, worldX, worldZ, invented);
 }
 
 math::Fixed32 sampleWorldMoisture(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
@@ -515,7 +557,7 @@ constexpr core::i32 kCalibrationSide = 3;
 /**
  * @brief Chunks between one sampled chunk and the next.
  *
- * ⚠ The window used to be nine ADJACENT chunks, and that stopped being enough the moment
+ * @warning The window used to be nine ADJACENT chunks, and that stopped being enough the moment
  * the walked world's landforms were widened: at a relief frequency of 0.06 a landform spans
  * about a hundred and ten cells, while three chunks of twenty-four span seventy-two. The
  * calibration was measuring less than one landform — sampling a corner and generalising to

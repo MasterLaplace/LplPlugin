@@ -96,7 +96,7 @@ core::u32 foldWorldState(const ecs::Registry &registry) noexcept
     return hash;
 }
 
-core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
+core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const ReliefBlend *relief)
 {
     // The pass order lives here, in one place, rather than at every call site.
     // It is not a style preference: two callers ordering erosion and rivers
@@ -110,6 +110,15 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe)
     // up with two generators and a gate that exercises the one nothing else runs.
     builder.cellSize(recipe.cellSize);
     builder.terrain(recipe.width, recipe.depth, recipe.terrain);
+
+    // @warning **Measured ground displaces the LOWEST frequency, so it lands here and not later.**
+    // Erosion softening real relief is what makes a survey read as terrain rather than as a
+    // photograph pasted onto one, and normalising afterwards keeps the whole field in the frame the
+    // rest of the recipe expects. Injected rather than named by the recipe, for the same reason
+    // `ChunkParams::relief` is a pointer beside serialisable noise: a recipe is a wire object and a
+    // survey is data that has to come from outside it.
+    if (relief != nullptr)
+        builder.relief(*relief);
 
     if (recipe.normalizeTerrain)
         builder.normalize(recipe.heightLow, recipe.heightHigh);

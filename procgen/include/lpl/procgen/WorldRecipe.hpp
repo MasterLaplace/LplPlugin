@@ -384,7 +384,8 @@ struct WorldRecipeResult {
  *         measure is not at the altitude its own recipe named. Returned rather than
  *         recomputed: it is only knowable at the moment erosion finished.
  */
-core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe);
+core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe,
+                      const ReliefBlend *relief = nullptr);
 
 /**
  * @brief Runs every enabled pass of @p recipe into @p registry and folds it.
