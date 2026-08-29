@@ -156,7 +156,7 @@ struct DerivedLayout {
  *
  * Size is the highest @c (offset + fieldSize) rounded up to the alignment;
  * alignment is the maximum field alignment. Must match @ref defaultLayout for
- * every registered component — that equality is what lets the reflection table
+ * every registered component -- that equality is what lets the reflection table
  * replace the hand-written @c defaultLayout switch.
  */
 [[nodiscard]] constexpr DerivedLayout computeLayout(const ComponentSchema &schema) noexcept
@@ -182,7 +182,7 @@ namespace detail {
 // --- Field tables (one contiguous array per component) -------------------- //
 // Offsets/types mirror the concrete data types documented in Component.hpp.
 
-// Position/Velocity/AABB/Mass are authoritative → Fixed32 (raw i32 defaults).
+// Position/Velocity/AABB/Mass are authoritative -> Fixed32 (raw i32 defaults).
 inline constexpr FieldDesc kPositionFields[] = {
     {"value", FieldType::Vec3Fixed, 0, 0},
 };
@@ -190,7 +190,7 @@ inline constexpr FieldDesc kVelocityFields[] = {
     {"value", FieldType::Vec3Fixed, 0, 0},
 };
 inline constexpr FieldDesc kRotationFields[] = {
-    // Rotation stays float for now — Fixed32 quaternion (CORDIC) is a later slice.
+    // Rotation stays float for now -- Fixed32 quaternion (CORDIC) is a later slice.
     {"value", FieldType::QuatF, 0, floatBits(0.0f)},
 };
 inline constexpr FieldDesc kAngularVelocityFields[] = {
@@ -220,7 +220,7 @@ inline constexpr FieldDesc kPlayerTagFields[] = {
 inline constexpr FieldDesc kSleepStateFields[] = {
     {"asleep", FieldType::U8, 0, 0, true, 0, 1},
 };
-// The animal's heritable traits. Authoritative — a genome multiplies into speed
+// The animal's heritable traits. Authoritative -- a genome multiplies into speed
 // and damage, and breeding compounds it, so a float would let two machines
 // disagree about a population after a few generations.
 inline constexpr FieldDesc kGenomeFields[] = {
@@ -238,10 +238,27 @@ inline constexpr FieldDesc kCreatureFields[] = {
 };
 // Unit facing on the ground plane. Bounded to [-1, 1] in raw Q16.16 because a
 // facing longer than one is not a fast animal, it is a pace multiplier hidden in
-// a direction — and the pace belongs to the genome.
+// a direction -- and the pace belongs to the genome.
 inline constexpr FieldDesc kHeadingFields[] = {
     {"x", FieldType::Fixed32, 0, 1 << 16, true, -(1 << 16), 1 << 16},
     {"z", FieldType::Fixed32, 4, 0,       true, -(1 << 16), 1 << 16},
+};
+// Who this entity is, in a corpus. @warning `subject` is NOT bounded: it is an identifier
+// interned by whatever curated the corpus, so any value is a legitimate one and a
+// range check here would refuse real people. The years are unbounded for the same
+// reason in the other direction -- a corpus that reaches back to the palaeolithic
+// has legitimate values a game would call absurd.
+inline constexpr FieldDesc kHistoricalFields[] = {
+    {"subject",  FieldType::U32, 0, 0},
+    {"bornDay", FieldType::I32, 4, 0},
+    {"diedDay", FieldType::I32, 8, 0},
+};
+// Which chunk a Position is relative to. @warning Unbounded on purpose: a chunk index is
+// how far the world reaches, and any bound here would be a hard edge on a world
+// whose whole point is not having one.
+inline constexpr FieldDesc kWorldCellFields[] = {
+    {"chunkX", FieldType::I32, 0, 0},
+    {"chunkZ", FieldType::I32, 4, 0},
 };
 inline constexpr FieldDesc kBciInputFields[] = {
     {"alpha",         FieldType::F32, 0, floatBits(0.0f)},
@@ -266,10 +283,87 @@ inline constexpr ComponentSchema kSchemas[] = {
     {ComponentId::Genome,          "Genome",          kGenomeFields         },
     {ComponentId::Creature,        "Creature",        kCreatureFields       },
     {ComponentId::Heading,         "Heading",         kHeadingFields        },
+    {ComponentId::Historical,      "Historical",      kHistoricalFields     },
+    {ComponentId::WorldCell,       "WorldCell",       kWorldCellFields      },
 };
 
 static_assert(sizeof(kSchemas) / sizeof(kSchemas[0]) == static_cast<core::usize>(ComponentId::Count),
               "reflection table must cover every ComponentId");
+
+/**
+ * @brief Bytes a field occupies, from its type alone.
+ *
+ * @param type The field type.
+ * @return Its width.
+ */
+[[nodiscard]] constexpr core::u32 fieldWidth(FieldType type) noexcept
+{
+    switch (type)
+    {
+    case FieldType::U8: return 1u;
+    case FieldType::U16: return 2u;
+    case FieldType::F32:
+    case FieldType::I32:
+    case FieldType::U32:
+    case FieldType::Fixed32: return 4u;
+    case FieldType::Vec3F:
+    case FieldType::Vec3Fixed: return 12u;
+    case FieldType::QuatF: return 16u;
+    }
+    return 4u;
+}
+
+/**
+ * @brief Whether a schema's fields tile its component without gap or overhang.
+ *
+ * @warning **The check nothing performed, and the one that matters most.** The reflection table is what
+ * bake and the editor read a component THROUGH -- offsets, widths, bounds -- while the C++ struct is
+ * what every system reads it AS. Nothing tied the two together: a field added to one and not the
+ * other, or an offset off by four, produces a component that serialises to something a system
+ * never wrote, silently and plausibly. The existing assertion only checked that the table has a
+ * row per `ComponentId`, which is presence, not agreement.
+ *
+ * Fields must be declared in offset order and must exactly cover the layout `defaultLayout`
+ * declares -- a gap means a byte nothing describes, an overhang means a read past the component.
+ *
+ * @param schema The schema.
+ * @return true when the fields tile the component exactly.
+ */
+[[nodiscard]] constexpr bool schemaTilesComponent(const ComponentSchema &schema) noexcept
+{
+    core::u32 cursor = 0u;
+    for (const FieldDesc &field : schema.fields)
+    {
+        if (field.offset != cursor)
+            return false;
+        cursor += fieldWidth(field.type);
+    }
+    return cursor == defaultLayout(schema.id).size;
+}
+
+/**
+ * @brief Whether every schema tiles its component.
+ *
+ * @return true when they all do.
+ */
+[[nodiscard]] constexpr bool everySchemaTilesItsComponent() noexcept
+{
+    for (const ComponentSchema &schema : kSchemas)
+    {
+        // @warning Components with no fields declared yet are skipped rather than failed: a schema that
+        // describes nothing is an honest "not described yet", where one that describes the wrong
+        // thing is a silent misread. Only the second is a defect.
+        if (schema.fields.empty())
+            continue;
+        if (!schemaTilesComponent(schema))
+            return false;
+    }
+    return true;
+}
+
+static_assert(everySchemaTilesItsComponent(),
+              "a component schema does not tile its component: a field is missing, an offset is "
+              "wrong, or the layout changed without the reflection following");
 
 } // namespace detail
 

@@ -9,6 +9,8 @@
 
 #include <lpl/engine/systems/CreatureSystems.hpp>
 
+#include <lpl/engine/systems/GroundStep.hpp>
+
 #include <lpl/ai/Personality.hpp>
 #include <lpl/ecology/Genome.hpp>
 #include <lpl/ecs/Archetype.hpp>
@@ -471,77 +473,18 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
                 const math::Fixed32 pace = view.genome[i].maxSpeed * _params.step *
                                            (math::Fixed32::fromFloat(0.7f) + traits.energy * math::Fixed32::half());
 
-                // ── Avoidance, before the move rather than after refusing it ──
-                //
-                // A full body-length ahead, not the fraction one tick covers: looking
-                // only as far as the next step means the turn happens with the
-                // obstacle already underfoot, which is a collision reported as an
-                // intention.
+                // @warning The step itself lives in `stepOnGround`, shared with the historical
+                // journey. Two steppers would be two answers to "may a body go there", free to
+                // disagree about corners — and the corner case took three attempts to get right
+                // the first time.
                 const math::Fixed32 reach = math::Fixed32::one() + view.genome[i].size;
-                if (!_terrain.standable(position.x + headingX * reach, position.z + headingZ * reach))
-                {
-                    math::Fixed32 bestX = headingX;
-                    math::Fixed32 bestZ = headingZ;
-                    math::Fixed32 bestDot = math::Fixed32::fromInt(-2);
-                    bool found = false;
-                    for (core::u32 n = 0u; n < 8u; ++n)
-                    {
-                        const math::Fixed32 candidateX = math::Fixed32::fromInt(procgen::kNeighbor8X[n]) *
-                                                         (n < 4u ? math::Fixed32::one() : math::kInvSqrt2);
-                        const math::Fixed32 candidateZ = math::Fixed32::fromInt(procgen::kNeighbor8Z[n]) *
-                                                         (n < 4u ? math::Fixed32::one() : math::kInvSqrt2);
-                        if (!_terrain.standable(position.x + candidateX * reach, position.z + candidateZ * reach))
-                            continue;
-                        // Closest to the current heading: turning is cheap, reversing
-                        // is not, and a creature that takes the first free direction
-                        // in array order makes every herd drift east.
-                        const math::Fixed32 dot = candidateX * headingX + candidateZ * headingZ;
-                        if (dot > bestDot)
-                        {
-                            bestDot = dot;
-                            bestX = candidateX;
-                            bestZ = candidateZ;
-                            found = true;
-                        }
-                    }
-                    if (found)
-                    {
-                        headingX = bestX;
-                        headingZ = bestZ;
-                        ++_avoided;
-                    }
-                }
-
-                const math::Fixed32 stepX = headingX * pace;
-                const math::Fixed32 stepZ = headingZ * pace;
-                const math::Fixed32 tryX = position.x + stepX;
-                const math::Fixed32 tryZ = position.z + stepZ;
-
-                // Axes tested separately, DIAGONAL included: testing the two axes
-                // apart and then moving along both walks the corner between two free
-                // cells into the blocked one they share, which puts the body inside
-                // the rock the next tick has to rescue it from.
-                const bool freeX = _terrain.standable(tryX, position.z);
-                const bool freeZ = _terrain.standable(position.x, tryZ);
-                if (freeX && freeZ && _terrain.standable(tryX, tryZ))
-                {
-                    position.x = tryX;
-                    position.z = tryZ;
-                }
-                else if (freeX)
-                    position.x = tryX;
-                else if (freeZ)
-                    position.z = tryZ;
-                else
-                {
-                    // Cornered: turn around rather than freeze. The HEADING is
-                    // reversed, not the boid velocity — zeroing that destroys the very
-                    // state the flocking rules accumulate, and a herd of those
-                    // shudders in place.
-                    headingX = math::Fixed32{} - headingX;
-                    headingZ = math::Fixed32{} - headingZ;
+                math::Vec3<math::Fixed32> &body = position;
+                const GroundStepResult stepped =
+                    stepOnGround(_terrain, body, headingX, headingZ, pace, reach);
+                if (stepped.avoided)
+                    ++_avoided;
+                if (stepped.cornered)
                     ++_cornered;
-                }
             }
         }
     }
