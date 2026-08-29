@@ -468,6 +468,126 @@ int main()
                                                              refused.cells.size() > over.cells.size());
     }
 
+    std::printf("-- a world too large to search flat is searched twice\n");
+    {
+        // @warning **The measurement that forces the shape.** A* keeps cost, parent and a settled flag
+        // per cell -- about twelve bytes. A global grid at thirty-metre cells is 890 733 444 400
+        // cells, roughly ten TERABYTES; at 7.7 km it is 163 MB. A planet cannot be searched flat.
+        constexpr core::u32 kRatio = 8u;
+        constexpr core::u32 kFine = 256u;
+        constexpr core::u32 kCoarse = kFine / kRatio;
+
+        // A ridge across the middle with one pass through it, so the route has a shape to find
+        // rather than a straight line to walk: a corridor around a straight line would confine
+        // nothing and the comparison below would be vacuous.
+        procgen::Heightfield fine{kFine, kFine, math::Fixed32::fromFloat(1.0f)};
+        constexpr core::u32 kRidge = 128u;
+        constexpr core::u32 kGate = 200u;
+        for (core::u32 x = 0u; x < kFine; ++x)
+            if (x < kGate || x > kGate + 8u)
+                fine.at(x, kRidge) = math::Fixed32::fromFloat(60.0f);
+
+        // The summary: each coarse cell the MAXIMUM of its block, so a ridge stays a ridge. A mean
+        // would let an eight-cell wall average away into a slope, and the coarse plan would walk
+        // straight through a mountain -- which is the failure a summary is most likely to have.
+        procgen::Heightfield coarse{kCoarse, kCoarse, math::Fixed32::zero()};
+        for (core::u32 cz = 0u; cz < kCoarse; ++cz)
+        {
+            for (core::u32 cx = 0u; cx < kCoarse; ++cx)
+            {
+                math::Fixed32 peak = math::Fixed32::zero();
+                for (core::u32 fz = 0u; fz < kRatio; ++fz)
+                    for (core::u32 fx = 0u; fx < kRatio; ++fx)
+                    {
+                        const math::Fixed32 here = fine.at(cx * kRatio + fx, cz * kRatio + fz);
+                        if (here > peak)
+                            peak = here;
+                    }
+                coarse.at(cx, cz) = peak;
+            }
+        }
+
+        procgen::RoutingParams cost{};
+        cost.waterPenalty = 0.0f;
+        cost.reuseDiscount = 0.0f;
+
+        const procgen::RoutedPath flat =
+            procgen::routeLeastCost(fine, nullptr, 20u, 20u, 220u, 240u, cost);
+        const procgen::HierarchicalRoute cascaded =
+            procgen::routeAcrossWorld(coarse, fine, kRatio, nullptr, 20u, 20u, 220u, 240u, cost);
+
+        check("the flat search finds a road", flat.found);
+        check("and so does the cascade", cascaded.fine.found);
+        check("the coarse plan existed", cascaded.coarseFound);
+
+        std::printf("     flat: %zu cells, %u expanded | cascade: %zu cells, %u+%u expanded, "
+                    "%u corridor cells%s\n",
+                    flat.cells.size(), flat.expanded, cascaded.fine.cells.size(),
+                    cascaded.coarseExpanded, cascaded.fine.expanded, cascaded.corridorCells,
+                    cascaded.widened ? ", WIDENED" : "");
+
+        // @warning **The whole justification.** If the cascade settled as many cells as the flat search,
+        // it would be the same search with extra steps -- and the ten terabytes above would still
+        // be ten terabytes. The corridor is what makes a planet affordable.
+        check("the cascade settles far fewer cells",
+              cascaded.coarseExpanded + cascaded.fine.expanded < flat.expanded);
+
+        // And the road must be worth having. A corridor that squeezed the route into a detour would
+        // buy its cheapness with a road nobody would drive; within a quarter is the bound, and it is
+        // measured against the flat answer rather than against a number chosen here.
+        check("and the road it finds is comparable",
+              cascaded.fine.cost <= flat.cost + flat.cost * math::Fixed32::fromFloat(0.25f));
+
+        // @warning A corridor constrains the SEARCH, never the ground. A goal outside it must make the
+        // search FAIL rather than wander out and return a road nobody planned -- which is why this
+        // is a separate field and not a very large cost.
+        procgen::Grid<core::u8> narrow{kFine, kFine, core::u8{0}};
+        for (core::u32 z = 0u; z < 8u; ++z)
+            for (core::u32 x = 0u; x < 8u; ++x)
+                narrow.at(x, z) = 1u;
+        procgen::RoutingParams boxed = cost;
+        boxed.corridor = &narrow;
+        const procgen::RoutedPath refused =
+            procgen::routeLeastCost(fine, nullptr, 1u, 1u, 220u, 240u, boxed);
+        check("a goal outside the corridor is refused, not approximated", !refused.found);
+
+        // A corridor that does not match the grid is ignored rather than half applied.
+        procgen::Grid<core::u8> wrongSize{16u, 16u, core::u8{1}};
+        procgen::RoutingParams mismatched = cost;
+        mismatched.corridor = &wrongSize;
+        const procgen::RoutedPath ignored =
+            procgen::routeLeastCost(fine, nullptr, 20u, 20u, 220u, 240u, mismatched);
+        check("a corridor of the wrong shape is ignored", ignored.found);
+
+        // @warning **A cascade on a CLOSED world, which is what the coarse plan's own wrap is for.**
+        // The coarse grid is narrower than the fine one by the cell ratio, so a coarse heuristic
+        // folding at the FINE width folds at a width its grid does not have -- it stops being
+        // admissible exactly at the seam, and the plan comes back round the long way while looking
+        // like any other plan. The two places sit either side of it.
+        procgen::RoutingParams closedCost = cost;
+        closedCost.wrapColumns = kFine;
+        const procgen::HierarchicalRoute wrapped = procgen::routeAcrossWorld(
+            coarse, fine, kRatio, nullptr, kFine - 12u, 40u, 12u, 40u, closedCost);
+        check("a closed world cascades too", wrapped.fine.found);
+        check("and crosses the seam rather than going round", wrapped.fine.cells.size() <= 40u);
+        std::printf("     closed cascade: %zu cells, %u+%u expanded%s\n", wrapped.fine.cells.size(),
+                    wrapped.coarseExpanded, wrapped.fine.expanded, wrapped.widened ? ", WIDENED" : "");
+
+        // @warning **The number that catches a coarse heuristic folding at the wrong width.** Both
+        // widths find the same road here -- the grid is small enough that exhaustion rescues a bad
+        // estimate -- so the road alone says nothing. What moves is the WORK: measured, 4 coarse
+        // expansions with the coarse grid's own width against 30 with the fine one's. The bound is
+        // derived rather than tuned: a coarse plan that pointed at the seam settles on the order of
+        // the road's length, never more than it.
+        check("and the coarse plan pointed at the seam rather than searching for it",
+              wrapped.coarseExpanded <= wrapped.fine.cells.size());
+
+        // A ratio of one is a plain route, not a cascade pretending to be one.
+        const procgen::HierarchicalRoute plainRatio =
+            procgen::routeAcrossWorld(fine, fine, 1u, nullptr, 20u, 20u, 220u, 240u, cost);
+        check("a ratio of one is just a route", plainRatio.fine.found && plainRatio.coarseExpanded == 0u);
+    }
+
     std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures,
                 gChecks);
     return gFailures == 0 ? 0 : 1;

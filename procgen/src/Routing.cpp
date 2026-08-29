@@ -114,6 +114,11 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
                                                                                           params.reuseDiscount);
     const bool hasExisting =
         existing != nullptr && existing->width() == field.width() && existing->depth() == field.depth();
+    // A corridor confines the SEARCH and says nothing about the ground: a cell outside it is not
+    // impassable, it is simply not looked at, so a corridor that is wrong makes this fail rather
+    // than return a road nobody planned.
+    const bool hasCorridor = params.corridor != nullptr && params.corridor->width() == field.width() &&
+                             params.corridor->depth() == field.depth();
 
     // The heuristic must never overestimate, or A* stops returning the cheapest
     // road and starts returning a plausible one. Chebyshev distance times the
@@ -249,6 +254,8 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
             if (!field.contains(nx, nz))
                 continue;
             const core::u32 next = field.index(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
+            if (hasCorridor && (*params.corridor)[next] == 0u)
+                continue;
             if (settled[next] != 0u)
                 continue;
 
@@ -459,6 +466,111 @@ core::u32 connectPlaces(const Heightfield &field, const lpl::pmr::vector<core::u
         connected[reachedPlace] = 1u;
     }
     return painted;
+}
+
+
+namespace {
+
+/**
+ * @brief Paints the fine cells a coarse plan opens, with slack either side.
+ *
+ * @param plan      Coarse cells the route runs through.
+ * @param coarse    The summary field, for its width.
+ * @param fine      The full-resolution field, for its extent.
+ * @param cellRatio Fine cells per coarse cell.
+ * @param margin    Coarse cells of slack.
+ * @param out       Receives the corridor; already sized to @p fine.
+ * @return How many fine cells were opened.
+ */
+[[nodiscard]] core::u32 paintCorridor(const lpl::pmr::vector<core::u32> &plan, const Heightfield &coarse,
+                                      const Heightfield &fine, core::u32 cellRatio, core::u32 margin,
+                                      Grid<core::u8> &out)
+{
+    core::u32 opened = 0u;
+    const core::i32 slack = static_cast<core::i32>(margin);
+    for (const core::u32 cell : plan)
+    {
+        const core::i32 cx = static_cast<core::i32>(cell % coarse.width());
+        const core::i32 cz = static_cast<core::i32>(cell / coarse.width());
+        for (core::i32 dz = -slack; dz <= slack; ++dz)
+        {
+            for (core::i32 dx = -slack; dx <= slack; ++dx)
+            {
+                const core::i64 baseX = static_cast<core::i64>(cx + dx) * cellRatio;
+                const core::i64 baseZ = static_cast<core::i64>(cz + dz) * cellRatio;
+                for (core::u32 fz = 0u; fz < cellRatio; ++fz)
+                {
+                    for (core::u32 fx = 0u; fx < cellRatio; ++fx)
+                    {
+                        const core::i64 x = baseX + fx;
+                        const core::i64 z = baseZ + fz;
+                        if (x < 0 || z < 0 || x >= static_cast<core::i64>(fine.width()) ||
+                            z >= static_cast<core::i64>(fine.depth()))
+                            continue;
+                        core::u8 &slot = out.at(static_cast<core::u32>(x), static_cast<core::u32>(z));
+                        if (slot == 0u)
+                        {
+                            slot = 1u;
+                            ++opened;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return opened;
+}
+
+} // namespace
+
+HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield &fine, core::u32 cellRatio,
+                                   const Grid<core::u8> *existing, core::u32 startX, core::u32 startZ,
+                                   core::u32 goalX, core::u32 goalZ, const RoutingParams &params,
+                                   core::u32 margin)
+{
+    HierarchicalRoute out{};
+
+    // A ratio of one means the two fields are the same resolution, so there is nothing to cascade
+    // and a plain route is both correct and cheaper than pretending otherwise.
+    if (cellRatio <= 1u || coarse.width() == 0u || fine.width() == 0u)
+    {
+        out.fine = routeLeastCost(fine, existing, startX, startZ, goalX, goalZ, params);
+        out.coarseFound = out.fine.found;
+        return out;
+    }
+
+    // The coarse plan. Its own params carry no corridor -- there is nothing above it to be confined
+    // by -- and its wrap must be the coarse grid's, not the fine one's, or the heuristic folds at a
+    // width the grid does not have and stops being admissible.
+    RoutingParams coarseParams = params;
+    coarseParams.corridor = nullptr;
+    coarseParams.wrapColumns = params.wrapColumns > 0u ? coarse.width() : 0u;
+
+    const RoutedPath plan = routeLeastCost(coarse, nullptr, startX / cellRatio, startZ / cellRatio,
+                                           goalX / cellRatio, goalZ / cellRatio, coarseParams);
+    out.coarseExpanded = plan.expanded;
+    out.coarseFound = plan.found;
+    if (!plan.found)
+        return out; // No shape to refine. Reported, never papered over with a flat search.
+
+    RoutingParams fineParams = params;
+    Grid<core::u8> corridor{fine.width(), fine.depth(), core::u8{0}};
+    out.corridorCells = paintCorridor(plan.cells, coarse, fine, cellRatio, margin, corridor);
+    fineParams.corridor = &corridor;
+    out.fine = routeLeastCost(fine, existing, startX, startZ, goalX, goalZ, fineParams);
+    if (out.fine.found)
+        return out;
+
+    // @warning A coarse cell is an AVERAGE, so a plan can cross a strait that is water at full
+    // resolution. Widening once is the cheap recovery; failing after it is REPORTED, because a
+    // refinement that fell back to the coarse plan would return a road through water and it would
+    // look like every other road.
+    out.widened = true;
+    Grid<core::u8> wider{fine.width(), fine.depth(), core::u8{0}};
+    out.corridorCells = paintCorridor(plan.cells, coarse, fine, cellRatio, margin + margin + 1u, wider);
+    fineParams.corridor = &wider;
+    out.fine = routeLeastCost(fine, existing, startX, startZ, goalX, goalZ, fineParams);
+    return out;
 }
 
 } // namespace lpl::procgen

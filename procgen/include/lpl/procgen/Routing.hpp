@@ -99,6 +99,28 @@ struct RoutingParams {
      * Requires @ref wrapColumns; a pole makes no sense on a grid that does not close east-west.
      */
     bool wrapPoles{false};
+
+    /**
+     * Cells the search is allowed into, or null for the whole grid.
+     *
+     * @warning **What lets a fine search follow a coarse plan without exploring a planet.** A* on a
+     * global grid at thirty-metre cells needs about ten TERABYTES of state; at eight kilometres it
+     * needs a hundred and sixty megabytes. So a route across a world is planned coarse and refined
+     * fine, and refinement is only affordable if the fine search is confined to the corridor the
+     * coarse one found. Same cascade `EndlessRiverParams` already uses for trunk rivers: ask the
+     * question twice at two scales and let the coarse answer constrain the fine one.
+     *
+     * @warning **A corridor is a constraint on the SEARCH, never a claim about the ground.** A cell
+     * outside it is not impassable, it is merely not looked at -- so a corridor that is wrong makes
+     * the search FAIL rather than lie, and `RoutedPath::found` says so. That distinction is the
+     * whole reason this is a separate field and not a cost: a very large cost would let the router
+     * leave the corridor when it felt like it and return a road nobody planned, which is the
+     * failure a corridor exists to make impossible.
+     *
+     * Must match the grid's dimensions when set; a mismatched one is ignored rather than half
+     * applied, for the reason @ref wrapColumns is.
+     */
+    const Grid<core::u8> *corridor{nullptr};
 };
 
 /**
@@ -127,6 +149,58 @@ struct RoutedPath {
  * @return The path; @c found is false when the goal is unreachable or the search
  *         budget ran out.
  */
+/**
+ * @struct HierarchicalRoute
+ * @brief A road planned coarse and walked fine, with what each half cost.
+ */
+struct HierarchicalRoute {
+    RoutedPath fine{};          ///< The road itself, in fine cells.
+    core::u32 coarseExpanded{0u}; ///< Cells the coarse plan settled.
+    core::u32 corridorCells{0u};  ///< Fine cells the coarse plan opened.
+    bool coarseFound{false};      ///< Whether a coarse plan existed at all.
+    /**
+     * The corridor had to be widened before the fine search got through.
+     *
+     * @warning Reported rather than hidden. A coarse cell is an AVERAGE, so a strait that a coarse
+     * plan calls land can be water at full resolution -- the classic failure of planning on a
+     * summary. Widening once is the cheap recovery; that it happened is worth knowing, because a
+     * world where it happens often has a coarse level too coarse to plan on.
+     */
+    bool widened{false};
+};
+
+/**
+ * @brief Routes across a world too large to search flat.
+ *
+ * @warning **The measurement that forces this shape.** A* keeps cost, parent and a settled flag per
+ * cell -- about twelve bytes. On a global grid at thirty-metre cells that is 890 733 444 400 cells
+ * and roughly ten TERABYTES; at 7.7 km it is 163 MB, at 31 km it is 10 MB. A planet cannot be
+ * searched flat, so it is searched twice: coarse for the shape, fine for the ground.
+ *
+ * @warning **The coarse plan is a CORRIDOR, not a commitment.** A coarse cell is an average, so a
+ * plan may cross a strait that does not exist at full resolution. The fine search is confined to
+ * the corridor but free inside it, and when it cannot get through the corridor is widened once and
+ * retried -- after which failure is REPORTED. A refinement that quietly returned the coarse plan
+ * instead would hand back a road through water, and it would look like every other road.
+ *
+ * @param coarse     The summary field the plan is made on.
+ * @param fine       The full-resolution field the road is walked on.
+ * @param cellRatio  Fine cells per coarse cell, on each axis. Zero or one makes this a plain route.
+ * @param existing   Optional 0/1 mask of ground that is already road, in FINE cells.
+ * @param startX     Start column, in fine cells.
+ * @param startZ     Start row, in fine cells.
+ * @param goalX      Goal column, in fine cells.
+ * @param goalZ      Goal row, in fine cells.
+ * @param params     Cost model. Its `corridor` is replaced by the one planned here.
+ * @param margin     Coarse cells of slack painted either side of the plan.
+ * @return The road and what finding it cost.
+ */
+[[nodiscard]] HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield &fine,
+                                                 core::u32 cellRatio, const Grid<core::u8> *existing,
+                                                 core::u32 startX, core::u32 startZ, core::u32 goalX,
+                                                 core::u32 goalZ, const RoutingParams &params,
+                                                 core::u32 margin = 1u);
+
 [[nodiscard]] RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existing, core::u32 startX,
                                         core::u32 startZ, core::u32 goalX, core::u32 goalZ,
                                         const RoutingParams &params);
