@@ -264,7 +264,7 @@ void forEachLandmarkNear(const ChunkParams &params, const LandmarkParams &landma
 /**
  * @brief The relief at a given QUANTILE of the sites a rule would otherwise accept.
  *
- * ⚠ `LandmarkParams::minRelief` and `maxRelief` are absolute metres, and an absolute
+ * @warning `LandmarkParams::minRelief` and `maxRelief` are absolute metres, and an absolute
  * threshold against a distribution that moves is this repository's most-repeated mistake —
  * the river threshold was calibrated for exactly this reason. It bit twice more here in one
  * afternoon: a village tolerance of 2.4 m admitted two sites in three and a half thousand

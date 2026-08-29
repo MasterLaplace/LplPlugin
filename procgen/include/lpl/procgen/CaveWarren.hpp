@@ -416,7 +416,7 @@ struct CaveWarren {
  * the first ring that contains anything would return something that is not the nearest.
  * Within the candidates it keeps the smallest true cell distance.
  *
- * ⚠ Bounded by @p maxBuilds as well as by @p maxRings, because confirming a site
+ * @warning Bounded by @p maxBuilds as well as by @p maxRings, because confirming a site
  * actually carries a cave costs a full @ref buildCaveWarren — about 1.4 ms. The adit is
  * planned first as a cheap filter (a handful of noise samples), which rejects the
  * quarter of sites that have no cover within reach before any of that is paid.

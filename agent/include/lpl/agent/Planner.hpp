@@ -18,7 +18,7 @@
  * was never a reason for two of anything in this project, and for a while there were
  * two look-alike decision interfaces that nothing kept in step.
  *
- * ⚠ What stays here is what genuinely CANNOT cross: a critic's structured findings and
+ * @warning What stays here is what genuinely CANNOT cross: a critic's structured findings and
  * the last recipe as a JSON document this planner parses and overlays. Those are not
  * an accident of an API the way `sockaddr` was for `net::Endpoint` — they are unbounded
  * data — so they are held as state given by @ref CorrectionPlanner::observe rather than

@@ -123,7 +123,7 @@ struct TerrainDrawParams {
 
     // ── Underground ─────────────────────────────────────────────────────────
 
-    // ⚠ There is no `underground` flag here, and there was: it was fed from
+    // @warning There is no `underground` flag here, and there was: it was fed from
     // engine::CharacterController::isEnclosed on the argument that the body already
     // resolves it, so the renderer should read rather than re-derive. That argument is
     // wrong, and wrong in a way that switched the whole feature off. The body is not

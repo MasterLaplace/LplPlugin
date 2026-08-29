@@ -21,7 +21,7 @@
  * act", and a world is "tell me what is possible, and carry it out". None of those
  * three needs a heap, a string class or a JSON parser to be stated.
  *
- * ⚠ WHAT IS NOT SHARED, said here rather than discovered later. The hosted planner
+ * @warning WHAT IS NOT SHARED, said here rather than discovered later. The hosted planner
  * decides partly from a critic's structured findings and from the last recipe as a
  * JSON DOCUMENT that it parses and overlays. That is not an accident of an API the
  * way `sockaddr` was for `net::Endpoint` — it is genuinely unbounded data, and it

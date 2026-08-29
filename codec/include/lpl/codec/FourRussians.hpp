@@ -28,7 +28,7 @@ namespace lpl::codec {
 /**
  * @brief Widest block M4RI will take.
  *
- * ⚠ k is bounded by the cache, not by the theory (SIM-105). Textbook M4RI takes
+ * @warning k is bounded by the cache, not by the theory (SIM-105). Textbook M4RI takes
  * k = log2(N); in practice the table is 2^k rows of N/8 bytes and the whole gain
  * evaporates the moment it stops fitting in L2. Twelve is the upper end of the
  * useful range; @ref chooseBlockWidth picks the actual value from a byte budget.

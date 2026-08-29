@@ -194,7 +194,7 @@ struct WaterParams {
     {
         constexpr core::f32 kCos103 = -0.22495f;
         constexpr core::f32 kSin103 = 0.97437f;
-        // ⚠ NORMALISED, because the drift enters the wave as `(x·dir) * frequency` — so its
+        // @warning NORMALISED, because the drift enters the wave as `(x·dir) * frequency` — so its
         // magnitude silently multiplies the SPATIAL FREQUENCY. Feed it a velocity, as the
         // river current does, and slow water does not ripple slowly: its wavelength is
         // stretched by the same factor and the surface goes flat. Measured on screen as
@@ -305,7 +305,7 @@ struct WaveSample {
     {
         if (octave.amplitude <= 0.0f)
             continue;
-        // ⚠ MINUS the phase, not plus. A crest sits where v is constant, so as the phase
+        // @warning MINUS the phase, not plus. A crest sits where v is constant, so as the phase
         // rises the projection x·dir must FALL to keep it there — with a plus, every crest
         // travels along −dir and the water runs backwards up its own slope. The field is
         // called `drift` and every caller points it where the water goes; the arithmetic

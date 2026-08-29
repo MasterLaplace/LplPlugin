@@ -161,7 +161,7 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     // Clamped rather than trusted: a byte from disk naming a generator that does not
     // exist would otherwise index a switch that has no case for it.
     //
-    // ⚠ The bound is the enum's LAST value and must stay that way. It was written out
+    // @warning The bound is the enum's LAST value and must stay that way. It was written out
     // as `Layered` and went stale the moment `Auto` was added: a cartridge that said
     // "auto" baked a 4, the decoder clamped it back to Cellular, and the document's
     // word was silently discarded on the way in. Nothing failed — the world just was

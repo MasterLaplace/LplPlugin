@@ -387,7 +387,7 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                 river.swellHeight = 0.0f;
                 const core::u32 size = view.chunkSize;
 
-                // ⚠ ONE surface for the whole chunk, not one per cell. `WaterParams` is
+                // @warning ONE surface for the whole chunk, not one per cell. `WaterParams` is
                 // consumed per PIXEL but supplied per QUAD, so anything that varies from cell
                 // to cell makes the ripple pattern restart at every cell border — which is
                 // precisely the "you can see the tile boundaries" the screenshots showed, and
@@ -434,7 +434,7 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                         const core::i32 worldCellX = originX + static_cast<core::i32>(rx);
                         const core::i32 worldCellZ = originZ + static_cast<core::i32>(rz);
 
-                        // ⚠ THE CORNERS ARE SHARED, and that is the whole difference between a
+                        // @warning THE CORNERS ARE SHARED, and that is the whole difference between a
                         // river and a stack of plates. Each cell used to get a flat quad at its
                         // OWN bed height, so two neighbours a metre apart in bed height drew two
                         // surfaces a metre apart — steps, never a sheet, and nothing a current
@@ -505,7 +505,7 @@ core::u32 TerrainRenderer::drawStreamed(const render::RenderTarget &rt, const re
                         // what makes the water look like water rather than a wet stripe, and
                         // asking the world height function here would answer with the bed of
                         // whichever cell the point rounded into.
-                        // ⚠ Bilinear from the four SHARED corners, not `top - bed` — which is one
+                        // @warning Bilinear from the four SHARED corners, not `top - bed` — which is one
                         // number for the whole cell and therefore paints the body colour in
                         // cell-sized blocks. It is consumed per pixel and it drives both the
                         // shallow-to-deep mix and the shore foam, so a constant here is a

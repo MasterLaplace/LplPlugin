@@ -344,7 +344,7 @@ template <typename EmitPlant>
     // under the terrain's frequency, continentalness at a quarter of it. Deriving
     // them from the terrain's own parameters is what keeps a wet world wet at every
     // scale instead of only at the one the layer was tuned at.
-    // ⚠ Copied from the terrain layer for its FREQUENCY, and then stripped of everything
+    // @warning Copied from the terrain layer for its FREQUENCY, and then stripped of everything
     // else it carries — because everything else it carries is about ground, not weather.
     //
     // Measured, and it is the reason this world had one biome in it: the copy inherited the

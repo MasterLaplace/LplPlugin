@@ -203,7 +203,7 @@ public:
      * pixels of the same frame, and threading nine more arguments through a shader
      * called a hundred thousand times a frame to say so would be nine arguments.
      *
-     * ⚠ The cone here is HORIZONTAL — about the view's heading in the ground plane, with
+     * @warning The cone here is HORIZONTAL — about the view's heading in the ground plane, with
      * no vertical term. The shading callback is given a world x and z and no y (see
      * @ref shadeSurface), so a true 3D cone would mean threading a height through four
      * call sites of a shared signature. The approximation is also the friendlier one for
@@ -348,7 +348,7 @@ public:
             return y + render::waterHeight(wx, wz, water) * damp;
         };
 
-        // ⚠ The grid lines are snapped to an ABSOLUTE WORLD LATTICE, not divided out of this
+        // @warning The grid lines are snapped to an ABSOLUTE WORLD LATTICE, not divided out of this
         // quad's own extent — and that is the difference between a watertight sheet and a
         // cracked one. Quads differ in size, because each is tightened to the cells its own
         // chunk has under water: dividing each by the same count puts their vertices at

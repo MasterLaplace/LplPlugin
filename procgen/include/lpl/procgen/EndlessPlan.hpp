@@ -49,7 +49,7 @@ struct WalkScale {
     /**
      * @brief Multiplies the recipe's frequency: fewer, WIDER landforms.
      *
-     * ⚠ The number that decides whether a mountain is a massif or a spire, and it was set
+     * @warning The number that decides whether a mountain is a massif or a spire, and it was set
      * for spires. The measure that matters is not the peak — it is how far you walk while
      * staying high. Mean run length above twenty metres, over a 480-cell traverse:
      *
@@ -68,7 +68,7 @@ struct WalkScale {
     /**
      * @brief Raises or lowers the base, i.e. how much of the world is SEA.
      *
-     * ⚠ This was the wrong knob, and the record of getting that wrong is worth keeping.
+     * @warning This was the wrong knob, and the record of getting that wrong is worth keeping.
      * The walked world had 0.0% sea, so it was lowered six metres to give it a coast — and
      * that turned 97% forest into 0% forest, because the climate classifier was deciding on
      * a single axis and the lift moved it across a knife edge. What the world was actually
@@ -97,7 +97,7 @@ struct WalkScale {
     /**
      * @brief Shaping. A map reads fine as raw noise; a place to walk needs plains.
      *
-     * ⚠ The old values made a PANCAKE. Measured over 49 chunks: 99% of the world was below
+     * @warning The old values made a PANCAKE. Measured over 49 chunks: 99% of the world was below
      * 2.0 metres and the tallest thing in it was 34 — not a flat world with mountains, a
      * flat world with three spikes. There was nowhere to climb because there was almost
      * nothing above the plain.
@@ -221,7 +221,7 @@ struct WalkScale {
     /**
      * @brief What SHARE of candidate sites should qualify, by relief.
      *
-     * ⚠ These were absolute metres, and they broke twice in one afternoon for the same
+     * @warning These were absolute metres, and they broke twice in one afternoon for the same
      * reason the river threshold did: an absolute threshold against a distribution that
      * moves. A village tolerance of 2.4 m admitted two sites in three and a half thousand
      * chunks; 6.0 m then gave one village per forty-nine chunks, and NONE at all once the
@@ -241,7 +241,7 @@ struct WalkScale {
     /**
      * @brief How deep a mouth's shelf is cut, in metres. HUMAN scale, deliberately.
      *
-     * ⚠ This was a fraction of the calibrated relief, and that was a category error with a
+     * @warning This was a fraction of the calibrated relief, and that was a category error with a
      * very visible result. Calibration decides WHERE a mouth goes — which hillside is steep
      * enough — and it rightly grows with the world: on a range that reaches sixty metres
      * the steepest tenth of sites has sixteen metres of relief. Deriving the mouth's SIZE
