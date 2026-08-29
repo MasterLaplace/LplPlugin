@@ -318,6 +318,27 @@ void foldAttestedRoads(JourneyFoldResult &out)
     polarRoutes.bind(field, places, polarParams);
     out.polarRoadCells = polarRoutes.paveAttested(order, 2u);
 
+    // @warning **The same network, planned on a summary and refined inside the corridor that plan
+    // opens.** A cascade is a genuinely different search, so that it returns the flat search's road
+    // is a claim to prove rather than assume -- and proving it on a desktop proves it for a
+    // desktop. The coarse count is folded beside the signature because a run that quietly fell back
+    // to a flat search would produce an IDENTICAL road and satisfy everything else here.
+    TerrainRouteParams cascadeParams = params;
+    cascadeParams.coarseRatio = 4u;
+    TerrainRoutes cascadeRoutes;
+    cascadeRoutes.bind(field, places, cascadeParams);
+    out.cascadeRoadCells = cascadeRoutes.paveAttested(order, 2u);
+    out.cascadeCoarseExpanded = cascadeRoutes.coarseExpanded();
+    out.cascadeCorridorCells = cascadeRoutes.corridorCells();
+
+    core::u32 cascadeSignature = kFnv1aOffsetBasis;
+    for (core::u32 cell = 0u; cell < cascadeRoutes.roads().cellCount(); ++cell)
+    {
+        if (cascadeRoutes.roads()[cell] != 0u)
+            cascadeSignature = history::foldWord(cascadeSignature, cell);
+    }
+    out.cascadeRoadSignature = cascadeSignature;
+
     history::RouteLeg legs[12]{};
     const core::u32 count = routes.route(RoadResolver::kWest, RoadResolver::kEast, legs, 12u);
     core::u32 waypointSignature = kFnv1aOffsetBasis;

@@ -46,11 +46,40 @@ void TerrainRoutes::bind(const procgen::Heightfield &field, const history::IPlac
     if (_params.cellSize == 0u)
         _params.cellSize = 1u;
     _roads = procgen::Grid<core::u8>{field.width(), field.depth(), 0u};
+    // Derived once, here, rather than per route: a summary is a function of the field, and the
+    // field is held by pointer precisely because it does not change under us.
+    _coarse = _params.coarseRatio > 1u ? procgen::reduceHeightfield(field, _params.coarseRatio)
+                                       : procgen::Heightfield{};
     _paved = 0u;
     _pairs = 0u;
     _planned = 0u;
     _unreachable = 0u;
     _expanded = 0u;
+    _coarseExpanded = 0u;
+    _corridorCells = 0u;
+    _widened = 0u;
+}
+
+procgen::RoutedPath TerrainRoutes::plan(core::u32 startX, core::u32 startZ, core::u32 goalX,
+                                        core::u32 goalZ) const
+{
+    if (_coarse.empty())
+    {
+        procgen::RoutedPath flat =
+            procgen::routeLeastCost(*_field, &_roads, startX, startZ, goalX, goalZ, _params.cost);
+        _expanded += flat.expanded;
+        return flat;
+    }
+
+    const procgen::HierarchicalRoute cascaded =
+        procgen::routeAcrossWorld(_coarse, *_field, _params.coarseRatio, &_roads, startX, startZ, goalX, goalZ,
+                                  _params.cost, _params.corridorMargin);
+    _expanded += cascaded.fine.expanded;
+    _coarseExpanded += cascaded.coarseExpanded;
+    _corridorCells += cascaded.corridorCells;
+    if (cascaded.widened)
+        ++_widened;
+    return cascaded.fine;
 }
 
 bool TerrainRoutes::toCell(math::Fixed32 x, math::Fixed32 z, core::u32 &outX, core::u32 &outZ) const
@@ -148,9 +177,7 @@ core::u32 TerrainRoutes::paveAttested(const core::u32 *places, core::u32 placeCo
             if (!cellOf(low, startX, startZ) || !cellOf(high, goalX, goalZ))
                 continue;
 
-            const procgen::RoutedPath path =
-                procgen::routeLeastCost(*_field, &_roads, startX, startZ, goalX, goalZ, _params.cost);
-            _expanded += path.expanded;
+            const procgen::RoutedPath path = plan(startX, startZ, goalX, goalZ);
             if (!path.found)
             {
                 ++_unreachable;
@@ -194,9 +221,7 @@ core::u32 TerrainRoutes::route(core::u32 fromPlace, core::u32 toPlace, history::
         return 0u;
 
     ++_planned;
-    const procgen::RoutedPath path =
-        procgen::routeLeastCost(*_field, &_roads, startX, startZ, goalX, goalZ, _params.cost);
-    _expanded += path.expanded;
+    const procgen::RoutedPath path = plan(startX, startZ, goalX, goalZ);
     if (!path.found || path.cells.size() < 2u)
     {
         if (!path.found)

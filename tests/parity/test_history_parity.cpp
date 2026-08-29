@@ -340,6 +340,10 @@ int main()
         std::printf("  journey_wrappedroad = %u\n", journey.wrappedRoadCells);
         std::printf("  journey_polarroad = %u\n", journey.polarRoadCells);
         std::printf("  journey_altfirst  = %u\n", journey.alternateFirst);
+        std::printf("  journey_cascaderoad = 0x%08X\n", journey.cascadeRoadSignature);
+        std::printf("  journey_cascadecells = %u\n", journey.cascadeRoadCells);
+        std::printf("  journey_cascadecoarse = %u\n", journey.cascadeCoarseExpanded);
+        std::printf("  journey_cascadecorridor = %u\n", journey.cascadeCorridorCells);
 
         // @warning A constraint has to put somebody in the world, or everything below measures nothing.
         check(journey.seeded == 1u, "a constraint seeds a body");
@@ -419,6 +423,21 @@ int main()
         // route before evaluating it and hands back a plausible one.
         check(journey.polarRoadCells <= journey.wrappedRoadCells,
               "and offering the poles never makes it worse");
+
+        // @warning **The cascade must lay the SAME road.** Planning on a summary and refining inside
+        // the corridor it opens is a different search, so agreement is a property to prove -- and
+        // proving it on a desktop proves it for a desktop, which is why both numbers cross to
+        // ring 0. A summary that hid the pass would return a road that is found, valid, and 2.65
+        // times the cost of the real one, without ever widening to say so (measured in
+        // test-terrain-routes).
+        check(journey.cascadeRoadSignature == journey.roadSignature,
+              "a road planned coarse and refined fine is the road found flat");
+        check(journey.cascadeRoadCells == journey.roadCells, "cell for cell");
+        // @warning **Without this the two lines above are satisfied by no cascade at all.** A run that
+        // fell back to a flat search folds an identical road signature and an identical count. Only
+        // a coarse plan settling cells says the summary was built, planned on, and refined.
+        check(journey.cascadeCoarseExpanded > 0u, "and a coarse plan actually ran");
+        check(journey.cascadeCorridorCells > 0u, "opening a corridor for the fine search");
     }
 
     std::printf("-- Magellan: on a closed world the near place is the one across the seam\n");

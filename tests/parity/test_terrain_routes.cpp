@@ -468,6 +468,127 @@ int main()
                                                              refused.cells.size() > over.cells.size());
     }
 
+    std::printf("-- how a block is reduced decides whether the plan can see the pass\n");
+    {
+        // @warning **This measurement exists because the tree disagreed with itself.** The cascade's
+        // own documentation says a coarse cell is an AVERAGE; the only code that ever built one took
+        // the MAXIMUM and argued against the mean in a comment. Both were reasoning, neither was
+        // measured, and the fixture that measured nothing was a one-cell ridge with a pass nine
+        // cells wide -- wider than the block, and aligned to it, so every rule found it.
+        //
+        // A real range is thick and its pass is narrow, and neither is aligned to a lattice chosen
+        // for a memory budget. That is the case each rule has to survive.
+        constexpr core::u32 kRatio = 8u;
+        constexpr core::u32 kSize = 192u;
+        constexpr core::u32 kRidgeTop = 90u;   // deliberately not a multiple of the ratio
+        constexpr core::u32 kRidgeBottom = 97u;
+        constexpr core::u32 kGateFrom = 149u;  // three cells wide, inside one block
+        constexpr core::u32 kGateTo = 151u;
+
+        procgen::Heightfield fine{kSize, kSize, math::Fixed32::fromFloat(1.0f)};
+        for (core::u32 z = kRidgeTop; z <= kRidgeBottom; ++z)
+            for (core::u32 x = 0u; x < kSize; ++x)
+                if (x < kGateFrom || x > kGateTo)
+                    fine.at(x, z) = math::Fixed32::fromFloat(60.0f);
+
+        const core::u32 coarseWidth = (kSize + kRatio - 1u) / kRatio;
+        const auto reduceBy = [&](int rule) {
+            procgen::Heightfield out{coarseWidth, coarseWidth, math::Fixed32::zero()};
+            for (core::u32 cz = 0u; cz < coarseWidth; ++cz)
+                for (core::u32 cx = 0u; cx < coarseWidth; ++cx)
+                {
+                    math::Fixed32 hi = math::Fixed32::min();
+                    math::Fixed32 lo = math::Fixed32::max();
+                    for (core::u32 fz = 0u; fz < kRatio; ++fz)
+                        for (core::u32 fx = 0u; fx < kRatio; ++fx)
+                        {
+                            const math::Fixed32 here = fine.at(cx * kRatio + fx, cz * kRatio + fz);
+                            if (here > hi)
+                                hi = here;
+                            if (here < lo)
+                                lo = here;
+                        }
+                    out.at(cx, cz) = rule == 0 ? hi : lo;
+                }
+            return out;
+        };
+
+        procgen::RoutingParams cost{};
+        cost.waterPenalty = 0.0f;
+        cost.reuseDiscount = 0.0f;
+
+        constexpr core::u32 kStartX = 20u;
+        constexpr core::u32 kStartZ = 30u;
+        constexpr core::u32 kGoalZ = 160u;
+
+        // The flat search is the ground truth: what the road IS, at full resolution, with no
+        // summary involved. Every rule below is judged against it and against nothing chosen here.
+        const procgen::RoutedPath truth =
+            procgen::routeLeastCost(fine, nullptr, kStartX, kStartZ, kStartX, kGoalZ, cost);
+        check("the flat search crosses the range", truth.found);
+
+        // Where a road crosses the range is the whole question: through the pass, or over the wall.
+        const auto crossesAtGate = [&](const procgen::RoutedPath &path) {
+            for (const core::u32 cell : path.cells)
+            {
+                const core::u32 x = cell % kSize;
+                const core::u32 z = cell / kSize;
+                if (z >= kRidgeTop && z <= kRidgeBottom && x >= kGateFrom && x <= kGateTo)
+                    return true;
+            }
+            return false;
+        };
+        check("and it crosses at the pass", crossesAtGate(truth));
+
+        std::printf("     flat: %zu cells, cost %.1f, %u expanded\n", truth.cells.size(),
+                    truth.cost.toFloat(), truth.expanded);
+
+        const char *names[3] = {"max ", "min ", "mean"};
+        bool sawGate[3] = {false, false, false};
+        bool optimal[3] = {false, false, false};
+        bool widened[3] = {false, false, false};
+        for (int rule = 0; rule < 3; ++rule)
+        {
+            const procgen::Heightfield summary =
+                rule == 2 ? procgen::reduceHeightfield(fine, kRatio) : reduceBy(rule);
+            const procgen::HierarchicalRoute cascaded = procgen::routeAcrossWorld(
+                summary, fine, kRatio, nullptr, kStartX, kStartZ, kStartX, kGoalZ, cost);
+            sawGate[rule] = cascaded.fine.found && crossesAtGate(cascaded.fine);
+            optimal[rule] = cascaded.fine.found && cascaded.fine.cost.raw() == truth.cost.raw();
+            widened[rule] = cascaded.widened;
+            std::printf("     %s: %s, %zu cells, cost %.1f, %u+%u expanded%s, %s\n", names[rule],
+                        cascaded.fine.found ? "found" : "NO ROAD", cascaded.fine.cells.size(),
+                        cascaded.fine.cost.toFloat(), cascaded.coarseExpanded, cascaded.fine.expanded,
+                        cascaded.widened ? ", WIDENED" : "",
+                        sawGate[rule] ? "through the pass" : "OVER THE WALL");
+        }
+
+        // @warning **Both rivals throw away one of the two facts the plan needs, in opposite
+        // directions.** The maximum keeps the wall and erases the gap: a block holding a
+        // three-cell pass also holds five cells of ridge, so it reads as solid ridge. The minimum
+        // keeps the gap and erases the wall: a block straddling the range's edge also holds valley
+        // floor, so it reads as valley and the plan crosses wherever it likes. Only the mean is
+        // sensitive to the PROPORTION, which is the one thing that distinguishes "a wall with a
+        // door in it" from either a wall or a door.
+        check("the mean summary routes through the pass", sawGate[2]);
+        check("the maximum summary does not", !sawGate[0]);
+        check("nor does the minimum", !sawGate[1]);
+
+        // Not "close to" the flat road: the SAME road. A corridor that contains the optimum lets
+        // A* return the optimum, and stating it exactly is what would notice a corridor that
+        // clipped a corner off it.
+        check("and the road it returns is the flat road, exactly", optimal[2]);
+        check("while the rivals return a costlier one", !optimal[0] && !optimal[1]);
+
+        // @warning **The lesson that is easy to miss, and the reason this is measured at all.**
+        // Neither rival WIDENED. The recover-once-and-report path only catches a plan that turns
+        // out to be impassable; a plan that merely hides a cheaper way is passable, so the fine
+        // search finds a road, reports success, and hands back something 2.65 times the cost of
+        // the real one. A bad summary does not fail loudly -- it succeeds quietly.
+        check("and neither of them widened, so nothing reported the mistake",
+              !widened[0] && !widened[1]);
+    }
+
     std::printf("-- a world too large to search flat is searched twice\n");
     {
         // @warning **The measurement that forces the shape.** A* keeps cost, parent and a settled flag
@@ -487,25 +608,13 @@ int main()
             if (x < kGate || x > kGate + 8u)
                 fine.at(x, kRidge) = math::Fixed32::fromFloat(60.0f);
 
-        // The summary: each coarse cell the MAXIMUM of its block, so a ridge stays a ridge. A mean
-        // would let an eight-cell wall average away into a slope, and the coarse plan would walk
-        // straight through a mountain -- which is the failure a summary is most likely to have.
-        procgen::Heightfield coarse{kCoarse, kCoarse, math::Fixed32::zero()};
-        for (core::u32 cz = 0u; cz < kCoarse; ++cz)
-        {
-            for (core::u32 cx = 0u; cx < kCoarse; ++cx)
-            {
-                math::Fixed32 peak = math::Fixed32::zero();
-                for (core::u32 fz = 0u; fz < kRatio; ++fz)
-                    for (core::u32 fx = 0u; fx < kRatio; ++fx)
-                    {
-                        const math::Fixed32 here = fine.at(cx * kRatio + fx, cz * kRatio + fz);
-                        if (here > peak)
-                            peak = here;
-                    }
-                coarse.at(cx, cz) = peak;
-            }
-        }
+        // @warning This used to build the summary by hand, taking the MAXIMUM of each block on the
+        // stated grounds that "a mean would let a wall average away into a slope". The section
+        // above measures that claim on a range a summary can actually get wrong, and it is false:
+        // the maximum erases the pass and returns a road 2.65 times the cost of the real one,
+        // without widening, so nothing reports it. One reducer in the tree, and it is the mean.
+        const procgen::Heightfield coarse = procgen::reduceHeightfield(fine, kRatio);
+        check("the summary is one cell per block", coarse.width() == kCoarse && coarse.depth() == kCoarse);
 
         procgen::RoutingParams cost{};
         cost.waterPenalty = 0.0f;
@@ -586,6 +695,148 @@ int main()
         const procgen::HierarchicalRoute plainRatio =
             procgen::routeAcrossWorld(fine, fine, 1u, nullptr, 20u, 20u, 220u, 240u, cost);
         check("a ratio of one is just a route", plainRatio.fine.found && plainRatio.coarseExpanded == 0u);
+    }
+
+    std::printf("-- the corridor is narrower at the seam, and it turns out not to matter\n");
+    {
+        // @warning **A gap that was looked for and could not be made to bite.** `paintCorridor` walks
+        // the plan's cells and adds slack either side; a coarse column past the last, or before the
+        // first, is skipped rather than wrapped. So on a closed world the corridor really is
+        // narrower at the seam than anywhere else, and a road squeezed by a corridor does not fail
+        // -- it comes back longer, which is the quiet failure this file keeps finding.
+        //
+        // Three fixtures were built to catch it and none did, for a reason worth writing down: the
+        // coarse plan is drawn on the SAME terrain the fine road crosses, so wherever the fine road
+        // wants the far side of the seam, the plan has already gone there -- and the plan's own
+        // cells do wrap. The slack is lost exactly where neither of them had a reason to be. That is
+        // an argument, not a proof, so this stays as a fixture: a road alongside the seam, with a
+        // wall the average absorbs, which must come out as cheap as the flat search finds it.
+        //
+        // Widening the painter would be three lines and could only help -- a superset of allowed
+        // cells never yields a worse road. It is not done because it is not measured: it would buy
+        // expansions everywhere for a case nobody can demonstrate.
+        constexpr core::u32 kRatio = 8u;
+        constexpr core::u32 kSize = 64u;
+
+        procgen::Heightfield fine{kSize, kSize, math::Fixed32::fromFloat(1.0f)};
+        // A wall thin enough for the average to absorb: one row, so its coarse cell reads 8.4
+        // against a floor of 1 and the plan goes straight through it rather than round.
+        for (core::u32 x = 0u; x < 16u; ++x)
+            fine.at(x, 36u) = math::Fixed32::fromFloat(60.0f);
+        // And a shelf on the far side of the seam: cheap enough for a fine road to prefer stepping
+        // onto it, expensive enough that the coarse plan will not route along it.
+        for (core::u32 z = 0u; z < kSize; ++z)
+            for (core::u32 x = 56u; x < kSize; ++x)
+                fine.at(x, z) = math::Fixed32::fromFloat(20.0f);
+
+        const procgen::Heightfield summary = procgen::reduceHeightfield(fine, kRatio);
+        procgen::RoutingParams cost{};
+        cost.waterPenalty = 0.0f;
+        cost.reuseDiscount = 0.0f;
+        cost.wrapColumns = kSize;
+
+        const procgen::HierarchicalRoute seam =
+            procgen::routeAcrossWorld(summary, fine, kRatio, nullptr, 0u, 8u, 0u, 56u, cost);
+        const procgen::RoutedPath flat =
+            procgen::routeLeastCost(fine, nullptr, 0u, 8u, 0u, 56u, cost);
+
+        std::printf("     flat: %zu cells, cost %.1f | cascade: %zu cells, cost %.1f, %u corridor%s\n",
+                    flat.cells.size(), flat.cost.toFloat(), seam.fine.cells.size(),
+                    seam.fine.cost.toFloat(), seam.corridorCells, seam.widened ? ", WIDENED" : "");
+
+        check("the flat search gets past the wall", flat.found);
+        check("and so does the cascade", seam.fine.found);
+        // The corridor must not cost the road anything. A road that comes back more expensive than
+        // the flat one is the quiet failure: found, valid, and worse.
+        check("and the corridor did not make the road worse", seam.fine.cost.raw() == flat.cost.raw());
+    }
+
+    std::printf("-- an attested network is laid by the cascade, and it is the same network\n");
+    {
+        // @warning **The wiring this section exists for.** `routeAcrossWorld` had exactly one caller
+        // and it was the test above -- which is the orphan pattern this repository keeps finding,
+        // one step short of the usual form: written, documented, measured, and reachable by nothing
+        // a world runs. A corpus laying its attested roads is the caller it was waiting for.
+        constexpr core::u32 kRatio = 8u;
+        constexpr core::u32 kSize = 192u;
+        constexpr core::u32 kHalf = kSize / 2u;
+
+        procgen::Heightfield fine{kSize, kSize, math::Fixed32::fromFloat(1.0f)};
+        for (core::u32 z = 90u; z <= 97u; ++z)
+            for (core::u32 x = 0u; x < kSize; ++x)
+                if (x < 149u || x > 151u)
+                    fine.at(x, z) = math::Fixed32::fromFloat(60.0f);
+
+        // Centred on the origin, the convention TerrainRoutes shares with GridTerrain: cell c is
+        // world unit c - size/2.
+        TableResolver places;
+        places.add(1u, 20.0f - kHalf, 30.0f - kHalf);
+        places.add(2u, 20.0f - kHalf, 160.0f - kHalf);
+        places.link(1u, 2u);
+        const core::u32 order[2] = {1u, 2u};
+
+        engine::systems::TerrainRouteParams flatParams;
+        flatParams.cost.waterPenalty = 0.0f;
+        flatParams.cost.reuseDiscount = 0.0f;
+        engine::systems::TerrainRoutes flatRoutes;
+        flatRoutes.bind(fine, places, flatParams);
+        const core::u32 flatPaved = flatRoutes.paveAttested(order, 2u);
+
+        engine::systems::TerrainRouteParams cascadeParams = flatParams;
+        cascadeParams.coarseRatio = kRatio;
+        engine::systems::TerrainRoutes cascadeRoutes;
+        cascadeRoutes.bind(fine, places, cascadeParams);
+        const core::u32 cascadePaved = cascadeRoutes.paveAttested(order, 2u);
+
+        std::printf("     flat: %u cells paved, %u expanded | cascade: %u paved, %u+%u expanded, "
+                    "%u corridor, %u widened\n",
+                    flatPaved, flatRoutes.expanded(), cascadePaved, cascadeRoutes.coarseExpanded(),
+                    cascadeRoutes.expanded(), cascadeRoutes.corridorCells(), cascadeRoutes.widened());
+
+        check("both lay the attested road", flatPaved > 0u && flatRoutes.pairs() == 1u);
+        check("and the cascade lays the same one", cascadePaved == flatPaved);
+
+        // The same network, cell for cell -- not merely the same length. Two roads of equal length
+        // through different valleys would satisfy a count and would still mean the body walks
+        // ground the corpus never routed it over.
+        bool identical = true;
+        for (core::u32 cell = 0u; cell < fine.cellCount() && identical; ++cell)
+            identical = flatRoutes.roads()[cell] == cascadeRoutes.roads()[cell];
+        check("cell for cell, not merely the same length", identical);
+
+        // @warning **Without this the section proves nothing.** A cascade that silently fell back to a
+        // flat search would pave an identical network and pass every check above. These counters are
+        // zero unless a coarse plan actually ran and opened a corridor.
+        check("a coarse plan actually ran", cascadeRoutes.coarseExpanded() > 0u);
+        check("and it opened a corridor", cascadeRoutes.corridorCells() > 0u);
+        check("which the fine search fitted inside", cascadeRoutes.widened() == 0u);
+
+        // The point of the whole arrangement.
+        check("the cascade settles far fewer cells",
+              cascadeRoutes.coarseExpanded() + cascadeRoutes.expanded() < flatRoutes.expanded());
+
+        // A ratio of zero or one leaves the summary empty, so nothing about a small world changes
+        // by declaring a cascade it does not need.
+        engine::systems::TerrainRouteParams noneParams = flatParams;
+        noneParams.coarseRatio = 1u;
+        engine::systems::TerrainRoutes noneRoutes;
+        noneRoutes.bind(fine, places, noneParams);
+        check("a ratio of one routes flat", noneRoutes.coarse().empty());
+        check("and a ratio of zero does too", flatRoutes.coarse().empty());
+
+        // @warning A body reading the same network must get the same waypoints either way, because
+        // `route()` and `paveAttested` go through one planner. They used to be two call sites, and
+        // the day one of them cascaded and the other did not, a body would walk a road laid by a
+        // different search than the one that laid the network it reads.
+        history::RouteLeg flatLegs[8]{};
+        history::RouteLeg cascadeLegs[8]{};
+        const core::u32 flatCount = flatRoutes.route(1u, 2u, flatLegs, 8u);
+        const core::u32 cascadeCount = cascadeRoutes.route(1u, 2u, cascadeLegs, 8u);
+        bool sameLegs = flatCount == cascadeCount && flatCount > 0u;
+        for (core::u32 i = 0u; i < flatCount && sameLegs; ++i)
+            sameLegs = flatLegs[i].x.raw() == cascadeLegs[i].x.raw() &&
+                       flatLegs[i].z.raw() == cascadeLegs[i].z.raw();
+        check("and a traveller gets the same waypoints either way", sameLegs);
     }
 
     std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures,

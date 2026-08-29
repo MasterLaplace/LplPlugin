@@ -2,10 +2,15 @@
  * @file TerrainRoutes.hpp
  * @brief Where a road actually runs, answered from the relief.
  *
- * @warning **The first consumer `procgen::routeLeastCost` has ever had.** Measured before writing a
- * line: neither it nor `connectPlaces` was called anywhere in the tree. The routing pass was
- * written, documented -- "the roads a grammar cannot draw" -- and never wired, which is the
- * orphan this repository keeps finding. A journey is the caller it was waiting for.
+ * @warning **The first consumer `procgen::routeLeastCost` has ever had**, and now the first
+ * `procgen::routeAcrossWorld` has too. Both were written, documented -- "the roads a grammar cannot
+ * draw" -- and reachable by nothing a world runs, which is the orphan this repository keeps
+ * finding. A journey is the caller they were waiting for.
+ *
+ * @warning Correcting this file's own first claim: it said `connectPlaces` had no caller either.
+ * That was false when written -- `WorldBuilder::roads` has called it since 2026-07-28, a month
+ * earlier. Only the point-to-point router was the orphan, and a grep that reported two of them
+ * was a grep that had not been read.
  *
  * **This is the "deterministic fill" half, and only that half.** The corpus says WHICH places
  * were connected -- @ref history::IPlaceResolver::linkedPlaces, evidence no simulation may
@@ -57,6 +62,32 @@ struct TerrainRouteParams {
      * continental route does not need metre resolution -- and 1 means one cell per unit.
      */
     core::u32 cellSize{1u};
+
+    /**
+     * Fine cells per coarse cell when the grid is too large to search flat, or zero to search it
+     * flat.
+     *
+     * @warning **What makes a planetary road findable at all.** A* keeps cost, parent and a settled
+     * flag per cell -- about twelve bytes -- so a global grid at thirty-metre cells is roughly ten
+     * TERABYTES of search state, and even a grid it can hold costs expansions proportional to the
+     * area between the endpoints rather than the length of the road. Above one, the route is
+     * planned on a summary and refined inside the corridor that plan opens: measured on a 256-cell
+     * grid, the SAME road for 8 493 expansions instead of 25 399.
+     *
+     * @warning The summary is DERIVED from the bound field, never supplied. A caller-provided coarse
+     * field is a second description of the ground, free to disagree with the first -- and a plan
+     * made on a ridge the fine field does not have opens a corridor around nothing.
+     */
+    core::u32 coarseRatio{0u};
+
+    /**
+     * Coarse cells of slack painted either side of the plan.
+     *
+     * @warning Slack is what lets the fine search improve on the plan instead of merely tracing it.
+     * At zero the corridor is the plan's own cells, so refinement can only follow a road drawn on
+     * averages; the failure is not a wrong road but a road with a coarse cell's staircase in it.
+     */
+    core::u32 corridorMargin{1u};
 
     /// Cost model handed to @ref procgen::routeLeastCost.
     procgen::RoutingParams cost{};
@@ -160,6 +191,42 @@ public:
     [[nodiscard]] core::u32 paved() const noexcept { return _paved; }
 
     /**
+     * @brief Cells the COARSE plans settled, in total; zero when routing flat.
+     *
+     * @warning Reported beside @ref expanded rather than folded into it, because the two are the
+     * halves of the trade the cascade makes: the coarse number is what the cascade costs and the
+     * fine number is what it saves. One total would hide a summary so coarse it plans badly behind
+     * a fine search that then has to work.
+     *
+     * @return The number of cells settled at the coarse level.
+     */
+    [[nodiscard]] core::u32 coarseExpanded() const noexcept { return _coarseExpanded; }
+
+    /**
+     * @brief Fine cells the coarse plans opened, in total; zero when routing flat.
+     * @return The number of cells opened.
+     */
+    [[nodiscard]] core::u32 corridorCells() const noexcept { return _corridorCells; }
+
+    /**
+     * @brief Routes whose corridor had to be widened before the fine search got through.
+     *
+     * @warning A coarse cell is an AVERAGE, so a plan may cross a strait that is water at full
+     * resolution. Counted because a world where this climbs has a summary too coarse to plan on --
+     * which is a tuning fact nothing else reports, and the alternative to reporting it is a router
+     * that silently costs twice what it should.
+     *
+     * @return The number of widened routes.
+     */
+    [[nodiscard]] core::u32 widened() const noexcept { return _widened; }
+
+    /**
+     * @brief The summary the plans are made on, empty when routing flat.
+     * @return The coarse field.
+     */
+    [[nodiscard]] const procgen::Heightfield &coarse() const noexcept { return _coarse; }
+
+    /**
      * @brief Distinct pairs @ref paveAttested laid a road between.
      *
      * @warning Reported because it is what shows the deduplication working: a resolver hands out
@@ -212,16 +279,37 @@ private:
      */
     [[nodiscard]] bool cellOf(core::u32 place, core::u32 &outX, core::u32 &outZ) const;
 
+    /**
+     * @brief One route, flat or cascaded, with the counters kept in one place.
+     *
+     * @warning Both callers go through here so neither can route by a rule the other does not.
+     * @ref paveAttested and @ref route ask the same question of the same terrain, and the day one
+     * of them cascaded and the other did not, the network a body reads would be laid on a
+     * different search than the one it walks.
+     *
+     * @param startX Start column.
+     * @param startZ Start row.
+     * @param goalX  Goal column.
+     * @param goalZ  Goal row.
+     * @return The path; @c found is false when the goal is unreachable.
+     */
+    [[nodiscard]] procgen::RoutedPath plan(core::u32 startX, core::u32 startZ, core::u32 goalX,
+                                           core::u32 goalZ) const;
+
 private:
     const procgen::Heightfield *_field{nullptr};
     const history::IPlaceResolver *_places{nullptr};
     TerrainRouteParams _params{};
+    procgen::Heightfield _coarse;
     procgen::Grid<core::u8> _roads;
     core::u32 _paved{0u};
     core::u32 _pairs{0u};
     mutable core::u32 _planned{0u};
     mutable core::u32 _unreachable{0u};
     mutable core::u32 _expanded{0u};
+    mutable core::u32 _coarseExpanded{0u};
+    mutable core::u32 _corridorCells{0u};
+    mutable core::u32 _widened{0u};
 };
 
 } // namespace lpl::engine::systems

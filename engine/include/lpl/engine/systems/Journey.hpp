@@ -409,6 +409,34 @@ struct JourneyFoldResult {
      * discards the cheap route before evaluating it.
      */
     core::u32 polarRoadCells{0u};
+
+    /**
+     * Fold of the SAME attested network, planned coarse and refined fine.
+     *
+     * @warning **It must equal @ref roadSignature, and that equality is the claim.** A cascade is a
+     * different search -- a plan on a summary, a corridor, then a confined A* -- so "it returns the
+     * road the flat search returns" is a property to prove rather than assume, and proving it on
+     * one machine proves it for one machine. Two numbers that must match is how a target that
+     * cascaded differently would name itself.
+     */
+    core::u32 cascadeRoadSignature{0u};
+
+    /// Cells the cascaded network paved; must equal @ref roadCells.
+    core::u32 cascadeRoadCells{0u};
+
+    /**
+     * Cells the COARSE plans settled.
+     *
+     * @warning **Zero would mean no cascade happened**, and a run that quietly fell back to a flat
+     * search folds an identical road signature and satisfies every check above. This is the number
+     * that says the summary was built, planned on, and refined -- and it is folded rather than
+     * merely asserted non-zero because a coarse search is arithmetic too, and arithmetic that
+     * disagrees between targets is what a gate exists to catch.
+     */
+    core::u32 cascadeCoarseExpanded{0u};
+
+    /// Fine cells the coarse plans opened.
+    core::u32 cascadeCorridorCells{0u};
 };
 
 /**

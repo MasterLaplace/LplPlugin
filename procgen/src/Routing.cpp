@@ -481,6 +481,14 @@ namespace {
  * @param margin    Coarse cells of slack.
  * @param out       Receives the corridor; already sized to @p fine.
  * @return How many fine cells were opened.
+ *
+ * @warning A coarse column before the first or past the last is SKIPPED, not wrapped, so on a
+ * closed world the corridor is narrower at the seam than anywhere else. Three fixtures were built
+ * to make that cost a road and none did: the plan is drawn on the same terrain the fine road
+ * crosses, so wherever the road wants the far side of the seam the plan has already gone there --
+ * and the plan's own cells wrap. Wrapping the slack too could only help, and is left undone
+ * because it would buy expansions everywhere for a case nobody could demonstrate. See
+ * test-terrain-routes; if a fixture ever bites, this is the three lines it wants.
  */
 [[nodiscard]] core::u32 paintCorridor(const lpl::pmr::vector<core::u32> &plan, const Heightfield &coarse,
                                       const Heightfield &fine, core::u32 cellRatio, core::u32 margin,
@@ -522,6 +530,46 @@ namespace {
 }
 
 } // namespace
+
+Heightfield reduceHeightfield(const Heightfield &field, core::u32 ratio)
+{
+    if (field.empty() || ratio <= 1u)
+        return field;
+
+    // Ceiling, so the block that runs off the edge still gets a cell: dropping it would make the
+    // summary describe a smaller world than the one being routed, and the goal near the far edge
+    // would have no coarse cell to plan toward.
+    const core::u32 width = (field.width() + ratio - 1u) / ratio;
+    const core::u32 depth = (field.depth() + ratio - 1u) / ratio;
+
+    Heightfield out{width, depth, math::Fixed32::zero()};
+    for (core::u32 cz = 0u; cz < depth; ++cz)
+    {
+        for (core::u32 cx = 0u; cx < width; ++cx)
+        {
+            core::i64 sum = 0;
+            core::u32 count = 0u;
+            for (core::u32 fz = cz * ratio; fz < (cz + 1u) * ratio && fz < field.depth(); ++fz)
+            {
+                for (core::u32 fx = cx * ratio; fx < (cx + 1u) * ratio && fx < field.width(); ++fx)
+                {
+                    sum += static_cast<core::i64>(field.at(fx, fz).raw());
+                    ++count;
+                }
+            }
+            if (count == 0u)
+                continue;
+            // Floors rather than truncating toward zero, so a block of sea and a block of hill
+            // round the same way. Plain integer arithmetic either way, so both targets agree.
+            const core::i64 divisor = static_cast<core::i64>(count);
+            core::i64 mean = sum / divisor;
+            if ((sum % divisor) != 0 && sum < 0)
+                --mean;
+            out.at(cx, cz) = math::Fixed32::fromRaw(static_cast<core::i32>(mean));
+        }
+    }
+    return out;
+}
 
 HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield &fine, core::u32 cellRatio,
                                    const Grid<core::u8> *existing, core::u32 startX, core::u32 startZ,

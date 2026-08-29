@@ -195,6 +195,35 @@ struct HierarchicalRoute {
  * @param margin     Coarse cells of slack painted either side of the plan.
  * @return The road and what finding it cost.
  */
+/**
+ * @brief Summarises a heightfield into one cell per block, to plan a route on.
+ *
+ * @warning **The parameter @ref routeAcrossWorld could not previously be given.** The cascade
+ * needs a coarse field and this module offered no way to make one, so the only caller it ever
+ * had was its own test -- which built the summary by hand. A function whose argument the module
+ * cannot produce is a function nothing will call.
+ *
+ * @warning **The MEAN, and the alternative loses in a way worth recording.** The obvious rival is
+ * the minimum -- "the cheapest ground in the block", which sounds like the optimistic summary a
+ * corridor wants. It erases thin barriers: a one-cell ridge inside a four-by-four block leaves
+ * twelve cells at valley height, so the minimum reports valley and the coarse plan crosses the
+ * wall wherever it likes, opening a corridor that does not contain the pass. The average keeps
+ * the wall visible and still reads the gap as cheaper, which is the whole job. Measured in
+ * test-terrain-routes.
+ *
+ * @warning Not a second answer to `harvest::reduceTile`, which reduces raw metres with a void
+ * sentinel on the host and never enters ring 0. This reduces authoritative Fixed32 and is linked
+ * into the kernel; unifying them would drag a survey's missing-data rule into a router.
+ *
+ * The block that runs off the edge is averaged over the cells that exist, so the summary is
+ * `ceil(width / ratio)` wide -- which is the size @ref routeAcrossWorld indexes it at.
+ *
+ * @param field The full-resolution terrain.
+ * @param ratio Fine cells per coarse cell, on each axis. Zero or one returns a copy.
+ * @return The summary.
+ */
+[[nodiscard]] Heightfield reduceHeightfield(const Heightfield &field, core::u32 ratio);
+
 [[nodiscard]] HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield &fine,
                                                  core::u32 cellRatio, const Grid<core::u8> *existing,
                                                  core::u32 startX, core::u32 startZ, core::u32 goalX,
