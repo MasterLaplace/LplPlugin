@@ -35,9 +35,27 @@ struct Fact {
     core::u32 subject{0u};   ///< Who or what the claim is about.
     core::u32 predicate{0u}; ///< What is claimed of it.
     core::u32 object{0u};    ///< The value claimed.
-    core::i32 fromYear{0};   ///< First year the claim covers.
-    core::i32 toYear{0};     ///< Last year it covers; equal to @c fromYear for an instant.
-    core::u32 source{0u};    ///< Which source asserted it.
+    /**
+     * First day the claim covers. See @ref Calendar.hpp for the epoch.
+     *
+     * @warning DAYS, and the unit carries the precision. This was `fromYear`, so a diary entry dated
+     * 18 June 1815 was stored as "1815" and the day thrown away at ingestion -- irreversibly, and
+     * identically to a chronicle that only knew the year. Ancient material genuinely is
+     * year-resolution and modern material is not; a type that cannot tell them apart makes every
+     * consumer treat a ship's log and a legend as equally sharp.
+     */
+    core::i32 fromDay{0};
+
+    /**
+     * Last day it covers; equal to @c fromDay for an instant.
+     *
+     * @warning The WIDTH of this interval IS the precision, which is why the change needed no new
+     * field: "1815" is [1 Jan, 31 Dec] and "18 June 1815" is one day. A separate precision
+     * enum would have been a second answer to a question the interval already answers.
+     */
+    core::i32 toDay{0};
+
+    core::u32 source{0u}; ///< Which source asserted it.
 
     /**
      * @brief Confidence in [0, 1].
@@ -68,15 +86,74 @@ enum class SourceKind : core::u32 {
 };
 
 /**
+ * Distance nobody has established.
+ *
+ * @warning **A sentinel taken from OUTSIDE the range, because zero already means something.** Zero
+ * years after the event is an eyewitness -- the strongest thing a source can be -- so using it
+ * for "we do not know" hands full temporal credit to every source whose composition date was
+ * never recorded. That is not a hypothetical: every TEI-ingested work wrote zero, so Herodotus
+ * writing three generations after Croesus was scored as though he had been standing there.
+ *
+ * Same shape as `kAnyLanguage` and `kNoIdentifier` elsewhere in this project, and the same
+ * lesson: a field whose whole range is meaningful needs its "unknown" from outside it.
+ */
+inline constexpr core::u32 kUnknownYearsAfterEvent = 0xFFFFFFFFu;
+
+/**
  * @struct SourceProfile
  * @brief What is known about a source, as the trust score needs it.
  */
 struct SourceProfile {
     core::u32 id{0u}; ///< Matches Fact::source.
     SourceKind kind{SourceKind::Chronicle};
-    core::u32 yearsAfterEvent{0u};       ///< Distance between the event and the writing.
+
+    /**
+     * Years between the event and the writing, or @ref kUnknownYearsAfterEvent.
+     *
+     * @warning **This depends on the FACT, not only on the source, which is why
+     * @ref distanceInYears exists.** A chronicle compiled in 1200 that recounts both 1190 and 400
+     * is ten years from one claim and eight hundred from the other; a single number on the source
+     * cannot be right about both. Set it directly only for a source dated relative to its subject
+     * and nothing else -- a report written as its own research happened, say. Otherwise give
+     * @ref composedFrom and let the distance be derived per claim.
+     */
+    core::u32 yearsAfterEvent{kUnknownYearsAfterEvent};
+
+    /**
+     * First day the source could have been written; 0 when unknown.
+     *
+     * An interval, like everything else dated here: "the 420s BCE" is what is known about
+     * Herodotus, and a single day would claim a precision no one has.
+     */
+    core::i32 composedFrom{0};
+
+    /// Last day it could have been written; 0 when unknown.
+    core::i32 composedTo{0};
+
     core::u32 independentAgreements{0u}; ///< Other sources that say the same thing.
 };
+
+/**
+ * @brief How long after an event a source was written.
+ *
+ * @warning Derived from the composition window when there is one, because the answer belongs to the
+ * PAIR rather than to the source. Falls back to a directly stated distance, and answers
+ * @ref kUnknownYearsAfterEvent when neither is known -- which the trust score must then treat as
+ * a credit not earned rather than as a credit granted.
+ *
+ * @warning **The gap to the nearest edge PLUS the width of the window**, and both halves are needed.
+ * The gap alone gives a source the benefit of its own vagueness: widen a window until the event
+ * falls inside it and the gap is zero, so an undatable manuscript scores as an eyewitness.
+ * Adding the width makes widening cost something, which is what it should cost -- not knowing
+ * when a text was written to within fifty years is a reason to trust it less about a particular
+ * year, and a precisely dated source keeps its full credit.
+ *
+ * @param profile  The source.
+ * @param eventDay The day the claimed event happened.
+ * @return The distance in years, or @ref kUnknownYearsAfterEvent.
+ */
+[[nodiscard]] core::u32 distanceInYears(const SourceProfile &profile, core::i32 eventDay) noexcept;
+
 
 /**
  * @struct TrustWeights
@@ -106,6 +183,22 @@ struct TrustWeights {
  * @return The score, clamped to [0, 1].
  */
 [[nodiscard]] math::Fixed32 trustworthiness(const SourceProfile &profile,
+                                            const TrustWeights &weights = TrustWeights{}) noexcept;
+
+/**
+ * @brief How much a source is worth believing ABOUT ONE CLAIM, in [0, 1].
+ *
+ * @warning **The overload that exists because the distance belongs to the pair.** A chronicle
+ * compiled in 1200 recounting both 1190 and 400 is ten years from one claim and eight hundred
+ * from the other; scoring it once, for the source as a whole, is right about at most one of them.
+ * Prefer this wherever a fact is in hand -- which is everywhere the score is actually used.
+ *
+ * @param profile  What is known about the source.
+ * @param eventDay The day the claimed event happened.
+ * @param weights  Which of the three terms matters most.
+ * @return The score.
+ */
+[[nodiscard]] math::Fixed32 trustworthiness(const SourceProfile &profile, core::i32 eventDay,
                                             const TrustWeights &weights = TrustWeights{}) noexcept;
 
 /**

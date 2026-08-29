@@ -7,15 +7,11 @@
  * @copyright MIT License
  */
 
+#include <lpl/history/Fold.hpp>
 #include <lpl/history/Chronicle.hpp>
 
+
 namespace lpl::history {
-
-namespace {
-
-constexpr core::u32 kFnv1aPrime = 0x01000193u;
-
-} // namespace
 
 void Chronicle::record(const Fact &fact, const Attestation &attestation)
 {
@@ -42,7 +38,11 @@ core::u32 Chronicle::countByCause(Cause cause) const noexcept
 core::u32 Chronicle::fold(core::u32 seed) const noexcept
 {
     core::u32 hash = seed;
-    const auto absorb = [&hash](core::u32 word) { hash = (hash ^ word) * kFnv1aPrime; };
+    // @warning Through the shared fold, not a local copy of the constant: a signature exists to
+    // be the same number on two machines, so the function producing it is the last thing
+    // that should exist in several versions. This file and Chronicle.cpp each carried
+    // their own until a third consumer was about to make it three.
+    const auto absorb = [&hash](core::u32 word) { hash = foldWord(hash, word); };
 
     for (core::usize i = 0u; i < _events.size(); ++i)
     {
@@ -50,8 +50,8 @@ core::u32 Chronicle::fold(core::u32 seed) const noexcept
         absorb(e.fact.subject);
         absorb(e.fact.predicate);
         absorb(e.fact.object);
-        absorb(static_cast<core::u32>(e.fact.fromYear));
-        absorb(static_cast<core::u32>(e.fact.toYear));
+        absorb(static_cast<core::u32>(e.fact.fromDay));
+        absorb(static_cast<core::u32>(e.fact.toDay));
         absorb(static_cast<core::u32>(e.fact.sigma.raw()));
         absorb(static_cast<core::u32>(e.attestation.cause));
         absorb(e.attestation.agent);

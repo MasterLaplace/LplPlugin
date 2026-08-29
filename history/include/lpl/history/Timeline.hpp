@@ -73,7 +73,8 @@ public:
      * @param outCount  Receives how many.
      * @return false when the year carries nothing.
      */
-    [[nodiscard]] bool constraintsOfYear(core::i32 year, core::u32 &outFirst, core::u32 &outCount) const noexcept;
+    [[nodiscard]] bool constraintsStartingIn(core::i32 fromDay, core::i32 toDay, core::u32 &outFirst,
+                                             core::u32 &outCount) const noexcept;
 
     /**
      * @brief FNV-1a over every constraint, in order.

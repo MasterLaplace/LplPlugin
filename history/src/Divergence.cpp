@@ -22,7 +22,7 @@ namespace {
 [[nodiscard]] bool agrees(const Fact &event, const Fact &claim) noexcept
 {
     return event.subject == claim.subject && event.predicate == claim.predicate && event.object == claim.object &&
-           event.fromYear <= claim.toYear && claim.fromYear <= event.toYear;
+           event.fromDay <= claim.toDay && claim.fromDay <= event.toDay;
 }
 
 } // namespace

@@ -7,13 +7,14 @@
  * @copyright MIT License
  */
 
+#include <lpl/history/Fold.hpp>
 #include <lpl/history/Timeline.hpp>
+
 
 namespace lpl::history {
 
 namespace {
 
-constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
 /**
  * @brief Total order over constraints: year, then contents, then source.
@@ -28,8 +29,8 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
  */
 [[nodiscard]] bool sortsBefore(const Constraint &a, const Constraint &b) noexcept
 {
-    if (a.fact.fromYear != b.fact.fromYear)
-        return a.fact.fromYear < b.fact.fromYear;
+    if (a.fact.fromDay != b.fact.fromDay)
+        return a.fact.fromDay < b.fact.fromDay;
     if (a.fact.subject != b.fact.subject)
         return a.fact.subject < b.fact.subject;
     if (a.fact.predicate != b.fact.predicate)
@@ -66,19 +67,24 @@ const Constraint &Timeline::at(core::u32 index) const noexcept
     return index < _constraints.size() ? _constraints[index] : kEmpty;
 }
 
-bool Timeline::constraintsOfYear(core::i32 year, core::u32 &outFirst, core::u32 &outCount) const noexcept
+bool Timeline::constraintsStartingIn(core::i32 fromDay, core::i32 toDay, core::u32 &outFirst,
+                                     core::u32 &outCount) const noexcept
 {
     outFirst = 0u;
     outCount = 0u;
 
     for (core::usize i = 0u; i < _constraints.size(); ++i)
     {
-        if (_constraints[i].fact.fromYear != year)
-        {
-            if (outCount != 0u)
-                break; // sorted, so the run is over
+        const core::i32 start = _constraints[i].fact.fromDay;
+        // @warning A RANGE, not an equality, and that is the whole repair. Asking for the constraints
+        // of one exact day is correct only while the clock advances one day at a time; the moment
+        // an era is geared to cross a silent century in a step -- which is what a gearing is FOR --
+        // every constraint inside the step is silently never applied, and the chronicle looks
+        // complete. A tick covers a span, and this returns what starts inside it.
+        if (start < fromDay)
             continue;
-        }
+        if (start > toDay)
+            break; // sorted by start, so nothing later can qualify
         if (outCount == 0u)
             outFirst = static_cast<core::u32>(i);
         ++outCount;
@@ -89,7 +95,11 @@ bool Timeline::constraintsOfYear(core::i32 year, core::u32 &outFirst, core::u32 
 core::u32 Timeline::fold(core::u32 seed) const noexcept
 {
     core::u32 hash = seed;
-    const auto absorb = [&hash](core::u32 word) { hash = (hash ^ word) * kFnv1aPrime; };
+    // @warning Through the shared fold, not a local copy of the constant: a signature exists to
+    // be the same number on two machines, so the function producing it is the last thing
+    // that should exist in several versions. This file and Chronicle.cpp each carried
+    // their own until a third consumer was about to make it three.
+    const auto absorb = [&hash](core::u32 word) { hash = foldWord(hash, word); };
 
     for (core::usize i = 0u; i < _constraints.size(); ++i)
     {
@@ -97,8 +107,8 @@ core::u32 Timeline::fold(core::u32 seed) const noexcept
         absorb(c.fact.subject);
         absorb(c.fact.predicate);
         absorb(c.fact.object);
-        absorb(static_cast<core::u32>(c.fact.fromYear));
-        absorb(static_cast<core::u32>(c.fact.toYear));
+        absorb(static_cast<core::u32>(c.fact.fromDay));
+        absorb(static_cast<core::u32>(c.fact.toDay));
         absorb(c.fact.source);
         absorb(static_cast<core::u32>(c.fact.sigma.raw()));
         absorb(static_cast<core::u32>(c.kind));
@@ -111,14 +121,14 @@ bool Timeline::span(core::i32 &outFirst, core::i32 &outLast) const noexcept
 {
     if (_constraints.empty())
         return false;
-    outFirst = _constraints[0].fact.fromYear;
-    outLast = _constraints[0].fact.toYear;
+    outFirst = _constraints[0].fact.fromDay;
+    outLast = _constraints[0].fact.toDay;
     for (core::usize i = 1u; i < _constraints.size(); ++i)
     {
-        if (_constraints[i].fact.fromYear < outFirst)
-            outFirst = _constraints[i].fact.fromYear;
-        if (_constraints[i].fact.toYear > outLast)
-            outLast = _constraints[i].fact.toYear;
+        if (_constraints[i].fact.fromDay < outFirst)
+            outFirst = _constraints[i].fact.fromDay;
+        if (_constraints[i].fact.toDay > outLast)
+            outLast = _constraints[i].fact.toDay;
     }
     return true;
 }

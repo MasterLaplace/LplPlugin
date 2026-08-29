@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 
     // A century cannot be simulated at 60 Hz. An era is a gearing, not a different
     // engine: the same systems, stepped at a scale where populations move.
-    const lpl::history::Era era = lpl::history::Era::from(1000).to(1400).ticksPerYear(4);
+    const lpl::history::Era era = lpl::history::Era::ofYears(1000, 1400, 4u);
 
     // One hypothesis is one World. Running "according to this source" is a mode,
     // not a fork of the code.

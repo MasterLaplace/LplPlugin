@@ -9,6 +9,10 @@
 
 #include <lpl/history/Parity.hpp>
 
+#include <lpl/history/Calendar.hpp>
+
+#include <lpl/history/Fold.hpp>
+
 #include <lpl/history/Chronicle.hpp>
 #include <lpl/history/Divergence.hpp>
 #include <lpl/history/Era.hpp>
@@ -25,20 +29,23 @@ constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
  * @param subject   Who.
  * @param predicate What of them.
  * @param object    The value.
- * @param fromYear  Window start.
- * @param toYear    Window end.
+ * @param firstYear Window start, as a YEAR.
+ * @param lastYear  Window end, as a year.
  * @param source    Who says so.
  * @param sigmaRaw  Confidence, raw Q16.16.
  */
-void addFact(Corpus &corpus, core::u32 subject, core::u32 predicate, core::u32 object, core::i32 fromYear,
-             core::i32 toYear, core::u32 source, core::i32 sigmaRaw)
+void addFact(Corpus &corpus, core::u32 subject, core::u32 predicate, core::u32 object, core::i32 firstYear,
+             core::i32 lastYear, core::u32 source, core::i32 sigmaRaw)
 {
     Fact fact;
     fact.subject = subject;
     fact.predicate = predicate;
     fact.object = object;
-    fact.fromYear = fromYear;
-    fact.toYear = toYear;
+    // @warning Years IN, days out, and the widening is the honest part: a medieval corpus really
+    // does date its claims to a year, so the window it deserves is the whole of that year. A
+    // helper that pretended to know the day would be inventing precision no charter has.
+    fact.fromDay = firstDayOfYear(firstYear);
+    fact.toDay = lastDayOfYear(lastYear);
     fact.source = source;
     fact.sigma = math::Fixed32::fromRaw(sigmaRaw);
     corpus.facts.push_back(fact);
@@ -151,17 +158,18 @@ void foldHistoryCorpus(const Corpus &corpus, HistoryFoldResult &out)
     // of the era, so the chronicle has a shape a real run would produce. What is being
     // exercised is the SCORING rule, not a simulation: a constrained event must not
     // count towards agreement with the timeline that caused it.
-    const Era era{1200, 1250, 4u};
+    const Era era = Era::ofYears(1200, 1250, 4u);
     Chronicle chronicle;
     for (core::u32 tick = 0u; tick < era.totalTicks(); ++tick)
     {
-        if (!era.isYearBoundary(tick))
-            continue;
-        const core::i32 year = era.yearOfTick(tick);
+        core::i32 spanFrom = 0;
+        core::i32 spanTo = 0;
+        era.spanOfTick(tick, spanFrom, spanTo);
+        const core::i32 year = yearOfDay(spanFrom);
 
         core::u32 first = 0u;
         core::u32 count = 0u;
-        if (timeline.constraintsOfYear(year, first, count))
+        if (timeline.constraintsStartingIn(spanFrom, spanTo, first, count))
         {
             for (core::u32 i = 0u; i < count; ++i)
             {
@@ -185,8 +193,11 @@ void foldHistoryCorpus(const Corpus &corpus, HistoryFoldResult &out)
             emergent.subject = kSubjectOutpost;
             emergent.predicate = kPredicateExists;
             emergent.object = kObjectTrue;
-            emergent.fromYear = year;
-            emergent.toYear = year;
+            // The run knows the DAY it emitted this, so it says the day. A scored claim dated to
+            // a whole year still matches it, because the two intervals overlap -- which is the
+            // asymmetry the unit exists for: sources are vague, a simulation is not.
+            emergent.fromDay = spanFrom;
+            emergent.toDay = spanFrom;
             emergent.sigma = math::Fixed32::one();
             Attestation attestation;
             attestation.cause = Cause::Emergent;

@@ -54,8 +54,14 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
         }
 
         SourceProfile profile{};
-        const math::Fixed32 trust =
-            corpus.sourceProfile(fact.source, profile) ? trustworthiness(profile, view.weights) : math::Fixed32::half();
+        // @warning Scored against THIS claim's date, not the source as a whole. A source that states
+        // a composition window is ten years from one of its claims and eight hundred from
+        // another, and one number for both is right about at most one. Where no window is stated
+        // the overload falls back on whatever distance the profile declares, so a corpus that
+        // knows nothing new folds exactly as before.
+        const math::Fixed32 trust = corpus.sourceProfile(fact.source, profile) ?
+                                        trustworthiness(profile, fact.fromDay, view.weights) :
+                                        math::Fixed32::half();
         index.push_back(static_cast<core::u32>(i));
         weight.push_back(fact.sigma * trust);
         ++outReport.admitted;
@@ -75,7 +81,7 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
             // one in 1200 and one in 1900 — are not agreeing with each other, they are
             // describing two different states of the world, and fusing them would
             // manufacture confidence out of the mere reuse of a name.
-            if (left.fromYear > right.toYear || right.fromYear > left.toYear)
+            if (left.fromDay > right.toDay || right.fromDay > left.toDay)
                 continue;
 
             const math::Fixed32 fused = fuseConfidence(weight[a], weight[b]);
