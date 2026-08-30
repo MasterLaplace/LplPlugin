@@ -113,8 +113,7 @@ core::u32 distanceInYears(const SourceProfile &profile, core::i32 eventDay) noex
     return profile.yearsAfterEvent;
 }
 
-math::Fixed32 trustworthiness(const SourceProfile &profile, core::i32 eventDay,
-                              const TrustWeights &weights) noexcept
+math::Fixed32 trustworthiness(const SourceProfile &profile, core::i32 eventDay, const TrustWeights &weights) noexcept
 {
     // Derived per claim, then scored by the same arithmetic: one formula, two ways of learning
     // its one uncertain input. A second scoring function would be a second historiographical

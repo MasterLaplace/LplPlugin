@@ -96,8 +96,8 @@ WorldBuilder &WorldBuilder::relief(const ReliefBlend &blend)
     // the streamed one uses, so a survey lands in both at the same place.
     for (core::u32 z = 0u; z < _height.depth(); ++z)
         for (core::u32 x = 0u; x < _height.width(); ++x)
-            _height.at(x, z) = applyRelief(blend, static_cast<core::i32>(x), static_cast<core::i32>(z),
-                                           _height.at(x, z));
+            _height.at(x, z) =
+                applyRelief(blend, static_cast<core::i32>(x), static_cast<core::i32>(z), _height.at(x, z));
     return *this;
 }
 

@@ -187,8 +187,7 @@ RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existi
             if (north < best)
                 best = north;
 
-            const core::i32 southVertical =
-                (rows - 1 - z) + (rows - 1 - static_cast<core::i32>(goalZ)) + 1;
+            const core::i32 southVertical = (rows - 1 - z) + (rows - 1 - static_cast<core::i32>(goalZ)) + 1;
             const core::i32 south = southVertical > acrossAbs ? southVertical : acrossAbs;
             if (south < best)
                 best = south;
@@ -468,7 +467,6 @@ core::u32 connectPlaces(const Heightfield &field, const lpl::pmr::vector<core::u
     return painted;
 }
 
-
 namespace {
 
 /**
@@ -572,9 +570,8 @@ Heightfield reduceHeightfield(const Heightfield &field, core::u32 ratio)
 }
 
 HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield &fine, core::u32 cellRatio,
-                                   const Grid<core::u8> *existing, core::u32 startX, core::u32 startZ,
-                                   core::u32 goalX, core::u32 goalZ, const RoutingParams &params,
-                                   core::u32 margin)
+                                   const Grid<core::u8> *existing, core::u32 startX, core::u32 startZ, core::u32 goalX,
+                                   core::u32 goalZ, const RoutingParams &params, core::u32 margin)
 {
     HierarchicalRoute out{};
 
@@ -594,8 +591,8 @@ HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield 
     coarseParams.corridor = nullptr;
     coarseParams.wrapColumns = params.wrapColumns > 0u ? coarse.width() : 0u;
 
-    const RoutedPath plan = routeLeastCost(coarse, nullptr, startX / cellRatio, startZ / cellRatio,
-                                           goalX / cellRatio, goalZ / cellRatio, coarseParams);
+    const RoutedPath plan = routeLeastCost(coarse, nullptr, startX / cellRatio, startZ / cellRatio, goalX / cellRatio,
+                                           goalZ / cellRatio, coarseParams);
     out.coarseExpanded = plan.expanded;
     out.coarseFound = plan.found;
     if (!plan.found)

@@ -154,7 +154,6 @@ struct SourceProfile {
  */
 [[nodiscard]] core::u32 distanceInYears(const SourceProfile &profile, core::i32 eventDay) noexcept;
 
-
 /**
  * @struct TrustWeights
  * @brief The three terms of the trust score, and what each is worth.

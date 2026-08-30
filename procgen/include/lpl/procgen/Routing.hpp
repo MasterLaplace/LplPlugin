@@ -154,7 +154,7 @@ struct RoutedPath {
  * @brief A road planned coarse and walked fine, with what each half cost.
  */
 struct HierarchicalRoute {
-    RoutedPath fine{};          ///< The road itself, in fine cells.
+    RoutedPath fine{};            ///< The road itself, in fine cells.
     core::u32 coarseExpanded{0u}; ///< Cells the coarse plan settled.
     core::u32 corridorCells{0u};  ///< Fine cells the coarse plan opened.
     bool coarseFound{false};      ///< Whether a coarse plan existed at all.
@@ -225,10 +225,9 @@ struct HierarchicalRoute {
 [[nodiscard]] Heightfield reduceHeightfield(const Heightfield &field, core::u32 ratio);
 
 [[nodiscard]] HierarchicalRoute routeAcrossWorld(const Heightfield &coarse, const Heightfield &fine,
-                                                 core::u32 cellRatio, const Grid<core::u8> *existing,
-                                                 core::u32 startX, core::u32 startZ, core::u32 goalX,
-                                                 core::u32 goalZ, const RoutingParams &params,
-                                                 core::u32 margin = 1u);
+                                                 core::u32 cellRatio, const Grid<core::u8> *existing, core::u32 startX,
+                                                 core::u32 startZ, core::u32 goalX, core::u32 goalZ,
+                                                 const RoutingParams &params, core::u32 margin = 1u);
 
 [[nodiscard]] RoutedPath routeLeastCost(const Heightfield &field, const Grid<core::u8> *existing, core::u32 startX,
                                         core::u32 startZ, core::u32 goalX, core::u32 goalZ,

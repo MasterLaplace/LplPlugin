@@ -20,8 +20,8 @@ namespace lpl::engine::systems {
 namespace {
 
 constexpr ecs::ComponentAccess kComponents[] = {
-    {ecs::ComponentId::Position, ecs::AccessMode::ReadWrite},
-    {ecs::ComponentId::Historical, ecs::AccessMode::ReadOnly},
+    {ecs::ComponentId::Position,   ecs::AccessMode::ReadWrite},
+    {ecs::ComponentId::Historical, ecs::AccessMode::ReadOnly },
 };
 
 constexpr ecs::SystemDescriptor kDescriptor{
@@ -51,8 +51,8 @@ constexpr ecs::SystemDescriptor kDescriptor{
  * @param bz Second z.
  * @return The distance.
  */
-[[nodiscard]] math::Fixed32 planarDistance(math::Fixed32 ax, math::Fixed32 az, math::Fixed32 bx,
-                                           math::Fixed32 bz, math::Fixed32 wrapWidth) noexcept
+[[nodiscard]] math::Fixed32 planarDistance(math::Fixed32 ax, math::Fixed32 az, math::Fixed32 bx, math::Fixed32 bz,
+                                           math::Fixed32 wrapWidth) noexcept
 {
     // @warning **On a closed world the east-west separation is the SHORTER way round, and without
     // this a closed world is worse than an open one.** Two places either side of the antimeridian
@@ -72,9 +72,9 @@ constexpr ecs::SystemDescriptor kDescriptor{
 
 } // namespace
 
-JourneySystem::JourneySystem(ecs::Registry &registry, const history::IPlaceResolver &resolver,
-                             const core::u32 *places, core::u32 placeCount, const history::Era &era,
-                             history::Chronicle &chronicle, const JourneyParams &params) noexcept
+JourneySystem::JourneySystem(ecs::Registry &registry, const history::IPlaceResolver &resolver, const core::u32 *places,
+                             core::u32 placeCount, const history::Era &era, history::Chronicle &chronicle,
+                             const JourneyParams &params) noexcept
     : _registry(&registry), _resolver(&resolver), _places(places), _placeCount(placeCount), _era(era),
       _chronicle(&chronicle), _params(params)
 {
@@ -104,8 +104,8 @@ void JourneySystem::placeBodyAt(core::u32 subject, core::u32 place)
         visited.places[visited.count++] = place; // you have been where you were born
 }
 
-bool JourneySystem::chooseGoal(math::Fixed32 x, math::Fixed32 z, core::i32 year,
-                               const Visited &visited, history::Place &out) const
+bool JourneySystem::chooseGoal(math::Fixed32 x, math::Fixed32 z, core::i32 year, const Visited &visited,
+                               history::Place &out) const
 {
     // @warning **Attested links first, geometry only as a fallback.** A corpus that says two places
     // were connected is stating a fact about roads, sea lanes and passes that no distance
@@ -213,10 +213,8 @@ void JourneySystem::execute(core::f32 dt)
     // time or a century at a time, or the same corpus would put him in Egypt at different dates
     // depending on how fast the run was configured.
     const core::u32 daysPerTick = _era.daysPerTick != 0u ? _era.daysPerTick : 1u;
-    const math::Fixed32 step =
-        (_params.pacePerYear * math::Fixed32::fromInt(static_cast<core::i32>(daysPerTick))) /
-        math::Fixed32::fromInt(365);
-
+    const math::Fixed32 step = (_params.pacePerYear * math::Fixed32::fromInt(static_cast<core::i32>(daysPerTick))) /
+                               math::Fixed32::fromInt(365);
 
     for (const auto &partition : _registry->partitions())
     {
@@ -234,8 +232,8 @@ void JourneySystem::execute(core::f32 dt)
             // @warning The WRITE side, as everything else in this repository reads: `swapBuffers` copies
             // back to front and then swaps, so the write buffer already holds this frame's values
             // and a read-modify-write on it is both current and published at the next swap.
-            auto *positions = static_cast<math::Vec3<math::Fixed32> *>(
-                chunk.writeComponent(ecs::ComponentId::Position));
+            auto *positions =
+                static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
             const auto *bodies =
                 static_cast<const ecs::HistoricalBody *>(chunk.writeComponent(ecs::ComponentId::Historical));
             if (positions == nullptr || bodies == nullptr)
@@ -262,8 +260,8 @@ void JourneySystem::execute(core::f32 dt)
                 // the whole run, with `walkers=1` every tick and `arrivals=0`, because the place
                 // it had just left stopped being "where it stands" and became the nearest
                 // unvisited one.
-                const bool haveGoal = visited.goal != 0u && _resolver->resolve(visited.goal, goal) &&
-                                      goal.located && history::existsInYear(goal, year);
+                const bool haveGoal = visited.goal != 0u && _resolver->resolve(visited.goal, goal) && goal.located &&
+                                      history::existsInYear(goal, year);
                 if (!haveGoal)
                 {
                     if (!chooseGoal(positions[row].x, positions[row].z, year, visited, goal))
@@ -367,8 +365,8 @@ void JourneySystem::execute(core::f32 dt)
                     // When the direct way is blocked the carried heading is kept, so the detour
                     // survives long enough to become one.
                     const math::Fixed32 look = _params.arrivalRadius;
-                    const bool clear = _terrain->standable(positions[row].x + wantX * look,
-                                                           positions[row].z + wantZ * look);
+                    const bool clear =
+                        _terrain->standable(positions[row].x + wantX * look, positions[row].z + wantZ * look);
                     if (clear || (visited.headingX == math::Fixed32{} && visited.headingZ == math::Fixed32{}))
                     {
                         visited.headingX = wantX;
@@ -376,8 +374,7 @@ void JourneySystem::execute(core::f32 dt)
                     }
 
                     const GroundStepResult stepped =
-                        stepOnGround(*_terrain, positions[row], visited.headingX, visited.headingZ,
-                                     step, look);
+                        stepOnGround(*_terrain, positions[row], visited.headingX, visited.headingZ, step, look);
                     if (stepped.avoided)
                         ++_avoided;
                     continue;

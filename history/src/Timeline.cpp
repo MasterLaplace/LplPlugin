@@ -10,11 +10,9 @@
 #include <lpl/history/Fold.hpp>
 #include <lpl/history/Timeline.hpp>
 
-
 namespace lpl::history {
 
 namespace {
-
 
 /**
  * @brief Total order over constraints: year, then contents, then source.

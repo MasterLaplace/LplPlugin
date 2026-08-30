@@ -85,7 +85,6 @@ struct HistoryFoldResult {
  */
 void foldHistoryState(HistoryFoldResult &out);
 
-
 /**
  * @brief Runs and folds a GIVEN corpus, rather than the canonical one.
  *

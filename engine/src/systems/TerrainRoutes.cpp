@@ -48,8 +48,8 @@ void TerrainRoutes::bind(const procgen::Heightfield &field, const history::IPlac
     _roads = procgen::Grid<core::u8>{field.width(), field.depth(), 0u};
     // Derived once, here, rather than per route: a summary is a function of the field, and the
     // field is held by pointer precisely because it does not change under us.
-    _coarse = _params.coarseRatio > 1u ? procgen::reduceHeightfield(field, _params.coarseRatio)
-                                       : procgen::Heightfield{};
+    _coarse =
+        _params.coarseRatio > 1u ? procgen::reduceHeightfield(field, _params.coarseRatio) : procgen::Heightfield{};
     _paved = 0u;
     _pairs = 0u;
     _planned = 0u;
@@ -60,8 +60,7 @@ void TerrainRoutes::bind(const procgen::Heightfield &field, const history::IPlac
     _widened = 0u;
 }
 
-procgen::RoutedPath TerrainRoutes::plan(core::u32 startX, core::u32 startZ, core::u32 goalX,
-                                        core::u32 goalZ) const
+procgen::RoutedPath TerrainRoutes::plan(core::u32 startX, core::u32 startZ, core::u32 goalX, core::u32 goalZ) const
 {
     if (_coarse.empty())
     {
@@ -207,8 +206,7 @@ core::u32 TerrainRoutes::paveAttested(const core::u32 *places, core::u32 placeCo
     return _paved;
 }
 
-core::u32 TerrainRoutes::route(core::u32 fromPlace, core::u32 toPlace, history::RouteLeg *out,
-                               core::u32 capacity) const
+core::u32 TerrainRoutes::route(core::u32 fromPlace, core::u32 toPlace, history::RouteLeg *out, core::u32 capacity) const
 {
     if (_field == nullptr || out == nullptr || capacity == 0u)
         return 0u;

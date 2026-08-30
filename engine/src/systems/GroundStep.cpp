@@ -15,8 +15,7 @@
 namespace lpl::engine::systems {
 
 GroundStepResult stepOnGround(const ITerrainQuery &terrain, math::Vec3<math::Fixed32> &position,
-                              math::Fixed32 &headingX, math::Fixed32 &headingZ, math::Fixed32 pace,
-                              math::Fixed32 reach)
+                              math::Fixed32 &headingX, math::Fixed32 &headingZ, math::Fixed32 pace, math::Fixed32 reach)
 {
     GroundStepResult result;
 
@@ -39,10 +38,10 @@ GroundStepResult stepOnGround(const ITerrainQuery &terrain, math::Vec3<math::Fix
         bool found = false;
         for (core::u32 n = 0u; n < 8u; ++n)
         {
-            const math::Fixed32 candidateX = math::Fixed32::fromInt(procgen::kNeighbor8X[n]) *
-                                             (n < 4u ? math::Fixed32::one() : math::kInvSqrt2);
-            const math::Fixed32 candidateZ = math::Fixed32::fromInt(procgen::kNeighbor8Z[n]) *
-                                             (n < 4u ? math::Fixed32::one() : math::kInvSqrt2);
+            const math::Fixed32 candidateX =
+                math::Fixed32::fromInt(procgen::kNeighbor8X[n]) * (n < 4u ? math::Fixed32::one() : math::kInvSqrt2);
+            const math::Fixed32 candidateZ =
+                math::Fixed32::fromInt(procgen::kNeighbor8Z[n]) * (n < 4u ? math::Fixed32::one() : math::kInvSqrt2);
             if (!terrain.standable(position.x + candidateX * reach, position.z + candidateZ * reach))
                 continue;
             // Closest to the current heading: turning is cheap, reversing is not, and a body that

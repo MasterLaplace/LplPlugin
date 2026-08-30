@@ -11,8 +11,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/procgen/Chunking.hpp>
 #include <lpl/math/Geo.hpp>
+#include <lpl/procgen/Chunking.hpp>
 
 #include <cstdio>
 
@@ -42,10 +42,7 @@ void check(const char *what, bool ok)
  * @param degrees Decimal degrees.
  * @return The raw word.
  */
-[[nodiscard]] lpl::core::i32 deg(double degrees)
-{
-    return static_cast<lpl::core::i32>(degrees * 65536.0);
-}
+[[nodiscard]] lpl::core::i32 deg(double degrees) { return static_cast<lpl::core::i32>(degrees * 65536.0); }
 
 } // namespace
 
@@ -146,8 +143,7 @@ int main()
         // contain. The recipe's Fixed32 is the truth here; there is no more precise value to be had,
         // and rounding differently per sample would be worse than a consistent scale.
         check("and the vertical scale is the one the recipe really holds",
-              projection.worldHeightOf(100).raw() ==
-                  spec.seaLevelUnits.raw() + 100 * spec.unitsPerMetre.raw());
+              projection.worldHeightOf(100).raw() == spec.seaLevelUnits.raw() + 100 * spec.unitsPerMetre.raw());
 
         // @warning The bound is DERIVED from the format, not chosen so today's numbers pass. A stored
         // scale is at most one raw unit below the decimal it came from, so scaling by it is wrong by
@@ -221,8 +217,8 @@ int main()
             return math::GlobeWrap{x, z};
         };
 
-        check("a cell already on the world is untouched", wrapped(500, 200).columns == 500 &&
-                                                              wrapped(500, 200).rows == 200);
+        check("a cell already on the world is untouched",
+              wrapped(500, 200).columns == 500 && wrapped(500, 200).rows == 200);
 
         // East-west is the easy half, and must be a FLOORED modulo: C++ leaves a negative dividend
         // negative, so a body one cell west of the prime meridian would come back at -1.
@@ -333,9 +329,8 @@ int main()
         check("and neither does its western side", westSeamless);
 
         // Crossing the pole must reach the ground half a world away, not the ground next door.
-        check("over the pole is the far meridian",
-              procgen::sampleWorldHeight(params, 10, -1).raw() ==
-                  procgen::sampleWorldHeight(params, 10 + 256, 0).raw());
+        check("over the pole is the far meridian", procgen::sampleWorldHeight(params, 10, -1).raw() ==
+                                                       procgen::sampleWorldHeight(params, 10 + 256, 0).raw());
 
         // And an open world is untouched by any of this.
         procgen::ChunkParams open = params;
@@ -359,9 +354,8 @@ int main()
             const core::i32 baseZ = static_cast<core::i32>((t / 2u) * kSide);
             for (core::u32 r = 0u; r < kSide; ++r)
                 for (core::u32 c = 0u; c < kSide; ++c)
-                    quad[t][r * kSide + c] =
-                        static_cast<core::i16>((baseZ + static_cast<core::i32>(r)) * 100 + baseX +
-                                               static_cast<core::i32>(c));
+                    quad[t][r * kSide + c] = static_cast<core::i16>((baseZ + static_cast<core::i32>(r)) * 100 + baseX +
+                                                                    static_cast<core::i32>(c));
             fields[t].samples = quad[t];
             fields[t].width = kSide;
             fields[t].height = kSide;
@@ -372,18 +366,24 @@ int main()
             // Only the OUTSIDE of the 2x2 block is exposed. West column faces nothing on its west,
             // and so on; the inner edges face a resident neighbour.
             core::u32 edges = 0u;
-            if ((t % 2u) == 0u) edges |= math::kReliefEdgeWest; else edges |= math::kReliefEdgeEast;
-            if ((t / 2u) == 0u) edges |= math::kReliefEdgeNorth; else edges |= math::kReliefEdgeSouth;
+            if ((t % 2u) == 0u)
+                edges |= math::kReliefEdgeWest;
+            else
+                edges |= math::kReliefEdgeEast;
+            if ((t / 2u) == 0u)
+                edges |= math::kReliefEdgeNorth;
+            else
+                edges |= math::kReliefEdgeSouth;
             fields[t].exposedEdges = edges;
             check("the tile joins the mosaic", mosaic.add(&fields[t]));
         }
 
         // Each tile answers for its own ground.
         math::Fixed32 h{};
-        check("the north-west tile answers", mosaic.heightAt(1, 1, h) &&
-                                                 h.raw() == projection.worldHeightOf(101).raw());
-        check("and the south-east one answers its own", mosaic.heightAt(40, 40, h) &&
-                                                            h.raw() == projection.worldHeightOf(4040).raw());
+        check("the north-west tile answers",
+              mosaic.heightAt(1, 1, h) && h.raw() == projection.worldHeightOf(101).raw());
+        check("and the south-east one answers its own",
+              mosaic.heightAt(40, 40, h) && h.raw() == projection.worldHeightOf(4040).raw());
         check("outside the block nothing is resident", !mosaic.heightAt(-1, 0, h));
 
         // @warning **THE claim of this whole lot.** An inner edge faces a resident neighbour, so the
@@ -462,8 +462,7 @@ int main()
         // @warning Nearest FIRST, so a budget that truncates loses the farthest tile rather than an
         // arbitrary one. A machine with less memory must lose ground at the horizon, never under
         // its own feet.
-        check("the eye's own tile comes first", plan[0].level == 0u &&
-                                                    plan[0].tileX == 4 && plan[0].tileZ == 6);
+        check("the eye's own tile comes first", plan[0].level == 0u && plan[0].tileX == 4 && plan[0].tileZ == 6);
         math::ReliefTileRequest tight[5];
         const core::u32 few = math::planReliefResidency(res, 5000, 7000, tight, 5u);
         check("a tight budget fills exactly", few == 5u);
@@ -488,8 +487,8 @@ int main()
         const core::u32 m = math::planReliefResidency(res, 5000, 7000, again, 64u);
         bool identical = m == n;
         for (core::u32 i = 0u; i < n && identical; ++i)
-            identical = again[i].level == plan[i].level && again[i].tileX == plan[i].tileX &&
-                        again[i].tileZ == plan[i].tileZ;
+            identical =
+                again[i].level == plan[i].level && again[i].tileX == plan[i].tileX && again[i].tileZ == plan[i].tileZ;
         check("the plan is deterministic", identical);
 
         // @warning Floored, or the two tiles either side of the origin would both be tile zero and the
@@ -502,8 +501,7 @@ int main()
         bool unique = true;
         for (core::u32 i = 0u; i < n; ++i)
             for (core::u32 j = i + 1u; j < n; ++j)
-                if (plan[i].level == plan[j].level && plan[i].tileX == plan[j].tileX &&
-                    plan[i].tileZ == plan[j].tileZ)
+                if (plan[i].level == plan[j].level && plan[i].tileX == plan[j].tileX && plan[i].tileZ == plan[j].tileZ)
                     unique = false;
         check("and no tile is requested twice", unique);
     }
@@ -535,16 +533,14 @@ int main()
         math::Fixed32 h{};
         math::ReliefMosaic coarseFirst{};
         check("coarse then fine", coarseFirst.add(&coarseTile) && coarseFirst.add(&fineTile));
-        check("the fine tile answers", coarseFirst.heightAt(4, 4, h) &&
-                                           h.raw() == projection.worldHeightOf(500).raw());
+        check("the fine tile answers", coarseFirst.heightAt(4, 4, h) && h.raw() == projection.worldHeightOf(500).raw());
 
         // @warning THE reason a level is stored. Without it the tile that answers is whichever was
         // streamed in first, so which ground a world has would depend on loader timing -- and two
         // targets would disagree the moment their loaders raced. Same answer, opposite order.
         math::ReliefMosaic fineFirst{};
         check("fine then coarse", fineFirst.add(&fineTile) && fineFirst.add(&coarseTile));
-        check("still the fine tile", fineFirst.heightAt(4, 4, h) &&
-                                         h.raw() == projection.worldHeightOf(500).raw());
+        check("still the fine tile", fineFirst.heightAt(4, 4, h) && h.raw() == projection.worldHeightOf(500).raw());
 
         // And where only the coarse tile reaches, coarse ground is what there is -- which is why
         // levels overlap: an evicted fine tile leaves ground behind, not a hole.
@@ -552,8 +548,8 @@ int main()
         farCoarse.originCellX = 100;
         math::ReliefMosaic gapped{};
         check("a lone coarse tile is resident", gapped.add(&farCoarse));
-        check("and it answers where nothing finer is", gapped.heightAt(104, 4, h) &&
-                                                           h.raw() == projection.worldHeightOf(100).raw());
+        check("and it answers where nothing finer is",
+              gapped.heightAt(104, 4, h) && h.raw() == projection.worldHeightOf(100).raw());
     }
 
     std::printf("-- a level boundary is a slope, not a ledge\n");
@@ -597,12 +593,12 @@ int main()
 
         // Deep inside the fine tile the fine ground wins outright.
         math::Fixed32 middle{};
-        check("the interior is the fine survey", mosaic.heightAt(24, 24, middle) &&
-                                                     middle.raw() == projection.worldHeightOf(800).raw());
+        check("the interior is the fine survey",
+              mosaic.heightAt(24, 24, middle) && middle.raw() == projection.worldHeightOf(800).raw());
         // Well outside it, the coarse survey answers.
         math::Fixed32 outside{};
-        check("beyond it the coarse survey answers", mosaic.heightAt(-20, 24, outside) &&
-                                                         outside.raw() == projection.worldHeightOf(500).raw());
+        check("beyond it the coarse survey answers",
+              mosaic.heightAt(-20, 24, outside) && outside.raw() == projection.worldHeightOf(500).raw());
 
         // @warning **THE measurement.** Walking across the boundary, the largest jump between two
         // adjacent cells must be a fraction of the 300 m the two surfaces differ by. Without the
@@ -621,8 +617,8 @@ int main()
             }
             if (havePrevious)
             {
-                const core::i32 step = here.raw() > previous.raw() ? here.raw() - previous.raw()
-                                                                   : previous.raw() - here.raw();
+                const core::i32 step =
+                    here.raw() > previous.raw() ? here.raw() - previous.raw() : previous.raw() - here.raw();
                 if (step > worstStep)
                     worstStep = step;
             }
@@ -631,8 +627,8 @@ int main()
         }
         const core::i32 fullStep = projection.worldHeightOf(800).raw() - projection.worldHeightOf(500).raw();
         check("the handover is spread, not a single ledge", worstStep * 4 < fullStep);
-        std::printf("     worst adjacent step %d raw against a %d raw difference between levels\n",
-                    worstStep, fullStep);
+        std::printf("     worst adjacent step %d raw against a %d raw difference between levels\n", worstStep,
+                    fullStep);
 
         // @warning And the survey must still count as MEASURED across the boundary. Taking the finest
         // tile's own weight would fade real ground into invented ground in the middle of a survey,
@@ -691,10 +687,10 @@ int main()
         check("a cell inside the field answers", field.heightAt(1000, 2000, height));
         check("and it is the sea level plus its elevation", height.raw() == spec.seaLevelUnits.raw());
 
-        check("rows run north to south", field.heightAt(1000, 2001, height) &&
-                                             height.raw() == projection.worldHeightOf(100).raw());
-        check("columns run west to east", field.heightAt(1001, 2000, height) &&
-                                              height.raw() == projection.worldHeightOf(1).raw());
+        check("rows run north to south",
+              field.heightAt(1000, 2001, height) && height.raw() == projection.worldHeightOf(100).raw());
+        check("columns run west to east",
+              field.heightAt(1001, 2000, height) && height.raw() == projection.worldHeightOf(1).raw());
 
         // @warning A gap must be REFUSED, not answered. -32768 metres is a plausible-looking number
         // that would drag a whole block to the bottom of the sea, in a place a reader would have to
@@ -730,8 +726,10 @@ int main()
         // @warning The first version of this check compared (2,2) against (2,32), where BOTH distances
         // are two -- so it read the same number either way and passed against an implementation
         // that ignored three edges out of four. A probe caught it; re-reading it did not.
-        check("a cell close in z fades even when it is deep in x", field.weightAt(30, 1).raw() < math::Fixed32::one().raw());
-        check("a cell close in x fades even when it is deep in z", field.weightAt(1, 30).raw() < math::Fixed32::one().raw());
+        check("a cell close in z fades even when it is deep in x",
+              field.weightAt(30, 1).raw() < math::Fixed32::one().raw());
+        check("a cell close in x fades even when it is deep in z",
+              field.weightAt(1, 30).raw() < math::Fixed32::one().raw());
         check("and the two axes fade alike", field.weightAt(30, 1).raw() == field.weightAt(1, 30).raw());
         check("the southern edge fades like the northern",
               field.weightAt(32, static_cast<core::i32>(kSide) - 2).raw() == field.weightAt(32, 1).raw());
@@ -746,8 +744,7 @@ int main()
                 field.weightAt(static_cast<core::i32>(d) - 1, 32).raw())
                 rises = false;
         check("and it climbs steadily across the band", rises);
-        check("reaching full strength at the band's width",
-              field.weightAt(8, 32).raw() == math::Fixed32::one().raw());
+        check("reaching full strength at the band's width", field.weightAt(8, 32).raw() == math::Fixed32::one().raw());
 
         // A hard border is legal, and means what it says.
         field.blendCells = 0u;
@@ -791,8 +788,7 @@ int main()
 
         // Inside, with no detail layer asked for, the ground is exactly what was measured.
         const math::Fixed32 measured = procgen::sampleWorldHeight(params, 104, 104);
-        check("a cell inside the field is the real ground",
-              measured.raw() == projection.worldHeightOf(500).raw());
+        check("a cell inside the field is the real ground", measured.raw() == projection.worldHeightOf(500).raw());
 
         // @warning The detail layer is declared SEPARATELY rather than as a scale on the main noise,
         // and this is why: scaling a five-octave field down keeps its low octaves too, which reads
@@ -805,8 +801,7 @@ int main()
         check("the detail layer roughens it", rough.raw() != measured.raw());
         const core::i32 added = rough.raw() - measured.raw();
         const core::i32 magnitude = added < 0 ? -added : added;
-        check("but only by the detail layer's own amplitude",
-              magnitude <= math::Fixed32::fromFloat(2.0f).raw());
+        check("but only by the detail layer's own amplitude", magnitude <= math::Fixed32::fromFloat(2.0f).raw());
 
         // And a gap inside the field falls back to invented ground at FULL strength, not to a fade
         // towards nothing: the survey has no opinion there, so the generator's is the only one.
@@ -814,8 +809,7 @@ int main()
         params.reliefDetail.amplitude = 0.0f;
         const math::Fixed32 atGap = procgen::sampleWorldHeight(params, 100, 100);
         params.relief = nullptr;
-        check("a gap falls back to invented ground",
-              atGap.raw() == procgen::sampleWorldHeight(params, 100, 100).raw());
+        check("a gap falls back to invented ground", atGap.raw() == procgen::sampleWorldHeight(params, 100, 100).raw());
     }
 
     std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);

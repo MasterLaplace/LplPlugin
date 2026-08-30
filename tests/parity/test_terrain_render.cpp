@@ -788,8 +788,7 @@ int main()
         const procgen::WorldRecipe recipe = procgen::parityWorldRecipe();
         const procgen::EndlessPlan &plan = walkedPlan();
 
-        static const math::ReliefField field =
-            samples::makeRealReliefField(recipe, plan.chunk.noise.amplitude);
+        static const math::ReliefField field = samples::makeRealReliefField(recipe, plan.chunk.noise.amplitude);
         check(field.valid(), "the checked-in survey is a usable field");
 
         math::ReliefMosaic mosaic{};
@@ -873,8 +872,7 @@ int main()
               "the two bounded builds are the same shape");
         core::u32 mapDiffer = 0u;
         core::u32 mapSampled = 0u;
-        const core::u32 span = plain.width < static_cast<core::u32>(side) ? plain.width
-                                                                         : static_cast<core::u32>(side);
+        const core::u32 span = plain.width < static_cast<core::u32>(side) ? plain.width : static_cast<core::u32>(side);
         for (core::u32 z = 0u; z < span; z += 2u)
         {
             for (core::u32 x = 0u; x < span; x += 2u)
@@ -886,8 +884,8 @@ int main()
         }
         check(mapSampled > 0u, "the map overlaps the survey at all");
         check(mapDiffer > mapSampled / 2u, "the bounded map stands on the survey too");
-        std::printf("     bounded map: %u of %u sampled cells differ from the survey-less build\n",
-                    mapDiffer, mapSampled);
+        std::printf("     bounded map: %u of %u sampled cells differ from the survey-less build\n", mapDiffer,
+                    mapSampled);
         std::printf("     %u wet, %u dry cells across the measured window\n", wet, dry);
     }
 

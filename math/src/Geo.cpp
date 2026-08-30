@@ -141,8 +141,7 @@ Fixed32 ReliefProjection::worldHeightOf(core::i32 metres) const noexcept
 {
     // THE reconciliation, and it is one line on purpose: elevation zero is mean sea level by
     // construction of the data, so it lands on the world's sea level and nowhere else.
-    const core::i64 scaled =
-        (static_cast<core::i64>(metres) * static_cast<core::i64>(projection.unitsPerMetre.raw()));
+    const core::i64 scaled = (static_cast<core::i64>(metres) * static_cast<core::i64>(projection.unitsPerMetre.raw()));
     const core::i64 raw = static_cast<core::i64>(projection.seaLevelUnits.raw()) + scaled;
 
     constexpr core::i64 kMaxRaw = 2147483647;
@@ -341,8 +340,7 @@ const ReliefField *ReliefMosaic::find(core::i32 worldX, core::i32 worldZ) const 
     return best;
 }
 
-const ReliefField *ReliefMosaic::findCoarserThan(core::u32 level, core::i32 worldX,
-                                                 core::i32 worldZ) const noexcept
+const ReliefField *ReliefMosaic::findCoarserThan(core::u32 level, core::i32 worldX, core::i32 worldZ) const noexcept
 {
     // The finest tile STRICTLY coarser than `level`: the one a fine tile hands over to at its edge.
     const ReliefField *best = nullptr;
@@ -433,8 +431,7 @@ core::u32 planReliefResidency(const ReliefResidencyParams &params, core::i32 eye
         const core::i64 span = static_cast<core::i64>(params.tileCells) * scale;
         const core::i64 eyeTileX = floorDivide(eyeCellX, span);
         const core::i64 eyeTileZ = floorDivide(eyeCellZ, span);
-        const core::i32 radius =
-            static_cast<core::i32>(level == 0u ? params.fineRadiusTiles : params.radiusPerLevel);
+        const core::i32 radius = static_cast<core::i32>(level == 0u ? params.fineRadiusTiles : params.radiusPerLevel);
 
         // Nearest first, ring by ring, so a budget that truncates loses the FARTHEST tile. A plan
         // whose overflow depended on iteration order would give a machine with less memory a hole

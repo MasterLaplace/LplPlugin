@@ -249,7 +249,7 @@ inline constexpr FieldDesc kHeadingFields[] = {
 // reason in the other direction -- a corpus that reaches back to the palaeolithic
 // has legitimate values a game would call absurd.
 inline constexpr FieldDesc kHistoricalFields[] = {
-    {"subject",  FieldType::U32, 0, 0},
+    {"subject", FieldType::U32, 0, 0},
     {"bornDay", FieldType::I32, 4, 0},
     {"diedDay", FieldType::I32, 8, 0},
 };

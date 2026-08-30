@@ -56,10 +56,9 @@ int main()
 
         // The coastline is INSIDE the survey, so both signs of elevation are exercised. A world
         // entirely above water never tests the reconciliation the projection exists to make.
-        check("the coast is inside the world", measured.seaCells > 0u &&
-                                                   measured.seaCells < measured.measuredCells +
-                                                                           measured.inventedCells +
-                                                                           measured.blendedCells);
+        check("the coast is inside the world",
+              measured.seaCells > 0u &&
+                  measured.seaCells < measured.measuredCells + measured.inventedCells + measured.blendedCells);
     }
 
     std::printf("-- the control: a world that ignores the survey is a different world\n");
@@ -87,10 +86,9 @@ int main()
 
     std::printf("\n== signatures (must match the kernel fold) ==\n");
     std::printf("  relief_sample=0x%08X relief_height=0x%08X relief_walk=0x%08X relief_coast=0x%08X\n",
-                measured.sampleSignature, measured.heightSignature, measured.walkSignature,
-                measured.coastSignature);
-    std::printf("  relief_measured=%u relief_invented=%u relief_blended=%u relief_sea=%u\n",
-                measured.measuredCells, measured.inventedCells, measured.blendedCells, measured.seaCells);
+                measured.sampleSignature, measured.heightSignature, measured.walkSignature, measured.coastSignature);
+    std::printf("  relief_measured=%u relief_invented=%u relief_blended=%u relief_sea=%u\n", measured.measuredCells,
+                measured.inventedCells, measured.blendedCells, measured.seaCells);
     std::printf("  relief_steps=%u relief_descended=%d\n", measured.walkSteps, measured.descended);
     std::printf("  relief_plainheight=0x%08X relief_plainwalk=0x%08X\n", invented.heightSignature,
                 invented.walkSignature);

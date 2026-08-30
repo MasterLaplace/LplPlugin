@@ -31,8 +31,8 @@ namespace lpl::ecs {
  */
 struct HistoricalBody {
     core::u32 subject{0u}; ///< Identifier the corpus knows them by.
-    core::i32 bornDay{0}; ///< As a source dates it; zero when none does.
-    core::i32 diedDay{0}; ///< Zero when no source says.
+    core::i32 bornDay{0};  ///< As a source dates it; zero when none does.
+    core::i32 diedDay{0};  ///< Zero when no source says.
 };
 
 /**

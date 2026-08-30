@@ -53,10 +53,10 @@ namespace lpl::samples {
  * @brief A place, where it really is.
  */
 struct ChroniclePlace {
-    core::u32 id;          ///< Identifier the corpus uses.
-    const char *name;      ///< What to write on the map.
-    core::f32 latitude;    ///< Degrees north.
-    core::f32 longitude;   ///< Degrees east.
+    core::u32 id;        ///< Identifier the corpus uses.
+    const char *name;    ///< What to write on the map.
+    core::f32 latitude;  ///< Degrees north.
+    core::f32 longitude; ///< Degrees east.
 };
 
 /// Identifiers. Spaced away from the parity fixture's so a log naming one is unambiguous.
@@ -91,13 +91,13 @@ enum : core::u32 {
  * the two cities everyone walked to are the ones over the northern ridge.
  */
 inline constexpr ChroniclePlace kManiPlaces[] = {
-    {kChroniclePlaceKalamata, "Kalamata", 37.038f, 22.113f},
+    {kChroniclePlaceKalamata,  "Kalamata",  37.038f, 22.113f},
     {kChroniclePlaceKardamyli, "Kardamyli", 36.891f, 22.234f},
-    {kChroniclePlaceOitylo, "Oitylo", 36.706f, 22.400f},
-    {kChroniclePlaceAreopoli, "Areopoli", 36.665f, 22.383f},
-    {kChroniclePlaceGytheio, "Gytheio", 36.759f, 22.565f},
-    {kChroniclePlaceTainaron, "Tainaron", 36.386f, 22.483f},
-    {kChroniclePlaceSparta, "Sparta", 37.074f, 22.429f},
+    {kChroniclePlaceOitylo,    "Oitylo",    36.706f, 22.400f},
+    {kChroniclePlaceAreopoli,  "Areopoli",  36.665f, 22.383f},
+    {kChroniclePlaceGytheio,   "Gytheio",   36.759f, 22.565f},
+    {kChroniclePlaceTainaron,  "Tainaron",  36.386f, 22.483f},
+    {kChroniclePlaceSparta,    "Sparta",    37.074f, 22.429f},
 };
 
 inline constexpr core::u32 kManiPlaceCount = sizeof(kManiPlaces) / sizeof(kManiPlaces[0]);
@@ -168,9 +168,12 @@ public:
         // The coast road down the Mani, and the pass east to the gulf. A fixture standing in for
         // Pleiades' `connectsWith`; see the file comment.
         static constexpr core::u32 kLinks[][2] = {
-            {kChroniclePlaceKalamata, kChroniclePlaceKardamyli}, {kChroniclePlaceKardamyli, kChroniclePlaceOitylo},
-            {kChroniclePlaceOitylo, kChroniclePlaceAreopoli},    {kChroniclePlaceAreopoli, kChroniclePlaceTainaron},
-            {kChroniclePlaceOitylo, kChroniclePlaceGytheio},     {kChroniclePlaceGytheio, kChroniclePlaceSparta},
+            {kChroniclePlaceKalamata,  kChroniclePlaceKardamyli},
+            {kChroniclePlaceKardamyli, kChroniclePlaceOitylo   },
+            {kChroniclePlaceOitylo,    kChroniclePlaceAreopoli },
+            {kChroniclePlaceAreopoli,  kChroniclePlaceTainaron },
+            {kChroniclePlaceOitylo,    kChroniclePlaceGytheio  },
+            {kChroniclePlaceGytheio,   kChroniclePlaceSparta   },
         };
         core::u32 written = 0u;
         for (const auto &link : kLinks)
@@ -201,8 +204,7 @@ public:
             return false;
         outX = _cellX[index];
         outZ = _cellZ[index];
-        return outX >= 0 && outZ >= 0 && outX < static_cast<core::i32>(_side) &&
-               outZ < static_cast<core::i32>(_side);
+        return outX >= 0 && outZ >= 0 && outX < static_cast<core::i32>(_side) && outZ < static_cast<core::i32>(_side);
     }
 
 private:
@@ -299,7 +301,7 @@ public:
         walk.arrivalRadius = math::Fixed32::fromFloat(1.2f);
         walk.horizon = math::Fixed32::fromFloat(200.0f);
         auto journey = pmr::make_unique<engine::systems::JourneySystem>(registry(), _gazetteer, _placeIds,
-                                                                       kManiPlaceCount, _era, _chronicle, walk);
+                                                                        kManiPlaceCount, _era, _chronicle, walk);
         _journey = journey.get();
         _journey->useRoutes(_routes);
         _journey->useTerrain(*this);
@@ -322,8 +324,9 @@ public:
         // classifier that ran on nothing or a region that really is all one thing, and only a
         // count tells those apart.
         char census[96];
-        formatLine(census, sizeof(census), "ChronicleWorld: biome grid ", static_cast<core::i32>(_snapshot.biomes.width()),
-                   "x", static_cast<core::i32>(_snapshot.biomes.depth()), ", distinct biomes ",
+        formatLine(census, sizeof(census), "ChronicleWorld: biome grid ",
+                   static_cast<core::i32>(_snapshot.biomes.width()), "x",
+                   static_cast<core::i32>(_snapshot.biomes.depth()), ", distinct biomes ",
                    static_cast<core::i32>(distinctBiomes()));
         core::Log::info(census);
 
@@ -381,7 +384,7 @@ public:
     [[nodiscard]] bool consumePlantAt(core::i32 /*x*/, core::i32 /*z*/) override { return false; }
 
 private:
-    static constexpr core::u32 kSide = 64u;      ///< Matches the survey exactly; see onInit.
+    static constexpr core::u32 kSide = 64u; ///< Matches the survey exactly; see onInit.
     static constexpr core::i32 kFirstYear = kChronicleFirstYear;
     static constexpr core::i32 kLastYear = kChronicleLastYear;
     static constexpr core::u32 kDaysPerTick = 30u;
@@ -654,8 +657,7 @@ private:
         // which found the wrong character and printed "this ghoandurvey".
         const core::u32 off = offSurveyPlaces();
         formatLine(line, sizeof(line), "places ", static_cast<core::i32>(kManiPlaceCount), "  on this ground ",
-                   static_cast<core::i32>(kManiPlaceCount - off), "  located elsewhere ",
-                   static_cast<core::i32>(off));
+                   static_cast<core::i32>(kManiPlaceCount - off), "  located elsewhere ", static_cast<core::i32>(off));
         write(line);
     }
 

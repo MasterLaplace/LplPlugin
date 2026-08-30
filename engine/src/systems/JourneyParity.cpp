@@ -87,11 +87,11 @@ public:
         // same statement, and a resolver that returned (0,0) as a position would send bodies
         // walking to the origin whenever a corpus mentioned somewhere nobody has found.
         static constexpr Row kRows[] = {
-            {kPlaceHome, 0.0f, 0.0f, -600, 400, true},
-            {kPlaceNear, 300.0f, 0.0f, -600, 400, true},
-            {kPlaceFar, 300.0f, 600.0f, -600, 400, true},
-            {kPlaceLost, 0.0f, 0.0f, -600, 400, false},
-            {kPlaceLate, 60.0f, 60.0f, 900, 1200, true},
+            {kPlaceHome, 0.0f,   0.0f,   -600, 400,  true },
+            {kPlaceNear, 300.0f, 0.0f,   -600, 400,  true },
+            {kPlaceFar,  300.0f, 600.0f, -600, 400,  true },
+            {kPlaceLost, 0.0f,   0.0f,   -600, 400,  false},
+            {kPlaceLate, 60.0f,  60.0f,  900,  1200, true },
         };
         for (const Row &row : kRows)
         {
@@ -142,8 +142,7 @@ public:
  */
 class DetourRoutes final : public history::IRouteResolver {
 public:
-    core::u32 route(core::u32 fromPlace, core::u32 toPlace, history::RouteLeg *out,
-                    core::u32 capacity) const override
+    core::u32 route(core::u32 fromPlace, core::u32 toPlace, history::RouteLeg *out, core::u32 capacity) const override
     {
         if (out == nullptr || capacity < 2u)
             return 0u;
@@ -224,8 +223,7 @@ public:
         // Cell centres of a 48x48 grid at four units a cell: (cell - 24) * 4 + 2.
         if (id == kWest)
         {
-            out = history::Place{kWest, math::Fixed32::fromFloat(-46.0f), math::Fixed32::fromFloat(-54.0f), 0, 0,
-                                 true};
+            out = history::Place{kWest, math::Fixed32::fromFloat(-46.0f), math::Fixed32::fromFloat(-54.0f), 0, 0, true};
             return true;
         }
         if (id == kEast)
@@ -447,11 +445,10 @@ void foldJourneyState(JourneyFoldResult &out)
     // a lambda over the view, and called twice. Copying it would let the consensus world and the
     // dissenting one drift apart in a way that has nothing to do with what their sources say,
     // which is precisely the comparison this gate exists to make.
-    const auto runWorld = [&](const history::WorldView &worldView, math::Fixed32 wrapWidth,
-                              JourneyFoldResult &result) {
+    const auto runWorld = [&](const history::WorldView &worldView, math::Fixed32 wrapWidth, JourneyFoldResult &result) {
         // An all-listening view: an empty `admittedSources` admits every source, which is what a
         // consensus world means here.
-                history::FusionReport report;
+        history::FusionReport report;
         const history::Timeline timeline = history::buildTimeline(corpus, worldView, report);
 
         const history::Era era = history::Era::ofYears(-500, -480, 4u);
@@ -534,15 +531,17 @@ void foldJourneyState(JourneyFoldResult &out)
                     continue;
                 const auto *positions = static_cast<const math::Vec3<math::Fixed32> *>(
                     chunkPtr->writeComponent(ecs::ComponentId::Position));
-                const auto *bodies = static_cast<const ecs::HistoricalBody *>(
-                    chunkPtr->writeComponent(ecs::ComponentId::Historical));
+                const auto *bodies =
+                    static_cast<const ecs::HistoricalBody *>(chunkPtr->writeComponent(ecs::ComponentId::Historical));
                 if (positions == nullptr || bodies == nullptr)
                     continue;
                 for (core::u32 row = 0u; row < chunkPtr->count(); ++row)
                 {
                     positionSignature = history::foldWord(positionSignature, bodies[row].subject);
-                    positionSignature = history::foldWord(positionSignature, static_cast<core::u32>(positions[row].x.raw()));
-                    positionSignature = history::foldWord(positionSignature, static_cast<core::u32>(positions[row].z.raw()));
+                    positionSignature =
+                        history::foldWord(positionSignature, static_cast<core::u32>(positions[row].x.raw()));
+                    positionSignature =
+                        history::foldWord(positionSignature, static_cast<core::u32>(positions[row].z.raw()));
                 }
             }
         }
@@ -552,8 +551,6 @@ void foldJourneyState(JourneyFoldResult &out)
         result.scoredClaims = verdict.scoredClaims;
         result.earned = verdict.earned;
         result.divergenceScore = static_cast<core::u32>(verdict.score.raw());
-
-
     };
 
     // The consensus world: an empty `admittedSources` admits every source.
@@ -594,6 +591,4 @@ void foldJourneyState(JourneyFoldResult &out)
     foldAttestedRoads(out);
 }
 
-
 } // namespace lpl::engine::systems
-

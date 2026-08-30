@@ -36,7 +36,6 @@
 #ifndef LPL_SAMPLES_TERRAINWORLD_HPP
 #    define LPL_SAMPLES_TERRAINWORLD_HPP
 
-#    include <lpl/samples/ReliefBlob.hpp>
 #    include <lpl/ai/Personality.hpp>
 #    include <lpl/ai/ScentWindow.hpp>
 #    include <lpl/ai/StigmergyField.hpp>
@@ -96,6 +95,7 @@
 #    include <lpl/render/SoftwareRasterizer.hpp>
 #    include <lpl/render/Topology.hpp>
 #    include <lpl/render/Water.hpp>
+#    include <lpl/samples/ReliefBlob.hpp>
 
 namespace lpl::samples {
 
@@ -728,8 +728,7 @@ private:
             blend.seed = _seed;
 
             const procgen::WorldSnapshot snapshot = procgen::buildSnapshot(
-                recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f},
-                &blend);
+                recipe, &registry(), &_propIds, procgen::WalkabilityRule{recipe.biomes.seaLevel, 2.4f}, &blend);
 
             _height = snapshot.height;
             _biomes = snapshot.biomes;
@@ -918,9 +917,9 @@ private:
         // terrain, and nothing in the log would differ. The numbers live in the generated header
         // rather than being formatted here -- Log takes a string, and hand-rolled integer
         // formatting has already been removed from this project once as speculative.
-        core::Log::info(_chunkParams.relief != nullptr
-                            ? "TerrainWorld: standing on measured earth (SRTM, southern Peloponnese)"
-                            : "TerrainWorld: no survey attached, ground is invented");
+        core::Log::info(_chunkParams.relief != nullptr ?
+                            "TerrainWorld: standing on measured earth (SRTM, southern Peloponnese)" :
+                            "TerrainWorld: no survey attached, ground is invented");
 
         _streamParams.generateRadius = kStreamRadius;
         // 1.5x: the hysteresis that stops a camera sitting on a boundary from

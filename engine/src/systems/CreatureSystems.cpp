@@ -479,8 +479,7 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
                 // the first time.
                 const math::Fixed32 reach = math::Fixed32::one() + view.genome[i].size;
                 math::Vec3<math::Fixed32> &body = position;
-                const GroundStepResult stepped =
-                    stepOnGround(_terrain, body, headingX, headingZ, pace, reach);
+                const GroundStepResult stepped = stepOnGround(_terrain, body, headingX, headingZ, pace, reach);
                 if (stepped.avoided)
                     ++_avoided;
                 if (stepped.cornered)

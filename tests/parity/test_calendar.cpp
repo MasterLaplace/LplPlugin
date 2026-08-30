@@ -162,7 +162,6 @@ int main()
         check("a gap of one day does not", !daysOverlap(0, 10, 11, 20));
     }
 
-    std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures,
-                gChecks);
+    std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);
     return gFailures == 0 ? 0 : 1;
 }

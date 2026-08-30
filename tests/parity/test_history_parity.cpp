@@ -17,14 +17,14 @@
  * @copyright MIT License
  */
 
-#include <lpl/math/Geo.hpp>
+#include <lpl/engine/systems/Journey.hpp>
 #include <lpl/history/Calendar.hpp>
 #include <lpl/history/Chronicle.hpp>
 #include <lpl/history/Divergence.hpp>
 #include <lpl/history/Era.hpp>
-#include <lpl/engine/systems/Journey.hpp>
 #include <lpl/history/Parity.hpp>
 #include <lpl/history/PossibleWorld.hpp>
+#include <lpl/math/Geo.hpp>
 
 #include <cstdio>
 
@@ -270,8 +270,7 @@ int main()
                 if (timesFired[i] != 1u)
                     everyConstraintFiredExactlyOnce = false;
             }
-            std::printf("    %6u days/tick : %u ticks, %u firings\n", kRates[r], era.totalTicks(),
-                        firedPerRate[r]);
+            std::printf("    %6u days/tick : %u ticks, %u firings\n", kRates[r], era.totalTicks(), firedPerRate[r]);
         }
 
         check(firedPerRate[0] == 5u && firedPerRate[1] == 5u && firedPerRate[2] == 5u && firedPerRate[3] == 5u,
@@ -373,7 +372,8 @@ int main()
         // the ground and one that does not reach the same places by different paths -- and only
         // this number separates them.
         check(journey.avoided >= 1u, "and turns aside from ground it cannot cross");
-        check(journey.divergenceScore == (65536u * journey.earned) / journey.scoredClaims, "the divergence score is the earned fraction");
+        check(journey.divergenceScore == (65536u * journey.earned) / journey.scoredClaims,
+              "the divergence score is the earned fraction");
 
         // @warning The attested link becomes ONE road, not one per direction: a resolver hands links
         // out both ways, and laying the pair twice would give a second road that took the first
@@ -388,8 +388,7 @@ int main()
         // fixture lays 28 cells, the straight line through the mountain -- which would fold to a
         // perfectly stable signature on both targets.
         check(journey.roadCells == 57u, "and it takes the shortest road that goes round the ridge");
-        check(journey.roadSignature != 0u && journey.waypointSignature != 0u,
-              "the road and its waypoints both fold");
+        check(journey.roadSignature != 0u && journey.waypointSignature != 0u, "the road and its waypoints both fold");
 
         // @warning **Two worlds, and the assertion is that they DIFFER.** The same corpus, the same
         // seed, the same systems -- one entry more in `admittedSources`, and a body born
@@ -414,15 +413,13 @@ int main()
         // @warning **A closed routing grid must lay a SHORTER road**, because the two attested places
         // sit either side of its seam. A router that could not cross it paves most of the way round
         // instead -- a valid road, a long road, and nothing downstream can tell it was the wrong one.
-        check(journey.wrappedRoadCells < journey.roadCells,
-              "a closed grid paves a shorter road than an open one");
+        check(journey.wrappedRoadCells < journey.roadCells, "a closed grid paves a shorter road than an open one");
         check(journey.wrappedRoadCells > 0u, "and it paves one at all");
 
         // @warning And opening the poles must not make it WORSE. A road getting longer when a shortcut
         // is offered is what an inadmissible estimate looks like from outside: A* discards the cheap
         // route before evaluating it and hands back a plausible one.
-        check(journey.polarRoadCells <= journey.wrappedRoadCells,
-              "and offering the poles never makes it worse");
+        check(journey.polarRoadCells <= journey.wrappedRoadCells, "and offering the poles never makes it worse");
 
         // @warning **The cascade must lay the SAME road.** Planning on a summary and refining inside
         // the corridor it opens is a different search, so agreement is a property to prove -- and
@@ -456,12 +453,10 @@ int main()
         check(closedGap > math::Fixed32::zero() && closedGap < math::Fixed32::fromFloat(11.0f),
               "a closed world sees them as neighbours");
 
-        check(math::foldOntoShorterWay(width, west - east) < math::Fixed32::zero(),
-              "and the crossing has a direction");
+        check(math::foldOntoShorterWay(width, west - east) < math::Fixed32::zero(), "and the crossing has a direction");
 
         const math::Fixed32 inland = math::Fixed32::fromFloat(120.0f);
-        check(math::foldOntoShorterWay(width, inland).raw() == inland.raw(),
-              "an ordinary separation is left alone");
+        check(math::foldOntoShorterWay(width, inland).raw() == inland.raw(), "an ordinary separation is left alone");
 
         // @warning **A separation can be WIDER than the world, and folding once is not enough.** A gap
         // of 300 across a world 120 wide came back as 180 -- still most of the way round, and wrong

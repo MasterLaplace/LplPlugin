@@ -268,7 +268,6 @@ struct ReliefProjection {
  */
 [[nodiscard]] ReliefProjection makeReliefProjection(const GeoProjection &projection);
 
-
 /**
  * @brief Brings a cell that walked off the edge back onto the world.
  *
@@ -578,9 +577,9 @@ struct ReliefResidencyParams {
      * @ref tileCells and that margin goes with it.
      */
     core::u32 tileCells{1024u};
-    core::u32 fineRadiusTiles{1u};   ///< Tiles of level 0 kept either side of the eye.
-    core::u32 levels{4u};            ///< How many levels to stack, finest first.
-    core::u32 radiusPerLevel{1u};    ///< Tiles either side of the eye at each coarser level.
+    core::u32 fineRadiusTiles{1u}; ///< Tiles of level 0 kept either side of the eye.
+    core::u32 levels{4u};          ///< How many levels to stack, finest first.
+    core::u32 radiusPerLevel{1u};  ///< Tiles either side of the eye at each coarser level.
 };
 
 /**
@@ -610,9 +609,8 @@ struct ReliefResidencyParams {
  * @param capacity How many @p out can hold.
  * @return How many were written; equal to @p capacity when the budget truncated the plan.
  */
-[[nodiscard]] core::u32 planReliefResidency(const ReliefResidencyParams &params, core::i32 eyeCellX,
-                                            core::i32 eyeCellZ, ReliefTileRequest *out,
-                                            core::u32 capacity) noexcept;
+[[nodiscard]] core::u32 planReliefResidency(const ReliefResidencyParams &params, core::i32 eyeCellX, core::i32 eyeCellZ,
+                                            ReliefTileRequest *out, core::u32 capacity) noexcept;
 
 /**
  * @brief Ground one cell of a level covers, in level-0 cells.

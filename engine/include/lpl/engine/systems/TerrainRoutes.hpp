@@ -293,8 +293,7 @@ private:
      * @param goalZ  Goal row.
      * @return The path; @c found is false when the goal is unreachable.
      */
-    [[nodiscard]] procgen::RoutedPath plan(core::u32 startX, core::u32 startZ, core::u32 goalX,
-                                           core::u32 goalZ) const;
+    [[nodiscard]] procgen::RoutedPath plan(core::u32 startX, core::u32 startZ, core::u32 goalX, core::u32 goalZ) const;
 
 private:
     const procgen::Heightfield *_field{nullptr};

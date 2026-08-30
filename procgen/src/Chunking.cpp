@@ -25,8 +25,7 @@ core::u32 chunkSeed(const ChunkParams &params, ChunkCoord coord)
     return math::deriveStream(mixed, 0xC804Bu).state();
 }
 
-math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ,
-                          math::Fixed32 invented)
+math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ, math::Fixed32 invented)
 {
     // No survey behind this world: exactly the path it always took, so nothing already folded moves
     // because this branch exists.

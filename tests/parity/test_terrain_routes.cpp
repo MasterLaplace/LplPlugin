@@ -171,8 +171,8 @@ int main()
     TableResolver places;
     places.add(1u, kWestX, kSouthZ);
     places.add(2u, kWestX, kNorthZ);
-    places.add(3u, 900.0f, 900.0f);        // off the grid entirely
-    places.add(4u, 0.5f, 0.5f, false);     // known from texts, never found
+    places.add(3u, 900.0f, 900.0f);    // off the grid entirely
+    places.add(4u, 0.5f, 0.5f, false); // known from texts, never found
 
     std::printf("-- a road goes round a ridge, not through it\n");
     core::u32 detourCount = 0u;
@@ -202,8 +202,7 @@ int main()
         // than at the last bend before it.
         const math::Fixed32 lastX = detour[detourCount - 1u].x;
         const math::Fixed32 lastZ = detour[detourCount - 1u].z;
-        check("the last waypoint is the destination cell",
-              lastX == goal.x && lastZ == goal.z);
+        check("the last waypoint is the destination cell", lastX == goal.x && lastZ == goal.z);
     }
 
     std::printf("-- with the climb made free, the same road is straight\n");
@@ -242,10 +241,8 @@ int main()
         // so the last slot would hold an early bend and the body would strike out straight from
         // the middle of the ridge -- across precisely what the road existed to go round.
         check("and the last of them is still the destination",
-              count == 2u && tight[1].x == detour[detourCount - 1u].x &&
-                  tight[1].z == detour[detourCount - 1u].z);
-        check("not the road's first bend",
-              count == 2u && !(tight[1].x == detour[0].x && tight[1].z == detour[0].z));
+              count == 2u && tight[1].x == detour[detourCount - 1u].x && tight[1].z == detour[detourCount - 1u].z);
+        check("not the road's first bend", count == 2u && !(tight[1].x == detour[0].x && tight[1].z == detour[0].z));
     }
 
     std::printf("-- the two cells either side of the origin are not one cell\n");
@@ -315,12 +312,10 @@ int main()
         // The resolver hands out four directed links for two attested roads, so a count of four
         // here would mean each road was laid twice -- the second time taking its own discount,
         // which is a parallel road nobody built.
-        check("each attested pair is laid once, not once per direction",
-              merged.pairs() == 2u && apart.pairs() == 2u);
+        check("each attested pair is laid once, not once per direction", merged.pairs() == 2u && apart.pairs() == 2u);
         // Both roads still connect: a merge that lost one of them would also pave fewer cells,
         // so the saving above means nothing without this beside it.
-        check("and neither road was lost to the merge",
-              merged.unreachable() == 0u && apart.unreachable() == 0u);
+        check("and neither road was lost to the merge", merged.unreachable() == 0u && apart.unreachable() == 0u);
     }
 
     std::printf("-- a road crosses the antimeridian instead of going round the planet\n");
@@ -380,8 +375,7 @@ int main()
         // in a way no single line of it looks wrong.
         procgen::RoutingParams mismatched = params;
         mismatched.wrapColumns = kW + 1u;
-        const procgen::RoutedPath ignored =
-            procgen::routeLeastCost(flat, nullptr, startX, 12u, goalX, 12u, mismatched);
+        const procgen::RoutedPath ignored = procgen::routeLeastCost(flat, nullptr, startX, 12u, goalX, 12u, mismatched);
         check("a wrap that does not match the grid is ignored", ignored.cells.size() == around.cells.size());
     }
 
@@ -446,8 +440,7 @@ int main()
         // Two points near the EQUATOR of this sheet are not helped by a pole, and the router must
         // not invent a detour: the estimate has to stay the direct one where the direct one wins.
         const core::u32 mid = kH / 2u;
-        const procgen::RoutedPath flatRun =
-            procgen::routeLeastCost(flat, nullptr, 10u, mid, 30u, mid, polar);
+        const procgen::RoutedPath flatRun = procgen::routeLeastCost(flat, nullptr, 10u, mid, 30u, mid, polar);
         check("a short hop mid-sheet is still direct", flatRun.found && flatRun.cells.size() <= 22u);
 
         // @warning The heuristic must stay ADMISSIBLE, and this is what says so: with poles enabled
@@ -462,10 +455,9 @@ int main()
         openSheet.waterPenalty = 0.0f;
         openSheet.reuseDiscount = 0.0f;
         openSheet.wrapPoles = true; // no wrapColumns
-        const procgen::RoutedPath refused =
-            procgen::routeLeastCost(flat, nullptr, startX, row, goalX, row, openSheet);
-        check("poles alone do nothing on an open sheet", refused.cells.size() == around.cells.size() ||
-                                                             refused.cells.size() > over.cells.size());
+        const procgen::RoutedPath refused = procgen::routeLeastCost(flat, nullptr, startX, row, goalX, row, openSheet);
+        check("poles alone do nothing on an open sheet",
+              refused.cells.size() == around.cells.size() || refused.cells.size() > over.cells.size());
     }
 
     std::printf("-- how a block is reduced decides whether the plan can see the pass\n");
@@ -480,9 +472,9 @@ int main()
         // for a memory budget. That is the case each rule has to survive.
         constexpr core::u32 kRatio = 8u;
         constexpr core::u32 kSize = 192u;
-        constexpr core::u32 kRidgeTop = 90u;   // deliberately not a multiple of the ratio
+        constexpr core::u32 kRidgeTop = 90u; // deliberately not a multiple of the ratio
         constexpr core::u32 kRidgeBottom = 97u;
-        constexpr core::u32 kGateFrom = 149u;  // three cells wide, inside one block
+        constexpr core::u32 kGateFrom = 149u; // three cells wide, inside one block
         constexpr core::u32 kGateTo = 151u;
 
         procgen::Heightfield fine{kSize, kSize, math::Fixed32::fromFloat(1.0f)};
@@ -540,8 +532,8 @@ int main()
         };
         check("and it crosses at the pass", crossesAtGate(truth));
 
-        std::printf("     flat: %zu cells, cost %.1f, %u expanded\n", truth.cells.size(),
-                    truth.cost.toFloat(), truth.expanded);
+        std::printf("     flat: %zu cells, cost %.1f, %u expanded\n", truth.cells.size(), truth.cost.toFloat(),
+                    truth.expanded);
 
         const char *names[3] = {"max ", "min ", "mean"};
         bool sawGate[3] = {false, false, false};
@@ -549,18 +541,16 @@ int main()
         bool widened[3] = {false, false, false};
         for (int rule = 0; rule < 3; ++rule)
         {
-            const procgen::Heightfield summary =
-                rule == 2 ? procgen::reduceHeightfield(fine, kRatio) : reduceBy(rule);
-            const procgen::HierarchicalRoute cascaded = procgen::routeAcrossWorld(
-                summary, fine, kRatio, nullptr, kStartX, kStartZ, kStartX, kGoalZ, cost);
+            const procgen::Heightfield summary = rule == 2 ? procgen::reduceHeightfield(fine, kRatio) : reduceBy(rule);
+            const procgen::HierarchicalRoute cascaded =
+                procgen::routeAcrossWorld(summary, fine, kRatio, nullptr, kStartX, kStartZ, kStartX, kGoalZ, cost);
             sawGate[rule] = cascaded.fine.found && crossesAtGate(cascaded.fine);
             optimal[rule] = cascaded.fine.found && cascaded.fine.cost.raw() == truth.cost.raw();
             widened[rule] = cascaded.widened;
             std::printf("     %s: %s, %zu cells, cost %.1f, %u+%u expanded%s, %s\n", names[rule],
                         cascaded.fine.found ? "found" : "NO ROAD", cascaded.fine.cells.size(),
                         cascaded.fine.cost.toFloat(), cascaded.coarseExpanded, cascaded.fine.expanded,
-                        cascaded.widened ? ", WIDENED" : "",
-                        sawGate[rule] ? "through the pass" : "OVER THE WALL");
+                        cascaded.widened ? ", WIDENED" : "", sawGate[rule] ? "through the pass" : "OVER THE WALL");
         }
 
         // @warning **Both rivals throw away one of the two facts the plan needs, in opposite
@@ -585,8 +575,7 @@ int main()
         // out to be impassable; a plan that merely hides a cheaper way is passable, so the fine
         // search finds a road, reports success, and hands back something 2.65 times the cost of
         // the real one. A bad summary does not fail loudly -- it succeeds quietly.
-        check("and neither of them widened, so nothing reported the mistake",
-              !widened[0] && !widened[1]);
+        check("and neither of them widened, so nothing reported the mistake", !widened[0] && !widened[1]);
     }
 
     std::printf("-- a world too large to search flat is searched twice\n");
@@ -620,8 +609,7 @@ int main()
         cost.waterPenalty = 0.0f;
         cost.reuseDiscount = 0.0f;
 
-        const procgen::RoutedPath flat =
-            procgen::routeLeastCost(fine, nullptr, 20u, 20u, 220u, 240u, cost);
+        const procgen::RoutedPath flat = procgen::routeLeastCost(fine, nullptr, 20u, 20u, 220u, 240u, cost);
         const procgen::HierarchicalRoute cascaded =
             procgen::routeAcrossWorld(coarse, fine, kRatio, nullptr, 20u, 20u, 220u, 240u, cost);
 
@@ -631,15 +619,13 @@ int main()
 
         std::printf("     flat: %zu cells, %u expanded | cascade: %zu cells, %u+%u expanded, "
                     "%u corridor cells%s\n",
-                    flat.cells.size(), flat.expanded, cascaded.fine.cells.size(),
-                    cascaded.coarseExpanded, cascaded.fine.expanded, cascaded.corridorCells,
-                    cascaded.widened ? ", WIDENED" : "");
+                    flat.cells.size(), flat.expanded, cascaded.fine.cells.size(), cascaded.coarseExpanded,
+                    cascaded.fine.expanded, cascaded.corridorCells, cascaded.widened ? ", WIDENED" : "");
 
         // @warning **The whole justification.** If the cascade settled as many cells as the flat search,
         // it would be the same search with extra steps -- and the ten terabytes above would still
         // be ten terabytes. The corridor is what makes a planet affordable.
-        check("the cascade settles far fewer cells",
-              cascaded.coarseExpanded + cascaded.fine.expanded < flat.expanded);
+        check("the cascade settles far fewer cells", cascaded.coarseExpanded + cascaded.fine.expanded < flat.expanded);
 
         // And the road must be worth having. A corridor that squeezed the route into a detour would
         // buy its cheapness with a road nobody would drive; within a quarter is the bound, and it is
@@ -656,16 +642,14 @@ int main()
                 narrow.at(x, z) = 1u;
         procgen::RoutingParams boxed = cost;
         boxed.corridor = &narrow;
-        const procgen::RoutedPath refused =
-            procgen::routeLeastCost(fine, nullptr, 1u, 1u, 220u, 240u, boxed);
+        const procgen::RoutedPath refused = procgen::routeLeastCost(fine, nullptr, 1u, 1u, 220u, 240u, boxed);
         check("a goal outside the corridor is refused, not approximated", !refused.found);
 
         // A corridor that does not match the grid is ignored rather than half applied.
         procgen::Grid<core::u8> wrongSize{16u, 16u, core::u8{1}};
         procgen::RoutingParams mismatched = cost;
         mismatched.corridor = &wrongSize;
-        const procgen::RoutedPath ignored =
-            procgen::routeLeastCost(fine, nullptr, 20u, 20u, 220u, 240u, mismatched);
+        const procgen::RoutedPath ignored = procgen::routeLeastCost(fine, nullptr, 20u, 20u, 220u, 240u, mismatched);
         check("a corridor of the wrong shape is ignored", ignored.found);
 
         // @warning **A cascade on a CLOSED world, which is what the coarse plan's own wrap is for.**
@@ -675,8 +659,8 @@ int main()
         // like any other plan. The two places sit either side of it.
         procgen::RoutingParams closedCost = cost;
         closedCost.wrapColumns = kFine;
-        const procgen::HierarchicalRoute wrapped = procgen::routeAcrossWorld(
-            coarse, fine, kRatio, nullptr, kFine - 12u, 40u, 12u, 40u, closedCost);
+        const procgen::HierarchicalRoute wrapped =
+            procgen::routeAcrossWorld(coarse, fine, kRatio, nullptr, kFine - 12u, 40u, 12u, 40u, closedCost);
         check("a closed world cascades too", wrapped.fine.found);
         check("and crosses the seam rather than going round", wrapped.fine.cells.size() <= 40u);
         std::printf("     closed cascade: %zu cells, %u+%u expanded%s\n", wrapped.fine.cells.size(),
@@ -737,12 +721,11 @@ int main()
 
         const procgen::HierarchicalRoute seam =
             procgen::routeAcrossWorld(summary, fine, kRatio, nullptr, 0u, 8u, 0u, 56u, cost);
-        const procgen::RoutedPath flat =
-            procgen::routeLeastCost(fine, nullptr, 0u, 8u, 0u, 56u, cost);
+        const procgen::RoutedPath flat = procgen::routeLeastCost(fine, nullptr, 0u, 8u, 0u, 56u, cost);
 
         std::printf("     flat: %zu cells, cost %.1f | cascade: %zu cells, cost %.1f, %u corridor%s\n",
-                    flat.cells.size(), flat.cost.toFloat(), seam.fine.cells.size(),
-                    seam.fine.cost.toFloat(), seam.corridorCells, seam.widened ? ", WIDENED" : "");
+                    flat.cells.size(), flat.cost.toFloat(), seam.fine.cells.size(), seam.fine.cost.toFloat(),
+                    seam.corridorCells, seam.widened ? ", WIDENED" : "");
 
         check("the flat search gets past the wall", flat.found);
         check("and so does the cascade", seam.fine.found);
@@ -834,12 +817,10 @@ int main()
         const core::u32 cascadeCount = cascadeRoutes.route(1u, 2u, cascadeLegs, 8u);
         bool sameLegs = flatCount == cascadeCount && flatCount > 0u;
         for (core::u32 i = 0u; i < flatCount && sameLegs; ++i)
-            sameLegs = flatLegs[i].x.raw() == cascadeLegs[i].x.raw() &&
-                       flatLegs[i].z.raw() == cascadeLegs[i].z.raw();
+            sameLegs = flatLegs[i].x.raw() == cascadeLegs[i].x.raw() && flatLegs[i].z.raw() == cascadeLegs[i].z.raw();
         check("and a traveller gets the same waypoints either way", sameLegs);
     }
 
-    std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures,
-                gChecks);
+    std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);
     return gFailures == 0 ? 0 : 1;
 }

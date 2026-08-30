@@ -55,8 +55,8 @@ struct ReliefFoldResult {
     core::u32 blendedCells{0u};  ///< Cells in the border band, part measured and part invented.
     core::u32 seaCells{0u};      ///< Cells at or below the world's sea level.
 
-    core::u32 walkSteps{0u};     ///< Steps the body actually took.
-    core::i32 descended{0};      ///< Raw Q16.16 height the walk lost, start to finish.
+    core::u32 walkSteps{0u}; ///< Steps the body actually took.
+    core::i32 descended{0};  ///< Raw Q16.16 height the walk lost, start to finish.
 };
 
 /**

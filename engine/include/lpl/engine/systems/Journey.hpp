@@ -39,10 +39,10 @@
 #    include <lpl/ecs/ComponentData.hpp>
 #    include <lpl/ecs/Registry.hpp>
 #    include <lpl/ecs/System.hpp>
-#    include <lpl/history/Chronicle.hpp>
-#    include <lpl/history/Era.hpp>
 #    include <lpl/engine/ITerrainQuery.hpp>
 #    include <lpl/engine/systems/GroundStep.hpp>
+#    include <lpl/history/Chronicle.hpp>
+#    include <lpl/history/Era.hpp>
 #    include <lpl/history/Place.hpp>
 #    include <lpl/history/Predicate.hpp>
 
@@ -248,8 +248,8 @@ private:
      * @param out     Receives the goal.
      * @return false when nothing is reachable.
      */
-    [[nodiscard]] bool chooseGoal(math::Fixed32 x, math::Fixed32 z, core::i32 year,
-                                  const Visited &visited, history::Place &out) const;
+    [[nodiscard]] bool chooseGoal(math::Fixed32 x, math::Fixed32 z, core::i32 year, const Visited &visited,
+                                  history::Place &out) const;
 
     /**
      * @brief Finds or makes a body's visit record.

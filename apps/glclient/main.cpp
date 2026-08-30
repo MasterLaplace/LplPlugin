@@ -105,9 +105,9 @@ public:
         windowAttributes.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
                                       ButtonReleaseMask | PointerMotionMask | StructureNotifyMask;
 
-        _window = XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height), 0,
-                                _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask,
-                                &windowAttributes);
+        _window =
+            XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height), 0,
+                          _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask, &windowAttributes);
         XMapWindow(_display, _window);
         XStoreName(_display, _window, "lpl-glclient - the ring-0 world, on a desktop");
 
@@ -321,9 +321,8 @@ public:
             unsigned border = 0u;
             unsigned depth = 0u;
             XGetGeometry(_display, _window, &root, &originX, &originY, &realWidth, &realHeight, &border, &depth);
-            std::printf("glclient: frame %u  window %ux%u  viewport %dx%d  colours on screen %u\n",
-                        _framesPresented, realWidth, realHeight, _windowWidth, _windowHeight,
-                        distinctIn(_presented));
+            std::printf("glclient: frame %u  window %ux%u  viewport %dx%d  colours on screen %u\n", _framesPresented,
+                        realWidth, realHeight, _windowWidth, _windowHeight, distinctIn(_presented));
             std::fflush(stdout);
         }
 
@@ -597,8 +596,7 @@ public:
     [[nodiscard]] bool tryPopCharacter(char &outCharacter) override { return _host.popCharacter(outCharacter); }
     [[nodiscard]] core::u32 pendingCount() const noexcept override { return _host.pendingCharacters(); }
 
-    [[nodiscard]] bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY,
-                                           core::u32 &outButtons) override
+    [[nodiscard]] bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY, core::u32 &outButtons) override
     {
         return _host.popMotion(outDeltaX, outDeltaY, outButtons);
     }

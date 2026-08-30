@@ -48,20 +48,20 @@ enum class Predicate : core::u32 {
     None = 0u,
 
     // ── Attributes: what a source asserts, and no agent performs ─────────────
-    DiedOf = 10u,  ///< What killed him. Frozen: folded into gate P13.
-    Exists = 11u,  ///< Whether a settlement is there. Frozen: folded into gate P13.
-    BornIn = 12u,  ///< The year of a birth, as a source dates it.
-    DiedIn = 13u,  ///< The year of a death.
-    Ruled = 14u,   ///< Held authority over a place, across the fact's window.
-    Wrote = 15u,   ///< Authored a work. The object is the work.
+    DiedOf = 10u, ///< What killed him. Frozen: folded into gate P13.
+    Exists = 11u, ///< Whether a settlement is there. Frozen: folded into gate P13.
+    BornIn = 12u, ///< The year of a birth, as a source dates it.
+    DiedIn = 13u, ///< The year of a death.
+    Ruled = 14u,  ///< Held authority over a place, across the fact's window.
+    Wrote = 15u,  ///< Authored a work. The object is the work.
 
     // ── Deeds: what an agent can be seen to do, and therefore EARN ───────────
-    BornAt = 40u,     ///< Came into the world at a place.
-    DweltAt = 41u,    ///< Was living at a place, across the fact's window.
-    TravelledTo = 42u,///< Went somewhere. The deed a walking entity produces.
-    DiedAt = 43u,     ///< Ended at a place.
-    Founded = 44u,    ///< Made a settlement exist that did not.
-    Abandoned = 45u,  ///< Left a settlement with nobody in it.
+    BornAt = 40u,      ///< Came into the world at a place.
+    DweltAt = 41u,     ///< Was living at a place, across the fact's window.
+    TravelledTo = 42u, ///< Went somewhere. The deed a walking entity produces.
+    DiedAt = 43u,      ///< Ended at a place.
+    Founded = 44u,     ///< Made a settlement exist that did not.
+    Abandoned = 45u,   ///< Left a settlement with nobody in it.
 
     Count = 46u, ///< One past the highest, for bounds checks. NOT a count of entries.
 };
@@ -78,9 +78,8 @@ enum class Predicate : core::u32 {
  */
 [[nodiscard]] constexpr bool isDeed(Predicate predicate) noexcept
 {
-    return predicate == Predicate::BornAt || predicate == Predicate::DweltAt ||
-           predicate == Predicate::TravelledTo || predicate == Predicate::DiedAt ||
-           predicate == Predicate::Founded || predicate == Predicate::Abandoned;
+    return predicate == Predicate::BornAt || predicate == Predicate::DweltAt || predicate == Predicate::TravelledTo ||
+           predicate == Predicate::DiedAt || predicate == Predicate::Founded || predicate == Predicate::Abandoned;
 }
 
 /**
@@ -94,9 +93,8 @@ enum class Predicate : core::u32 {
  */
 [[nodiscard]] constexpr bool objectIsPlace(Predicate predicate) noexcept
 {
-    return predicate == Predicate::BornAt || predicate == Predicate::DweltAt ||
-           predicate == Predicate::TravelledTo || predicate == Predicate::DiedAt ||
-           predicate == Predicate::Founded || predicate == Predicate::Abandoned ||
+    return predicate == Predicate::BornAt || predicate == Predicate::DweltAt || predicate == Predicate::TravelledTo ||
+           predicate == Predicate::DiedAt || predicate == Predicate::Founded || predicate == Predicate::Abandoned ||
            predicate == Predicate::Ruled;
 }
 
@@ -114,21 +112,21 @@ enum class Predicate : core::u32 {
 {
     switch (predicate)
     {
-    case Predicate::DiedOf:      return "died-of";
-    case Predicate::Exists:      return "exists";
-    case Predicate::BornIn:      return "born-in";
-    case Predicate::DiedIn:      return "died-in";
-    case Predicate::Ruled:       return "ruled";
-    case Predicate::Wrote:       return "wrote";
-    case Predicate::BornAt:      return "born-at";
-    case Predicate::DweltAt:     return "dwelt-at";
+    case Predicate::DiedOf: return "died-of";
+    case Predicate::Exists: return "exists";
+    case Predicate::BornIn: return "born-in";
+    case Predicate::DiedIn: return "died-in";
+    case Predicate::Ruled: return "ruled";
+    case Predicate::Wrote: return "wrote";
+    case Predicate::BornAt: return "born-at";
+    case Predicate::DweltAt: return "dwelt-at";
     case Predicate::TravelledTo: return "travelled-to";
-    case Predicate::DiedAt:      return "died-at";
-    case Predicate::Founded:     return "founded";
-    case Predicate::Abandoned:   return "abandoned";
+    case Predicate::DiedAt: return "died-at";
+    case Predicate::Founded: return "founded";
+    case Predicate::Abandoned: return "abandoned";
     case Predicate::None:
     case Predicate::Count:
-    default:                     return "unknown";
+    default: return "unknown";
     }
 }
 
@@ -146,10 +144,9 @@ enum class Predicate : core::u32 {
  */
 [[nodiscard]] constexpr bool predicateByName(const char *text, core::u32 bytes, Predicate &out) noexcept
 {
-    constexpr Predicate kAll[] = {Predicate::DiedOf,  Predicate::Exists,      Predicate::BornIn,
-                                  Predicate::DiedIn,  Predicate::Ruled,       Predicate::Wrote,
-                                  Predicate::BornAt,  Predicate::DweltAt,     Predicate::TravelledTo,
-                                  Predicate::DiedAt,  Predicate::Founded,     Predicate::Abandoned};
+    constexpr Predicate kAll[] = {Predicate::DiedOf,      Predicate::Exists, Predicate::BornIn,  Predicate::DiedIn,
+                                  Predicate::Ruled,       Predicate::Wrote,  Predicate::BornAt,  Predicate::DweltAt,
+                                  Predicate::TravelledTo, Predicate::DiedAt, Predicate::Founded, Predicate::Abandoned};
     for (const Predicate candidate : kAll)
     {
         const char *name = predicateName(candidate);

@@ -7,9 +7,8 @@
  * @copyright MIT License
  */
 
-#include <lpl/history/Fold.hpp>
 #include <lpl/history/Chronicle.hpp>
-
+#include <lpl/history/Fold.hpp>
 
 namespace lpl::history {
 

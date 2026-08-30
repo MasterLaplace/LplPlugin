@@ -24,9 +24,9 @@
 #    include <lpl/ecs/Registry.hpp>
 #    include <lpl/ecs/System.hpp>
 #    include <lpl/history/Chronicle.hpp>
+#    include <lpl/history/Era.hpp>
 #    include <lpl/history/Place.hpp>
 #    include <lpl/history/Predicate.hpp>
-#    include <lpl/history/Era.hpp>
 #    include <lpl/history/Timeline.hpp>
 
 namespace lpl::history {
@@ -67,8 +67,7 @@ public:
      * @param resolver  Where places are.
      * @param archetype What a seeded body carries.
      */
-    void bindWorld(ecs::Registry &registry, const IPlaceResolver &resolver,
-                   const ecs::Archetype &archetype) noexcept;
+    void bindWorld(ecs::Registry &registry, const IPlaceResolver &resolver, const ecs::Archetype &archetype) noexcept;
 
     /**
      * @brief How many bodies the constraints brought into the world.
@@ -137,8 +136,7 @@ private:
      * @param out     Receives the entity.
      * @return false when no body could be made.
      */
-    [[nodiscard]] bool bodyFor(core::u32 subject, const Fact &fact, ecs::EntityId &out,
-                               bool &outCreated);
+    [[nodiscard]] bool bodyFor(core::u32 subject, const Fact &fact, ecs::EntityId &out, bool &outCreated);
 
     /**
      * @brief Puts a body at a place.

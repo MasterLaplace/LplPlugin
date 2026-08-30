@@ -33,12 +33,12 @@ namespace lpl::history {
  * @brief A named place, positioned and dated.
  */
 struct Place {
-    core::u32 id{0u};      ///< The gazetteer's own identifier. Never a hash of a name.
-    math::Fixed32 x{};     ///< World position. What the corpus calls a longitude, projected.
-    math::Fixed32 z{};     ///< World position.
-    core::i32 minYear{0};  ///< First year attested.
-    core::i32 maxYear{0};  ///< Last year attested.
-    bool located{false};   ///< Whether the coordinates mean anything. See below.
+    core::u32 id{0u};     ///< The gazetteer's own identifier. Never a hash of a name.
+    math::Fixed32 x{};    ///< World position. What the corpus calls a longitude, projected.
+    math::Fixed32 z{};    ///< World position.
+    core::i32 minYear{0}; ///< First year attested.
+    core::i32 maxYear{0}; ///< Last year attested.
+    bool located{false};  ///< Whether the coordinates mean anything. See below.
 };
 
 /**
@@ -82,8 +82,7 @@ public:
      * @param capacity Room in @p out.
      * @return How many were written.
      */
-    [[nodiscard]] virtual core::u32 linkedPlaces(core::u32 id, core::u32 *out,
-                                                 core::u32 capacity) const
+    [[nodiscard]] virtual core::u32 linkedPlaces(core::u32 id, core::u32 *out, core::u32 capacity) const
     {
         (void) id;
         (void) out;

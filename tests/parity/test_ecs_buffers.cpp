@@ -16,8 +16,8 @@
 
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Registry.hpp>
-#include <lpl/math/FixedPoint.hpp>
 #include <lpl/ecs/WorldPosition.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
 
 #include <cstdio>
@@ -103,10 +103,9 @@ int main()
                 {
                     if (chunk == nullptr)
                         continue;
-                    auto *positions = static_cast<math::Vec3<math::Fixed32> *>(
-                        chunk->writeComponent(ecs::ComponentId::Position));
-                    auto *identity = static_cast<core::u32 *>(
-                        chunk->writeComponent(ecs::ComponentId::Historical));
+                    auto *positions =
+                        static_cast<math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+                    auto *identity = static_cast<core::u32 *>(chunk->writeComponent(ecs::ComponentId::Historical));
                     if (positions == nullptr || identity == nullptr)
                     {
                         positionsHeld = false;
@@ -151,8 +150,7 @@ int main()
         p.localX = p.localX - lpl::math::Fixed32::fromFloat(20.0f);
         lpl::ecs::normaliseWorldPosition(p, chunk);
         check("stepping back crosses the other way", p.chunkX == 0);
-        check("with the offset inside again",
-              p.localX >= lpl::math::Fixed32{} && p.localX < chunk);
+        check("with the offset inside again", p.localX >= lpl::math::Fixed32{} && p.localX < chunk);
 
         // Range: a world that reaches a planet. Earth's circumference is 40 075 km, which is
         // 78 272 chunks of 512 m -- the point of the split, in one number.
@@ -161,8 +159,7 @@ int main()
         far.localX = lpl::math::Fixed32::fromFloat(511.5f);
         lpl::ecs::normaliseWorldPosition(far, chunk);
         check("a cell far past what Q16.16 spans is untouched", far.chunkX == 78272);
-        check("and its offset is still exact",
-              far.localX == lpl::math::Fixed32::fromFloat(511.5f));
+        check("and its offset is still exact", far.localX == lpl::math::Fixed32::fromFloat(511.5f));
 
         // The delta of two positions is a chunk count plus a remainder, never one flat number:
         // that is where the overflow used to be.
@@ -172,11 +169,9 @@ int main()
         lpl::math::Fixed32 dlz{};
         lpl::ecs::worldDelta(p, far, chunk, dcx, dcz, dlx, dlz);
         check("a delta across 78 272 chunks is expressed exactly", dcx == 78272 && dcz == 0);
-        check("with the leftover inside one chunk",
-              dlx > -chunk && dlx < chunk && dlz == lpl::math::Fixed32{});
+        check("with the leftover inside one chunk", dlx > -chunk && dlx < chunk && dlz == lpl::math::Fixed32{});
     }
 
-    std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures,
-                gChecks);
+    std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);
     return gFailures == 0 ? 0 : 1;
 }

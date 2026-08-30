@@ -55,8 +55,7 @@ struct Era {
      * @param ticksPerYear Steps per year; zero is treated as one.
      * @return The era.
      */
-    [[nodiscard]] static constexpr Era ofYears(core::i32 firstYear, core::i32 lastYear,
-                                               core::u32 ticksPerYear) noexcept
+    [[nodiscard]] static constexpr Era ofYears(core::i32 firstYear, core::i32 lastYear, core::u32 ticksPerYear) noexcept
     {
         Era era;
         era.startDay = firstDayOfYear(firstYear);
@@ -149,10 +148,7 @@ struct Era {
      * @param tick Index from the start of the era.
      * @return The year.
      */
-    [[nodiscard]] constexpr core::i32 yearOfTick(core::u32 tick) const noexcept
-    {
-        return yearOfDay(dayOfTick(tick));
-    }
+    [[nodiscard]] constexpr core::i32 yearOfTick(core::u32 tick) const noexcept { return yearOfDay(dayOfTick(tick)); }
 };
 
 } // namespace lpl::history

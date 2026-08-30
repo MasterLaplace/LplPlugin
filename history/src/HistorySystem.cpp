@@ -103,8 +103,7 @@ void HistorySystem::placeBody(ecs::EntityId body, const Place &place)
     ecs::Chunk *chunk = _registry->chunkOf(body, row);
     if (chunk == nullptr)
         return;
-    auto *positions =
-        static_cast<math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+    auto *positions = static_cast<math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
     if (positions == nullptr)
         return;
     positions[row].x = place.x;
