@@ -95,6 +95,19 @@ target_end()
 -- Behind an option so the headless and kernel builds never see it: it links
 -- libGL and libX11, which exist on a desktop and nowhere else.
 -- ─────────────────────────────────────────────────────────────────────────────
+-- The desktop window that runs the SAME World the kernel client boots. Gated for the same
+-- reason mapview is -- it links libGL and libX11 -- but unlike mapview it draws nothing itself:
+-- it hands the engine a framebuffer and uploads the result, so the pixels are the ring-0 ones.
+if has_config("glclient") then
+    target("lpl-glclient")
+        set_kind("binary")
+        set_group("apps")
+        add_deps("lpl-engine", "lpl-samples", "lpl-pack", "lpl-platform")
+        add_files("glclient/main.cpp")
+        add_syslinks("GL", "X11", "m")
+    target_end()
+end
+
 if has_config("mapview") then
     target("lpl-mapview")
         set_kind("binary")

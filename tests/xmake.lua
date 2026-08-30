@@ -562,6 +562,18 @@ target("test-geo-projection")
     add_files("parity/test_geo_projection.cpp")
 target_end()
 
+-- The chronicle sample: the corpus, the attested roads and the walk, on real ground. It runs the
+-- World for real against LinuxPlatform's framebuffer -- headless, and the only thing in the tree
+-- that exercises HistorySystem, JourneySystem and the routing cascade together outside a fold.
+target("test-chronicle-world")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-render", "lpl-procgen", "lpl-ecs", "lpl-ecology", "lpl-ai", "lpl-history",
+             "lpl-engine", "lpl-samples", "lpl-platform")
+    add_files("parity/test_chronicle_world.cpp")
+    set_default(false)
+target_end()
+
 target("test-terrain-render")
     set_kind("binary")
     set_group("tests")

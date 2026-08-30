@@ -59,6 +59,12 @@ option("mapview")
     set_description("Build lpl-mapview, the standalone X11/GLX viewer for generated worlds")
 option_end()
 
+option("glclient")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build lpl-glclient, the desktop window that runs the ring-0 World")
+option_end()
+
 option("worldforge")
     set_default(false)
     set_showmenu(true)

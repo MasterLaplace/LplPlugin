@@ -57,6 +57,22 @@ public:
     /** @brief Present the back buffer (atomic flip / scanout). */
     virtual void present() = 0;
 
+    /**
+     * @brief Has the host asked for the display to go away?
+     *
+     * @warning A window has a close button and a scanout does not, so this is the one thing a
+     * display knows that the engine cannot work out for itself. The loop already asked this
+     * question -- of GLFW, by name, inside an `#ifdef LPL_HAS_RENDERER` -- which made "the host
+     * wants out" a property of one windowing library rather than of the display seam. It is the
+     * same question either way.
+     *
+     * Defaults to false, which is the honest answer for a linear framebuffer: a kernel's scanout
+     * never closes, so ring 0 inherits this and pays nothing.
+     *
+     * @return true when the loop should stop.
+     */
+    [[nodiscard]] virtual bool shouldClose() const noexcept { return false; }
+
     /** @brief Returns a human-readable name. */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };

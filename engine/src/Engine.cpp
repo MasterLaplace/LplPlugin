@@ -620,6 +620,14 @@ void Engine::run()
             requestShutdown();
         }
 #endif
+        // The same question, asked of the display seam rather than of one windowing library.
+        // A scanout answers false and pays nothing; a window answers when its close button is
+        // pressed. Asked BEFORE the world draws, so the frame after a close request is not one
+        // the host has to keep a surface alive for.
+        if (_impl->platform->display().shouldClose())
+        {
+            requestShutdown();
+        }
         _impl->world->onRender(_impl->worldContext, alpha);
     };
 

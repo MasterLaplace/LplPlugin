@@ -1,0 +1,626 @@
+/**
+ * @file main.cpp
+ * @brief The ring-0 client, on a desktop, through a window.
+ *
+ * @warning **This app contains no rendering.** It opens a window, hands the engine a framebuffer,
+ * and uploads whatever the engine put there. Every pixel is drawn by the same
+ * `engine::TerrainRenderer` running the same `procgen` passes over the same authoritative Fixed32
+ * state that the kernel runs -- so what appears here is what QEMU shows, at desktop speed and with
+ * a mouse. Drawing the world a second time in OpenGL would be faster and would be a second
+ * renderer: two answers to what the world looks like, free to disagree, and the one that is
+ * checked by five booted artifacts would not be this one.
+ *
+ * OpenGL is therefore a BLITTER and nothing else -- one textured quad. That is also why this costs
+ * so little: `samples::TerrainWorld` rasterises at 480x300 and scales up, so the host pays for an
+ * upload, not for a scene.
+ *
+ * @warning **It also required no engine code.** `platform::IDisplayBackend` and
+ * `platform::IInputBackend` were declared for exactly this and had one implementation each -- a
+ * kernel scanout and a host stub that drew into RAM nobody looked at. `engine::bootGame` already
+ * took a platform and a World factory. The only thing missing was somebody to plug a window into
+ * the seam, which is what this file is.
+ *
+ * @author MasterLaplace
+ * @version 0.1.0
+ * @copyright MIT License
+ */
+
+// @warning **The engine headers come FIRST, and the order is not cosmetic.** Xlib defines `None`,
+// `Bool`, `Status` and `Success` as bare preprocessor macros, and `history::Predicate::None` is an
+// enumerator by that name -- so including X11 first turns an enum member into `0L` and the error
+// points at Predicate.hpp, a file this app never edits. Every project that touches both hits this
+// once; hitting it in the right order costs nothing.
+#include <lpl/core/Log.hpp>
+#include <lpl/engine/Boot.hpp>
+#include <lpl/pack/ViewerPackBlob.hpp>
+#include <lpl/platform/linux/LinuxPlatform.hpp>
+#include <lpl/samples/ChronicleWorld.hpp>
+#include <lpl/samples/TerrainWorld.hpp>
+#include <lpl/std/memory.hpp>
+
+#include <GL/gl.h>
+#include <GL/glx.h>
+#include <X11/XKBlib.h>
+#include <X11/Xlib.h>
+
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+using namespace lpl;
+
+namespace {
+
+/**
+ * @class DesktopHost
+ * @brief The X11 window, its GL context, the framebuffer the engine draws into, and the events.
+ *
+ * @warning One object rather than two, because the display and the input are the SAME connection:
+ * a window that pumped its own events and an input backend that pumped its own would each drain
+ * the other's, and the symptom is a keyboard that works only on the frames the mouse is still.
+ * The two seams below are adapters over this; nothing owns an X connection twice.
+ */
+class DesktopHost {
+public:
+    /**
+     * @brief Opens the window and the GL context.
+     *
+     * @param width  Framebuffer width in pixels.
+     * @param height Framebuffer height in pixels.
+     * @return false when there is no display, or no usable visual.
+     */
+    [[nodiscard]] bool open(core::u32 width, core::u32 height)
+    {
+        _width = width;
+        _height = height;
+        _pixels.assign(static_cast<std::size_t>(width) * height, 0u);
+
+        _display = XOpenDisplay(nullptr);
+        if (_display == nullptr)
+        {
+            std::fprintf(stderr, "lpl-glclient: cannot open a display (is DISPLAY set?)\n");
+            return false;
+        }
+
+        // No depth buffer asked for: the engine owns the depth test and does it in software, in
+        // the same buffer the kernel uses. A GL depth buffer here would be an unused attachment.
+        int attributes[] = {GLX_RGBA, GLX_DOUBLEBUFFER, None};
+        _visual = glXChooseVisual(_display, DefaultScreen(_display), attributes);
+        if (_visual == nullptr)
+        {
+            std::fprintf(stderr, "lpl-glclient: no double-buffered RGBA visual\n");
+            return false;
+        }
+
+        Window root = DefaultRootWindow(_display);
+        XSetWindowAttributes windowAttributes{};
+        windowAttributes.colormap = XCreateColormap(_display, root, _visual->visual, AllocNone);
+        windowAttributes.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
+                                      ButtonReleaseMask | PointerMotionMask | StructureNotifyMask;
+
+        _window = XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height), 0,
+                                _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask,
+                                &windowAttributes);
+        XMapWindow(_display, _window);
+        XStoreName(_display, _window, "lpl-glclient - the ring-0 world, on a desktop");
+
+        // The window manager's close button arrives as a client message, and a window that
+        // ignores it is a window that only Ctrl-C closes.
+        _closeAtom = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+        XSetWMProtocols(_display, _window, &_closeAtom, 1);
+
+        // @warning Without this, held keys do not exist: X synthesises a KeyRelease immediately
+        // before every auto-repeat KeyPress, so a key held down reads as released on most frames
+        // and the walk stutters instead of moving. Detectable auto-repeat suppresses the
+        // synthetic release, which is the whole reason `isKeyHeld` can be answered honestly.
+        Bool supported = False;
+        XkbSetDetectableAutoRepeat(_display, True, &supported);
+        _detectableRepeat = supported == True;
+
+        _context = glXCreateContext(_display, _visual, nullptr, GL_TRUE);
+        glXMakeCurrent(_display, _window, _context);
+
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_BLEND);
+        glEnable(GL_TEXTURE_2D);
+        glGenTextures(1, &_texture);
+        glBindTexture(GL_TEXTURE_2D, _texture);
+        // NEAREST, deliberately. The engine rasterises at 480x300 and scales up itself; a second
+        // bilinear pass here would blur the upscale the world already chose, and the point of this
+        // app is to show the frame the kernel produces rather than a smoothed version of it.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(width), static_cast<GLsizei>(height), 0, GL_BGRA,
+                     GL_UNSIGNED_BYTE, _pixels.data());
+        return true;
+    }
+
+    /** @brief Tears down the context and the window. */
+    void close()
+    {
+        if (_display == nullptr)
+            return;
+        if (_texture != 0u)
+            glDeleteTextures(1, &_texture);
+        glXMakeCurrent(_display, None, nullptr);
+        if (_context != nullptr)
+            glXDestroyContext(_display, _context);
+        if (_window != 0)
+            XDestroyWindow(_display, _window);
+        XCloseDisplay(_display);
+        _display = nullptr;
+    }
+
+    /**
+     * @brief Drains the X queue into the input rings.
+     *
+     * @warning Called from present(), which is the only point in the frame the host is
+     * guaranteed to reach. Pumping from the input backend instead would tie event delivery to
+     * whether the World happened to ask for a key this frame.
+     */
+    void pump()
+    {
+        while (XPending(_display) > 0)
+        {
+            XEvent event;
+            XNextEvent(_display, &event);
+            switch (event.type)
+            {
+            case ClientMessage:
+                if (static_cast<Atom>(event.xclient.data.l[0]) == _closeAtom)
+                    _shouldClose = true;
+                break;
+            case ConfigureNotify:
+                _windowWidth = event.xconfigure.width;
+                _windowHeight = event.xconfigure.height;
+                break;
+            case KeyPress:
+            case KeyRelease: {
+                char text[8]{};
+                KeySym symbol = 0;
+                const int written = XLookupString(&event.xkey, text, sizeof(text) - 1u, &symbol, nullptr);
+                if (symbol == XK_Escape)
+                {
+                    _shouldClose = true;
+                    break;
+                }
+                if (written <= 0)
+                    break;
+                const auto code = static_cast<unsigned char>(text[0]);
+                if (code >= sizeof(_held))
+                    break;
+                if (event.type == KeyPress)
+                {
+                    // Only the edge is queued. A held key already reports through isKeyHeld, and
+                    // queueing every repeat as well would stack a typed nudge on top of a steady
+                    // walk -- which is the lurch TerrainWorld's own comment describes.
+                    if (_held[code] == 0u)
+                        pushCharacter(text[0]);
+                    _held[code] = 1u;
+                }
+                else
+                {
+                    _held[code] = 0u;
+                }
+                break;
+            }
+            case ButtonPress:
+            case ButtonRelease: {
+                const unsigned button = event.xbutton.button;
+                const core::u32 mask = button == Button1 ? 1u : button == Button3 ? 2u : button == Button2 ? 4u : 0u;
+                if (event.type == ButtonPress)
+                    _buttons |= mask;
+                else
+                    _buttons &= ~mask;
+                break;
+            }
+            case MotionNotify:
+                // Deltas against the previous position, which is what the seam asks for: an
+                // absolute position would make the world's look speed depend on the window size.
+                if (_haveMotion)
+                    pushMotion(event.xmotion.x - _lastX, event.xmotion.y - _lastY);
+                _lastX = event.xmotion.x;
+                _lastY = event.xmotion.y;
+                _haveMotion = true;
+                break;
+            default: break;
+            }
+        }
+    }
+
+    /** @brief Uploads the framebuffer and swaps. */
+    void present()
+    {
+        pump();
+        if (_display == nullptr)
+            return;
+
+        glViewport(0, 0, _windowWidth, _windowHeight);
+        glBindTexture(GL_TEXTURE_2D, _texture);
+        // BGRA over a 0x00RRGGBB word: on a little-endian host those bytes are B, G, R, 0, which
+        // is exactly what GL_BGRA reads. Alpha comes out zero and nothing blends, by design.
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, static_cast<GLsizei>(_width), static_cast<GLsizei>(_height), GL_BGRA,
+                        GL_UNSIGNED_BYTE, _pixels.data());
+
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0.0, 1.0, 1.0, 0.0, -1.0, 1.0); // y down: row 0 of the framebuffer is the top row
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        glBegin(GL_QUADS);
+        glTexCoord2f(0.0f, 0.0f);
+        glVertex2f(0.0f, 0.0f);
+        glTexCoord2f(1.0f, 0.0f);
+        glVertex2f(1.0f, 0.0f);
+        glTexCoord2f(1.0f, 1.0f);
+        glVertex2f(1.0f, 1.0f);
+        glTexCoord2f(0.0f, 1.0f);
+        glVertex2f(0.0f, 1.0f);
+        glEnd();
+
+        glXSwapBuffers(_display, _window);
+        ++_framesPresented;
+        if (_frameBudget != 0u && _framesPresented >= _frameBudget)
+            _shouldClose = true;
+    }
+
+    [[nodiscard]] core::u32 *pixels() noexcept { return _pixels.data(); }
+    [[nodiscard]] core::u32 width() const noexcept { return _width; }
+    [[nodiscard]] core::u32 height() const noexcept { return _height; }
+    [[nodiscard]] bool shouldClose() const noexcept { return _shouldClose; }
+    [[nodiscard]] bool detectableRepeat() const noexcept { return _detectableRepeat; }
+
+    [[nodiscard]] bool isHeld(char character) const noexcept
+    {
+        const auto code = static_cast<unsigned char>(character);
+        return code < sizeof(_held) && _held[code] != 0u;
+    }
+
+    /**
+     * @brief Takes one queued character.
+     *
+     * @param out Receives it.
+     * @return false when the ring is empty.
+     */
+    [[nodiscard]] bool popCharacter(char &out)
+    {
+        if (_charHead == _charTail)
+            return false;
+        out = _chars[_charTail];
+        _charTail = (_charTail + 1u) & (kRing - 1u);
+        return true;
+    }
+
+    [[nodiscard]] core::u32 pendingCharacters() const noexcept { return (_charHead - _charTail) & (kRing - 1u); }
+
+    /**
+     * @brief Takes one accumulated pointer motion.
+     *
+     * @param outDeltaX Receives the horizontal delta.
+     * @param outDeltaY Receives the vertical delta.
+     * @param outButtons Receives the button mask.
+     * @return false when nothing moved.
+     */
+    [[nodiscard]] bool popMotion(core::i32 &outDeltaX, core::i32 &outDeltaY, core::u32 &outButtons)
+    {
+        if (_motionHead == _motionTail)
+            return false;
+        outDeltaX = _motionX[_motionTail];
+        outDeltaY = _motionY[_motionTail];
+        outButtons = _buttons;
+        _motionTail = (_motionTail + 1u) & (kRing - 1u);
+        ++_motionsTaken;
+        return true;
+    }
+
+    [[nodiscard]] core::u32 motionsTaken() const noexcept { return _motionsTaken; }
+
+    /**
+     * @brief Stops after @p frames presents, or never when zero.
+     *
+     * @warning Exists so this app can be checked without somebody looking at it. A window nobody
+     * asserts on is how the viewers in this tree drifted: the failure of a render path is a black
+     * rectangle, which is indistinguishable from a window that has not drawn yet.
+     *
+     * @param frames How many frames to present before asking to close.
+     */
+    void limitFrames(core::u32 frames) noexcept { _frameBudget = frames; }
+
+    [[nodiscard]] core::u32 framesPresented() const noexcept { return _framesPresented; }
+
+    /**
+     * @brief Writes the framebuffer as a binary PPM.
+     *
+     * @param path Destination.
+     * @return false when the file could not be written.
+     */
+    [[nodiscard]] bool writePortablePixmap(const char *path) const
+    {
+        std::FILE *file = std::fopen(path, "wb");
+        if (file == nullptr)
+            return false;
+        std::fprintf(file, "P6\n%u %u\n255\n", _width, _height);
+        for (std::size_t i = 0u; i < _pixels.size(); ++i)
+        {
+            const core::u32 pixel = _pixels[i];
+            const unsigned char rgb[3] = {static_cast<unsigned char>((pixel >> 16) & 0xFFu),
+                                          static_cast<unsigned char>((pixel >> 8) & 0xFFu),
+                                          static_cast<unsigned char>(pixel & 0xFFu)};
+            std::fwrite(rgb, 1u, 3u, file);
+        }
+        std::fclose(file);
+        return true;
+    }
+
+    /**
+     * @brief How many distinct colours the last frame holds.
+     *
+     * @warning The one number that separates "the world drew" from "the window is a colour". A
+     * black frame and a cleared frame both have one; a landscape has thousands.
+     *
+     * @return The count, capped at the sample size.
+     */
+    [[nodiscard]] core::u32 distinctColours() const
+    {
+        std::vector<core::u32> seen;
+        seen.reserve(4096u);
+        for (std::size_t i = 0u; i < _pixels.size(); i += 7u) // a prime stride: no row alignment
+        {
+            const core::u32 pixel = _pixels[i] & 0x00FFFFFFu;
+            bool known = false;
+            for (const core::u32 other : seen)
+                if (other == pixel)
+                {
+                    known = true;
+                    break;
+                }
+            if (!known)
+            {
+                seen.push_back(pixel);
+                if (seen.size() >= 4096u)
+                    break;
+            }
+        }
+        return static_cast<core::u32>(seen.size());
+    }
+
+private:
+    static constexpr core::u32 kRing = 256u; ///< Power of two: the wrap is a mask.
+
+    void pushCharacter(char character)
+    {
+        const core::u32 next = (_charHead + 1u) & (kRing - 1u);
+        if (next == _charTail)
+            return; // full: drop the newest rather than corrupt the oldest, as the kernel ring does
+        _chars[_charHead] = character;
+        _charHead = next;
+    }
+
+    void pushMotion(int deltaX, int deltaY)
+    {
+        const core::u32 next = (_motionHead + 1u) & (kRing - 1u);
+        if (next == _motionTail)
+            return;
+        _motionX[_motionHead] = deltaX;
+        _motionY[_motionHead] = deltaY;
+        _motionHead = next;
+    }
+
+    Display *_display{nullptr};
+    XVisualInfo *_visual{nullptr};
+    Window _window{0};
+    GLXContext _context{nullptr};
+    Atom _closeAtom{0};
+    GLuint _texture{0u};
+
+    core::u32 _width{0u};
+    core::u32 _height{0u};
+    int _windowWidth{1};
+    int _windowHeight{1};
+    std::vector<core::u32> _pixels;
+
+    bool _shouldClose{false};
+    bool _detectableRepeat{false};
+
+    core::u8 _held[128]{};
+    char _chars[kRing]{};
+    core::u32 _charHead{0u};
+    core::u32 _charTail{0u};
+
+    core::i32 _motionX[kRing]{};
+    core::i32 _motionY[kRing]{};
+    core::u32 _motionHead{0u};
+    core::u32 _motionTail{0u};
+    core::u32 _motionsTaken{0u};
+    core::u32 _buttons{0u};
+    core::u32 _frameBudget{0u};
+    core::u32 _framesPresented{0u};
+    int _lastX{0};
+    int _lastY{0};
+    bool _haveMotion{false};
+};
+
+/** @brief The display seam over the window. */
+class DesktopDisplay final : public platform::IDisplayBackend {
+public:
+    explicit DesktopDisplay(DesktopHost &host) noexcept : _host(host) {}
+
+    [[nodiscard]] bool querySurface(platform::SurfaceDescriptor &outDescriptor) const noexcept override
+    {
+        outDescriptor.buffer = const_cast<DesktopHost &>(_host).pixels();
+        outDescriptor.physicalAddress = 0u; // no GPU uploader attaches to this one
+        outDescriptor.width = _host.width();
+        outDescriptor.height = _host.height();
+        outDescriptor.pitch = _host.width() * 4u;
+        outDescriptor.bitsPerPixel = 32u;
+        return outDescriptor.buffer != nullptr;
+    }
+
+    void clear(core::u32 colorRgb) override
+    {
+        core::u32 *pixels = _host.pixels();
+        const core::u32 count = _host.width() * _host.height();
+        for (core::u32 i = 0u; i < count; ++i)
+            pixels[i] = colorRgb;
+    }
+
+    [[nodiscard]] core::u32 readPixel(core::u32 x, core::u32 y) const noexcept override
+    {
+        if (x >= _host.width() || y >= _host.height())
+            return 0u;
+        return const_cast<DesktopHost &>(_host).pixels()[y * _host.width() + x];
+    }
+
+    void present() override { _host.present(); }
+    [[nodiscard]] bool shouldClose() const noexcept override { return _host.shouldClose(); }
+    [[nodiscard]] const char *name() const noexcept override { return "DesktopDisplay(GLX blit)"; }
+
+private:
+    DesktopHost &_host;
+};
+
+/** @brief The input seam over the same window. */
+class DesktopInput final : public platform::IInputBackend {
+public:
+    explicit DesktopInput(DesktopHost &host) noexcept : _host(host) {}
+
+    [[nodiscard]] bool tryPopCharacter(char &outCharacter) override { return _host.popCharacter(outCharacter); }
+    [[nodiscard]] core::u32 pendingCount() const noexcept override { return _host.pendingCharacters(); }
+
+    [[nodiscard]] bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY,
+                                           core::u32 &outButtons) override
+    {
+        return _host.popMotion(outDeltaX, outDeltaY, outButtons);
+    }
+
+    [[nodiscard]] bool isKeyHeld(char character) const noexcept override { return _host.isHeld(character); }
+
+    // @warning Answered honestly rather than unconditionally: without detectable auto-repeat X
+    // reports a release before every repeat, so held keys would be wrong most frames. Saying so
+    // lets the World fall back to its typed path instead of walking in stutters.
+    [[nodiscard]] bool hasKeyStates() const noexcept override { return _host.detectableRepeat(); }
+    [[nodiscard]] bool hasPointer() const noexcept override { return true; }
+    [[nodiscard]] core::u32 pointerInterruptCount() const noexcept override { return _host.motionsTaken(); }
+    [[nodiscard]] const char *name() const noexcept override { return "DesktopInput(X11)"; }
+
+private:
+    DesktopHost &_host;
+};
+
+/**
+ * @class DesktopPlatform
+ * @brief LinuxPlatform's clock and memory, with a real window in front.
+ *
+ * @warning It reuses `LinuxClockBackend`, `LinuxMemoryBackend` and `LinuxGpuMemoryBackend` rather
+ * than restating them: what a desktop adds is a display and a keyboard, and a second host clock
+ * would be a second answer to what time it is.
+ */
+class DesktopPlatform final : public platform::IPlatform {
+public:
+    explicit DesktopPlatform(DesktopHost &host) noexcept : _display(host), _input(host) {}
+
+    [[nodiscard]] platform::IClockBackend &clock() noexcept override { return _clock; }
+    [[nodiscard]] platform::IDisplayBackend &display() noexcept override { return _display; }
+    [[nodiscard]] platform::IInputBackend &input() noexcept override { return _input; }
+    [[nodiscard]] platform::IMemoryBackend &memory() noexcept override { return _memory; }
+    [[nodiscard]] platform::IGpuMemoryBackend &gpuMemory() noexcept override { return _gpuMemory; }
+    [[nodiscard]] const char *name() const noexcept override { return "DesktopPlatform(X11/GLX)"; }
+
+private:
+    platform::linux_host::LinuxClockBackend _clock;
+    DesktopDisplay _display;
+    DesktopInput _input;
+    platform::linux_host::LinuxMemoryBackend _memory;
+    platform::linux_host::LinuxGpuMemoryBackend _gpuMemory;
+};
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    core::u32 width = 1280u;
+    core::u32 height = 800u;
+    core::u32 frames = 0u;
+    bool chronicle = false;
+    const char *shot = nullptr;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc)
+        {
+            frames = static_cast<core::u32>(std::atoi(argv[i + 1]));
+            ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--chronicle") == 0)
+        {
+            chronicle = true;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--shot") == 0 && i + 1 < argc)
+        {
+            shot = argv[i + 1];
+            ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--size") == 0 && i + 2 < argc)
+        {
+            width = static_cast<core::u32>(std::atoi(argv[i + 1]));
+            height = static_cast<core::u32>(std::atoi(argv[i + 2]));
+            i += 2;
+        }
+        else if (std::strcmp(argv[i], "--help") == 0)
+        {
+            std::printf("usage: lpl-glclient [--size W H] [--frames N] [--shot out.ppm]\n"
+                        "  Runs the same World the kernel client boots, in a window.\n"
+                        "  WASD walk, mouse looks, space jumps, V toggles the body, Escape quits.\n"
+                        "  --frames N quits after N frames and --shot writes the last one, so the\n"
+                        "  app can be checked without anybody looking at it.\n"
+                        "  --chronicle runs ChronicleWorld instead: the Mani over a century, with\n"
+                        "  the roads a corpus attests and the people who walked them.\n");
+            return 0;
+        }
+    }
+
+    DesktopHost host;
+    if (!host.open(width, height))
+        return 1;
+    host.limitFrames(frames);
+
+    engine::BootRequest request;
+    request.host = engine::HostProfile::DesktopClient;
+    request.tickRate = 60u;
+    request.banner = "=== LplPlugin GL Client ===";
+    // The SAME built-in cartridge the kernel client falls back to, so the desktop and ring 0 show
+    // the same world rather than two worlds that happen to share a renderer.
+    request.fallbackPackBytes = pack::kViewerPackBytes;
+    request.fallbackPackSize = pack::kViewerPackSize;
+
+    const engine::BootResult result = engine::bootGame(
+        request, pmr::unique_ptr<platform::IPlatform>{new DesktopPlatform{host}},
+        [chronicle](const procgen::WorldRecipe &recipe, const ecology::LivingRecipe &living,
+                    const engine::ViewProfile &view) {
+            if (chronicle)
+                return pmr::unique_ptr<engine::World>{pmr::make_unique<samples::ChronicleWorld>(recipe)};
+            return pmr::unique_ptr<engine::World>{pmr::make_unique<samples::TerrainWorld>(recipe, living, view)};
+        });
+
+    const core::u32 colours = host.distinctColours();
+    std::printf("glclient: %u frames presented, %u distinct colours in the last one\n",
+                host.framesPresented(), colours);
+    if (shot != nullptr && !host.writePortablePixmap(shot))
+        core::Log::error("glclient: could not write the screenshot");
+
+    host.close();
+    // A frame that is one colour is a render path that did not run, and it looks exactly like a
+    // window that has not drawn yet. Reported as a failure rather than a clean exit.
+    if (frames != 0u && colours < 2u)
+    {
+        std::fprintf(stderr, "lpl-glclient: the last frame is a single colour\n");
+        return 2;
+    }
+    return result.initialised ? 0 : 1;
+}
