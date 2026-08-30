@@ -73,6 +73,13 @@ public:
     {
         _width = width;
         _height = height;
+        // @warning **Seeded from the requested size, not left at one.** These used to be set only by
+        // ConfigureNotify, so until that event arrived the viewport was one pixel by one -- and a
+        // window manager is under no obligation to send a configure for a window that opened at
+        // the size it asked for. The result is a window that maps, swaps buffers, and shows the
+        // grey it was born with, which looks exactly like a GL context that failed to bind.
+        _windowWidth = static_cast<int>(width);
+        _windowHeight = static_cast<int>(height);
         _pixels.assign(static_cast<std::size_t>(width) * height, 0u);
 
         _display = XOpenDisplay(nullptr);
@@ -103,6 +110,18 @@ public:
                                 &windowAttributes);
         XMapWindow(_display, _window);
         XStoreName(_display, _window, "lpl-glclient - the ring-0 world, on a desktop");
+
+        // Drawing into a window the server has not mapped yet is drawing into nothing, and the
+        // frames are simply lost. Waiting for the map costs one blocking read at startup and
+        // removes a race whose symptom is a window that stays blank for as long as the machine
+        // happens to be slow.
+        XEvent mapped;
+        XIfEvent(
+            _display, &mapped,
+            [](Display *, XEvent *event, XPointer argument) {
+                return static_cast<Bool>(event->type == MapNotify && event->xmap.window == *(Window *) argument);
+            },
+            (XPointer) &_window);
 
         // The window manager's close button arrives as a client message, and a window that
         // ignores it is a window that only Ctrl-C closes.
@@ -135,6 +154,18 @@ public:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(width), static_cast<GLsizei>(height), 0, GL_BGRA,
                      GL_UNSIGNED_BYTE, _pixels.data());
+
+        // @warning **Painted before anything else happens.** The window is created at the top of
+        // main and the first frame cannot arrive until a world has been generated -- which on a
+        // debug build is seconds of procgen passes and four least-cost searches. Until then the
+        // window shows whatever the compositor left in it, which is a grey rectangle, and a grey
+        // rectangle is indistinguishable from a GL context that failed. One clear and one swap
+        // costs nothing and makes the difference visible.
+        glClearColor(0.02f, 0.03f, 0.05f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glXSwapBuffers(_display, _window);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glXSwapBuffers(_display, _window); // both buffers, or the first real swap flashes the grey back
         return true;
     }
 
@@ -262,7 +293,49 @@ public:
         glVertex2f(0.0f, 1.0f);
         glEnd();
 
+        // @warning **Read back BEFORE the swap, from the buffer that is about to become the window.**
+        // The self-check used to count colours in `_pixels`, which is what the ENGINE wrote -- so a
+        // window showing nothing at all passed it, and did: the viewport was one pixel by one and
+        // the check reported twenty-eight colours. An instrument on the wrong side of the seam it
+        // is meant to test is worse than none, because it reads as evidence.
+        const bool lastFrame = _frameBudget != 0u && _framesPresented + 1u >= _frameBudget;
+        const bool heartbeat = _diagnoseEvery != 0u && (_framesPresented % _diagnoseEvery) == 0u;
+        if (lastFrame || heartbeat)
+        {
+            _presented.assign(static_cast<std::size_t>(_windowWidth) * static_cast<std::size_t>(_windowHeight), 0u);
+            glReadBuffer(GL_BACK);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(0, 0, _windowWidth, _windowHeight, GL_BGRA, GL_UNSIGNED_BYTE, _presented.data());
+        }
+
+        if (heartbeat)
+        {
+            // @warning Reported from INSIDE the presentation path, because there is no other way to
+            // see it: an external screenshot tool is not always there, and the framebuffer the
+            // engine wrote says nothing about what reached the window.
+            unsigned realWidth = 0u;
+            unsigned realHeight = 0u;
+            Window root = 0;
+            int originX = 0;
+            int originY = 0;
+            unsigned border = 0u;
+            unsigned depth = 0u;
+            XGetGeometry(_display, _window, &root, &originX, &originY, &realWidth, &realHeight, &border, &depth);
+            std::printf("glclient: frame %u  window %ux%u  viewport %dx%d  colours on screen %u\n",
+                        _framesPresented, realWidth, realHeight, _windowWidth, _windowHeight,
+                        distinctIn(_presented));
+            std::fflush(stdout);
+        }
+
         glXSwapBuffers(_display, _window);
+        if (_framesPresented == 0u)
+        {
+            // The line that separates "still generating" from "running but blank". Without it the
+            // log's last word is about the real-time guard, and a reader cannot tell whether the
+            // window ever received a frame.
+            std::printf("glclient: first frame on screen\n");
+            std::fflush(stdout);
+        }
         ++_framesPresented;
         if (_frameBudget != 0u && _framesPresented >= _frameBudget)
             _shouldClose = true;
@@ -330,6 +403,24 @@ public:
      */
     void limitFrames(core::u32 frames) noexcept { _frameBudget = frames; }
 
+    /**
+     * @brief Reports the geometry and the presented colour count every @p frames frames.
+     *
+     * @param frames How often, or zero to stay quiet.
+     */
+    void diagnoseEvery(core::u32 frames) noexcept { _diagnoseEvery = frames; }
+
+    /** @brief Prints what the GL implementation says it is. */
+    void reportContext() const
+    {
+        std::printf("glclient: GL %s | %s | %s | %s rendering\n",
+                    reinterpret_cast<const char *>(glGetString(GL_VERSION)),
+                    reinterpret_cast<const char *>(glGetString(GL_VENDOR)),
+                    reinterpret_cast<const char *>(glGetString(GL_RENDERER)),
+                    glXIsDirect(_display, _context) == True ? "direct" : "INDIRECT");
+        std::fflush(stdout);
+    }
+
     [[nodiscard]] core::u32 framesPresented() const noexcept { return _framesPresented; }
 
     /**
@@ -364,13 +455,26 @@ public:
      *
      * @return The count, capped at the sample size.
      */
-    [[nodiscard]] core::u32 distinctColours() const
+    [[nodiscard]] core::u32 distinctColours() const { return distinctIn(_pixels); }
+
+    /**
+     * @brief Colours in the frame the WINDOW received, rather than the one the engine drew.
+     *
+     * @warning The two are different questions and only this one is about the presentation path.
+     * @return The count, or zero when no frame was read back.
+     */
+    [[nodiscard]] core::u32 distinctPresentedColours() const { return distinctIn(_presented); }
+
+    /** @brief Whether a frame was read back off the GL buffer at all. */
+    [[nodiscard]] bool capturedPresented() const noexcept { return !_presented.empty(); }
+
+    [[nodiscard]] static core::u32 distinctIn(const std::vector<core::u32> &pixels)
     {
         std::vector<core::u32> seen;
         seen.reserve(4096u);
-        for (std::size_t i = 0u; i < _pixels.size(); i += 7u) // a prime stride: no row alignment
+        for (std::size_t i = 0u; i < pixels.size(); i += 7u) // a prime stride: no row alignment
         {
-            const core::u32 pixel = _pixels[i] & 0x00FFFFFFu;
+            const core::u32 pixel = pixels[i] & 0x00FFFFFFu;
             bool known = false;
             for (const core::u32 other : seen)
                 if (other == pixel)
@@ -422,6 +526,7 @@ private:
     int _windowWidth{1};
     int _windowHeight{1};
     std::vector<core::u32> _pixels;
+    std::vector<core::u32> _presented;
 
     bool _shouldClose{false};
     bool _detectableRepeat{false};
@@ -438,6 +543,7 @@ private:
     core::u32 _motionsTaken{0u};
     core::u32 _buttons{0u};
     core::u32 _frameBudget{0u};
+    core::u32 _diagnoseEvery{0u};
     core::u32 _framesPresented{0u};
     int _lastX{0};
     int _lastY{0};
@@ -546,6 +652,7 @@ int main(int argc, char **argv)
     core::u32 height = 800u;
     core::u32 frames = 0u;
     bool chronicle = false;
+    core::u32 diagnose = 0u;
     const char *shot = nullptr;
     for (int i = 1; i < argc; ++i)
     {
@@ -553,6 +660,11 @@ int main(int argc, char **argv)
         {
             frames = static_cast<core::u32>(std::atoi(argv[i + 1]));
             ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--diagnose") == 0)
+        {
+            diagnose = 60u;
             continue;
         }
         if (std::strcmp(argv[i], "--chronicle") == 0)
@@ -580,7 +692,9 @@ int main(int argc, char **argv)
                         "  --frames N quits after N frames and --shot writes the last one, so the\n"
                         "  app can be checked without anybody looking at it.\n"
                         "  --chronicle runs ChronicleWorld instead: the Mani over a century, with\n"
-                        "  the roads a corpus attests and the people who walked them.\n");
+                        "  the roads a corpus attests and the people who walked them.\n"
+                        "  --diagnose reports the GL context, the real window size and how many\n"
+                        "  colours actually reached the screen, every sixty frames.\n");
             return 0;
         }
     }
@@ -589,6 +703,9 @@ int main(int argc, char **argv)
     if (!host.open(width, height))
         return 1;
     host.limitFrames(frames);
+    host.diagnoseEvery(diagnose);
+    if (diagnose != 0u)
+        host.reportContext();
 
     engine::BootRequest request;
     request.host = engine::HostProfile::DesktopClient;
@@ -609,8 +726,9 @@ int main(int argc, char **argv)
         });
 
     const core::u32 colours = host.distinctColours();
-    std::printf("glclient: %u frames presented, %u distinct colours in the last one\n",
-                host.framesPresented(), colours);
+    const core::u32 presented = host.distinctPresentedColours();
+    std::printf("glclient: %u frames presented, %u colours drawn, %u colours actually on screen\n",
+                host.framesPresented(), colours, presented);
     if (shot != nullptr && !host.writePortablePixmap(shot))
         core::Log::error("glclient: could not write the screenshot");
 
@@ -621,6 +739,15 @@ int main(int argc, char **argv)
     {
         std::fprintf(stderr, "lpl-glclient: the last frame is a single colour\n");
         return 2;
+    }
+    // @warning The one that matters, and the one that was missing: the engine can draw a perfect
+    // frame into a buffer the window never receives. That is not a hypothetical -- it is what a
+    // one-pixel viewport did, while the check above reported twenty-eight colours.
+    if (frames != 0u && host.capturedPresented() && presented < 2u)
+    {
+        std::fprintf(stderr, "lpl-glclient: the window received a single colour - the frame was drawn "
+                             "and not presented\n");
+        return 3;
     }
     return result.initialised ? 0 : 1;
 }
