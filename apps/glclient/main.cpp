@@ -38,6 +38,8 @@
 #include <lpl/samples/TerrainWorld.hpp>
 #include <lpl/std/memory.hpp>
 
+#include "../common/XWindowIdentity.hpp"
+
 #include <GL/gl.h>
 #include <GL/glx.h>
 #include <X11/XKBlib.h>
@@ -108,8 +110,12 @@ public:
         _window =
             XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height), 0,
                           _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask, &windowAttributes);
-        XMapWindow(_display, _window);
         XStoreName(_display, _window, "lpl-glclient - the ring-0 world, on a desktop");
+        // Before the map, and it is what decides whether anything is ever shown under a RAIL
+        // compositor. See XWindowIdentity.hpp for the log that proves it.
+        apps::declareWindowIdentity(_display, _window, "lpl-glclient", "LplGlclient", static_cast<int>(width),
+                                    static_cast<int>(height));
+        XMapWindow(_display, _window);
 
         // Drawing into a window the server has not mapped yet is drawing into nothing, and the
         // frames are simply lost. Waiting for the map costs one blocking read at startup and

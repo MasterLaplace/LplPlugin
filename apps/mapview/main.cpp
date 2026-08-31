@@ -89,6 +89,8 @@
 
 #include <GL/gl.h>
 #include <GL/glx.h>
+#include "../common/XWindowIdentity.hpp"
+
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 
@@ -1433,8 +1435,11 @@ public:
         _window =
             XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(_width), static_cast<unsigned>(_height), 0,
                           _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask, &windowAttributes);
-        XMapWindow(_display, _window);
         XStoreName(_display, _window, "lpl-mapview — solo client");
+        // WM_CLASS before the map. Without it a RAIL compositor (WSLg) gives this window a
+        // generic taskbar entry that never opens -- mapped, IsViewable, and invisible.
+        apps::declareWindowIdentity(_display, _window, "lpl-mapview", "LplMapview", _width, _height);
+        XMapWindow(_display, _window);
 
         _context = glXCreateContext(_display, _visual, nullptr, GL_TRUE);
         glXMakeCurrent(_display, _window, _context);
