@@ -87,9 +87,9 @@
 #include <lpl/procgen/Voronoi.hpp>
 #include <lpl/procgen/WorldBuilder.hpp>
 
+#include "../common/XWindowIdentity.hpp"
 #include <GL/gl.h>
 #include <GL/glx.h>
-#include "../common/XWindowIdentity.hpp"
 
 #include <X11/Xlib.h>
 #include <X11/keysym.h>

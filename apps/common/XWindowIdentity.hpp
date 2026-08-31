@@ -51,12 +51,12 @@ namespace lpl::apps {
  * @brief One monitor's place in the X screen, in screen coordinates.
  */
 struct MonitorRect {
-    int x{0};             ///< Left edge within the X screen.
-    int y{0};             ///< Top edge within the X screen.
-    int width{0};         ///< Width in pixels.
-    int height{0};        ///< Height in pixels.
-    bool primary{false};  ///< Whether the server calls this one primary.
-    bool fromRandr{false};///< False when this is the whole-screen fallback.
+    int x{0};              ///< Left edge within the X screen.
+    int y{0};              ///< Top edge within the X screen.
+    int width{0};          ///< Width in pixels.
+    int height{0};         ///< Height in pixels.
+    bool primary{false};   ///< Whether the server calls this one primary.
+    bool fromRandr{false}; ///< False when this is the whole-screen fallback.
 };
 
 /**
@@ -147,8 +147,7 @@ inline void reportMonitors(Display *display)
     {
         char *name = XGetAtomName(display, monitors[i].name);
         std::printf("  [%d] %s %dx%d at (%d,%d)%s\n", i, name != nullptr ? name : "?", monitors[i].width,
-                    monitors[i].height, monitors[i].x, monitors[i].y,
-                    monitors[i].primary != 0 ? "  PRIMARY" : "");
+                    monitors[i].height, monitors[i].x, monitors[i].y, monitors[i].primary != 0 ? "  PRIMARY" : "");
         if (name != nullptr)
             XFree(name);
     }

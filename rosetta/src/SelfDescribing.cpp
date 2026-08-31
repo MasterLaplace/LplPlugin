@@ -64,7 +64,7 @@ core::u32 emitSpecification(core::u8 *out, core::u32 size) noexcept
         // The names are stored AT the field's width and already NUL-padded, so a row is a plain
         // copy: no terminator search, no tail to zero, and no way to read past the end. The two
         // loops this replaces were one out-of-bounds read and one repair of its output.
-        const char (&mnemonic)[kMnemonicBytes] = kOpcodeMnemonics[i];
+        const char(&mnemonic)[kMnemonicBytes] = kOpcodeMnemonics[i];
         for (core::u32 c = 0u; c < kMnemonicBytes; ++c)
             out[cursor + c] = static_cast<core::u8>(mnemonic[c]);
         cursor += kMnemonicBytes;

@@ -175,9 +175,9 @@ public:
             originY = _explicitY;
         }
 
-        _window = XCreateWindow(_display, root, originX, originY, static_cast<unsigned>(width),
-                                static_cast<unsigned>(height), 0, _visual->depth, InputOutput, _visual->visual,
-                                CWColormap | CWEventMask, &windowAttributes);
+        _window =
+            XCreateWindow(_display, root, originX, originY, static_cast<unsigned>(width), static_cast<unsigned>(height),
+                          0, _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask, &windowAttributes);
         XStoreName(_display, _window, "lpl-glclient - the ring-0 world, on a desktop");
         // Before the map, and it is what decides whether anything is ever shown under a RAIL
         // compositor. See XWindowIdentity.hpp for the log that proves it.
