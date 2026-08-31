@@ -83,6 +83,26 @@ public:
      *
      * @param index Monitor ordinal, or a negative value to keep the primary.
      */
+    /**
+     * @brief Puts the window's top-left corner at an exact screen position.
+     *
+     * @warning Screen coordinates, which on a multi-monitor X screen span every display: the
+     * layout --diagnose prints is the map to read them against. Overrides the monitor choice,
+     * because a caller who names a corner has already decided.
+     *
+     * @param x Left edge.
+     * @param y Top edge.
+     */
+    void placeAt(int x, int y) noexcept
+    {
+        _explicitX = x;
+        _explicitY = y;
+        _hasExplicitCorner = true;
+    }
+
+    /** @brief Asks for fullscreen on whichever monitor the window lands on. */
+    void requestFullscreen() noexcept { _wantFullscreen = true; }
+
     void placeOnMonitor(int index)
     {
         if (index < 0)
@@ -149,6 +169,11 @@ public:
         int originX = 0;
         int originY = 0;
         centreOn(monitor, static_cast<int>(width), static_cast<int>(height), originX, originY);
+        if (_hasExplicitCorner)
+        {
+            originX = _explicitX;
+            originY = _explicitY;
+        }
 
         _window = XCreateWindow(_display, root, originX, originY, static_cast<unsigned>(width),
                                 static_cast<unsigned>(height), 0, _visual->depth, InputOutput, _visual->visual,
@@ -158,6 +183,8 @@ public:
         // compositor. See XWindowIdentity.hpp for the log that proves it.
         apps::declareWindowIdentity(_display, _window, "lpl-glclient", "LplGlclient", static_cast<int>(width),
                                     static_cast<int>(height), originX, originY);
+        if (_wantFullscreen)
+            apps::requestFullscreen(_display, _window);
         XMapWindow(_display, _window);
 
         // Drawing into a window the server has not mapped yet is drawing into nothing, and the
@@ -594,6 +621,10 @@ private:
     core::u32 _frameBudget{0u};
     core::u32 _diagnoseEvery{0u};
     MonitorRect _placement{};
+    int _explicitX{0};
+    int _explicitY{0};
+    bool _hasExplicitCorner{false};
+    bool _wantFullscreen{false};
     core::u32 _framesPresented{0u};
     int _lastX{0};
     int _lastY{0};
@@ -703,6 +734,10 @@ int main(int argc, char **argv)
     bool chronicle = false;
     core::u32 diagnose = 0u;
     int monitor = -1;
+    int atX = 0;
+    int atY = 0;
+    bool hasCorner = false;
+    bool fullscreen = false;
     const char *shot = nullptr;
     for (int i = 1; i < argc; ++i)
     {
@@ -710,6 +745,19 @@ int main(int argc, char **argv)
         {
             frames = static_cast<core::u32>(std::atoi(argv[i + 1]));
             ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--at") == 0 && i + 2 < argc)
+        {
+            atX = std::atoi(argv[i + 1]);
+            atY = std::atoi(argv[i + 2]);
+            hasCorner = true;
+            i += 2;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--fullscreen") == 0)
+        {
+            fullscreen = true;
             continue;
         }
         if (std::strcmp(argv[i], "--monitor") == 0 && i + 1 < argc)
@@ -752,13 +800,20 @@ int main(int argc, char **argv)
                         "  --diagnose reports the monitors, the GL context, the real window size\n"
                         "  and how many colours actually reached the screen, every sixty frames.\n"
                         "  --monitor N opens on that monitor instead of the primary one; the\n"
-                        "  numbering is the one --diagnose prints.\n");
+                        "  numbering is the one --diagnose prints.\n"
+                        "  --at X Y puts the top-left corner at an exact screen coordinate, which\n"
+                        "  on a multi-monitor X screen spans every display.\n"
+                        "  --fullscreen asks the window manager for fullscreen on that monitor.\n");
             return 0;
         }
     }
 
     DesktopHost host;
     host.placeOnMonitor(monitor);
+    if (hasCorner)
+        host.placeAt(atX, atY);
+    if (fullscreen)
+        host.requestFullscreen();
     if (!host.open(width, height))
         return 1;
     host.limitFrames(frames);
@@ -786,8 +841,17 @@ int main(int argc, char **argv)
 
     const core::u32 colours = host.distinctColours();
     const core::u32 presented = host.distinctPresentedColours();
-    std::printf("glclient: %u frames presented, %u colours drawn, %u colours actually on screen\n",
-                host.framesPresented(), colours, presented);
+    // @warning Zero has to be distinguished from "never looked". The readback fires on the last
+    // budgeted frame, so a run cut short never captures anything -- and printing 0 for that reads
+    // as a black window, which is the one thing this line exists to detect. Two meanings on one
+    // number is the defect this session kept finding; it does not get to live here.
+    if (host.capturedPresented())
+        std::printf("glclient: %u frames presented, %u colours drawn, %u colours actually on screen\n",
+                    host.framesPresented(), colours, presented);
+    else
+        std::printf("glclient: %u frames presented, %u colours drawn, screen not sampled "
+                    "(the run ended before the budgeted frame)\n",
+                    host.framesPresented(), colours);
     if (shot != nullptr && !host.writePortablePixmap(shot))
         core::Log::error("glclient: could not write the screenshot");
 

@@ -243,6 +243,30 @@ inline void declareWindowIdentity(Display *display, Window window, const char *i
     }
 }
 
+/**
+ * @brief Asks the window manager to make @p window fullscreen.
+ *
+ * @warning **Set BEFORE the map, as a property rather than as a message.** EWMH has two ways to
+ * say this: writing `_NET_WM_STATE` directly, which only works while the window is unmapped, and
+ * sending a client message to the root, which only works once it is mapped. Using the wrong one
+ * for the moment is silently ignored -- the window simply opens at its ordinary size, which reads
+ * as a window manager that does not support fullscreen.
+ *
+ * @warning It is a REQUEST. A compositor is free to decline, and under RAIL the Windows side has
+ * the final say; a caller that assumed it took has assumed something the protocol does not
+ * promise.
+ *
+ * @param display The connection.
+ * @param window  The window, created and not yet mapped.
+ */
+inline void requestFullscreen(Display *display, Window window)
+{
+    const Atom state = XInternAtom(display, "_NET_WM_STATE", False);
+    const Atom fullscreen = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
+    XChangeProperty(display, window, state, XA_ATOM, 32, PropModeReplace,
+                    reinterpret_cast<const unsigned char *>(&fullscreen), 1);
+}
+
 } // namespace lpl::apps
 
 #endif // LPL_APPS_XWINDOWIDENTITY_HPP
