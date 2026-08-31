@@ -67,33 +67,42 @@ enum class Opcode : core::u8 {
 };
 
 /**
- * @brief The word a specification spells @p opcode with.
+ * Bytes a mnemonic occupies, in the table and in storage alike.
  *
- * A word rather than a number, for the reason every named thing in this project is
- * one: a number means whatever the enumeration happened to be the day it was written.
- * Here it matters more than usual — the whole artifact exists to be read by someone
- * who does not have the enumeration.
+ * @warning **One number, because it used to be two facts.** The engraved table gives every
+ * mnemonic a fixed eight-byte field while the names themselves were bare literals of whatever
+ * length they happened to be, so writing a row meant walking off the end of a five-character
+ * string to fill an eight-byte slot. That is a real out-of-bounds read, it survived because a
+ * second loop overwrote the garbage before anyone could see it, and only `-O2` ever reported it.
+ * Storing the names at the field's own width removes it by construction rather than by argument.
+ */
+inline constexpr core::u32 kMnemonicBytes = 8u;
+
+/**
+ * @brief The words a specification spells the opcodes with, NUL-padded to the field width.
+ *
+ * Words rather than numbers, for the reason every named thing in this project is one: a number
+ * means whatever the enumeration happened to be the day it was written. Here it matters more than
+ * usual -- the whole artifact exists to be read by someone who does not have the enumeration.
+ *
+ * @warning A name that does not leave room for its terminator fails to COMPILE, which is the
+ * truncation rule stated where it cannot be forgotten. The emitter used to carry that rule as a
+ * runtime branch nothing exercised.
+ */
+inline constexpr char kOpcodeMnemonics[static_cast<core::u32>(Opcode::Count)][kMnemonicBytes] = {
+    "HALT", "SET", "LOAD", "STORE", "ADD", "SUB", "XOR", "SHIFT", "JUMP", "JZ",
+};
+
+/**
+ * @brief The word a specification spells @p opcode with.
  *
  * @param opcode The instruction.
  * @return Its mnemonic, or "?" when the value is not one of the ten.
  */
 [[nodiscard]] constexpr const char *opcodeName(Opcode opcode) noexcept
 {
-    switch (opcode)
-    {
-    case Opcode::Halt: return "HALT";
-    case Opcode::Set: return "SET";
-    case Opcode::Load: return "LOAD";
-    case Opcode::Store: return "STORE";
-    case Opcode::Add: return "ADD";
-    case Opcode::Sub: return "SUB";
-    case Opcode::Xor: return "XOR";
-    case Opcode::Shift: return "SHIFT";
-    case Opcode::Jump: return "JUMP";
-    case Opcode::JumpIfZero: return "JZ";
-    case Opcode::Count: break;
-    }
-    return "?";
+    const auto index = static_cast<core::u32>(opcode);
+    return index < static_cast<core::u32>(Opcode::Count) ? kOpcodeMnemonics[index] : "?";
 }
 
 /**

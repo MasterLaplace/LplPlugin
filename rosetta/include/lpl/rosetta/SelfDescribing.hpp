@@ -29,7 +29,8 @@ namespace lpl::rosetta {
 /**
  * @brief Bytes a mnemonic occupies in the specification, NUL padding included.
  */
-inline constexpr core::u32 kMnemonicBytes = 8u;
+// The field width lives with the names it measures, in MinimalIsa.hpp: a width declared apart
+// from its storage is how a five-character literal came to be read as eight bytes.
 
 /**
  * @brief The four bytes a specification starts with.
