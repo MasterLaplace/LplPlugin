@@ -38,11 +38,145 @@
 #    include <X11/Xatom.h>
 #    include <X11/Xlib.h>
 #    include <X11/Xutil.h>
+#    include <X11/extensions/Xrandr.h>
 
+#    include <cstdio>
 #    include <cstring>
 #    include <unistd.h>
 
 namespace lpl::apps {
+
+/**
+ * @struct MonitorRect
+ * @brief One monitor's place in the X screen, in screen coordinates.
+ */
+struct MonitorRect {
+    int x{0};             ///< Left edge within the X screen.
+    int y{0};             ///< Top edge within the X screen.
+    int width{0};         ///< Width in pixels.
+    int height{0};        ///< Height in pixels.
+    bool primary{false};  ///< Whether the server calls this one primary.
+    bool fromRandr{false};///< False when this is the whole-screen fallback.
+};
+
+/**
+ * @brief The monitor the server calls primary, or the whole screen if it will not say.
+ *
+ * @warning **RandR and not Xinerama**, for one reason: Xinerama enumerates rectangles and has no
+ * concept of a primary one, so a caller using it has to guess -- and "the first one" is not the
+ * same monitor on every machine. An X screen spanning two displays is one coordinate space, so
+ * a window created at (0,0) lands on whichever monitor happens to own that corner, which on a
+ * vertically stacked pair is routinely the wrong one.
+ *
+ * @param display The connection.
+ * @return The primary monitor, or the full screen when RandR reports nothing.
+ */
+[[nodiscard]] inline MonitorRect primaryMonitor(Display *display)
+{
+    MonitorRect chosen;
+    const int screen = DefaultScreen(display);
+    chosen.width = DisplayWidth(display, screen);
+    chosen.height = DisplayHeight(display, screen);
+
+    int count = 0;
+    // get_active true: a monitor that is configured and switched off is not somewhere to put a
+    // window, and RandR will happily list it.
+    XRRMonitorInfo *monitors = XRRGetMonitors(display, RootWindow(display, screen), True, &count);
+    if (monitors == nullptr || count <= 0)
+    {
+        if (monitors != nullptr)
+            XRRFreeMonitors(monitors);
+        return chosen;
+    }
+
+    // @warning **A server may mark NO monitor primary, and then index zero is a coin toss.**
+    // Measured under WSLg: two monitors, `rdp-0 1920x1200 at (0,1440)` and `rdp-2 2560x1440 at
+    // (0,0)`, and neither carries the primary flag -- so taking the first put the window on the
+    // lower screen, which is exactly the one the user was not looking at.
+    //
+    // The fallback is the monitor that owns the ORIGIN, because that is where X conventionally
+    // puts the main display, with area as the tie-break for a layout that does not cover it. Both
+    // rules pick rdp-2 here, and they agree for the same reason: the screen everything else is
+    // measured from is the screen somebody is sitting in front of.
+    int pick = -1;
+    for (int i = 0; i < count; ++i)
+        if (monitors[i].primary != 0)
+        {
+            pick = i;
+            break;
+        }
+    for (int i = 0; pick < 0 && i < count; ++i)
+        if (monitors[i].x == 0 && monitors[i].y == 0)
+            pick = i;
+    if (pick < 0)
+    {
+        pick = 0;
+        for (int i = 1; i < count; ++i)
+            if (static_cast<long>(monitors[i].width) * monitors[i].height >
+                static_cast<long>(monitors[pick].width) * monitors[pick].height)
+                pick = i;
+    }
+
+    chosen.x = monitors[pick].x;
+    chosen.y = monitors[pick].y;
+    chosen.width = monitors[pick].width;
+    chosen.height = monitors[pick].height;
+    chosen.primary = monitors[pick].primary != 0;
+    chosen.fromRandr = true;
+    XRRFreeMonitors(monitors);
+    return chosen;
+}
+
+/**
+ * @brief Prints every monitor the server reports.
+ *
+ * @warning A diagnostic, and it earns its place: "the window opened on the wrong screen" cannot be
+ * acted on without knowing what the server thinks the screens ARE, and an X screen spanning two
+ * displays looks like one big desktop from inside the client.
+ *
+ * @param display The connection.
+ */
+inline void reportMonitors(Display *display)
+{
+    const int screen = DefaultScreen(display);
+    int count = 0;
+    XRRMonitorInfo *monitors = XRRGetMonitors(display, RootWindow(display, screen), True, &count);
+    std::printf("monitors: X screen %dx%d, RandR reports %d\n", DisplayWidth(display, screen),
+                DisplayHeight(display, screen), count);
+    for (int i = 0; i < count; ++i)
+    {
+        char *name = XGetAtomName(display, monitors[i].name);
+        std::printf("  [%d] %s %dx%d at (%d,%d)%s\n", i, name != nullptr ? name : "?", monitors[i].width,
+                    monitors[i].height, monitors[i].x, monitors[i].y,
+                    monitors[i].primary != 0 ? "  PRIMARY" : "");
+        if (name != nullptr)
+            XFree(name);
+    }
+    std::fflush(stdout);
+    if (monitors != nullptr)
+        XRRFreeMonitors(monitors);
+}
+
+/**
+ * @brief Top-left corner that centres a window of @p width by @p height on @p monitor.
+ *
+ * @param monitor Where to put it.
+ * @param width   Window width.
+ * @param height  Window height.
+ * @param outX    Receives the X position.
+ * @param outY    Receives the Y position.
+ */
+inline void centreOn(const MonitorRect &monitor, int width, int height, int &outX, int &outY)
+{
+    outX = monitor.x + (monitor.width - width) / 2;
+    outY = monitor.y + (monitor.height - height) / 2;
+    // A window taller or wider than its monitor would centre to a negative corner, which puts its
+    // title bar off the top where nothing can grab it.
+    if (outX < monitor.x)
+        outX = monitor.x;
+    if (outY < monitor.y)
+        outY = monitor.y;
+}
 
 /**
  * @brief Declares the window's identity, size and input hints.

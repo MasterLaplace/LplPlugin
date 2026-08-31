@@ -104,7 +104,7 @@ if has_config("glclient") then
         set_group("apps")
         add_deps("lpl-engine", "lpl-samples", "lpl-pack", "lpl-platform")
         add_files("glclient/main.cpp")
-        add_syslinks("GL", "X11", "m")
+        add_syslinks("GL", "Xrandr", "Xrender", "Xext", "X11", "m")
     target_end()
 end
 
@@ -114,7 +114,7 @@ if has_config("mapview") then
         set_group("apps")
         add_deps("lpl-engine", "lpl-procgen", "lpl-image", "lpl-ai", "lpl-ecology")
         add_files("mapview/main.cpp")
-        add_syslinks("GL", "X11", "m")
+        add_syslinks("GL", "Xrandr", "Xrender", "Xext", "X11", "m")
     target_end()
 end
 

@@ -53,6 +53,10 @@ using namespace lpl;
 
 namespace {
 
+using lpl::apps::centreOn;
+using lpl::apps::MonitorRect;
+using lpl::apps::primaryMonitor;
+
 /**
  * @class DesktopHost
  * @brief The X11 window, its GL context, the framebuffer the engine draws into, and the events.
@@ -71,6 +75,36 @@ public:
      * @param height Framebuffer height in pixels.
      * @return false when there is no display, or no usable visual.
      */
+    /**
+     * @brief Puts the window on a specific monitor instead of the primary one.
+     *
+     * @warning Indexed the way the server enumerates them, and reported by --diagnose, so the
+     * number a user passes is a number they were shown rather than one they had to guess.
+     *
+     * @param index Monitor ordinal, or a negative value to keep the primary.
+     */
+    void placeOnMonitor(int index)
+    {
+        if (index < 0)
+            return;
+        Display *probe = XOpenDisplay(nullptr);
+        if (probe == nullptr)
+            return;
+        int count = 0;
+        XRRMonitorInfo *monitors = XRRGetMonitors(probe, DefaultRootWindow(probe), True, &count);
+        if (monitors != nullptr && index < count)
+        {
+            _placement.x = monitors[index].x;
+            _placement.y = monitors[index].y;
+            _placement.width = monitors[index].width;
+            _placement.height = monitors[index].height;
+            _placement.fromRandr = true;
+        }
+        if (monitors != nullptr)
+            XRRFreeMonitors(monitors);
+        XCloseDisplay(probe);
+    }
+
     [[nodiscard]] bool open(core::u32 width, core::u32 height)
     {
         _width = width;
@@ -107,14 +141,23 @@ public:
         windowAttributes.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask |
                                       ButtonReleaseMask | PointerMotionMask | StructureNotifyMask;
 
-        _window =
-            XCreateWindow(_display, root, 0, 0, static_cast<unsigned>(width), static_cast<unsigned>(height), 0,
-                          _visual->depth, InputOutput, _visual->visual, CWColormap | CWEventMask, &windowAttributes);
+        // @warning **Centred on the PRIMARY monitor, not at the origin.** An X screen spanning two
+        // displays is one coordinate space, so (0,0) is whichever monitor owns that corner -- on a
+        // vertically stacked pair that is routinely the second one. The server is asked rather
+        // than guessed at.
+        const MonitorRect monitor = _placement.width > 0 ? _placement : primaryMonitor(_display);
+        int originX = 0;
+        int originY = 0;
+        centreOn(monitor, static_cast<int>(width), static_cast<int>(height), originX, originY);
+
+        _window = XCreateWindow(_display, root, originX, originY, static_cast<unsigned>(width),
+                                static_cast<unsigned>(height), 0, _visual->depth, InputOutput, _visual->visual,
+                                CWColormap | CWEventMask, &windowAttributes);
         XStoreName(_display, _window, "lpl-glclient - the ring-0 world, on a desktop");
         // Before the map, and it is what decides whether anything is ever shown under a RAIL
         // compositor. See XWindowIdentity.hpp for the log that proves it.
         apps::declareWindowIdentity(_display, _window, "lpl-glclient", "LplGlclient", static_cast<int>(width),
-                                    static_cast<int>(height));
+                                    static_cast<int>(height), originX, originY);
         XMapWindow(_display, _window);
 
         // Drawing into a window the server has not mapped yet is drawing into nothing, and the
@@ -418,6 +461,7 @@ public:
     /** @brief Prints what the GL implementation says it is. */
     void reportContext() const
     {
+        lpl::apps::reportMonitors(_display);
         std::printf("glclient: GL %s | %s | %s | %s rendering\n",
                     reinterpret_cast<const char *>(glGetString(GL_VERSION)),
                     reinterpret_cast<const char *>(glGetString(GL_VENDOR)),
@@ -549,6 +593,7 @@ private:
     core::u32 _buttons{0u};
     core::u32 _frameBudget{0u};
     core::u32 _diagnoseEvery{0u};
+    MonitorRect _placement{};
     core::u32 _framesPresented{0u};
     int _lastX{0};
     int _lastY{0};
@@ -657,12 +702,19 @@ int main(int argc, char **argv)
     core::u32 frames = 0u;
     bool chronicle = false;
     core::u32 diagnose = 0u;
+    int monitor = -1;
     const char *shot = nullptr;
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc)
         {
             frames = static_cast<core::u32>(std::atoi(argv[i + 1]));
+            ++i;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--monitor") == 0 && i + 1 < argc)
+        {
+            monitor = std::atoi(argv[i + 1]);
             ++i;
             continue;
         }
@@ -697,13 +749,16 @@ int main(int argc, char **argv)
                         "  app can be checked without anybody looking at it.\n"
                         "  --chronicle runs ChronicleWorld instead: the Mani over a century, with\n"
                         "  the roads a corpus attests and the people who walked them.\n"
-                        "  --diagnose reports the GL context, the real window size and how many\n"
-                        "  colours actually reached the screen, every sixty frames.\n");
+                        "  --diagnose reports the monitors, the GL context, the real window size\n"
+                        "  and how many colours actually reached the screen, every sixty frames.\n"
+                        "  --monitor N opens on that monitor instead of the primary one; the\n"
+                        "  numbering is the one --diagnose prints.\n");
             return 0;
         }
     }
 
     DesktopHost host;
+    host.placeOnMonitor(monitor);
     if (!host.open(width, height))
         return 1;
     host.limitFrames(frames);
