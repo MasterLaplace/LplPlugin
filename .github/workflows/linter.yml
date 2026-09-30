@@ -8,6 +8,9 @@ on:
       - '**.h'
       - '**.cpp'
       - '**.hpp'
+      - '**.inl'
+      - '**.cu'
+      - '**.cuh'
       - '.github/workflows/linter.yml'
 
 permissions:
