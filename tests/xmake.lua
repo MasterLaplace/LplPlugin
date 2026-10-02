@@ -617,3 +617,14 @@ target("test-zarr-array")
     add_deps("lpl-core", "lpl-zarr")
     add_files("parity/test_zarr_array.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Following a surface the samples only imply, and never finishing on the one
+-- next to it -- the failure that produces a smooth, plausible, wrong path.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-sheet-trace")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_files("parity/test_sheet_trace.cpp")
+target_end()
