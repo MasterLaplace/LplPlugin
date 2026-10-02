@@ -595,3 +595,14 @@ target("test-terrain-render")
              "lpl-samples")
     add_files("parity/test_terrain_render.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Direct volume rendering: bricks, the resident mosaic, residency planning and
+-- the marcher itself, against a synthetic field whose answer is known by hand.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-voxel-raymarch")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_files("parity/test_voxel_raymarch.cpp")
+target_end()
