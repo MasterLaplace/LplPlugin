@@ -867,29 +867,63 @@ void benchmarkNetworking()
 
 } // anonymous namespace
 
-int main(int /*argc*/, char * /*argv*/[])
+int main(int argc, char *argv[])
 {
+    // A filter, because the whole suite takes ten minutes and iterating on one section against a
+    // ten-minute loop is how measurements stop being taken.
+    const char *only = nullptr;
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string a = argv[i];
+        if ((a == "--only" || a == "-o") && i + 1 < argc)
+            only = argv[++i];
+        else if (a == "--help" || a == "-h")
+        {
+            std::printf("lpl-benchmark [--only SECTION]\n\n"
+                        "  arena fixed morton allocators trig registry physics scalability\n"
+                        "  partition hashmap threadpool soa lookup broadphase net\n\n"
+                        "Without --only, every section runs.\n");
+            return 0;
+        }
+    }
+    const auto wanted = [&](const char *name) { return only == nullptr || std::string(only) == name; };
+
     core::Log::info("=== LplPlugin Benchmark ===");
     std::printf("\n");
 
     bench::printSystemInfo();
     bench::printLegend();
 
-    benchmarkArena();
-    benchmarkFixedMath();
-    benchmarkMorton();
-    benchmarkAllocators();
-    benchmarkTrigonometry();
-    benchmarkRegistry();
-    benchmarkPhysics();
-    benchmarkPhysicsScalability();
-    benchmarkWorldPartition();
-    benchmarkFlatAtomicHashMap();
-    benchmarkThreadPool();
-    benchmarkSoA_vs_AoS();
-    benchmarkEntityLookup();
-    benchmarkCollisionBroadphase();
-    benchmarkNetworking();
+    if (wanted("arena"))
+        benchmarkArena();
+    if (wanted("fixed"))
+        benchmarkFixedMath();
+    if (wanted("morton"))
+        benchmarkMorton();
+    if (wanted("allocators"))
+        benchmarkAllocators();
+    if (wanted("trig"))
+        benchmarkTrigonometry();
+    if (wanted("registry"))
+        benchmarkRegistry();
+    if (wanted("physics"))
+        benchmarkPhysics();
+    if (wanted("scalability"))
+        benchmarkPhysicsScalability();
+    if (wanted("partition"))
+        benchmarkWorldPartition();
+    if (wanted("hashmap"))
+        benchmarkFlatAtomicHashMap();
+    if (wanted("threadpool"))
+        benchmarkThreadPool();
+    if (wanted("soa"))
+        benchmarkSoA_vs_AoS();
+    if (wanted("lookup"))
+        benchmarkEntityLookup();
+    if (wanted("broadphase"))
+        benchmarkCollisionBroadphase();
+    if (wanted("net"))
+        benchmarkNetworking();
 
     std::printf("\nDone.\n");
     return 0;
