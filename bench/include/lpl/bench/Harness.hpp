@@ -21,10 +21,12 @@
 #ifndef LPL_BENCH_HARNESS_HPP
 #    define LPL_BENCH_HARNESS_HPP
 
+#    include <lpl/bench/EnergyMeter.hpp>
 #    include <lpl/core/Platform.hpp>
 #    include <lpl/core/Types.hpp>
 
 #    include <chrono>
+#    include <optional>
 #    include <string>
 #    include <vector>
 
@@ -69,6 +71,9 @@ struct Result {
     core::f64 p99Ns = 0.0;    ///< 99th-percentile tail latency.
     core::f64 stddevNs = 0.0; ///< Sample standard deviation.
     core::u32 samples = 0;    ///< Number of timed repetitions collected.
+
+    /** Package energy per repetition, absent when no counter could bracket the run. */
+    std::optional<core::f64> microjoulesPerRep;
 };
 
 /**
@@ -98,7 +103,8 @@ struct Config {
 [[nodiscard]] const char *frameRateVerdict(core::f64 msPerFrame);
 
 /**
- * @brief Prints the column legend for the one-line results emitted by @ref run.
+ * @brief Prints the column legend for the one-line results emitted by @ref run, and
+ *        where the energy column comes from, or why it is missing.
  */
 void printLegend();
 
@@ -113,9 +119,11 @@ void section(const char *title);
  *        summary, and returns the statistics.
  * @param label Kernel name shown on the summary line.
  * @param samplesNs Timed samples in nanoseconds (sorted in place).
+ * @param microjoulesPerRep Package energy per repetition, when it was measured.
  * @return Reduced statistics. Behaviour is undefined if @p samplesNs is empty.
  */
-[[nodiscard]] Result report(const char *label, std::vector<core::f64> &samplesNs);
+[[nodiscard]] Result report(const char *label, std::vector<core::f64> &samplesNs,
+                            std::optional<core::f64> microjoulesPerRep = std::nullopt);
 
 /**
  * @brief Times @p fn repeatedly and reports its statistics.
@@ -143,6 +151,12 @@ template <typename Fn> Result run(const char *label, Fn &&fn, Config cfg = {})
     samples.reserve(cfg.maxReps);
     core::f64 totalNs = 0.0;
 
+    /* Bracketing the whole timed loop, not each sample: the counter advances in steps of
+       tens of microjoules about once a millisecond, far coarser than one repetition. */
+    const EnergyMeter &meter = energyMeter();
+    core::u64 energyBefore = 0;
+    const bool energyStarted = meter.read(energyBefore);
+
     for (core::u32 i = 0; i < cfg.maxReps; ++i)
     {
         const auto t0 = clock::now();
@@ -158,7 +172,15 @@ template <typename Fn> Result run(const char *label, Fn &&fn, Config cfg = {})
             break;
     }
 
-    return report(label, samples);
+    std::optional<core::f64> microjoulesPerRep;
+    core::u64 energyAfter = 0;
+    if (energyStarted && meter.read(energyAfter))
+    {
+        if (const auto spent = energyDeltaMicrojoules(energyBefore, energyAfter, meter.rangeMicrojoules()))
+            microjoulesPerRep = static_cast<core::f64>(*spent) / static_cast<core::f64>(samples.size());
+    }
+
+    return report(label, samples, microjoulesPerRep);
 }
 
 } // namespace lpl::bench
