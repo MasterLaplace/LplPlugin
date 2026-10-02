@@ -15,6 +15,7 @@
 
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Platform.hpp>
+#    include <lpl/core/Types.hpp>
 
 #    include <atomic>
 
@@ -31,10 +32,24 @@ namespace lpl::concurrency {
  */
 class SpinLock final : public core::NonCopyable<SpinLock> {
 public:
+    /**
+     * Ceiling on one run of pauses. Past it a waiter answers late enough to the release
+     * that the back-off costs more than the contention it saves, for sections this short.
+     */
+    static constexpr core::u32 kMaximumBackoffPauses = 64u;
+
     /** @brief Default-constructs in unlocked state. */
     SpinLock() noexcept = default;
 
-    /** @brief Acquires the lock, spinning with CPU back-off. */
+    /**
+     * @brief Acquires the lock, spinning with exponential pause back-off.
+     *
+     * @details The wait doubles its run of pauses each time it finds the lock still held,
+     *          up to @ref kMaximumBackoffPauses, and starts over from one after each failed
+     *          acquire. A waiter that re-reads the flag every cycle keeps the cache line
+     *          bouncing between cores for the whole wait, which costs the holder the very
+     *          bandwidth it needs to finish and let go.
+     */
     void lock() noexcept
     {
         for (;;)
@@ -44,9 +59,17 @@ public:
                 return;
             }
 
+            core::u32 backoff = 1u;
             while (_flag.test(std::memory_order_relaxed))
             {
-                LPL_CPU_PAUSE();
+                for (core::u32 pause = 0u; pause < backoff; ++pause)
+                {
+                    LPL_CPU_PAUSE();
+                }
+                if (backoff < kMaximumBackoffPauses)
+                {
+                    backoff <<= 1;
+                }
             }
         }
     }
