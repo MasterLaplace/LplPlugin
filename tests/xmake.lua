@@ -278,6 +278,17 @@ target("test-tick-allocations")
     add_files("parity/test_tick_allocations.cpp")
 target_end()
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- The benchmark's energy column: a counter that wraps, and a meter that never
+-- reports a number it did not read.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-energy-meter")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-bench")
+    add_files("parity/test_energy_meter.cpp")
+target_end()
+
 target("test-server-routing")
     set_kind("binary")
     set_group("tests")

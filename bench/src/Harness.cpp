@@ -56,11 +56,15 @@ const char *frameRateVerdict(core::f64 msPerFrame)
     return "TOO SLOW   (<30 fps) ";
 }
 
-void printLegend() { std::printf("Legend: median  ±CV%%  [min … p99]  n=samples  (lower is better)\n\n"); }
+void printLegend()
+{
+    std::printf("Legend: median  ±CV%%  [min … p99]  n=samples  energy/rep  (lower is better)\n");
+    std::printf("Energy: %s\n\n", energyMeter().description().c_str());
+}
 
 void section(const char *title) { std::printf("\n  --- %s ---\n", title); }
 
-Result report(const char *label, std::vector<core::f64> &samplesNs)
+Result report(const char *label, std::vector<core::f64> &samplesNs, std::optional<core::f64> microjoulesPerRep)
 {
     std::sort(samplesNs.begin(), samplesNs.end());
 
@@ -86,8 +90,10 @@ Result report(const char *label, std::vector<core::f64> &samplesNs)
     r.stddevNs = n > 1 ? std::sqrt(var / static_cast<core::f64>(n - 1)) : 0.0;
 
     const core::f64 cv = r.meanNs > 0.0 ? (r.stddevNs / r.meanNs) * 100.0 : 0.0;
-    std::printf("  %-40s %11s  ±%4.1f%%  [min %-10s p99 %-10s] n=%u\n", label, formatDuration(r.medianNs).c_str(), cv,
-                formatDuration(r.minNs).c_str(), formatDuration(r.p99Ns).c_str(), r.samples);
+    r.microjoulesPerRep = microjoulesPerRep;
+    std::printf("  %-40s %11s  ±%4.1f%%  [min %-10s p99 %-10s] n=%-5u %s\n", label, formatDuration(r.medianNs).c_str(),
+                cv, formatDuration(r.minNs).c_str(), formatDuration(r.p99Ns).c_str(), r.samples,
+                microjoulesPerRep ? formatEnergy(*microjoulesPerRep).c_str() : "-");
     return r;
 }
 
