@@ -628,3 +628,14 @@ target("test-sheet-trace")
     add_deps("lpl-core", "lpl-math", "lpl-voxel")
     add_files("parity/test_sheet_trace.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- The minimap: a map is the one picture whose being wrong is invisible, so
+-- where it says the eye is gets checked against where the eye actually is.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-minimap")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_files("parity/test_minimap.cpp")
+target_end()
