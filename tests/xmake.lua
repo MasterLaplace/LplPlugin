@@ -22,6 +22,13 @@ target("test-ringbuffer-parity")
     add_files("parity/test_ringbuffer_parity.cpp")
 target_end()
 
+target("test-spinlock")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-concurrency")
+    add_files("parity/test_spinlock.cpp")
+target_end()
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Morton encoding/decoding roundtrip
 -- ─────────────────────────────────────────────────────────────────────────────

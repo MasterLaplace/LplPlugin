@@ -17,6 +17,7 @@
 #    include <lpl/core/Platform.hpp>
 #    include <lpl/core/Types.hpp>
 
+#    include <algorithm>
 #    include <atomic>
 
 namespace lpl::concurrency {
@@ -32,46 +33,24 @@ namespace lpl::concurrency {
  */
 class SpinLock final : public core::NonCopyable<SpinLock> {
 public:
-    /**
-     * Ceiling on one run of pauses. Past it a waiter answers late enough to the release
-     * that the back-off costs more than the contention it saves, for sections this short.
-     */
-    static constexpr core::u32 kMaximumBackoffPauses = 64u;
-
     /** @brief Default-constructs in unlocked state. */
     SpinLock() noexcept = default;
 
     /**
-     * @brief Acquires the lock, spinning with exponential pause back-off.
+     * @brief Acquires the lock, spinning until it is free.
      *
-     * @details The wait doubles its run of pauses each time it finds the lock still held,
-     *          up to @ref kMaximumBackoffPauses, and starts over from one after each failed
-     *          acquire. A waiter that re-reads the flag every cycle keeps the cache line
-     *          bouncing between cores for the whole wait, which costs the holder the very
-     *          bandwidth it needs to finish and let go.
+     * @pre The calling thread does not hold it already: the lock is not reentrant, and a
+     *      second lock() from its holder spins forever.
+     * @pre The caller is not code that can interrupt the holder on the holder's core, such as
+     *      an interrupt or a signal handler: it would spin on a lock whose holder cannot resume
+     *      until the handler returns.
+     * @note Not fair: waiters are not served in arrival order, so under steady contention
+     *       one of them can be overtaken again and again.
      */
     void lock() noexcept
     {
-        for (;;)
-        {
-            if (!_flag.test_and_set(std::memory_order_acquire))
-            {
-                return;
-            }
-
-            core::u32 backoff = 1u;
-            while (_flag.test(std::memory_order_relaxed))
-            {
-                for (core::u32 pause = 0u; pause < backoff; ++pause)
-                {
-                    LPL_CPU_PAUSE();
-                }
-                if (backoff < kMaximumBackoffPauses)
-                {
-                    backoff <<= 1;
-                }
-            }
-        }
+        while (!tryLock())
+            waitWhileHeld();
     }
 
     /**
@@ -84,6 +63,29 @@ public:
     void unlock() noexcept { _flag.clear(std::memory_order_release); }
 
 private:
+    /**
+     * Ceiling on the pauses per poll, so that a waiter does not answer the release later
+     * than the contention it saves is worth. Not measured yet: the contention benchmark of
+     * issue #122 sets the value.
+     */
+    static constexpr core::u32 kMaximumBackoffPauses = 64u;
+
+    /**
+     * Polls with a plain read, which leaves the cache line shared while the lock is held,
+     * rather than test_and_set, which would take it exclusive on every try. The pauses per
+     * poll grow so that, at the release, the waiters do not all rush the line at once.
+     */
+    void waitWhileHeld() const noexcept
+    {
+        core::u32 pausesPerPoll = 1u;
+        while (_flag.test(std::memory_order_relaxed))
+        {
+            for (core::u32 pause = 0u; pause < pausesPerPoll; ++pause)
+                LPL_CPU_PAUSE();
+            pausesPerPoll = std::min(pausesPerPoll * 2u, kMaximumBackoffPauses);
+        }
+    }
+
     std::atomic_flag _flag = ATOMIC_FLAG_INIT;
 };
 
