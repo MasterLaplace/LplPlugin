@@ -58,8 +58,13 @@ const char *frameRateVerdict(core::f64 msPerFrame)
 
 void printLegend()
 {
+    const EnergyMeter &meter = energyMeter();
     std::printf("Legend: median  ±CV%%  [min … p99]  n=samples  energy/rep  (lower is better)\n");
-    std::printf("Energy: %s\n\n", energyMeter().description().c_str());
+    std::printf("Energy: %s\n", meter.description().c_str());
+    if (meter.availability() == EnergyAvailability::Measured)
+        std::printf("        energy/rep shows - on a row whose run lasted under %lld ms\n",
+                    static_cast<long long>(EnergyBracket::kMinimumWindow.count()));
+    std::printf("\n");
 }
 
 void section(const char *title) { std::printf("\n  --- %s ---\n", title); }

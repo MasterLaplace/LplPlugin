@@ -13,6 +13,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 namespace lpl::bench {
 
@@ -25,7 +26,8 @@ constexpr int kMaximumZonesScanned = 16;
  * @brief Reads one unsigned decimal value from a sysfs file.
  * @param path File to read.
  * @param out Receives the value.
- * @return The errno of the open, or 0 on success.
+ * @return 0 on success, the errno of the open when it fails, or EIO when the read fails or
+ *         the file does not start with a decimal value.
  */
 int readSysfsValue(const std::string &path, core::u64 &out)
 {
@@ -108,62 +110,113 @@ std::string formatEnergy(core::f64 microjoules)
     return std::string(buffer);
 }
 
-EnergyMeter EnergyMeter::probe()
+EnergyMeter::EnergyMeter(EnergyAvailability availability, std::string description, std::string counterPath,
+                         core::u64 range)
+    : _availability{availability}, _description{std::move(description)}, _counterPath{std::move(counterPath)},
+      _range{range}
 {
-    EnergyMeter meter;
-    std::string deniedPath;
+}
+
+EnergyMeter EnergyMeter::unreadable(const std::string &path, std::string_view reason)
+{
+    return EnergyMeter{EnergyAvailability::Unreadable, "unreadable: " + path + ": " + std::string{reason}};
+}
+
+EnergyMeter EnergyMeter::probe(std::string_view powercapRoot)
+{
+    std::optional<EnergyMeter> firstDenied;
+    std::optional<EnergyMeter> firstUnreadable;
 
     for (int zone = 0; zone < kMaximumZonesScanned; ++zone)
     {
-        const std::string base = "/sys/class/powercap/intel-rapl:" + std::to_string(zone);
-        const std::string name = readSysfsLine(base + "/name");
-        if (name.rfind("package", 0) != 0)
-            continue;
-
-        core::u64 probeValue = 0;
-        const int status = readSysfsValue(base + "/energy_uj", probeValue);
-        if (status == EACCES || status == EPERM)
+        EnergyMeter candidate = probeZone(powercapRoot, zone);
+        switch (candidate._availability)
         {
-            deniedPath = base + "/energy_uj";
-            continue;
+        case EnergyAvailability::Measured: return candidate;
+        case EnergyAvailability::Denied:
+            if (!firstDenied)
+                firstDenied = std::move(candidate);
+            break;
+        case EnergyAvailability::Unreadable:
+            if (!firstUnreadable)
+                firstUnreadable = std::move(candidate);
+            break;
+        case EnergyAvailability::Absent: break;
         }
-        if (status != 0)
-            continue;
-
-        core::u64 range = 0;
-        if (readSysfsValue(base + "/max_energy_range_uj", range) != 0 || range == 0u)
-            continue;
-
-        meter._availability = EnergyAvailability::Measured;
-        meter._counterPath = base + "/energy_uj";
-        meter._range = range;
-        meter._description = name + " (intel-rapl:" + std::to_string(zone) + "), whole package";
-        return meter;
     }
 
-    if (!deniedPath.empty())
-    {
-        meter._availability = EnergyAvailability::Denied;
-        meter._description =
-            "denied: " + deniedPath +
-            " is readable by root only since the PLATYPUS side channel; run as root or grant read access";
-        return meter;
-    }
-
-    meter._availability = EnergyAvailability::Absent;
-    meter._description = runningUnderWindowsSubsystem() ?
-                             "absent: WSL2 does not pass RAPL through to the Linux guest; boot Linux natively or "
-                             "measure on the target hardware" :
-                             "absent: no powercap package zone under /sys/class/powercap";
-    return meter;
+    if (firstDenied)
+        return *std::move(firstDenied);
+    if (firstUnreadable)
+        return *std::move(firstUnreadable);
+    if (powercapRoot == kPowercapRoot && runningUnderWindowsSubsystem())
+        return EnergyMeter{EnergyAvailability::Absent, "absent: WSL2 does not pass RAPL through to the Linux guest; "
+                                                       "boot Linux natively or measure on the target hardware"};
+    return EnergyMeter{EnergyAvailability::Absent,
+                       "absent: no powercap package zone under " + std::string{powercapRoot}};
 }
 
-bool EnergyMeter::read(core::u64 &outMicrojoules) const
+EnergyMeter EnergyMeter::probeZone(std::string_view powercapRoot, int zone)
+{
+    const std::string zoneId = "intel-rapl:" + std::to_string(zone);
+    const std::string zoneDirectory = std::string{powercapRoot} + "/" + zoneId;
+    const std::string zoneLabel = readSysfsLine(zoneDirectory + "/name");
+    if (!zoneLabel.starts_with("package"))
+        return EnergyMeter{EnergyAvailability::Absent, {}};
+
+    const std::string counterPath = zoneDirectory + "/energy_uj";
+    core::u64 counter = 0u;
+    const int counterError = readSysfsValue(counterPath, counter);
+    if (counterError == EACCES || counterError == EPERM)
+        return EnergyMeter{EnergyAvailability::Denied,
+                           "denied: " + counterPath +
+                               " is readable by root only since the PLATYPUS side channel; run as root or grant "
+                               "read access"};
+    if (counterError != 0)
+        return unreadable(counterPath, std::strerror(counterError));
+
+    const std::string rangePath = zoneDirectory + "/max_energy_range_uj";
+    core::u64 range = 0u;
+    const int rangeError = readSysfsValue(rangePath, range);
+    if (rangeError != 0)
+        return unreadable(rangePath, std::strerror(rangeError));
+    if (range == 0u)
+        return unreadable(rangePath, "a range of zero cannot unwrap the counter");
+
+    return EnergyMeter{EnergyAvailability::Measured, zoneLabel + " (" + zoneId + "), whole package", counterPath,
+                       range};
+}
+
+std::optional<core::u64> EnergyMeter::read() const
 {
     if (_availability != EnergyAvailability::Measured)
-        return false;
+        return std::nullopt;
 
-    return readSysfsValue(_counterPath, outMicrojoules) == 0;
+    core::u64 microjoules = 0u;
+    if (readSysfsValue(_counterPath, microjoules) != 0)
+        return std::nullopt;
+    return microjoules;
+}
+
+EnergyBracket::EnergyBracket(const EnergyMeter &meter)
+    : _meter{meter}, _openedAt{std::chrono::steady_clock::now()}, _counterAtOpening{meter.read()}
+{
+}
+
+std::optional<core::f64> EnergyBracket::microjoulesPerRepetition(core::usize repetitions) const
+{
+    if (!_counterAtOpening || repetitions == 0u || std::chrono::steady_clock::now() - _openedAt < kMinimumWindow)
+        return std::nullopt;
+
+    const std::optional<core::u64> counterAtClosing = _meter.read();
+    if (!counterAtClosing)
+        return std::nullopt;
+
+    const std::optional<core::u64> spent =
+        energyDeltaMicrojoules(*_counterAtOpening, *counterAtClosing, _meter.rangeMicrojoules());
+    if (!spent)
+        return std::nullopt;
+    return static_cast<core::f64>(*spent) / static_cast<core::f64>(repetitions);
 }
 
 const EnergyMeter &energyMeter()

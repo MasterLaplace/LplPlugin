@@ -72,7 +72,10 @@ struct Result {
     core::f64 stddevNs = 0.0; ///< Sample standard deviation.
     core::u32 samples = 0;    ///< Number of timed repetitions collected.
 
-    /** Package energy per repetition, absent when no counter could bracket the run. */
+    /**
+     * Package energy per repetition, absent when no counter could bracket the run or the
+     * run was shorter than @ref EnergyBracket::kMinimumWindow.
+     */
     std::optional<core::f64> microjoulesPerRep;
 };
 
@@ -151,12 +154,7 @@ template <typename Fn> Result run(const char *label, Fn &&fn, Config cfg = {})
     samples.reserve(cfg.maxReps);
     core::f64 totalNs = 0.0;
 
-    /* Bracketing the whole timed loop, not each sample: the counter advances in steps of
-       tens of microjoules about once a millisecond, far coarser than one repetition. */
-    const EnergyMeter &meter = energyMeter();
-    core::u64 energyBefore = 0;
-    const bool energyStarted = meter.read(energyBefore);
-
+    const EnergyBracket energy{energyMeter()};
     for (core::u32 i = 0; i < cfg.maxReps; ++i)
     {
         const auto t0 = clock::now();
@@ -172,15 +170,7 @@ template <typename Fn> Result run(const char *label, Fn &&fn, Config cfg = {})
             break;
     }
 
-    std::optional<core::f64> microjoulesPerRep;
-    core::u64 energyAfter = 0;
-    if (energyStarted && meter.read(energyAfter))
-    {
-        if (const auto spent = energyDeltaMicrojoules(energyBefore, energyAfter, meter.rangeMicrojoules()))
-            microjoulesPerRep = static_cast<core::f64>(*spent) / static_cast<core::f64>(samples.size());
-    }
-
-    return report(label, samples, microjoulesPerRep);
+    return report(label, samples, energy.microjoulesPerRepetition(samples.size()));
 }
 
 } // namespace lpl::bench
