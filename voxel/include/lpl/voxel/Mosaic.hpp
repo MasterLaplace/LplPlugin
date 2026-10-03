@@ -28,6 +28,8 @@
 #    include <lpl/core/Types.hpp>
 #    include <lpl/voxel/Brick.hpp>
 
+#    include <optional>
+
 namespace lpl::voxel {
 
 /// Bricks a mosaic can hold. At 2 MiB each this caps the resident set at 1 GiB.
@@ -64,9 +66,21 @@ public:
 
     /**
      * @brief Finest resident brick containing the level-0 sample (@p bz, @p by, @p bx).
+     * @pre Each coordinate is below 2^38 in magnitude, so its brick index holds in an i32. Beyond,
+     * the index wraps and a brick that does not contain the point can answer; @ref sampleAt checks.
      * @return Pointer into the set, or nullptr when no resident brick covers the point.
      */
     [[nodiscard]] const BrickView *find(core::i64 bz, core::i64 by, core::i64 bx) const noexcept;
+
+    /**
+     * @brief Sample at the level-0 position (@p bz, @p by, @p bx), read from the brick @ref find returns.
+     *
+     * The nearest sample, never an interpolation: a level-L brick answers with the sample whose cell,
+     * 2^L level-0 samples wide, holds the point.
+     * @return Nothing when no resident brick covers the point, or when a coordinate is beyond what a
+     * brick index holds: the index would wrap onto another brick.
+     */
+    [[nodiscard]] std::optional<core::u8> sampleAt(core::i64 bz, core::i64 by, core::i64 bx) const noexcept;
 
     /**
      * @brief Finest resident brick strictly coarser than @p level covering the point.
