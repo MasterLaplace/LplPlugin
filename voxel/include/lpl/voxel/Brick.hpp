@@ -180,6 +180,19 @@ void summariseCells(BrickView &brick, core::u8 *out) noexcept;
     return static_cast<core::i32>(base >> (kBrickEdgeShift + level));
 }
 
+/**
+ * @brief Floor of @p position as an i64: the level-0 sample that contains it, when it is given in
+ * level-0 samples.
+ *
+ * @warning Floor, not truncation, for the reason @ref brickIndexOfBase gives: -0.5 is in sample -1.
+ * @pre @p position is finite and within the range of an i64.
+ */
+template <typename Real> [[nodiscard]] constexpr core::i64 floorToI64(Real position) noexcept
+{
+    const core::i64 truncated = static_cast<core::i64>(position);
+    return (position < Real{0} && static_cast<Real>(truncated) != position) ? truncated - 1 : truncated;
+}
+
 } // namespace lpl::voxel
 
 #endif // LPL_VOXEL_BRICK_HPP
