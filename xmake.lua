@@ -132,6 +132,7 @@ includes(
     "editor",
     "procgen",
     "voxel",
+    "zarr",
     "ai",
     "ecology",
     "pack",

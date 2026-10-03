@@ -606,3 +606,14 @@ target("test-voxel-raymarch")
     add_deps("lpl-core", "lpl-math", "lpl-voxel")
     add_files("parity/test_voxel_raymarch.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Zarr: reading an array's own description and building chunk keys. The check
+-- labels name each way that goes silently wrong.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-zarr-array")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-zarr")
+    add_files("parity/test_zarr_array.cpp")
+target_end()
