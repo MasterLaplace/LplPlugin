@@ -40,12 +40,18 @@
 #include <lpl/net/transport/ITransport.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <expected>
+#include <format>
 #include <future>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using namespace lpl;
@@ -865,28 +871,89 @@ void benchmarkNetworking()
     }
 }
 
+struct Section {
+    std::string_view name;
+    void (*run)();
+};
+
+constexpr std::array kSections{
+    Section{"arena",       benchmarkArena              },
+    Section{"fixed",       benchmarkFixedMath          },
+    Section{"morton",      benchmarkMorton             },
+    Section{"allocators",  benchmarkAllocators         },
+    Section{"trig",        benchmarkTrigonometry       },
+    Section{"registry",    benchmarkRegistry           },
+    Section{"physics",     benchmarkPhysics            },
+    Section{"scalability", benchmarkPhysicsScalability },
+    Section{"partition",   benchmarkWorldPartition     },
+    Section{"hashmap",     benchmarkFlatAtomicHashMap  },
+    Section{"threadpool",  benchmarkThreadPool         },
+    Section{"soa",         benchmarkSoA_vs_AoS         },
+    Section{"lookup",      benchmarkEntityLookup       },
+    Section{"broadphase",  benchmarkCollisionBroadphase},
+    Section{"net",         benchmarkNetworking         },
+};
+
+[[nodiscard]] bool isSectionName(std::string_view name)
+{
+    return std::ranges::any_of(kSections, [name](const Section &section) { return section.name == name; });
+}
+
+void printUsage(std::FILE *stream)
+{
+    std::fputs("usage: lpl-benchmark [-o|--only SECTION] [-h|--help]\n"
+               "  Measures the engine's building blocks and prints the results on stdout.\n"
+               "\n"
+               "Without --only, every section runs, in this order:\n",
+               stream);
+    for (const Section &section : kSections)
+        std::fprintf(stream, "  %.*s\n", static_cast<int>(section.name.size()), section.name.data());
+    const std::string_view exampleSection = kSections.front().name;
+    std::fprintf(stream, "\nExample: lpl-benchmark --only %.*s\n", static_cast<int>(exampleSection.size()),
+                 exampleSection.data());
+}
+
+struct Arguments {
+    std::optional<std::string_view> onlySection;
+    bool helpRequested{false};
+};
+
+[[nodiscard]] std::expected<Arguments, std::string> parseArguments(int argc, char *argv[])
+{
+    Arguments arguments;
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string_view argument = argv[i];
+        if (argument == "--help" || argument == "-h")
+            return Arguments{.onlySection = std::nullopt, .helpRequested = true};
+        if (argument != "--only" && argument != "-o")
+            return std::unexpected(std::format("unknown argument '{}'", argument));
+        if (i + 1 == argc)
+            return std::unexpected(std::format("'{}' needs a SECTION", argument));
+        const std::string_view section = argv[++i];
+        if (!isSectionName(section))
+            return std::unexpected(std::format("unknown section '{}'", section));
+        arguments.onlySection = section;
+    }
+    return arguments;
+}
+
 } // anonymous namespace
 
 int main(int argc, char *argv[])
 {
-    // A filter, because the whole suite takes ten minutes and iterating on one section against a
-    // ten-minute loop is how measurements stop being taken.
-    const char *only = nullptr;
-    for (int i = 1; i < argc; ++i)
+    const std::expected<Arguments, std::string> arguments = parseArguments(argc, argv);
+    if (!arguments)
     {
-        const std::string a = argv[i];
-        if ((a == "--only" || a == "-o") && i + 1 < argc)
-            only = argv[++i];
-        else if (a == "--help" || a == "-h")
-        {
-            std::printf("lpl-benchmark [--only SECTION]\n\n"
-                        "  arena fixed morton allocators trig registry physics scalability\n"
-                        "  partition hashmap threadpool soa lookup broadphase net\n\n"
-                        "Without --only, every section runs.\n");
-            return 0;
-        }
+        std::fprintf(stderr, "lpl-benchmark: %s\n\n", arguments.error().c_str());
+        printUsage(stderr);
+        return 2;
     }
-    const auto wanted = [&](const char *name) { return only == nullptr || std::string(only) == name; };
+    if (arguments->helpRequested)
+    {
+        printUsage(stdout);
+        return 0;
+    }
 
     core::Log::info("=== LplPlugin Benchmark ===");
     std::printf("\n");
@@ -894,36 +961,9 @@ int main(int argc, char *argv[])
     bench::printSystemInfo();
     bench::printLegend();
 
-    if (wanted("arena"))
-        benchmarkArena();
-    if (wanted("fixed"))
-        benchmarkFixedMath();
-    if (wanted("morton"))
-        benchmarkMorton();
-    if (wanted("allocators"))
-        benchmarkAllocators();
-    if (wanted("trig"))
-        benchmarkTrigonometry();
-    if (wanted("registry"))
-        benchmarkRegistry();
-    if (wanted("physics"))
-        benchmarkPhysics();
-    if (wanted("scalability"))
-        benchmarkPhysicsScalability();
-    if (wanted("partition"))
-        benchmarkWorldPartition();
-    if (wanted("hashmap"))
-        benchmarkFlatAtomicHashMap();
-    if (wanted("threadpool"))
-        benchmarkThreadPool();
-    if (wanted("soa"))
-        benchmarkSoA_vs_AoS();
-    if (wanted("lookup"))
-        benchmarkEntityLookup();
-    if (wanted("broadphase"))
-        benchmarkCollisionBroadphase();
-    if (wanted("net"))
-        benchmarkNetworking();
+    for (const Section &section : kSections)
+        if (!arguments->onlySection || *arguments->onlySection == section.name)
+            section.run();
 
     std::printf("\nDone.\n");
     return 0;
