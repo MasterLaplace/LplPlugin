@@ -131,6 +131,7 @@ includes(
     "serial",
     "editor",
     "procgen",
+    "voxel",
     "ai",
     "ecology",
     "pack",
