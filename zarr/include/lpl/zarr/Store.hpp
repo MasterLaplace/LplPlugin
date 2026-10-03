@@ -28,6 +28,8 @@
 
 #    include <lpl/core/Types.hpp>
 
+#    include <span>
+
 namespace lpl::zarr {
 
 /**
@@ -80,11 +82,10 @@ public:
 
     /**
      * @brief Reads the value for @p key into @p buffer.
-     * @param key      Store key, for example "0/12/3/4" or ".zarray".
-     * @param buffer   Destination.
-     * @param capacity Bytes available.
+     * @param key    Store key, for example "0/12/3/4" or ".zarray".
+     * @param buffer Destination; its size is the room available.
      */
-    [[nodiscard]] virtual FetchResult read(const char *key, core::u8 *buffer, core::usize capacity) noexcept = 0;
+    [[nodiscard]] virtual FetchResult read(const char *key, std::span<core::u8> buffer) noexcept = 0;
 
     /// @brief Human-readable name of the transport, for logs that have to say where bytes failed.
     [[nodiscard]] virtual const char *name() const noexcept = 0;

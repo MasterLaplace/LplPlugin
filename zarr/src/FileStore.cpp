@@ -9,12 +9,27 @@
 
 #include <lpl/zarr/FileStore.hpp>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 namespace lpl::zarr {
+
+namespace {
+
+constexpr core::usize kMaxPathLength = 1024u;
+constexpr char kPartialSuffix[] = ".part";
+
+struct FileCloser final {
+    void operator()(std::FILE *file) const noexcept { std::fclose(file); }
+};
+
+using File = std::unique_ptr<std::FILE, FileCloser>;
+
+} // namespace
 
 FileStore::FileStore(const char *root) noexcept
 {
@@ -52,44 +67,32 @@ bool FileStore::pathFor(const char *key, char *out, core::usize capacity) const 
     return true;
 }
 
-FetchResult FileStore::read(const char *key, core::u8 *buffer, core::usize capacity) noexcept
+FetchResult FileStore::read(const char *key, std::span<core::u8> buffer) noexcept
 {
-    char path[1024];
+    char path[kMaxPathLength];
     if (!pathFor(key, path, sizeof(path)))
         return FetchResult{FetchStatus::Failed, 0u};
 
-    std::FILE *f = std::fopen(path, "rb");
-    if (f == nullptr)
-        return FetchResult{FetchStatus::Absent, 0u};
+    const File file{std::fopen(path, "rb")};
+    if (file == nullptr)
+        return FetchResult{errno == ENOENT ? FetchStatus::Absent : FetchStatus::Failed, 0u};
+    struct stat info {};
+    if (::fstat(::fileno(file.get()), &info) != 0 || !S_ISREG(info.st_mode))
+        return FetchResult{FetchStatus::Failed, 0u};
+    const auto bytes = static_cast<core::usize>(info.st_size);
+    if (bytes > buffer.size())
+        return FetchResult{FetchStatus::TooLarge, bytes};
 
-    if (std::fseek(f, 0, SEEK_END) != 0)
-    {
-        std::fclose(f);
-        return FetchResult{FetchStatus::Failed, 0u};
-    }
-    const long size = std::ftell(f);
-    std::rewind(f);
-    if (size < 0)
-    {
-        std::fclose(f);
-        return FetchResult{FetchStatus::Failed, 0u};
-    }
-    if (static_cast<core::usize>(size) > capacity)
-    {
-        std::fclose(f);
-        return FetchResult{FetchStatus::TooLarge, static_cast<core::usize>(size)};
-    }
-    const core::usize got = std::fread(buffer, 1u, static_cast<core::usize>(size), f);
-    std::fclose(f);
-    if (got != static_cast<core::usize>(size))
+    const core::usize got = std::fread(buffer.data(), 1u, bytes, file.get());
+    if (got != bytes)
         return FetchResult{FetchStatus::Failed, got};
     return FetchResult{FetchStatus::Ok, got};
 }
 
-bool FileStore::write(const char *key, const core::u8 *bytes, core::usize size) noexcept
+bool FileStore::write(const char *key, std::span<const core::u8> bytes) noexcept
 {
-    char path[1024];
-    if (!pathFor(key, path, sizeof(path)) || bytes == nullptr)
+    char path[kMaxPathLength];
+    if (!pathFor(key, path, sizeof(path)))
         return false;
 
     // Create every parent, INCLUDING the root: a cache directory that does not exist yet is the
@@ -107,22 +110,22 @@ bool FileStore::write(const char *key, const core::u8 *bytes, core::usize size) 
 
     // Write beside, then rename. A reader that finds a half-written chunk has no way to tell it
     // from a short one, and rename is the only step that is atomic.
-    char tmp[1088];
-    const int n = std::snprintf(tmp, sizeof(tmp), "%s.part", path);
-    if (n <= 0 || static_cast<core::usize>(n) >= sizeof(tmp))
+    char partial[kMaxPathLength + sizeof(kPartialSuffix)];
+    const int n = std::snprintf(partial, sizeof(partial), "%s%s", path, kPartialSuffix);
+    if (n <= 0 || static_cast<core::usize>(n) >= sizeof(partial))
         return false;
 
-    std::FILE *f = std::fopen(tmp, "wb");
-    if (f == nullptr)
+    File file{std::fopen(partial, "wb")};
+    if (file == nullptr)
         return false;
-    const core::usize put = std::fwrite(bytes, 1u, size, f);
-    const bool closed = std::fclose(f) == 0;
-    if (put != size || !closed)
+    const core::usize put = std::fwrite(bytes.data(), 1u, bytes.size(), file.get());
+    const bool closed = std::fclose(file.release()) == 0;
+    if (put != bytes.size() || !closed)
     {
-        std::remove(tmp);
+        std::remove(partial);
         return false;
     }
-    return std::rename(tmp, path) == 0;
+    return std::rename(partial, path) == 0;
 }
 
 } // namespace lpl::zarr

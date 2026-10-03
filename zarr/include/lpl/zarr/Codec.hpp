@@ -20,6 +20,8 @@
 
 #    include <lpl/core/Types.hpp>
 
+#    include <span>
+
 namespace lpl::zarr {
 
 /**
@@ -37,11 +39,12 @@ enum class Codec : core::u8 {
 [[nodiscard]] bool codecAvailable(Codec codec) noexcept;
 
 /**
- * @brief Unpacks @p size bytes of @p codec from @p in into @p out.
- * @return Bytes produced, or 0 on failure.
+ * @brief Unpacks the @p codec bytes of @p in into @p out; Raw bytes are copied as they are.
+ * @return Bytes produced, or 0 when @p in is empty or rejected by the codec (blosc also when it is
+ * shorter than its header announces), the result does not fit @p out, or this build lacks
+ * @p codec. A count other than 0 does not prove the bytes intact: Raw copies a short input as it is.
  */
-[[nodiscard]] core::usize decodeChunk(Codec codec, const core::u8 *in, core::usize size, core::u8 *out,
-                                      core::usize capacity) noexcept;
+[[nodiscard]] core::usize decodeChunk(Codec codec, std::span<const core::u8> in, std::span<core::u8> out) noexcept;
 
 /// @return Human-readable name, for a log line that has to say what it could not open.
 [[nodiscard]] const char *codecName(Codec codec) noexcept;

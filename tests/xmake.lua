@@ -608,8 +608,8 @@ target("test-voxel-raymarch")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Zarr: reading an array's own description, building chunk keys, and the two
--- ways that goes silently wrong -- an assumed separator and a guessed codec.
+-- Zarr: reading an array's own description and building chunk keys. The check
+-- labels name each way that goes silently wrong.
 -- ─────────────────────────────────────────────────────────────────────────────
 target("test-zarr-array")
     set_kind("binary")

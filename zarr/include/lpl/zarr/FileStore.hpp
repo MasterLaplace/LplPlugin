@@ -27,12 +27,17 @@ namespace lpl::zarr {
  */
 class FileStore final : public IZarrStore {
 public:
-    /// @param root Directory the keys are relative to. Copied; must fit.
+    /**
+     * @param root Directory the keys are relative to, copied. A null, empty, or 510-byte-or-longer
+     * root leaves the store invalid (@ref valid).
+     */
     explicit FileStore(const char *root) noexcept;
 
-    [[nodiscard]] FetchResult read(const char *key, core::u8 *buffer, core::usize capacity) noexcept override;
+    /// Absent only when no file exists at the key. A directory, or a file that cannot be opened, is Failed.
+    [[nodiscard]] FetchResult read(const char *key, std::span<core::u8> buffer) noexcept override;
     [[nodiscard]] const char *name() const noexcept override { return "FileStore"; }
 
+    /// @return Whether the store has a root to read and write under.
     [[nodiscard]] bool valid() const noexcept { return _root[0] != '\0'; }
 
     /**
@@ -40,8 +45,11 @@ public:
      *
      * A store that can only read cannot be a cache, and a cache written by a separate code path
      * would be free to disagree with the reader about where a key lives.
+     *
+     * @return Whether the value is now at @p key. A reader sees the old value or the new one, never
+     * part of one; on false, a value already at @p key is untouched.
      */
-    [[nodiscard]] bool write(const char *key, const core::u8 *bytes, core::usize size) noexcept;
+    [[nodiscard]] bool write(const char *key, std::span<const core::u8> bytes) noexcept;
 
 private:
     [[nodiscard]] bool pathFor(const char *key, char *out, core::usize capacity) const noexcept;

@@ -8,10 +8,12 @@
 -- key-to-bytes map, so a filesystem, an HTTP endpoint and an object bucket are
 -- all stores and none of them belongs in here.
 --
--- The compressed paths are optional and REFUSED rather than approximated when
--- absent: handing compressed bytes to the raw path yields plausible garbage,
--- and garbage renders.
+-- The compressed paths are optional: a codec the system does not provide is
+-- refused at open time, never approximated (Codec.hpp says why).
 -- /////////////////////////////////////////////////////////////////////////////
+
+add_requires("pkgconfig::blosc", { optional = true })
+add_requires("pkgconfig::libzstd", { optional = true })
 
 target("lpl-zarr")
     set_kind("static")
@@ -20,13 +22,14 @@ target("lpl-zarr")
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
     add_headerfiles("include/(lpl/zarr/**.hpp)")
+    add_packages("pkgconfig::blosc", "pkgconfig::libzstd", { public = true })
 
-    if os.isfile("/usr/include/blosc.h") then
-        add_defines("LPL_ZARR_HAS_BLOSC")
-        add_syslinks("blosc", { public = true })
-    end
-    if os.isfile("/usr/include/zstd.h") then
-        add_defines("LPL_ZARR_HAS_ZSTD")
-        add_syslinks("zstd", { public = true })
-    end
+    on_config(function (target)
+        if target:pkg("pkgconfig::blosc") then
+            target:add("defines", "LPL_ZARR_HAS_BLOSC")
+        end
+        if target:pkg("pkgconfig::libzstd") then
+            target:add("defines", "LPL_ZARR_HAS_ZSTD")
+        end
+    end)
 target_end()

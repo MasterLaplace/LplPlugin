@@ -9,6 +9,8 @@
 
 #include <lpl/zarr/Codec.hpp>
 
+#include <cstring>
+
 #if defined(LPL_ZARR_HAS_BLOSC)
 #    include <blosc.h>
 #endif
@@ -52,29 +54,32 @@ const char *codecName(Codec codec) noexcept
     }
 }
 
-core::usize decodeChunk([[maybe_unused]] Codec codec, [[maybe_unused]] const core::u8 *in,
-                        [[maybe_unused]] core::usize size, [[maybe_unused]] core::u8 *out,
-                        [[maybe_unused]] core::usize capacity) noexcept
+core::usize decodeChunk(Codec codec, std::span<const core::u8> in, std::span<core::u8> out) noexcept
 {
-    if (in == nullptr || out == nullptr || size == 0u || capacity == 0u)
+    if (in.empty() || out.empty())
         return 0u;
 
     switch (codec)
     {
-    case Codec::Raw: return 0u; // Raw never reaches here: the caller reads it straight into place.
+    case Codec::Raw: {
+        if (in.size() > out.size())
+            return 0u;
+        std::memcpy(out.data(), in.data(), in.size());
+        return in.size();
+    }
 
     case Codec::Blosc: {
 #if defined(LPL_ZARR_HAS_BLOSC)
         // The blosc container names its own sub-codec in its header, so nothing here has to know
         // whether the writer chose zstd, lz4 or blosclz -- which is exactly why a corpus can
         // change its mind between volumes without breaking a reader.
-        core::usize nbytes = 0;
-        core::usize cbytes = 0;
-        core::usize blocksize = 0;
-        blosc_cbuffer_sizes(in, &nbytes, &cbytes, &blocksize);
-        if (nbytes == 0u || nbytes > capacity)
+        core::usize nbytes = 0u;
+        // The decompressor reads as many bytes as the header announces and is never told how many
+        // arrived, so a short download would decode whatever lies after it in the buffer.
+        if (blosc_cbuffer_validate(in.data(), in.size(), &nbytes) != 0 || nbytes == 0u || nbytes > out.size())
             return 0u;
-        const int produced = blosc_decompress_ctx(in, out, capacity, 1);
+        constexpr int threads = 1;
+        const int produced = blosc_decompress_ctx(in.data(), out.data(), out.size(), threads);
         return produced > 0 ? static_cast<core::usize>(produced) : 0u;
 #else
         return 0u;
@@ -83,7 +88,7 @@ core::usize decodeChunk([[maybe_unused]] Codec codec, [[maybe_unused]] const cor
 
     case Codec::Zstd: {
 #if defined(LPL_ZARR_HAS_ZSTD)
-        const core::usize produced = ZSTD_decompress(out, capacity, in, size);
+        const core::usize produced = ZSTD_decompress(out.data(), out.size(), in.data(), in.size());
         return ZSTD_isError(produced) ? 0u : produced;
 #else
         return 0u;
