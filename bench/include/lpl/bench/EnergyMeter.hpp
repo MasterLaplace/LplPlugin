@@ -7,11 +7,12 @@
  * The package energy counter (RAPL, exposed by Linux through powercap) gives joules;
  * two readings around the timed loop and a subtraction give the energy of the run.
  *
- * Three outcomes, never a zero standing in for one of them. The counter may be
- * readable; it may exist and be denied to this process, since reading it unprivileged
- * was restricted after the PLATYPUS power side channel; or there may be nothing to read,
- * which is the case under WSL2, where Hyper-V does not pass RAPL through to the Linux
- * guest. "Denied" and "absent" call for opposite remedies, so they are kept apart.
+ * Four outcomes, never a zero standing in for one of them. The counter may be readable;
+ * it may exist and be denied to this process, since reading it unprivileged was
+ * restricted after the PLATYPUS power side channel; it may exist and fail to read, or hold
+ * no usable value, named with the file at fault; or there may be nothing to read, which
+ * is the case under WSL2, where Hyper-V does not pass RAPL through to the Linux guest.
+ * Each calls for a different remedy, so they are kept apart.
  *
  * What the number means, stated so it is not over-read: it is the energy of the WHOLE
  * package over the run, idle draw and every other process included, divided by the
@@ -30,16 +31,19 @@
 
 #    include <lpl/core/Types.hpp>
 
+#    include <chrono>
 #    include <optional>
 #    include <string>
+#    include <string_view>
 
 namespace lpl::bench {
 
 /** What an energy reading can honestly claim. */
 enum class EnergyAvailability : core::u8 {
-    Measured, ///< The package counter is readable.
-    Denied,   ///< The counter exists and this process may not read it.
-    Absent,   ///< There is no counter this build knows how to read.
+    Measured,   ///< The package counter is readable.
+    Denied,     ///< The counter exists and this process may not read it.
+    Unreadable, ///< A package zone exists and one of its files could not be read or holds no usable value.
+    Absent,     ///< There is no counter this build knows how to read.
 };
 
 /**
@@ -68,11 +72,16 @@ enum class EnergyAvailability : core::u8 {
 /** @brief One package energy counter, located once. */
 class EnergyMeter final {
 public:
+    /** Where Linux exposes its powercap zones. */
+    static constexpr std::string_view kPowercapRoot = "/sys/class/powercap";
+
     /**
      * @brief Looks for a readable package counter.
-     * @return A meter that says what it found, including when it found nothing.
+     * @param powercapRoot Directory holding the @c intel-rapl:N zones.
+     * @return The first readable package zone; otherwise the first denied one, then the
+     *         first unreadable one; otherwise a meter that says why there is none.
      */
-    [[nodiscard]] static EnergyMeter probe();
+    [[nodiscard]] static EnergyMeter probe(std::string_view powercapRoot = kPowercapRoot);
 
     /**
      * @brief What this meter can claim.
@@ -94,16 +103,57 @@ public:
 
     /**
      * @brief Reads the counter.
-     * @param outMicrojoules Receives the cumulative energy.
-     * @return false when the meter is not measuring or the read failed.
+     * @return The cumulative energy in microjoules, or nothing when the meter is not
+     *         measuring or the read failed.
      */
-    [[nodiscard]] bool read(core::u64 &outMicrojoules) const;
+    [[nodiscard]] std::optional<core::u64> read() const;
 
 private:
-    EnergyAvailability _availability = EnergyAvailability::Absent;
+    explicit EnergyMeter(EnergyAvailability availability, std::string description, std::string counterPath = {},
+                         core::u64 range = 0u);
+
+    [[nodiscard]] static EnergyMeter probeZone(std::string_view powercapRoot, int zone);
+    [[nodiscard]] static EnergyMeter unreadable(const std::string &path, std::string_view reason);
+
+    EnergyAvailability _availability;
     std::string _description;
     std::string _counterPath;
-    core::u64 _range = 0;
+    core::u64 _range;
+};
+
+/**
+ * @brief The package energy spent across one window of repetitions, shared among them.
+ *
+ * @details The window brackets every repetition at once, because the counter advances
+ *          about once a millisecond in steps of tens of microjoules, far coarser than one
+ *          repetition. A window shorter than @ref kMinimumWindow reports nothing: one step
+ *          of the counter would weigh more than a percent of it.
+ */
+class EnergyBracket final {
+public:
+    /** Shortest window whose energy is reported. */
+    static constexpr std::chrono::milliseconds kMinimumWindow{100};
+
+    /**
+     * @brief Opens the window: reads the counter and starts the clock.
+     * @param meter Counter to read; it must outlive the bracket.
+     */
+    explicit EnergyBracket(const EnergyMeter &meter);
+
+    /**
+     * @brief Shares the energy spent since the bracket opened among @p repetitions; each
+     *        call reads the counter and the clock again.
+     * @param repetitions How many repetitions ran since the bracket opened.
+     * @return Microjoules per repetition, or nothing when the meter is not measuring, a read
+     *         failed, the readings cannot describe a single wrap, no repetition ran, or less
+     *         than @ref kMinimumWindow has passed since the bracket opened.
+     */
+    [[nodiscard]] std::optional<core::f64> microjoulesPerRepetition(core::usize repetitions) const;
+
+private:
+    const EnergyMeter &_meter;
+    std::chrono::steady_clock::time_point _openedAt;
+    std::optional<core::u64> _counterAtOpening;
 };
 
 /**
