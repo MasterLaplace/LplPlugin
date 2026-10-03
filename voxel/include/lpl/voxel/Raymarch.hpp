@@ -50,6 +50,58 @@ struct Eye final {
 };
 
 /**
+ * @struct ImagePlane
+ * @brief How the pixels of one frame map to directions from an @ref Eye, both ways.
+ *
+ * The ray through a point of the frame is `forward + right * rightSlope + up * upSlope`, unnormalised.
+ * The marcher casts its rays through it and a surface is projected with it, so a triangle lands on
+ * the pixels whose rays reach it; two derivations of the same projection drift apart by a pixel, and
+ * nobody can say why the surface sits beside the scan.
+ *
+ * Positions on the frame are in pixels from its top-left corner, so the centre of pixel (px, py) is
+ * (px + 0.5, py + 0.5).
+ *
+ * @pre Made by @ref imagePlane: a default one divides by zero.
+ */
+struct ImagePlane final {
+    core::f32 tanHalfFieldOfView{0.0f};
+    core::f32 aspect{0.0f}; ///< Height over width.
+    core::f32 width{0.0f};
+    core::f32 height{0.0f};
+
+    /// @return Offset along @ref Eye::right per unit along @ref Eye::forward, at frame column @p x.
+    [[nodiscard]] constexpr core::f32 rightSlope(core::f32 x) const noexcept
+    {
+        return (2.0f * x / width - 1.0f) * tanHalfFieldOfView;
+    }
+
+    /// @return Offset along @ref Eye::up per unit along @ref Eye::forward, at frame row @p y.
+    [[nodiscard]] constexpr core::f32 upSlope(core::f32 y) const noexcept
+    {
+        return (1.0f - 2.0f * y / height) * aspect * tanHalfFieldOfView;
+    }
+
+    /// @return The frame column whose @ref rightSlope is @p slope.
+    [[nodiscard]] constexpr core::f32 column(core::f32 slope) const noexcept
+    {
+        return (slope / tanHalfFieldOfView + 1.0f) * 0.5f * width;
+    }
+
+    /// @return The frame row whose @ref upSlope is @p slope.
+    [[nodiscard]] constexpr core::f32 row(core::f32 slope) const noexcept
+    {
+        return (1.0f - slope / (aspect * tanHalfFieldOfView)) * 0.5f * height;
+    }
+};
+
+/**
+ * @brief The image plane of a @p width by @p height frame seen from @p eye.
+ *
+ * @pre @p width and @p height are not zero, and the field of view is in (0, pi).
+ */
+[[nodiscard]] ImagePlane imagePlane(const Eye &eye, core::u32 width, core::u32 height) noexcept;
+
+/**
  * @class FreeCamera
  * @brief A position and two angles, turned into an @ref Eye.
  *

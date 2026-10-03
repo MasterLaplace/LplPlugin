@@ -79,12 +79,6 @@ void toVolumeAxes(const math::Vec3<core::f32> &world, core::f32 scale, core::f32
     volume[kAxisOfWorldZ] = world.z * scale;
 }
 
-template <typename Real> [[nodiscard]] constexpr core::i64 floorToI64(Real v) noexcept
-{
-    const core::i64 t = static_cast<core::i64>(v);
-    return (v < Real{0} && static_cast<Real>(t) != v) ? t - 1 : t;
-}
-
 /// Rounds a density to the nearest byte, saturating at both ends.
 [[nodiscard]] constexpr core::u8 toByte(core::f32 v) noexcept
 {
@@ -852,6 +846,19 @@ Eye FreeCamera::eye() const noexcept
     return e;
 }
 
+ImagePlane imagePlane(const Eye &eye, core::u32 width, core::u32 height) noexcept
+{
+    // tan(fov/2) from CORDIC, as Mat4::perspective takes it: no libm, and no truncated series,
+    // whose error grows with the angle -- three terms were already 1.3 % short at 90 degrees.
+    math::Fixed32 halfSine{};
+    math::Fixed32 halfCosine{};
+    math::Cordic::sincos(math::Fixed32::fromFloat(eye.horizontalFieldOfView * 0.5f), halfSine, halfCosine);
+    return ImagePlane{.tanHalfFieldOfView = halfSine.toFloat() / halfCosine.toFloat(),
+                      .aspect = static_cast<core::f32>(height) / static_cast<core::f32>(width),
+                      .width = static_cast<core::f32>(width),
+                      .height = static_cast<core::f32>(height)};
+}
+
 MarchReport march(const BrickMosaic &mosaic, const VolumeGeometry &geometry, const DensityProfile &profile,
                   const TransferFunction &transfer, const Eye &eye, const MarchParams &params, core::u32 *pixels,
                   core::u32 width, core::u32 height, core::u32 rowFirst, core::u32 rowCount) noexcept
@@ -873,24 +880,16 @@ MarchReport march(const BrickMosaic &mosaic, const VolumeGeometry &geometry, con
     const core::f32 boxSize[3]{geometry.extentMetres(kAxisOfWorldX), geometry.extentMetres(kAxisOfWorldY),
                                geometry.extentMetres(kAxisOfWorldZ)};
 
-    // tan(fov/2) from CORDIC, as Mat4::perspective takes it: no libm, and no truncated series,
-    // whose error grows with the angle -- three terms were already 1.3 % short at 90 degrees.
-    math::Fixed32 halfSine{};
-    math::Fixed32 halfCosine{};
-    math::Cordic::sincos(math::Fixed32::fromFloat(eye.horizontalFieldOfView * 0.5f), halfSine, halfCosine);
-    const core::f32 tanHalf = halfSine.toFloat() / halfCosine.toFloat();
-    const core::f32 aspect = static_cast<core::f32>(height) / static_cast<core::f32>(width);
-
+    const ImagePlane plane = imagePlane(eye, width, height);
     const core::u32 rowEnd = (rowFirst + rowCount > height) ? height : rowFirst + rowCount;
     for (core::u32 py = rowFirst; py < rowEnd; ++py)
     {
-        const core::f32 ndcY =
-            (1.0f - 2.0f * (static_cast<core::f32>(py) + 0.5f) / static_cast<core::f32>(height)) * aspect * tanHalf;
+        const core::f32 upSlope = plane.upSlope(static_cast<core::f32>(py) + 0.5f);
         for (core::u32 px = 0u; px < width; ++px)
         {
-            const core::f32 ndcX =
-                (2.0f * (static_cast<core::f32>(px) + 0.5f) / static_cast<core::f32>(width) - 1.0f) * tanHalf;
-            const math::Vec3<core::f32> direction = (eye.forward + eye.right * ndcX + eye.up * ndcY).normalize();
+            const core::f32 rightSlope = plane.rightSlope(static_cast<core::f32>(px) + 0.5f);
+            const math::Vec3<core::f32> direction =
+                (eye.forward + eye.right * rightSlope + eye.up * upSlope).normalize();
             ++report.rays;
             const core::usize pixelIndex = static_cast<core::usize>(py) * width + px;
             pixels[pixelIndex] = renderPixel(frame, eye.position, direction, boxSize, pixelIndex, report);

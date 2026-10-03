@@ -50,15 +50,6 @@ struct SurfaceMesh final {
     core::u32 indexCount{0};
 
     /**
-     * Texture coordinates, and one index per corner rather than per vertex.
-     *
-     * @warning **Per CORNER, because a vertex on a seam has two of them.** A flattened sheet is
-     * cut somewhere, and the vertices along that cut carry a different coordinate on each side; an
-     * array indexed by vertex silently picks one, and everything painted from the texture is
-     * smeared across the cut. Null when the mesh carries none, which is the normal case for a
-     * surface this tool traced -- it has geometry and no flattening.
-     */
-    /**
      * One normal per vertex, or null.
      *
      * @warning **Without these the surface is FLAT-shaded, and that is what makes a traced sheet
@@ -70,9 +61,18 @@ struct SurfaceMesh final {
      */
     const math::Vec3<core::f32> *normals{nullptr};
 
+    /**
+     * Texture coordinates, and one index per corner rather than per vertex.
+     *
+     * @warning **Per CORNER, because a vertex on a seam has two of them.** A flattened sheet is
+     * cut somewhere, and the vertices along that cut carry a different coordinate on each side; an
+     * array indexed by vertex silently picks one, and everything painted from the texture is
+     * smeared across the cut. Null when the mesh carries none, which is the normal case for a
+     * surface this tool traced -- it has geometry and no flattening.
+     */
     const core::f32 *texture{nullptr};        ///< Pairs (u, v).
     const core::u32 *textureIndices{nullptr}; ///< One per corner, so @ref indexCount of them.
-    core::u32 textureCount{0};
+    core::u32 textureCount{0};                ///< Pairs in @ref texture.
 
     [[nodiscard]] constexpr bool textured() const noexcept
     {
@@ -82,6 +82,21 @@ struct SurfaceMesh final {
     [[nodiscard]] constexpr bool valid() const noexcept
     {
         return points != nullptr && indices != nullptr && indexCount >= 3u && (indexCount % 3u) == 0u;
+    }
+
+    /**
+     * @return Whether every index names one of the @ref pointCount vertices and, when the mesh is
+     *         @ref textured, every texture index one of the @ref textureCount pairs.
+     * @pre @ref valid.
+     */
+    [[nodiscard]] constexpr bool indicesInRange() const noexcept
+    {
+        for (core::u32 i = 0u; i < indexCount; ++i)
+        {
+            if (indices[i] >= pointCount || (textured() && textureIndices[i] >= textureCount))
+                return false;
+        }
+        return true;
     }
 };
 
@@ -124,8 +139,10 @@ inline constexpr core::f32 kNoSurface = 1.0e30f;
  * showing through where the trace actually failed. Degenerate triangles are dropped here, which is
  * what makes the failure visible as a missing corner instead of an invented one.
  *
- * @param out       Storage for (rows - 1) * (columns - 1) * 6 indices.
- * @return Indices written.
+ * @param out       Storage for (rows - 1) * (columns - 1) * 6 indices, which is the most it writes.
+ * @param capacity  Indices @p out holds. With less, it stops before the first quad that might not
+ *                  fit; the quads after it are left out.
+ * @return Indices written, a multiple of three.
  */
 [[nodiscard]] core::u32 patchIndices(const SheetPatch &patch, core::u32 *out, core::u32 capacity) noexcept;
 
@@ -135,21 +152,27 @@ inline constexpr core::f32 kNoSurface = 1.0e30f;
  * Area-weighted rather than a plain average: a mesh whose triangles differ wildly in size -- which
  * a traced patch with a ragged edge always is -- would otherwise let a sliver pull the normal of
  * its corner as hard as the large triangle beside it, and the shading would ripple along the edge.
+ * Every entry is a unit vector: a vertex no triangle reaches gets +Z, which is a placeholder, not a
+ * direction.
  *
- * @param out  One entry per vertex, at least @p mesh.pointCount of them.
+ * @param out  One entry per vertex, at least @p mesh.pointCount of them. Nothing is written when the
+ *             mesh is not @ref SurfaceMesh::valid or a vertex or texture index is out of range.
  */
 void computeVertexNormals(const SurfaceMesh &mesh, math::Vec3<core::f32> *out) noexcept;
 
 /**
  * @brief Rasterises @p mesh into @p depth for the given eye.
  *
- * A depth-only software rasteriser: no colours, no texture, one comparison per covered pixel. The
- * marcher does the rest.
+ * A depth-only software rasteriser: no colours, and texture coordinates only when @p depth has room
+ * for them and the mesh is textured; one comparison per covered pixel. The marcher does the rest. Its projection is the
+ * marcher's own, @ref ImagePlane, so a triangle covers the pixels whose rays reach it.
  *
- * @return Triangles that covered at least one pixel.
+ * @return Triangles that were the nearest at one pixel at least when they were drawn; zero, with
+ *         nothing written, when the mesh is not @ref SurfaceMesh::valid, a vertex or texture index
+ *         is out of range, or the depth or the geometry is not valid.
  */
-core::u32 rasteriseSurface(const SurfaceMesh &mesh, const VolumeGeometry &geometry, const Eye &eye,
-                           const SurfaceDepth &depth) noexcept;
+[[nodiscard]] core::u32 rasteriseSurface(const SurfaceMesh &mesh, const VolumeGeometry &geometry, const Eye &eye,
+                                         const SurfaceDepth &depth) noexcept;
 
 /// @brief Fills a depth buffer with @ref kNoSurface and zero facing. Call before rasterising.
 void clearSurfaceDepth(const SurfaceDepth &depth) noexcept;
