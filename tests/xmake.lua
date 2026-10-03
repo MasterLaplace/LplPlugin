@@ -602,3 +602,47 @@ target("test-terrain-render")
              "lpl-samples")
     add_files("parity/test_terrain_render.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Direct volume rendering: bricks, the resident mosaic, residency planning and
+-- the marcher itself, against a synthetic field whose answer is known by hand.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-voxel-raymarch")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_files("parity/test_voxel_raymarch.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Zarr: reading an array's own description and building chunk keys. The check
+-- labels name each way that goes silently wrong.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-zarr-array")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-zarr")
+    add_files("parity/test_zarr_array.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Following a surface the samples only imply, and never finishing on the one
+-- next to it -- the failure that produces a smooth, plausible, wrong path.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-sheet-trace")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_files("parity/test_sheet_trace.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- The minimap: a map is the one picture whose being wrong is invisible, so
+-- where it says the eye is gets checked against where the eye actually is.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-minimap")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_files("parity/test_minimap.cpp")
+target_end()
