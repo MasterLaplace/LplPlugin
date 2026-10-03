@@ -40,10 +40,6 @@ namespace lpl::voxel {
 /**
  * @struct Eye
  * @brief Where the camera is and what it is looking at, in walked metres.
- *
- * A free camera with no collision and no body: the subject is a scan, not a place with floors, and
- * a research instrument whose operator can be stopped by a wall is a worse instrument. Flight is
- * the mode, not a cheat.
  */
 struct Eye final {
     math::Vec3<core::f32> position{}; ///< Metres.
@@ -63,18 +59,18 @@ struct Eye final {
  * reduce its argument, so past about a hundred degrees the sine and cosine FROZE and a body kept
  * walking in the direction it had at a hundred degrees. It reads as dead controls, not as bad
  * arithmetic, which is why it survived -- the first sixty degrees of every turn work perfectly.
+ * That is also why the angles are private: only @ref turn keeps them wrapped and clamped.
  *
  * @warning Pitch is CLAMPED rather than wrapped, because a camera that rolls over the vertical
  * flips its horizon and there is no reading of the controls that recovers from it.
  *
  * @warning No collision, deliberately. A volume is a scan, not a place with floors, and an
- * instrument whose operator can be stopped by a wall is a worse instrument.
+ * instrument whose operator can be stopped by a wall is a worse instrument. Flight is the mode,
+ * not a cheat.
  */
 class FreeCamera final {
 public:
     math::Vec3<core::f32> position{};
-    core::f32 yaw{0.0f};   ///< Radians about the world vertical.
-    core::f32 pitch{0.0f}; ///< Radians, clamped just short of straight up and straight down.
     core::f32 horizontalFieldOfView{1.0472f};
 
     /// @brief Turns by @p dYaw and @p dPitch, wrapping the first and clamping the second.
@@ -84,17 +80,38 @@ public:
     void move(core::f32 forward, core::f32 strafe, core::f32 rise, core::f32 distance) noexcept;
 
     [[nodiscard]] Eye eye() const noexcept;
+
+    /// @return Radians about the world vertical, as @ref wrapAngle leaves it.
+    [[nodiscard]] core::f32 yaw() const noexcept { return _yaw; }
+
+    /// @return Radians, clamped just short of straight up and straight down.
+    [[nodiscard]] core::f32 pitch() const noexcept { return _pitch; }
+
+private:
+    core::f32 _yaw{0.0f};
+    core::f32 _pitch{0.0f};
 };
+
+/**
+ * @brief The same angle, in [-pi, pi] once rounded to float.
+ *
+ * @return 0 for an angle that is not finite or beyond 1e8 turns (about 6e8 radians), well past
+ *         the point where a float carries any fraction of a turn: a direction derived from it then
+ *         stays defined instead of freezing or going NaN.
+ */
+[[nodiscard]] core::f32 wrapAngle(core::f32 radians) noexcept;
 
 /**
  * @brief Sine of any angle, without libm, correct over the whole circle.
  *
  * Exposed because the camera is not the only thing that needs it and a second copy would be a
  * second chance to leave out the reduction.
+ *
+ * @return The sine of @ref wrapAngle(@p radians), to about two parts in ten thousand.
  */
 [[nodiscard]] core::f32 wrappedSine(core::f32 radians) noexcept;
 
-/// @copydoc wrappedSine
+/// @brief Cosine of any angle, without libm, with the accuracy of @ref wrappedSine.
 [[nodiscard]] core::f32 wrappedCosine(core::f32 radians) noexcept;
 
 /**
@@ -105,18 +122,19 @@ public:
  * first real renders came out in rectangular patches; the level of detail was blamed twice, the
  * brick-skip jump once, and a false gradient at unresident neighbours once. Each was a real defect
  * and none was the cause. A view that paints the intermediate quantity settles in one frame what a
- * day of reasoning did not.
+ * day of reasoning did not: the shading term alone came out as large grey rectangles, which is
+ * what finally pointed at the gradient stencil.
  */
 enum class DebugView : core::u8 {
     Off = 0,           ///< The picture.
-    Level,             ///< Which pyramid level answered, as a colour ramp.
+    Level,             ///< Which pyramid level answered, as a grey ramp over every possible level.
     GradientMagnitude, ///< How strong the local gradient is at the first sample that paints.
     Normal,            ///< The surface normal as colour: x, y, z into red, green, blue.
     Shade,             ///< The lighting term alone.
     StepCount,         ///< How many samples the ray took.
 };
 
-/// Traced surfaces one frame can composite. Two is what a comparison needs; more is for later.
+/// Traced surfaces one frame can composite. A comparison needs two; the other two are headroom.
 inline constexpr core::u32 kMaxSurfaceLayers = 4u;
 
 /**
@@ -169,10 +187,8 @@ struct SurfaceLayer final {
      * that does not invent a registration.
      *
      * @warning Everything the volume overlay promises holds here too: null by default, and
-     * @ref inkConfidence multiplies the tint rather than sitting in a caption. A model can be
-     * confidently wrong in a way no inspection of its output reveals -- this corpus established
-     * that with a negative witness -- so a viewer that painted a prediction as solidly as the scan
-     * would be an instrument that lies.
+     * @ref inkConfidence multiplies the tint rather than sitting in a caption.
+     * @see MarchParams::overlay
      */
     const core::u8 *ink{nullptr};
     core::u32 inkWidth{0};
@@ -242,8 +258,10 @@ struct MarchParams final {
      * @warning **One is too small on real data, and the failure looks like faceting rather than
      * like noise.** A byte sample with low local contrast gives a nearest-neighbour difference of
      * 0, 1 or 2 over one sample, so the normal lands on a handful of directions and the picture
-     * comes out in flat polygons. Two samples, interpolated, lifts the difference clear of that
-     * floor without smoothing away the sheet it is supposed to be lighting.
+     * comes out in flat polygons. Two lifts the difference, taken over four samples, clear of
+     * that floor without smoothing away the sheet it is supposed to be lighting -- and it is what
+     * lets the six probes stay NEAREST samples: interpolating them made each one eight scattered
+     * reads, in the costliest part of a frame (@see shadingCutoff).
      */
     core::f32 gradientSpread{2.0f};
 
@@ -260,15 +278,16 @@ struct MarchParams final {
 
     /**
      * Leave an occupancy cell in one comparison when nothing in it can paint.
+     * @see BrickView::occupancy for why the cells, and not the bricks, carry the medium.
      *
-     * @warning **The cell test is exact; the frame is not bit-identical, and both halves of that
-     * matter.** A cell is skipped only when its HIGHEST sample cannot reach the visible band, so
-     * no visible matter is ever stepped over. But a jump lands the ray on a different phase of the
-     * step lattice, so where it re-enters matter it starts a fraction of a step along the ramp:
-     * measured at **at most ten levels out of 255** against a 3.4x cut in samples. Snapping jumps
-     * to the lattice and counting steps as integers both narrowed that and neither closed it.
-     * On by default because the trade is good and the difference is small; switchable because a
-     * tool whose job is a reproducible measurement should be able to decline it.
+     * @warning **Exact for nearest samples, not for trilinear ones.** A cell is skipped only when
+     * its HIGHEST sample cannot reach the visible band, and with nearest sampling the frame is
+     * bit-identical with or without the skip. A trilinear point near a cell's face interpolates
+     * toward the next cell, so a skipped cell can still hold points that would have painted a
+     * little: measured at **at most ten levels out of 255** against a 3.4x cut in samples. It is
+     * not the step phase, as was once thought: every hop lands on the step grid. On by default
+     * because the trade is good and the difference is small; switchable because a tool whose job
+     * is a reproducible measurement should be able to decline it.
      */
     bool skipEmptyCells{true};
 
@@ -337,41 +356,6 @@ struct MarchParams final {
      * prediction. Parallel to @ref surfaces.
      */
     const SurfaceTexture *surfaceTexture{nullptr};
-
-    /**
-     * Per-pixel depth of a traced surface, in metres along the ray, or null for none.
-     *
-     * @warning **A traced surface is an INTRUSION and must read as one.** Whether it was walked by
-     * this tool or loaded from somebody's file, it is an inference about where a sheet goes, and a
-     * reader has to tell it from the samples at a glance -- which is why it gets its own colour,
-     * and why @ref surfaceOpacity is allowed to be well under one. A surface you can see through
-     * is a surface you can check against what is behind it; an opaque one is a claim that hides
-     * its own evidence.
-     */
-    const core::f32 *surfaceDepth{nullptr};
-
-    /// Per-pixel |N . V| of that surface, for shading it. Must match @ref surfaceDepth in size.
-    const core::f32 *surfaceFacing{nullptr};
-
-    core::f32 surfaceRed{0.35f};
-    core::f32 surfaceGreen{0.85f};
-    core::f32 surfaceBlue{1.00f};
-
-    /// How solidly the surface paints, in [0,1]. Under one on purpose; see @ref surfaceDepth.
-    core::f32 surfaceOpacity{0.55f};
-
-    /**
-     * Draw the surface through whatever is in front of it.
-     *
-     * @warning **This deliberately breaks the property that makes the surface checkable, so it is
-     * off by default and it is named for what it does.** Composited honestly, a traced sheet is
-     * occluded by the matter between it and the eye -- which is correct, and which inside a dense
-     * scroll means you often cannot see it at all. An operator judging whether a trace follows a
-     * real sheet needs to see it anyway; that is a legitimate thing to want and a dishonest thing
-     * to make the default, because a picture where an inference is never hidden by the evidence is
-     * a picture that cannot disagree with it.
-     */
-    bool surfaceThroughMatter{false};
 };
 
 /**
@@ -403,7 +387,7 @@ struct MarchReport final {
  *                  passes through, counted in @ref MarchReport::missingBricks.
  * @param geometry  Extent and scale of the subject.
  * @param profile   Measured densities, used to rescale the curve per level.
- * @param transfer  The level-0 curve. Coarser levels are derived from it, per ray, per level.
+ * @param transfer  The level-0 curve. Coarser levels are derived from it, once per call.
  * @param eye       Camera.
  * @param params    Marching parameters.
  * @param pixels    Destination, @p width * @p height entries, 0xAARRGGBB.

@@ -13,8 +13,9 @@ namespace lpl::voxel {
 
 namespace {
 
-/// Mixes a key into a slot. Rotating between the three axes so that a plane of bricks -- which is
-/// what a resident set mostly is -- does not collapse onto a handful of slots.
+/// Mixes a key into a slot: FNV-1a-style over the four fields, with an xorshift after each one so that a
+/// plane of bricks -- which is what a resident set mostly is -- does not collapse onto a handful of
+/// slots.
 [[nodiscard]] core::u32 hashKey(const BrickKey &key) noexcept
 {
     core::u32 h = 2166136261u;
@@ -31,18 +32,23 @@ namespace {
 
 } // namespace
 
-void BrickMosaic::recomputeCoarsest() noexcept
+void BrickMosaic::recomputeLevelSummary() noexcept
 {
-    core::u32 coarsest = 0u;
     core::u32 mask = 0u;
     for (core::u32 i = 0u; i < _count; ++i)
-    {
-        if (_bricks[i].key.level > coarsest)
-            coarsest = _bricks[i].key.level;
         mask |= 1u << _bricks[i].key.level;
-    }
-    _coarsest = coarsest;
     _levelMask = mask;
+    _finest = 0u;
+    _coarsest = 0u;
+    if (mask == 0u)
+        return;
+    while ((mask & (1u << _finest)) == 0u)
+        ++_finest;
+    for (core::u32 level = _finest; level < kMaxPyramidLevels; ++level)
+    {
+        if ((mask & (1u << level)) != 0u)
+            _coarsest = level;
+    }
 }
 
 void BrickMosaic::reindex() noexcept
@@ -93,16 +99,13 @@ bool BrickMosaic::insert(const BrickView &brick) noexcept
         if (_bricks[i].key == brick.key)
         {
             _bricks[i] = brick;
-            recomputeCoarsest();
             reindex();
             return true;
         }
     }
 
     _bricks[_count++] = brick;
-    if (brick.key.level > _coarsest)
-        _coarsest = brick.key.level;
-    _levelMask |= 1u << brick.key.level;
+    recomputeLevelSummary();
     reindex();
     return true;
 }
@@ -115,7 +118,7 @@ bool BrickMosaic::remove(const BrickKey &key) noexcept
             continue;
         _bricks[i] = _bricks[_count - 1u];
         --_count;
-        recomputeCoarsest();
+        recomputeLevelSummary();
         reindex();
         return true;
     }
@@ -136,21 +139,11 @@ const BrickView *BrickMosaic::findCoarserThan(core::u32 level, core::i64 bz, cor
     return nullptr;
 }
 
-bool BrickMosaic::contains(const BrickKey &key) const noexcept
-{
-    for (core::u32 i = 0u; i < _count; ++i)
-    {
-        if (_bricks[i].key == key)
-            return true;
-    }
-    return false;
-}
+bool BrickMosaic::contains(const BrickKey &key) const noexcept { return lookup(key) != nullptr; }
 
 const BrickView *BrickMosaic::find(core::i64 bz, core::i64 by, core::i64 bx) const noexcept
 {
-    // Finest first, and the first hit wins: levels overlap on purpose -- that is what lets a fine
-    // brick be evicted without leaving a hole -- so asking in order of level is what makes the
-    // answer the best detail available rather than whichever brick arrived first.
+    // Finest first: the header of Mosaic.hpp says why that order is the contract.
     for (core::u32 level = 0u; level < kMaxPyramidLevels; ++level)
     {
         if ((_levelMask & (1u << level)) == 0u)

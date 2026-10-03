@@ -55,7 +55,7 @@ struct VolumeGeometry final {
     [[nodiscard]] constexpr bool valid() const noexcept
     {
         return samples[0] > 0 && samples[1] > 0 && samples[2] > 0 && levels > 0u && levels <= kMaxPyramidLevels &&
-               voxelMicrometres > 0.0f;
+               voxelMicrometres > 0.0f && metresPerMicrometre > 0.0f;
     }
 
     /// @return Edge of one level-0 sample, in walked metres.
@@ -150,28 +150,16 @@ struct DensityProfile final {
                                             core::f32 windowDeviations = 1.0f) noexcept;
 
 /**
- * @brief Fills @ref DensityProfile::spreadRatio from bricks covering the same region at each level.
- *
- * @warning The bricks must cover the **same physical region**, cropped, or the measurement is not
- * of downsampling at all. A whole level-5 brick spans 32 mm and leaves the scroll, so comparing
- * whole bricks reports the emptiness around the object and calls it contrast loss. That mistake
- * was made once here already, and the paired version is what produced the ratios above.
- *
- * @param perLevel  One brick per level, index 0 being level 0. Entries may be invalid: their
- *                  ratio is left at the previous level's, which degrades rather than lies.
- * @param count     Entries in @p perLevel.
- */
-void measureSpread(DensityProfile &profile, const BrickView *perLevel, core::u32 count) noexcept;
-
-/**
  * @brief Fills @ref DensityProfile::spreadRatio from a whole resident set, cropped to one box.
  *
  * @warning **The crop is the entire point, and skipping it produces a confidently wrong number.**
  * A resident set holds a small ring of fine bricks and a large one of coarse bricks, so a coarse
  * level covers far more of the world -- including the emptiness outside the subject. Measure each
  * level over its own bricks and the coarse levels report that emptiness as a collapse in contrast,
- * which is a real effect of something else entirely. That mistake was made once here, on whole
- * bricks, and the cropped version is what produced the ratios this renderer uses.
+ * which is a real effect of something else entirely. That mistake was made once here: an earlier
+ * `measureSpread` compared one WHOLE brick per level, and a whole level-5 brick spans 32 mm and
+ * leaves the scroll. It is gone; the cropped version is what produced the ratios this renderer
+ * uses.
  *
  * @warning **Unmeasured, every ratio is one, and one means "no correction".** That is not a
  * neutral default: it leaves a curve calibrated on the finest level painting the entire histogram

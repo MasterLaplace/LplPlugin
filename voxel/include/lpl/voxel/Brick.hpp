@@ -94,12 +94,17 @@ struct BrickView final {
      * sixteen samples. It costs a kibibyte against a two-mebibyte brick: five hundredths of a per
      * cent.
      *
-     * @warning It is EXACT, not a heuristic: a cell is skipped only when its highest sample is
-     * below the first density the curve paints, so nothing visible is ever stepped over.
+     * @warning It is EXACT on the samples, not a heuristic: a cell is skipped only when its highest
+     * sample is below the first density the curve paints. An interpolated point near the cell's
+     * face can still lean toward the next cell; @see MarchParams::skipEmptyCells for what that
+     * costs.
      */
     const core::u8 *occupancy{nullptr};
 
-    /// @return Highest sample in the cell containing the given LOCAL coordinates.
+    /**
+     * @return Highest sample in the cell containing the given LOCAL coordinates.
+     * @pre @ref occupancy is set, and each coordinate is below @ref kBrickEdge.
+     */
     [[nodiscard]] constexpr core::u8 cellHighest(core::u32 lz, core::u32 ly, core::u32 lx) const noexcept
     {
         const core::u32 cell = ((lz >> kOccupancyShift) * kOccupancyEdge + (ly >> kOccupancyShift)) * kOccupancyEdge +
@@ -109,7 +114,10 @@ struct BrickView final {
 
     [[nodiscard]] constexpr bool valid() const noexcept { return voxels != nullptr; }
 
-    /// @return Sample at local coordinates, which the caller must already have bounded.
+    /**
+     * @return Sample at the given LOCAL coordinates.
+     * @pre @ref valid(), and each coordinate is below @ref kBrickEdge.
+     */
     [[nodiscard]] constexpr core::u8 at(core::u32 lz, core::u32 ly, core::u32 lx) const noexcept
     {
         return voxels[(static_cast<core::usize>(lz) * kBrickEdge + ly) * kBrickEdge + lx];
@@ -144,6 +152,18 @@ void summariseCells(BrickView &brick, core::u8 *out) noexcept;
 }
 
 /**
+ * @brief Lowest level-0 sample a brick covers on one axis.
+ *
+ * @param axis  0 for z, 1 for y, 2 for x: the zarr order of @ref BrickKey.
+ * @pre @p axis < 3; any larger value reads x.
+ */
+[[nodiscard]] constexpr core::i64 brickOriginInBaseSamples(const BrickKey &key, core::u32 axis) noexcept
+{
+    const core::i32 index = axis == 0u ? key.z : (axis == 1u ? key.y : key.x);
+    return static_cast<core::i64>(index) * brickSpanInBaseSamples(key.level);
+}
+
+/**
  * @brief Which brick of @p level contains the level-0 sample at @p base, on one axis.
  *
  * @warning Floor division, not truncation. C++ truncates toward zero, so `-1 / 128` is `0` and the
@@ -152,16 +172,11 @@ void summariseCells(BrickView &brick, core::u8 *out) noexcept;
  */
 [[nodiscard]] constexpr core::i32 brickIndexOfBase(core::i64 base, core::u32 level) noexcept
 {
-    // ⚡ **An arithmetic shift, not a division, and it is not a micro-optimisation.** A brick span
-    // is always a power of two -- 128 << level -- so the shift IS the floor division, exactly, for
-    // negatives included. It matters because this function is the innermost thing in the renderer:
-    // every sample calls it three times and every gradient probe three more, so a frame ran tens
-    // of millions of integer divisions at twenty-odd cycles each. Measured: replacing them cut the
-    // frame by a third on real data, with the picture unchanged to the bit.
-    //
-    // ⚠ It is a shift precisely BECAUSE C++ truncates toward zero and this must floor. `-1 / 128`
-    // is `0` and `-1 >> 7` is `-1`; the brick below the origin has to be -1, or it collides with
-    // the one above it. The old form paid a division and a modulo to get what the shift gives free.
+    // An arithmetic shift rather than a division: a brick span is always a power of two, so the
+    // shift IS the floor division, negatives included, where the old form paid a division and a
+    // modulo. It matters because this is the innermost call of the renderer -- every sample makes
+    // three and every gradient probe three more -- and the shift cut the frame by a third on real
+    // data, with the picture unchanged to the bit.
     return static_cast<core::i32>(base >> (kBrickEdgeShift + level));
 }
 

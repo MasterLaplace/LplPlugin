@@ -52,21 +52,27 @@ struct TransferFunction final {
 
     core::u8 firstVisible{255}; ///< Lowest density whose alpha is non-zero; empty-space skipping reads it.
 
+    core::f32 lowEdge{0.0f};    ///< Density where the ramp this table was built from leaves zero.
+    core::f32 highEdge{255.0f}; ///< Density where that ramp reaches @ref peakAlpha.
+    core::f32 peakAlpha{0.0f};  ///< Opacity per level-0 sample at and above @ref highEdge.
+
     /**
      * @brief The same curve, rescaled for a coarser level.
      *
      * @warning Returns a copy on purpose. A marcher crossing three levels in one ray needs all
      * three at once, and mutating a shared one would make the picture depend on the order the
      * bricks happened to be visited.
+     *
+     * @warning **Only the ramp survives the rescaling.** The coarser curve is rebuilt from
+     * @ref lowEdge, @ref highEdge and @ref peakAlpha with the colours of @ref rampTransfer, so a
+     * table edited by hand keeps its edits at level 0 and loses them at every coarser level whose
+     * spread ratio is under one. A table filled by hand without those three fields loses more:
+     * @ref peakAlpha is zero by default, so at those levels it paints NOTHING.
      */
     [[nodiscard]] TransferFunction forLevel(const DensityProfile &profile, core::u32 level) const noexcept;
 
-    /// @return Whether any density in [@p lowest, @p highest] paints anything at all.
-    [[nodiscard]] constexpr bool anyVisible(core::u8 lowest, core::u8 highest) const noexcept
-    {
-        (void) lowest;
-        return highest >= firstVisible;
-    }
+    /// @return Whether a brick or a cell whose largest sample is @p highest can paint anything.
+    [[nodiscard]] constexpr bool reachesVisible(core::u8 highest) const noexcept { return highest >= firstVisible; }
 };
 
 /**
@@ -92,6 +98,15 @@ struct TransferFunction final {
  * @param opacity  Accumulated opacity wanted after that path, in (0,1).
  */
 [[nodiscard]] core::f32 alphaForOpaqueAfter(core::f32 samples, core::f32 opacity) noexcept;
+
+/**
+ * @brief Fraction of light left after crossing @p samples level-0 samples of opacity @p perSample.
+ *
+ * Exactly (1 - @p perSample)^n over the whole samples, and linear across the fractional remainder.
+ *
+ * @return 1 when @p perSample or @p samples is at most 0, and 0 when @p perSample is at least 1.
+ */
+[[nodiscard]] core::f32 transparencyAfter(core::f32 perSample, core::f32 samples) noexcept;
 
 } // namespace lpl::voxel
 

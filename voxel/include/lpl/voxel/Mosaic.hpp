@@ -43,6 +43,7 @@ public:
     void clear() noexcept
     {
         _count = 0u;
+        _finest = 0u;
         _coarsest = 0u;
         _levelMask = 0u;
         for (core::u32 i = 0u; i < kSlots; ++i)
@@ -71,9 +72,8 @@ public:
      * @brief Finest resident brick strictly coarser than @p level covering the point.
      *
      * The other half of the overlap: @ref find answers with the best detail available, and this
-     * answers with what is behind it. A level of detail that switches without one is a visible
-     * seam -- the boundary of the fine ring is a cube, and a cube-shaped brightness step in the
-     * middle of a scan reads as structure that is not there.
+     * answers with what is behind it, which is what a level of detail fades into.
+     * @see MarchParams::levelBlendSamples
      */
     [[nodiscard]] const BrickView *findCoarserThan(core::u32 level, core::i64 bz, core::i64 by,
                                                    core::i64 bx) const noexcept;
@@ -83,33 +83,27 @@ public:
 
     [[nodiscard]] core::u32 count() const noexcept { return _count; }
 
-    /**
-     * @brief Coarsest level currently listed.
-     *
-     * A ray that finds nothing at a point has to advance somehow, and advancing by the finest
-     * brick span in a mostly-empty subject costs thousands of wasted lookups. The coarsest
-     * resident level is the largest step that cannot skip over a brick the mosaic actually holds.
-     */
+    /// @brief Coarsest level currently listed, or 0 when nothing is.
     [[nodiscard]] core::u32 coarsestLevel() const noexcept { return _coarsest; }
 
     /// Bit per level that has at least one resident brick. A lookup skips the empty ones.
     [[nodiscard]] core::u32 levelMask() const noexcept { return _levelMask; }
 
     /**
-     * @brief Finest level with any resident brick.
+     * @brief Finest level with any resident brick, or 0 when nothing is listed.
      *
      * A brick at this level cannot be shadowed by a finer one, which is what makes it safe to
      * reuse as a hint without asking the index again.
+     *
+     * @warning **This is also the largest hop a ray may take without looking, and the coarsest
+     * level is not.** Brick grids nest by powers of two, so the finest-level box around a point is
+     * either inside a resident brick or overlaps none, and every point of it is answered by the
+     * same brick. A hop sized by anything coarser can leap over a finer resident brick, which then
+     * vanishes from the picture.
      */
-    [[nodiscard]] core::u32 finestLevel() const noexcept
-    {
-        for (core::u32 level = 0u; level < kMaxPyramidLevels; ++level)
-        {
-            if ((_levelMask & (1u << level)) != 0u)
-                return level;
-        }
-        return 0u;
-    }
+    [[nodiscard]] core::u32 finestLevel() const noexcept { return _finest; }
+
+    /// @pre @p i < @ref count().
     [[nodiscard]] const BrickView &at(core::u32 i) const noexcept { return _bricks[i]; }
 
 private:
@@ -128,13 +122,14 @@ private:
      */
     static constexpr core::u32 kSlots = 2048u; ///< Power of two, comfortably over kMaxResidentBricks.
 
-    void recomputeCoarsest() noexcept;
+    void recomputeLevelSummary() noexcept;
     void reindex() noexcept;
     [[nodiscard]] const BrickView *lookup(const BrickKey &key) const noexcept;
 
     BrickView _bricks[kMaxResidentBricks]{};
     core::u16 _index[kSlots]{}; ///< Slot + 1, so zero means empty.
     core::u32 _count{0u};
+    core::u32 _finest{0u};
     core::u32 _coarsest{0u};
     core::u32 _levelMask{0u};
 };

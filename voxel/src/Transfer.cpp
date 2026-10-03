@@ -19,6 +19,9 @@ void fill(TransferFunction &tf, core::f32 lowEdge, core::f32 highEdge, core::f32
 {
     if (highEdge <= lowEdge)
         highEdge = lowEdge + 1.0f;
+    tf.lowEdge = lowEdge;
+    tf.highEdge = highEdge;
+    tf.peakAlpha = peakAlpha;
 
     tf.firstVisible = 255u;
     for (core::u32 v = 0u; v < 256u; ++v)
@@ -51,6 +54,28 @@ TransferFunction rampTransfer(core::u8 floorSample, core::u8 sheetSample, core::
     return tf;
 }
 
+core::f32 transparencyAfter(core::f32 perSample, core::f32 samples) noexcept
+{
+    if (perSample <= 0.0f || samples <= 0.0f)
+        return 1.0f;
+    if (perSample >= 1.0f)
+        return 0.0f;
+
+    // Repeated squaring on the whole samples. An exp/log pair would be one line and would put a
+    // transcendental on the hot path of every sample, which this tree does not spend.
+    const core::f32 keep = 1.0f - perSample;
+    core::f32 left = 1.0f;
+    core::f32 power = keep;
+    for (core::u32 whole = static_cast<core::u32>(samples); whole != 0u; whole >>= 1u)
+    {
+        if ((whole & 1u) != 0u)
+            left *= power;
+        power *= power;
+    }
+    const core::f32 fraction = samples - static_cast<core::f32>(static_cast<core::u32>(samples));
+    return left * (1.0f - fraction * (1.0f - keep));
+}
+
 core::f32 alphaForOpaqueAfter(core::f32 samples, core::f32 opacity) noexcept
 {
     if (!(samples > 0.0f))
@@ -67,20 +92,7 @@ core::f32 alphaForOpaqueAfter(core::f32 samples, core::f32 opacity) noexcept
     for (int i = 0; i < 40; ++i)
     {
         const core::f32 mid = 0.5f * (lo + hi);
-        core::f32 keep = 1.0f;
-        const core::f32 k = 1.0f - mid;
-        core::u32 whole = static_cast<core::u32>(samples);
-        core::f32 base = k;
-        while (whole != 0u)
-        {
-            if ((whole & 1u) != 0u)
-                keep *= base;
-            base *= base;
-            whole >>= 1u;
-        }
-        const core::f32 frac = samples - static_cast<core::f32>(static_cast<core::u32>(samples));
-        keep *= 1.0f - frac * (1.0f - k);
-        if (1.0f - keep < opacity)
+        if (1.0f - transparencyAfter(mid, samples) < opacity)
             lo = mid;
         else
             hi = mid;
@@ -97,23 +109,12 @@ TransferFunction TransferFunction::forLevel(const DensityProfile &profile, core:
     if (!(ratio > 0.0f) || ratio >= 1.0f)
         return *this;
 
-    // Recover the level-0 window from the table, then squeeze it toward the mean by the measured
-    // ratio. Squeezing the window is what keeps the same matter visible: the samples have moved
-    // toward the mean, so the window has to move with them.
-    core::f32 low = static_cast<core::f32>(firstVisible);
-    core::f32 high = 255.0f;
-    for (core::u32 v = 255u; v > 0u; --v)
-    {
-        if (alpha[v] < alpha[255] * 0.999f)
-        {
-            high = static_cast<core::f32>(v + 1u);
-            break;
-        }
-    }
-
+    // Squeeze the window toward the mean by the measured ratio: the samples have moved toward the
+    // mean, so the window has to move with them to keep the same matter visible. The edges are the
+    // stored ones.
     const core::f32 m = profile.mean;
     TransferFunction scaled{};
-    fill(scaled, m + (low - m) * ratio, m + (high - m) * ratio, alpha[255]);
+    fill(scaled, m + (lowEdge - m) * ratio, m + (highEdge - m) * ratio, peakAlpha);
     return scaled;
 }
 

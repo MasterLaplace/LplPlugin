@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -126,6 +127,21 @@ voxel::BrickView viewOf(const std::vector<u8> &bytes, voxel::BrickKey key)
     return v;
 }
 
+/// Field of view of the one-pixel frames below. Their single ray goes straight ahead whatever it is.
+constexpr f32 kPencil = 0.01f;
+
+/// A camera looking down volume Z from (x, y, z), given in level-0 samples.
+voxel::Eye eyeAlongZ(f32 metresPerSample, f32 x, f32 y, f32 z, f32 fieldOfView)
+{
+    voxel::Eye eye{};
+    eye.position = {x * metresPerSample, y * metresPerSample, z * metresPerSample};
+    eye.forward = {0.0f, 0.0f, 1.0f};
+    eye.right = {1.0f, 0.0f, 0.0f};
+    eye.up = {0.0f, 1.0f, 0.0f};
+    eye.horizontalFieldOfView = fieldOfView;
+    return eye;
+}
+
 /// Mean luminance of the non-background part of a frame, in [0,1].
 f32 meanLuminance(const std::vector<u32> &pixels, u32 background)
 {
@@ -139,6 +155,32 @@ f32 meanLuminance(const std::vector<u32> &pixels, u32 background)
         ++n;
     }
     return n == 0 ? 0.0f : static_cast<f32>(acc / static_cast<double>(n));
+}
+
+/// Red channel of a 0xAARRGGBB pixel, in [0,1]. The ramp's red rises fastest with density.
+f32 redLevel(u32 pixel) { return static_cast<f32>((pixel >> 16) & 0xFFu) / 255.0f; }
+
+/// Largest change between two consecutive values of @p readingAt(0 .. count-1).
+template <typename Reading> f32 worstAdjacentChange(int count, Reading readingAt)
+{
+    f32 worst = 0.0f;
+    f32 previous = readingAt(0);
+    for (int i = 1; i < count; ++i)
+    {
+        const f32 current = readingAt(i);
+        const f32 change = current > previous ? current - previous : previous - current;
+        if (change > worst)
+            worst = change;
+        previous = current;
+    }
+    return worst;
+}
+
+/// Whether @p key is the brick, at its own level, that holds the level-0 sample @p eye.
+bool isInEyeColumn(const voxel::BrickKey &key, const i64 eye[3])
+{
+    return voxel::brickIndexOfBase(eye[0], key.level) == key.z && voxel::brickIndexOfBase(eye[1], key.level) == key.y &&
+           voxel::brickIndexOfBase(eye[2], key.level) == key.x;
 }
 
 } // namespace
@@ -181,6 +223,7 @@ int main()
         check(m.insert(viewOf(fine, voxel::BrickKey{0u, 0, 0, 0})), "the fine brick is listed");
         checkEq(m.count(), 2, "both are resident");
         checkEq(m.coarsestLevel(), 3, "the mosaic knows its coarsest level");
+        checkEq(m.finestLevel(), 0, "and its finest, which bounds every hop a ray takes");
 
         const voxel::BrickView *hit = m.find(4, 4, 4);
         check(hit != nullptr, "a covered point finds a brick");
@@ -194,6 +237,7 @@ int main()
 
         check(m.remove(voxel::BrickKey{0u, 0, 0, 0}), "a listed brick can be unlisted");
         check(!m.contains(voxel::BrickKey{0u, 0, 0, 0}), "and is then absent");
+        checkEq(m.finestLevel(), 3, "evicting the finest brick moves the finest level up");
         hit = m.find(4, 4, 4);
         check(hit != nullptr && hit->key.level == 3u, "eviction of the fine brick leaves the coarse one, not a hole");
         checkEq(m.count(), 1, "the count follows the removal");
@@ -225,12 +269,7 @@ int main()
         // That is what makes a truncated plan still cover everywhere.
         bool firstShellIsRadiusZero = true;
         for (u32 i = 0u; i < 4u && i < n; ++i)
-        {
-            const voxel::BrickKey &k = plan[i];
-            if (voxel::brickIndexOfBase(eye[0], k.level) != k.z || voxel::brickIndexOfBase(eye[1], k.level) != k.y ||
-                voxel::brickIndexOfBase(eye[2], k.level) != k.x)
-                firstShellIsRadiusZero = false;
-        }
+            firstShellIsRadiusZero = firstShellIsRadiusZero && isInEyeColumn(plan[i], eye);
         check(firstShellIsRadiusZero, "the plan opens with the eye's own brick at every level");
 
         // A budget smaller than the plan must lose the far shell, never the near one.
@@ -239,11 +278,7 @@ int main()
         checkEq(tight, 4, "a tight budget is respected exactly");
         bool tightIsAllNear = true;
         for (u32 i = 0u; i < tight; ++i)
-        {
-            const voxel::BrickKey &k = plan[i];
-            if (voxel::brickIndexOfBase(eye[0], k.level) != k.z)
-                tightIsAllNear = false;
-        }
+            tightIsAllNear = tightIsAllNear && isInEyeColumn(plan[i], eye);
         check(tightIsAllNear, "a truncated plan keeps the ground under the eye and drops the horizon");
 
         // Nothing outside the subject is ever requested.
@@ -298,8 +333,8 @@ int main()
         check(base.alpha[170] > base.alpha[150], "and rises through the middle of the band");
         check(base.firstVisible > profile.floorSample && base.firstVisible < profile.sheetSample,
               "the first visible density sits inside the band");
-        check(!base.anyVisible(0u, 100u), "a brick that never reaches the band is skippable");
-        check(base.anyVisible(0u, 255u), "a brick that reaches it is not");
+        check(!base.reachesVisible(100u), "a brick that never reaches the band is skippable");
+        check(base.reachesVisible(255u), "a brick that reaches it is not");
 
         const voxel::TransferFunction coarse = base.forLevel(profile, 4u);
         // Squeezed toward the mean: the samples moved there, so the window has to follow. Without
@@ -308,6 +343,13 @@ int main()
               "a coarser level's window starts higher, following the collapsing spread");
         check(coarse.firstVisible < static_cast<u8>(profile.mean + 30.0f),
               "and stays near the mean rather than running away");
+        // The level-0 window is [140, 200]. Squeezed toward 147 by 0.485 at level 4 it opens at
+        // 143.6, and by 0.383 at level 5 it closes at 167.3. Recovered from the table rather than
+        // stored, it had shrunk to [141, 199] first: it opened at 144.1 and closed at 166.9, one
+        // density off at each end.
+        check(coarse.alpha[143] == 0.0f && coarse.alpha[144] > 0.0f, "the rescaled window opens where it should");
+        const voxel::TransferFunction coarser = base.forLevel(profile, 5u);
+        check(coarser.alpha[167] < coarser.alpha[168], "and closes where it should");
     }
 
     // ── the march ──────────────────────────────────────────────────────────
@@ -418,38 +460,38 @@ int main()
 
         voxel::VolumeGeometry one = geometry;
         one.samples[0] = 128;
-        const f32 m = one.metresPerSample();
-        voxel::Eye pencil{};
-        pencil.position = {64.0f * m, 64.0f * m, -4.0f * m};
-        pencil.forward = {0.0f, 0.0f, 1.0f};
-        pencil.right = {1.0f, 0.0f, 0.0f};
-        pencil.up = {0.0f, 1.0f, 0.0f};
+        const voxel::Eye wide =
+            eyeAlongZ(one.metresPerSample(), 64.0f, 64.0f, -4.0f, voxel::Eye{}.horizontalFieldOfView);
 
         std::vector<u32> a(frame.size(), 0u);
         voxel::BrickMosaic without;
         without.insert(plain);
         const voxel::MarchReport slow =
-            voxel::march(without, one, profile, base, pencil, params, a.data(), kW, kH, 0u, kH);
+            voxel::march(without, one, profile, base, wide, params, a.data(), kW, kH, 0u, kH);
 
         std::vector<u32> b(frame.size(), 0u);
         voxel::BrickMosaic with;
         with.insert(celled);
-        const voxel::MarchReport fast =
-            voxel::march(with, one, profile, base, pencil, params, b.data(), kW, kH, 0u, kH);
+        const voxel::MarchReport fast = voxel::march(with, one, profile, base, wide, params, b.data(), kW, kH, 0u, kH);
 
         std::printf("  occupancy: %llu samples without, %llu with, %llu cells skipped\n",
                     static_cast<unsigned long long>(slow.steps), static_cast<unsigned long long>(fast.steps),
                     static_cast<unsigned long long>(fast.skippedCells));
         check(fast.skippedCells > 0, "cells in the medium are skipped");
         check(fast.steps < slow.steps * 3u / 4u, "and skipping them costs materially fewer samples");
-        // ⚠ **What the skip actually promises, measured rather than assumed.** The cell test is
-        // exact -- a cell is left only when its HIGHEST sample cannot reach the visible band, so
-        // no visible matter is ever stepped over. The FRAME is nonetheless not bit-identical, and
-        // chasing that was a mistake worth recording: a jump lands the ray on a different phase of
-        // the step lattice, so where it re-enters matter it starts a fraction of a step earlier or
-        // later along the ramp. Snapping jumps to the lattice and counting steps as integers both
-        // narrowed it and neither closed it. What matters is the size of the difference, so that
-        // is what is checked.
+        // With nearest samples the skip changes nothing at all.
+        voxel::MarchParams nearest = params;
+        nearest.trilinear = false;
+        std::vector<u32> nearestWithout(frame.size(), 0u);
+        std::vector<u32> nearestWith(frame.size(), 0u);
+        voxel::march(without, one, profile, base, wide, nearest, nearestWithout.data(), kW, kH, 0u, kH);
+        voxel::march(with, one, profile, base, wide, nearest, nearestWith.data(), kW, kH, 0u, kH);
+        checkEq(voxel::foldFrame(nearestWith.data(), static_cast<u32>(nearestWith.size())),
+                voxel::foldFrame(nearestWithout.data(), static_cast<u32>(nearestWithout.size())),
+                "with nearest samples, skipping cells leaves the frame identical");
+
+        // Trilinear points lean across a cell's face (MarchParams::skipEmptyCells), so what is
+        // checked there is the size of the difference.
         u32 worst = 0u;
         std::size_t differing = 0;
         for (std::size_t i = 0; i < a.size(); ++i)
@@ -467,9 +509,9 @@ int main()
         }
         std::printf("  occupancy: worst channel difference %u of 255, %zu channels of %zu differ\n", worst, differing,
                     a.size() * 3u);
-        // ⚠ Ten of 255 is the measured bound, not a hoped-for one. It buys a 3.4x cut in samples;
-        // whether that trade is acceptable is the caller's call, which is why the skip can be
-        // switched off and why the count is printed beside every rendered frame.
+        // Ten of 255 is what was measured, and twelve leaves room for a change of rounding alone. It
+        // buys a 3.4x cut in samples; whether that trade is acceptable is the caller's call, which
+        // is why the skip can be switched off and why the count is printed beside every frame.
         check(worst <= 12u, "and the picture differs by at most a few per cent of a channel");
         check(fast.steps * 3u < slow.steps, "for a threefold cut in samples");
     }
@@ -651,11 +693,7 @@ int main()
     }
 
     // ── skipping a brick must leave the ray AT ITS EXIT, not a span further on ──
-    // A ray usually enters a brick partway through. Advancing by a whole span from wherever it
-    // happens to be lands inside the NEXT brick and skips whatever was visible in between -- and
-    // because the amount skipped depends on where the ray crossed, the error differs per brick and
-    // the picture comes out in rectangular patches. That is what the first real renders showed,
-    // and reading the code had blamed the level of detail for it.
+    // samplesToFinestBoxExit in Raymarch.cpp says what a blind span jump looked like.
     {
         const auto empty = makeFlatBrick(kMedium); // Skippable: nothing in it can paint.
         const auto slab = makeEntrySlabBrick(8u);  // Visible, but only in its first 8 samples.
@@ -668,29 +706,92 @@ int main()
 
         // Enter the empty brick well past its face: a blind span jump from here overshoots the
         // slab entirely.
-        const f32 m = two.metresPerSample();
-        voxel::Eye pencil{};
-        pencil.position = {64.0f * m, 64.0f * m, 50.0f * m};
-        pencil.forward = {0.0f, 0.0f, 1.0f};
-        pencil.right = {1.0f, 0.0f, 0.0f};
-        pencil.up = {0.0f, 1.0f, 0.0f};
-        pencil.horizontalFieldOfView = 0.01f;
-
+        const voxel::Eye pencil = eyeAlongZ(two.metresPerSample(), 64.0f, 64.0f, 50.0f, kPencil);
         u32 pixel = 0u;
         const voxel::MarchReport r = voxel::march(corridor, two, profile, base, pencil, params, &pixel, 1u, 1u, 0u, 1u);
-        const f32 luma = static_cast<f32>((pixel >> 16) & 0xFFu) / 255.0f;
-        std::printf("  skip-then-hit: %llu bricks skipped, luma %.3f\n",
-                    static_cast<unsigned long long>(r.skippedBricks), static_cast<double>(luma));
+        std::printf("  skip-then-hit: %llu bricks skipped, red %.3f\n",
+                    static_cast<unsigned long long>(r.skippedBricks), static_cast<double>(redLevel(pixel)));
         check(r.skippedBricks >= 1u, "the empty brick really is skipped");
-        check(luma > 0.4f, "and the slab just past it is still hit");
+        check(redLevel(pixel) > 0.4f, "and the slab just past it is still hit");
+    }
+
+    // ── no skip ever leaps over a finer resident brick ─────────────────────
+    // Levels overlap, so the brick answering at a point can be coarser than one a few samples
+    // further on. A hop sized by the answering brick, or by the coarsest resident level, lands past
+    // that finer brick and it vanishes from the picture: here, a bright brick that should stop the
+    // ray outright.
+    {
+        voxel::VolumeGeometry deep = geometry;
+        deep.samples[0] = 2048;
+        deep.samples[1] = 2048;
+        deep.samples[2] = 2048;
+        deep.levels = 5u;
+        const voxel::Eye pencil = eyeAlongZ(deep.metresPerSample(), 64.0f, 64.0f, -10.0f, kPencil);
+        const auto saturatedRays = [&](const voxel::BrickMosaic &resident) {
+            u32 pixel = 0u;
+            return static_cast<long long>(
+                voxel::march(resident, deep, profile, base, pencil, params, &pixel, 1u, 1u, 0u, 1u).saturated);
+        };
+
+        const auto bright = makeFlatBrick(kSheet);
+        const auto dark = makeFlatBrick(100u);
+
+        voxel::BrickMosaic insideDarkBrick;
+        insideDarkBrick.insert(viewOf(dark, voxel::BrickKey{2u, 0, 0, 0}));
+        insideDarkBrick.insert(viewOf(bright, voxel::BrickKey{0u, 2, 0, 0}));
+        checkEq(saturatedRays(insideDarkBrick), 1, "skipping a dark coarse brick stops at the fine brick inside it");
+
+        voxel::BrickMosaic pastAHole;
+        pastAHole.insert(viewOf(bright, voxel::BrickKey{0u, 1, 0, 0}));
+        pastAHole.insert(viewOf(bright, voxel::BrickKey{3u, 1, 1, 1}));
+        checkEq(saturatedRays(pastAHole), 1, "crossing a hole stops at the fine brick beyond it");
+
+        std::vector<u8> darkButVisibleElsewhere = dark;
+        for (u32 lz = 0u; lz < voxel::kBrickEdge; ++lz)
+            for (u32 ly = 0u; ly < voxel::kBrickEdge; ++ly)
+                for (u32 lx = 120u; lx < voxel::kBrickEdge; ++lx)
+                    darkButVisibleElsewhere[(static_cast<std::size_t>(lz) * voxel::kBrickEdge + ly) *
+                                                voxel::kBrickEdge +
+                                            lx] = kSheet;
+        std::vector<u8> cells(voxel::kOccupancyBytes);
+        voxel::BrickView celled = viewOf(darkButVisibleElsewhere, voxel::BrickKey{4u, 0, 0, 0});
+        voxel::summariseCells(celled, cells.data());
+        voxel::BrickMosaic insideDarkCell;
+        insideDarkCell.insert(celled);
+        insideDarkCell.insert(viewOf(bright, voxel::BrickKey{0u, 1, 0, 0}));
+        checkEq(saturatedRays(insideDarkCell), 1, "skipping a dark coarse cell stops at the fine brick inside it");
+
+        // The same hops, from a ray that sits exactly on the low face of its box and leaves through
+        // it: the exit is right there, so the hop is one step, never a whole box.
+        voxel::VolumeGeometry exact = geometry;
+        exact.samples[0] = 512;
+        exact.samples[1] = 512;
+        exact.samples[2] = 512;
+        exact.levels = 3u;
+        exact.voxelMicrometres = 1.0f;
+        exact.metresPerMicrometre = 1.0e6f;
+        check(exact.metresPerSample() == 1.0f, "one sample is exactly one metre, so a brick face is an exact position");
+        voxel::Eye down = eyeAlongZ(1.0f, 64.0f, 64.0f, 256.0f, kPencil);
+        down.forward = {0.0f, 0.0f, -1.0f};
+        down.right = {-1.0f, 0.0f, 0.0f};
+        const auto saturatedGoingDown = [&](const voxel::BrickMosaic &resident) {
+            u32 pixel = 0u;
+            return static_cast<long long>(
+                voxel::march(resident, exact, profile, base, down, params, &pixel, 1u, 1u, 0u, 1u).saturated);
+        };
+
+        voxel::BrickMosaic belowAHole;
+        belowAHole.insert(viewOf(bright, voxel::BrickKey{0u, 1, 0, 0}));
+        checkEq(saturatedGoingDown(belowAHole), 1, "leaving a hole through the face it sits on stops right below it");
+
+        voxel::BrickMosaic belowADarkBrick;
+        belowADarkBrick.insert(viewOf(dark, voxel::BrickKey{2u, 0, 0, 0}));
+        belowADarkBrick.insert(viewOf(bright, voxel::BrickKey{0u, 1, 0, 0}));
+        checkEq(saturatedGoingDown(belowADarkBrick), 1, "and so does leaving a dark coarse brick through that face");
     }
 
     // ── the brick face must not be visible ─────────────────────────────────
-    // Clamping the trilinear cell to a brick's edge leaves a one-sample seam on every face, which
-    // sounds harmless and is not: put the eye exactly on such a plane -- any coordinate that is a
-    // multiple of the brick edge -- and every ray along it runs down the seam, painting a hard
-    // band across the whole picture. That is what a real render showed, and it survived four other
-    // fixes before an eye moved half a brick made it vanish.
+    // crossBrickSample in Raymarch.cpp says what the one-sample seam of a clamped cell looked like.
     {
         // Two bricks side by side along Z with a smooth ramp running through both, so a correct
         // sample crossing the face sees a straight line and a clamped one sees a step.
@@ -717,50 +818,28 @@ int main()
 
         voxel::VolumeGeometry two = geometry;
         two.samples[0] = 256;
-        const f32 m = two.metresPerSample();
 
-        // A pencil ray straight down Z, from just inside the first brick: it crosses the face at
-        // z = 128 where the ramp continues smoothly.
-        voxel::MarchParams p = params;
-        p.shading = 0.0f;
-        p.boundaryOpacity = 0.0f;
-        p.stepSamples = 0.5f;
+        voxel::MarchParams once = params;
+        once.shading = 0.0f;
+        once.boundaryOpacity = 0.0f;
+        once.stepSamples = 0.5f;
+        once.maxSteps = 1u; // The FIRST sample only: this is a probe of the field, not a walk.
 
-        // Sample the field either side of the face by putting the eye at successive Z offsets and
-        // reading the very first thing each ray paints.
-        f32 previous = -1.0f;
-        f32 worst = 0.0f;
-        for (int i = 0; i < 40; ++i)
-        {
-            const f32 z = 120.0f + static_cast<f32>(i) * 0.4f; // 120 -> 136, crossing 128.
-            voxel::Eye pencil{};
-            pencil.position = {64.0f * m, 64.0f * m, z * m};
-            pencil.forward = {0.0f, 0.0f, 1.0f};
-            pencil.right = {1.0f, 0.0f, 0.0f};
-            pencil.up = {0.0f, 1.0f, 0.0f};
-            pencil.horizontalFieldOfView = 0.01f;
+        // Sample the field either side of the face by putting the eye at successive Z offsets, from
+        // 120 to 136 across the face at 128, and reading the very first thing each ray paints.
+        const f32 worst = worstAdjacentChange(40, [&](int i) {
+            const f32 z = 120.0f + static_cast<f32>(i) * 0.4f;
             u32 pixel = 0u;
-            voxel::MarchParams once = p;
-            once.maxSteps = 1u; // The FIRST sample only: this is a probe of the field, not a walk.
-            voxel::march(pair, two, profile, base, pencil, once, &pixel, 1u, 1u, 0u, 1u);
-            const f32 luma = static_cast<f32>((pixel >> 16) & 0xFFu) / 255.0f;
-            if (previous >= 0.0f)
-            {
-                const f32 d = luma > previous ? luma - previous : previous - luma;
-                if (d > worst)
-                    worst = d;
-            }
-            previous = luma;
-        }
+            voxel::march(pair, two, profile, base, eyeAlongZ(two.metresPerSample(), 64.0f, 64.0f, z, kPencil), once,
+                         &pixel, 1u, 1u, 0u, 1u);
+            return redLevel(pixel);
+        });
         std::printf("  brick face: worst single-step change across it %.4f\n", static_cast<double>(worst));
         check(worst < 0.05f, "crossing a brick face leaves no step in a field that has none");
     }
 
     // ── the level-of-detail seam ───────────────────────────────────────────
-    // Levels overlap, so where the fine ring stops the coarse brick behind it answers. If the
-    // switch is hard, the boundary of that ring -- a box -- paints a rectangular brightness step
-    // in the middle of the subject and reads as structure that is not there. It was the most
-    // obvious defect in the first renders of a real scroll.
+    // MarchParams::levelBlendSamples says what a hard switch between levels looked like.
     {
         // A fine brick over the first 128 samples and a coarse one covering four times that, at a
         // different density: crossing out of the fine one is exactly the seam.
@@ -770,37 +849,20 @@ int main()
         layered.insert(viewOf(far, voxel::BrickKey{2u, 0, 0, 0}));
         layered.insert(viewOf(near, voxel::BrickKey{0u, 0, 0, 0}));
 
-        // Walk across the fine brick's outer face and record the biggest single-sample jump.
+        // Pencil rays fired at successive points from x = 100 to 160, across the fine brick's
+        // outer face at 128, and the biggest jump between neighbours.
         auto biggestStep = [&](f32 band) {
             voxel::MarchParams p = params;
             p.levelBlendSamples = band;
             p.shading = 0.0f;
             p.boundaryOpacity = 0.0f;
-            const f32 m = metresPerSample;
-            f32 previous = -1.0f;
-            f32 worst = 0.0f;
-            for (int i = 0; i < 60; ++i)
-            {
-                // A pencil ray fired straight at successive points along the boundary axis.
-                const f32 x = 100.0f + static_cast<f32>(i) * 1.0f; // 100 -> 160, crossing 128.
-                voxel::Eye pencil{};
-                pencil.position = {x * m, 64.0f * m, -20.0f * m};
-                pencil.forward = {0.0f, 0.0f, 1.0f};
-                pencil.right = {1.0f, 0.0f, 0.0f};
-                pencil.up = {0.0f, 1.0f, 0.0f};
-                pencil.horizontalFieldOfView = 0.01f;
+            return worstAdjacentChange(60, [&](int i) {
+                const f32 x = 100.0f + static_cast<f32>(i);
                 u32 pixel = 0u;
-                voxel::march(layered, geometry, profile, base, pencil, p, &pixel, 1u, 1u, 0u, 1u);
-                const f32 luma = static_cast<f32>((pixel >> 16) & 0xFFu) / 255.0f;
-                if (previous >= 0.0f)
-                {
-                    const f32 d = luma > previous ? luma - previous : previous - luma;
-                    if (d > worst)
-                        worst = d;
-                }
-                previous = luma;
-            }
-            return worst;
+                voxel::march(layered, geometry, profile, base, eyeAlongZ(metresPerSample, x, 64.0f, -20.0f, kPencil), p,
+                             &pixel, 1u, 1u, 0u, 1u);
+                return redLevel(pixel);
+            });
         };
 
         const f32 hard = biggestStep(0.0f);
@@ -808,12 +870,13 @@ int main()
         std::printf("  level seam: hard switch jumps %.4f, blended jumps %.4f\n", static_cast<double>(hard),
                     static_cast<double>(soft));
         check(hard > 0.02f, "the fixture really does have a seam to hide");
-        // ⚠ Measured, not hoped for: 0.64 down to 0.34, a 47 % cut. It is not zero and cannot be,
+        // Measured, not hoped for: 0.62 down to 0.35, a 44 % cut. It is not zero and cannot be,
         // because a ray INTEGRATES -- a density that ramps smoothly still produces a pixel that
         // does not, since opacity accumulates nonlinearly along the path. The band softens the
         // step; only a much wider band would flatten it, and a wide band throws away the detail it
-        // was supposed to be showing. This fixture is also deliberately extreme: 200 against 150
-        // with a window of 154 to 173, so the two levels are opaque against transparent.
+        // was supposed to be showing. This fixture is also deliberately extreme: 200 against 150,
+        // with the coarse level's window at 141 to 191, so the two levels are opaque against
+        // nearly transparent.
         check(soft < hard * 0.7f, "blending across the band cuts the worst jump by a third or more");
     }
 
@@ -825,14 +888,7 @@ int main()
     // assertions trade places -- while every other check in this file still passes, because a
     // transposed subject is still a plausible subject.
     {
-        const f32 m = metresPerSample;
-        voxel::Eye down{};
-        down.position = {16.5f * m, 64.0f * m, 2.0f * m}; // volume x = 16.5: inside a gap.
-        down.forward = {0.0f, 0.0f, 1.0f};
-        down.right = {1.0f, 0.0f, 0.0f};
-        down.up = {0.0f, 1.0f, 0.0f};
-        down.horizontalFieldOfView = 0.02f; // A pencil: one direction, not a cone.
-
+        const voxel::Eye down = eyeAlongZ(metresPerSample, 16.5f, 64.0f, 2.0f, kPencil); // x = 16.5: inside a gap.
         voxel::Eye across = down;
         across.forward = {1.0f, 0.0f, 0.0f};
         across.right = {0.0f, 0.0f, -1.0f};
@@ -840,23 +896,23 @@ int main()
         u32 onePixel = 0u;
         const voxel::MarchReport alongRay =
             voxel::march(mosaic, geometry, profile, base, down, params, &onePixel, 1u, 1u, 0u, 1u);
-        const f32 alongLuma = static_cast<f32>(((onePixel >> 16) & 0xFFu)) / 255.0f;
+        const f32 alongRed = redLevel(onePixel);
 
         const voxel::MarchReport acrossRay =
             voxel::march(mosaic, geometry, profile, base, across, params, &onePixel, 1u, 1u, 0u, 1u);
-        const f32 acrossLuma = static_cast<f32>(((onePixel >> 16) & 0xFFu)) / 255.0f;
+        const f32 acrossRed = redLevel(onePixel);
 
-        std::printf("  along the corridor: %llu steps, luma %.3f | across the sheets: %llu steps, luma %.3f\n",
-                    static_cast<unsigned long long>(alongRay.steps), static_cast<double>(alongLuma),
-                    static_cast<unsigned long long>(acrossRay.steps), static_cast<double>(acrossLuma));
+        std::printf("  along the corridor: %llu steps, red %.3f | across the sheets: %llu steps, red %.3f\n",
+                    static_cast<unsigned long long>(alongRay.steps), static_cast<double>(alongRed),
+                    static_cast<unsigned long long>(acrossRay.steps), static_cast<double>(acrossRed));
 
         checkEq(static_cast<long long>(alongRay.escaped), 1, "a ray down the corridor comes out the far side");
-        check(alongLuma < 0.15f, "and comes out having picked up almost nothing: the gap is a gap");
-        check(acrossLuma > 0.6f, "a ray across the sheets is stopped by them");
+        check(alongRed < 0.15f, "and comes out having picked up almost nothing: the gap is a gap");
+        check(acrossRed > 0.6f, "a ray across the sheets is stopped by them");
         // The ratio is the claim, not either number: from inside a corridor you see ALONG it and
         // not THROUGH its walls. A threshold on saturation would instead be a claim about the
         // peak opacity somebody picked, which is a setting rather than a property of the field.
-        check(acrossLuma > alongLuma * 10.0f, "the wall is an order of magnitude brighter than the corridor");
+        check(acrossRed > alongRed * 10.0f, "the wall is an order of magnitude brighter than the corridor");
     }
 
     // ── the profile, measured rather than assumed ──────────────────────────
@@ -873,44 +929,63 @@ int main()
 
     // ── the free camera, and the bug it exists to not repeat ──────────────
     {
-        // A cheap sine is only good near zero. This engine has already shipped a CORDIC that did
-        // not reduce its argument: past about a hundred degrees the direction FROZE, and a body
-        // kept walking the way it faced at a hundred degrees. It reads as dead controls, which is
-        // why it survived -- the first sixty degrees of every turn work perfectly.
-        f32 worst = 0.0f;
-        for (int i = -1440; i <= 1440; ++i) // Four full turns, both ways.
+        // FreeCamera's header names the bug: a sine that does not reduce its argument freezes the
+        // camera, and the first sixty degrees of every turn still work perfectly. The reference is
+        // the library sine: the same reduction on both sides would only prove the code agrees with
+        // itself -- a mistake this repository has already recorded twice.
+        const auto worstSineError = [](int first, int last, f32 radiansPerStep) {
+            f32 worst = 0.0f;
+            for (int i = first; i <= last; ++i)
+            {
+                const f32 a = static_cast<f32>(i) * radiansPerStep;
+                const f32 got = voxel::wrappedSine(a);
+                const f32 want = static_cast<f32>(std::sin(static_cast<double>(a)));
+                const f32 e = got > want ? got - want : want - got;
+                if (e > worst)
+                    worst = e;
+            }
+            return worst;
+        };
+        const f32 nearTurns = worstSineError(-1440, 1440, 0.0174532925f); // Four full turns, both ways.
+        const f32 farTurns = worstSineError(-7300, 7300, 1.37f);          // Out to ten thousand radians.
+        std::printf("  wrapped sine: worst error %.2e over four turns, %.2e out to 1e4 radians\n",
+                    static_cast<double>(nearTurns), static_cast<double>(farTurns));
+        check(nearTurns < 2e-4f, "the sine holds over the whole circle, not just near zero");
+        check(farTurns < 2e-4f, "and holds out to ten thousand radians, well past 64 turns");
+        check(voxel::wrapAngle(std::numeric_limits<f32>::infinity()) == 0.0f &&
+                  voxel::wrapAngle(std::numeric_limits<f32>::quiet_NaN()) == 0.0f,
+              "an angle that is not a number wraps to zero instead of poisoning a direction");
+        bool hugeStayOnTheCircle = true;
+        for (f32 huge = 1.0e8f; huge < 3.0e38f; huge *= 3.0f)
         {
-            const f32 a = static_cast<f32>(i) * 0.0174532925f;
-            const f32 got = voxel::wrappedSine(a);
-            // Reference by the angle-addition identity from a value inside the polynomial's good
-            // range: computed independently of the function under test.
-            // The reference is the library sine, computed independently of the function under
-            // test. Using the same reduction on both sides would only prove the code agrees with
-            // itself -- a mistake this repository has already recorded twice.
-            const f32 want = static_cast<f32>(std::sin(static_cast<double>(a)));
-            const f32 e = got > want ? got - want : want - got;
-            if (e > worst)
-                worst = e;
+            for (const f32 a : {huge, -huge, 1.0e17f})
+            {
+                const f32 wrapped = voxel::wrapAngle(a);
+                const f32 sine = voxel::wrappedSine(a);
+                if (!(wrapped >= -3.1415927f && wrapped <= 3.1415927f) || !(sine >= -1.0f && sine <= 1.0f))
+                    hugeStayOnTheCircle = false;
+            }
         }
-        std::printf("  wrapped sine over four turns: worst error %.2e\n", static_cast<double>(worst));
-        check(worst < 2e-4f, "the sine holds over the whole circle, not just near zero");
+        check(hugeStayOnTheCircle, "an angle too large to hold a fraction of a turn still lands on the circle");
 
+        const auto facesYaw = [](const voxel::Eye &e, double yaw) {
+            return std::fabs(static_cast<double>(e.forward.x) - std::sin(yaw)) < 1e-3 &&
+                   std::fabs(static_cast<double>(e.forward.z) - std::cos(yaw)) < 1e-3;
+        };
         voxel::FreeCamera camera;
         camera.turn(3.14159265f, 0.0f); // A half turn.
-        const voxel::Eye behind = camera.eye();
-        check(behind.forward.z < -0.99f, "a half turn actually faces the other way");
-        camera.turn(100.0f, 0.0f); // Sixteen turns, the case that froze.
-        const voxel::Eye spun = camera.eye();
-        const f32 len =
-            spun.forward.x * spun.forward.x + spun.forward.y * spun.forward.y + spun.forward.z * spun.forward.z;
-        check(len > 0.99f && len < 1.01f, "and sixteen more turns still produce a unit direction");
+        check(camera.eye().forward.z < -0.99f, "a half turn actually faces the other way");
+        camera.turn(100.0f, 0.0f); // Sixteen turns more, the case that froze.
+        check(facesYaw(camera.eye(), 3.14159265 + 100.0), "sixteen more turns face exactly where they should");
+        camera.turn(4096.0f, 0.0f); // Six hundred and fifty more.
+        check(facesYaw(camera.eye(), 3.14159265 + 100.0 + 4096.0), "and so do six hundred and fifty more");
 
         // Pitch is clamped rather than wrapped: rolling over the vertical flips the horizon and no
         // reading of the controls recovers from it.
         camera.turn(0.0f, 100.0f);
-        check(camera.pitch < 1.5708f, "pitch stops just short of straight up");
+        check(camera.pitch() < 1.5708f, "pitch stops just short of straight up");
         camera.turn(0.0f, -200.0f);
-        check(camera.pitch > -1.5708f, "and just short of straight down");
+        check(camera.pitch() > -1.5708f, "and just short of straight down");
 
         // Moving with no input must not move: a normalize of a zero vector is how a camera drifts.
         voxel::FreeCamera still;
@@ -923,10 +998,7 @@ int main()
     }
 
     // ── the overlay, and the three rules that keep it honest ───────────────
-    // An overlay is somebody's inference about the subject. This corpus has a negative witness
-    // showing a model producing a different, convincing structure on every input including one
-    // with no writing anywhere near it -- so a renderer that let a prediction look like the scan
-    // would be an instrument that lies.
+    // MarchParams::overlay says why a prediction must never look like the scan.
     {
         const auto ink = makeFlatBrick(255u); // "Ink everywhere", the most demanding overlay there is.
         voxel::BrickMosaic predicted;
