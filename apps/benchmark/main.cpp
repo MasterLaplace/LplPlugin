@@ -12,6 +12,7 @@
 
 #include <lpl/bench/Harness.hpp>
 #include <lpl/bench/SystemInfo.hpp>
+#include <lpl/bench/VoxelBench.hpp>
 
 #include <lpl/concurrency/ThreadPool.hpp>
 #include <lpl/container/FlatAtomicHashMap.hpp>
@@ -892,6 +893,7 @@ constexpr std::array kSections{
     Section{"lookup",      benchmarkEntityLookup       },
     Section{"broadphase",  benchmarkCollisionBroadphase},
     Section{"net",         benchmarkNetworking         },
+    Section{"voxel",       bench::runVoxelBenchmarks   },
 };
 
 [[nodiscard]] bool isSectionName(std::string_view name)
