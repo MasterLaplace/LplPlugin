@@ -21,20 +21,9 @@ namespace {
 /// Nearest sample, or -1 where nothing is resident. Negative is distinguishable from any density.
 [[nodiscard]] core::f32 sampleAt(const BrickMosaic &mosaic, const math::Vec3<core::f32> &point) noexcept
 {
-    const core::i64 base[3]{floorToI64(point.z), floorToI64(point.y), floorToI64(point.x)};
-    const BrickView *brick = mosaic.find(base[0], base[1], base[2]);
-    if (brick == nullptr)
-        return -1.0f;
-
-    core::u32 local[3]{};
-    for (core::u32 axis = 0u; axis < 3u; ++axis)
-    {
-        const core::i64 cell = (base[axis] - brickOriginInBaseSamples(brick->key, axis)) >> brick->key.level;
-        if (cell < 0 || cell >= static_cast<core::i64>(kBrickEdge))
-            return -1.0f;
-        local[axis] = static_cast<core::u32>(cell);
-    }
-    return static_cast<core::f32>(brick->at(local[0], local[1], local[2]));
+    const std::optional<core::u8> sample =
+        mosaic.sampleAt(floorToI64(point.z), floorToI64(point.y), floorToI64(point.x));
+    return sample.has_value() ? static_cast<core::f32>(*sample) : -1.0f;
 }
 
 /// Field value averaged over a small window: the same question, asked of a less noisy field.

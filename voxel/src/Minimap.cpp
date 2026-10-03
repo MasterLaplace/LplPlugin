@@ -1,64 +1,226 @@
 /**
  * @file Minimap.cpp
- * @brief Cutting a plane out of the coarsest level, and putting the eye on it.
+ * @brief Cutting a plane out of the mosaic the caller passes, and putting the eye on it.
  *
  * @author MasterLaplace
  * @version 0.1.0
  * @copyright MIT License
  */
 
+#include <lpl/std/cmath.hpp>
 #include <lpl/voxel/Minimap.hpp>
+
+#include <algorithm>
+#include <array>
+#include <optional>
 
 namespace lpl::voxel {
 
 namespace {
 
-/// The two axes a slice spans, in (u, v) order.
-void spanAxes(SliceAxis axis, core::u32 &u, core::u32 &v, core::u32 &normal) noexcept
+/// The heading is drawn as a ring when the squared length of its projection into the slice is at most this.
+constexpr core::f32 kRingInPlaneLengthSquared = 0.05f;
+
+/// The ring around the dot, from 5.5 to 7 pixels out.
+constexpr core::i32 kRingInnerRadiusSquared = 30;
+constexpr core::i32 kRingOuterRadiusSquared = 49;
+
+/// The dot that marks the eye, about 2.2 pixels in radius.
+constexpr core::i32 kDotRadiusSquared = 5;
+
+/// Pixels between two points of the heading line.
+constexpr core::f32 kHeadingStepPixels = 0.5f;
+
+/// Volume axes, in (z, y, x) order: along the slice's columns, along its rows, and across it.
+struct SliceAxes final {
+    core::u32 u;
+    core::u32 v;
+    core::u32 normal;
+};
+
+constexpr SliceAxes kAcrossZ{.u = 2u, .v = 1u, .normal = 0u};
+constexpr SliceAxes kAcrossY{.u = 2u, .v = 0u, .normal = 1u};
+constexpr SliceAxes kAcrossX{.u = 1u, .v = 0u, .normal = 2u};
+
+[[nodiscard]] constexpr SliceAxes spanAxes(SliceAxis axis) noexcept
 {
     switch (axis)
     {
-    case SliceAxis::Z:
-        // A rolled scroll's axis is the volume's slowest one, so this is the spiral seen end-on.
-        normal = 0u;
-        u = 2u; // x across
-        v = 1u; // y down
-        break;
-    case SliceAxis::Y:
-        normal = 1u;
-        u = 2u;
-        v = 0u;
-        break;
-    case SliceAxis::X:
-    default:
-        normal = 2u;
-        u = 1u;
-        v = 0u;
-        break;
+    case SliceAxis::Z: return kAcrossZ;
+    case SliceAxis::Y: return kAcrossY;
+    case SliceAxis::X: return kAcrossX;
+    }
+    return kAcrossX;
+}
+
+[[nodiscard]] constexpr std::array<core::f32, 3> inVolumeOrder(const math::Vec3<core::f32> &vector) noexcept
+{
+    return {vector.z, vector.y, vector.x};
+}
+
+[[nodiscard]] constexpr core::i64 smallestStepCovering(core::i64 extent, core::u32 cells) noexcept
+{
+    return (extent + cells - 1) / static_cast<core::i64>(cells);
+}
+
+[[nodiscard]] constexpr bool panelFits(const MinimapStyle &style, core::u32 frameWidth, core::u32 frameHeight) noexcept
+{
+    return style.width != 0u && style.height != 0u && style.width <= frameWidth &&
+           style.left <= frameWidth - style.width && style.height <= frameHeight &&
+           style.top <= frameHeight - style.height;
+}
+
+/// The panel's rectangle in the caller's frame. Coordinates are panel pixels from its top-left corner.
+struct Panel final {
+    core::u32 *pixels;
+    core::u32 frameWidth;
+    core::u32 left;
+    core::u32 top;
+    core::u32 width;
+    core::u32 height;
+
+    [[nodiscard]] bool contains(core::f32 x, core::f32 y) const noexcept
+    {
+        return x >= 0.0f && y >= 0.0f && x < static_cast<core::f32>(width) && y < static_cast<core::f32>(height);
+    }
+
+    /// @pre @p x < @ref width and @p y < @ref height.
+    void put(core::u32 x, core::u32 y, core::u32 colour) const noexcept
+    {
+        pixels[static_cast<core::usize>(top + y) * frameWidth + left + x] = colour;
+    }
+
+    void putIfInside(core::f32 x, core::f32 y, core::u32 colour) const noexcept
+    {
+        if (contains(x, y))
+            put(static_cast<core::u32>(x), static_cast<core::u32>(y), colour);
+    }
+};
+
+struct PanelPoint final {
+    core::f32 x;
+    core::f32 y;
+};
+
+/// The darkest non-zero sample of a slice and the distance to its brightest. A fixed window would show a flat
+/// grey on one volume and pure white on the next -- the failure the main renderer's density window exists to
+/// avoid, one panel smaller. A sample of 0 is the mask, not a density, so it takes no part.
+struct ContrastWindow final {
+    core::u8 lowest;
+    core::f32 span;
+};
+
+[[nodiscard]] ContrastWindow contrastWindow(const VolumeSlice &slice) noexcept
+{
+    core::u8 lowest = 255u;
+    core::u8 highest = 0u;
+    const core::usize count = static_cast<core::usize>(slice.width) * slice.height;
+    for (core::usize i = 0u; i < count; ++i)
+    {
+        const core::u8 sample = slice.samples[i];
+        if (sample == 0u)
+            continue;
+        lowest = std::min(lowest, sample);
+        highest = std::max(highest, sample);
+    }
+    return {.lowest = lowest, .span = highest > lowest ? static_cast<core::f32>(highest - lowest) : 1.0f};
+}
+
+[[nodiscard]] core::u32 greyOf(core::u8 sample, ContrastWindow window, core::f32 brightness) noexcept
+{
+    const core::f32 level = (static_cast<core::f32>(sample) - static_cast<core::f32>(window.lowest)) / window.span;
+    const core::u32 grey = static_cast<core::u32>(level * brightness * 255.0f + 0.5f);
+    return 0xFF000000u | (grey << 16) | (grey << 8) | grey;
+}
+
+void fillPanel(const Panel &panel, const VolumeSlice &slice, const MinimapStyle &style) noexcept
+{
+    const ContrastWindow window = contrastWindow(slice);
+    const core::f32 brightness = style.sliceBrightness > 0.0f ? std::min(style.sliceBrightness, 1.0f) : 0.0f;
+    for (core::u32 y = 0u; y < panel.height; ++y)
+    {
+        const core::u64 row = static_cast<core::u64>(slice.height) * y / panel.height;
+        for (core::u32 x = 0u; x < panel.width; ++x)
+        {
+            const core::u64 column = static_cast<core::u64>(slice.width) * x / panel.width;
+            const core::u8 sample = slice.samples[row * slice.width + column];
+            panel.put(x, y, sample == 0u ? style.background : greyOf(sample, window, brightness));
+        }
     }
 }
 
-[[nodiscard]] core::u8 sampleAt(const BrickMosaic &mosaic, core::i64 z, core::i64 y, core::i64 x, bool &found) noexcept
+void drawFrame(const Panel &panel, core::u32 colour) noexcept
 {
-    const BrickView *brick = mosaic.find(z, y, x);
-    if (brick == nullptr)
+    for (core::u32 x = 0u; x < panel.width; ++x)
     {
-        found = false;
-        return 0u;
+        panel.put(x, 0u, colour);
+        panel.put(x, panel.height - 1u, colour);
     }
-    found = true;
-    const core::u32 level = brick->key.level;
-    const core::i64 span = brickSpanInBaseSamples(level);
-    const core::i64 lz = (z - static_cast<core::i64>(brick->key.z) * span) >> level;
-    const core::i64 ly = (y - static_cast<core::i64>(brick->key.y) * span) >> level;
-    const core::i64 lx = (x - static_cast<core::i64>(brick->key.x) * span) >> level;
-    const core::i64 edge = static_cast<core::i64>(kBrickEdge);
-    if (lz < 0 || ly < 0 || lx < 0 || lz >= edge || ly >= edge || lx >= edge)
+    for (core::u32 y = 0u; y < panel.height; ++y)
     {
-        found = false;
-        return 0u;
+        panel.put(0u, y, colour);
+        panel.put(panel.width - 1u, y, colour);
     }
-    return brick->at(static_cast<core::u32>(lz), static_cast<core::u32>(ly), static_cast<core::u32>(lx));
+}
+
+[[nodiscard]] PanelPoint eyeOnPanel(const Panel &panel, const VolumeSlice &slice, const VolumeGeometry &geometry,
+                                    const Eye &eye, SliceAxes axes) noexcept
+{
+    const core::f32 metresPerSample = geometry.metresPerSample();
+    const std::array<core::f32, 3> eyeInMetres = inVolumeOrder(eye.position);
+    const core::f32 fractionAlongColumns =
+        (eyeInMetres[axes.u] / metresPerSample - static_cast<core::f32>(slice.lowU)) /
+        static_cast<core::f32>(slice.stepU * static_cast<core::i64>(slice.width));
+    const core::f32 fractionAlongRows = (eyeInMetres[axes.v] / metresPerSample - static_cast<core::f32>(slice.lowV)) /
+                                        static_cast<core::f32>(slice.stepV * static_cast<core::i64>(slice.height));
+    return {.x = std::clamp(fractionAlongColumns * static_cast<core::f32>(panel.width), 0.0f,
+                            static_cast<core::f32>(panel.width - 1u)),
+            .y = std::clamp(fractionAlongRows * static_cast<core::f32>(panel.height), 0.0f,
+                            static_cast<core::f32>(panel.height - 1u))};
+}
+
+/// Every pixel whose offset (dx, dy) from @p centre has dx * dx + dy * dy between the two bounds, inclusive.
+void stampAnnulus(const Panel &panel, PanelPoint centre, core::i32 innerRadiusSquared, core::i32 outerRadiusSquared,
+                  core::u32 colour) noexcept
+{
+    core::i32 reach = 0;
+    while ((reach + 1) * (reach + 1) <= outerRadiusSquared)
+        ++reach;
+    for (core::i32 dy = -reach; dy <= reach; ++dy)
+    {
+        for (core::i32 dx = -reach; dx <= reach; ++dx)
+        {
+            const core::i32 distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared >= innerRadiusSquared && distanceSquared <= outerRadiusSquared)
+                panel.putIfInside(centre.x + static_cast<core::f32>(dx), centre.y + static_cast<core::f32>(dy), colour);
+        }
+    }
+}
+
+void drawHeading(const Panel &panel, PanelPoint eyePoint, const Eye &eye, SliceAxes axes,
+                 const MinimapStyle &style) noexcept
+{
+    const std::array<core::f32, 3> forward = inVolumeOrder(eye.forward);
+    const core::f32 alongColumns = forward[axes.u];
+    const core::f32 alongRows = forward[axes.v];
+    const core::f32 inPlaneSquared = alongColumns * alongColumns + alongRows * alongRows;
+    if (inPlaneSquared <= kRingInPlaneLengthSquared)
+    {
+        stampAnnulus(panel, eyePoint, kRingInnerRadiusSquared, kRingOuterRadiusSquared, style.marker);
+        return;
+    }
+
+    const core::f32 inPlaneLength = pmr::sqrt(inPlaneSquared);
+    const core::f32 directionX = alongColumns / inPlaneLength;
+    const core::f32 directionY = alongRows / inPlaneLength;
+    for (core::f32 distance = 0.0f; distance < style.headingLength; distance += kHeadingStepPixels)
+    {
+        const core::f32 x = eyePoint.x + directionX * distance;
+        const core::f32 y = eyePoint.y + directionY * distance;
+        if (!panel.contains(x, y))
+            break;
+        panel.put(static_cast<core::u32>(x), static_cast<core::u32>(y), style.marker);
+    }
 }
 
 } // namespace
@@ -68,204 +230,56 @@ core::u32 extractSlice(const BrickMosaic &mosaic, const VolumeGeometry &geometry
     if (!slice.valid() || !geometry.valid())
         return 0u;
 
-    core::u32 u = 0u;
-    core::u32 v = 0u;
-    core::u32 normal = 0u;
-    spanAxes(slice.axis, u, v, normal);
-
-    // The slice always spans the WHOLE subject: a map that showed only part of it would be a
-    // second view of where you already are.
-    const core::i64 extentU = geometry.samples[u];
-    const core::i64 extentV = geometry.samples[v];
+    const SliceAxes axes = spanAxes(slice.axis);
+    const core::i64 extentU = geometry.samples[axes.u];
+    const core::i64 extentV = geometry.samples[axes.v];
     slice.lowU = 0;
     slice.lowV = 0;
-    slice.stepU = extentU / static_cast<core::i64>(slice.width);
-    slice.stepV = extentV / static_cast<core::i64>(slice.height);
-    if (slice.stepU < 1)
-        slice.stepU = 1;
-    if (slice.stepV < 1)
-        slice.stepV = 1;
-
-    core::i64 at = slice.at;
-    if (at < 0)
-        at = 0;
-    if (at >= geometry.samples[normal])
-        at = geometry.samples[normal] - 1;
+    slice.stepU = smallestStepCovering(extentU, slice.width);
+    slice.stepV = smallestStepCovering(extentV, slice.height);
+    slice.at = std::clamp<core::i64>(slice.at, 0, geometry.samples[axes.normal] - 1);
 
     core::u32 hits = 0u;
     for (core::u32 row = 0u; row < slice.height; ++row)
     {
-        for (core::u32 col = 0u; col < slice.width; ++col)
+        for (core::u32 column = 0u; column < slice.width; ++column)
         {
-            core::i64 position[3]{0, 0, 0};
-            position[normal] = at;
-            position[u] = slice.lowU + static_cast<core::i64>(col) * slice.stepU;
-            position[v] = slice.lowV + static_cast<core::i64>(row) * slice.stepV;
-
-            bool found = false;
-            const core::u8 value = sampleAt(mosaic, position[0], position[1], position[2], found);
-            slice.samples[static_cast<core::usize>(row) * slice.width + col] = found ? value : 0u;
-            if (found)
+            core::i64 position[3]{};
+            position[axes.normal] = slice.at;
+            position[axes.u] = slice.lowU + static_cast<core::i64>(column) * slice.stepU;
+            position[axes.v] = slice.lowV + static_cast<core::i64>(row) * slice.stepV;
+            const bool insideTheVolume = position[axes.u] < extentU && position[axes.v] < extentV;
+            const std::optional<core::u8> sample =
+                insideTheVolume ? mosaic.sampleAt(position[0], position[1], position[2]) : std::nullopt;
+            slice.samples[static_cast<core::usize>(row) * slice.width + column] = sample.value_or(0u);
+            if (sample.has_value())
                 ++hits;
         }
     }
     return hits;
 }
 
-void drawMinimap(core::u32 *pixels, core::u32 width, core::u32 height, const MinimapStyle &style,
+bool drawMinimap(core::u32 *pixels, core::u32 frameWidth, core::u32 frameHeight, const MinimapStyle &style,
                  const VolumeSlice &slice, const VolumeGeometry &geometry, const Eye &eye) noexcept
 {
-    if (pixels == nullptr || !slice.valid() || !geometry.valid())
-        return;
+    if (pixels == nullptr || !slice.valid() || slice.stepU < 1 || slice.stepV < 1 || !geometry.valid() ||
+        geometry.metresPerSample() <= 0.0f || !panelFits(style, frameWidth, frameHeight))
+        return false;
 
-    const core::u32 right = style.left + style.width;
-    const core::u32 bottom = style.top + style.height;
-    if (right > width || bottom > height)
-        return;
+    const Panel panel{.pixels = pixels,
+                      .frameWidth = frameWidth,
+                      .left = style.left,
+                      .top = style.top,
+                      .width = style.width,
+                      .height = style.height};
+    fillPanel(panel, slice, style);
+    drawFrame(panel, style.border);
 
-    const auto put = [&](core::u32 x, core::u32 y, core::u32 colour) noexcept {
-        if (x < width && y < height)
-            pixels[static_cast<core::usize>(y) * width + x] = colour;
-    };
-
-    core::u32 u = 0u;
-    core::u32 v = 0u;
-    core::u32 normal = 0u;
-    spanAxes(slice.axis, u, v, normal);
-
-    // The slice's own contrast, stretched over what is actually in it. A fixed window would show
-    // a flat grey on one volume and pure white on the next -- the same failure the main renderer's
-    // density window exists to avoid, one panel smaller.
-    core::u8 lowest = 255u;
-    core::u8 highest = 0u;
-    for (core::usize i = 0u; i < static_cast<core::usize>(slice.width) * slice.height; ++i)
-    {
-        const core::u8 s = slice.samples[i];
-        if (s == 0u)
-            continue; // Outside the subject; the mask, not a density.
-        if (s < lowest)
-            lowest = s;
-        if (s > highest)
-            highest = s;
-    }
-    const core::f32 span = highest > lowest ? static_cast<core::f32>(highest - lowest) : 1.0f;
-
-    for (core::u32 py = 0u; py < style.height; ++py)
-    {
-        const core::u32 sy = slice.height * py / style.height;
-        for (core::u32 px = 0u; px < style.width; ++px)
-        {
-            const core::u32 sx = slice.width * px / style.width;
-            const core::u8 s = slice.samples[static_cast<core::usize>(sy) * slice.width + sx];
-            core::u32 colour = style.background;
-            if (s != 0u)
-            {
-                core::f32 t = (static_cast<core::f32>(s) - static_cast<core::f32>(lowest)) / span;
-                if (t < 0.0f)
-                    t = 0.0f;
-                if (t > 1.0f)
-                    t = 1.0f;
-                t *= style.dim;
-                const core::u32 grey = static_cast<core::u32>(t * 255.0f + 0.5f);
-                colour = 0xFF000000u | (grey << 16) | (grey << 8) | grey;
-            }
-            put(style.left + px, style.top + py, colour);
-        }
-    }
-
-    for (core::u32 px = 0u; px < style.width; ++px)
-    {
-        put(style.left + px, style.top, style.border);
-        put(style.left + px, bottom - 1u, style.border);
-    }
-    for (core::u32 py = 0u; py < style.height; ++py)
-    {
-        put(style.left, style.top + py, style.border);
-        put(right - 1u, style.top + py, style.border);
-    }
-
-    // Where the eye is, derived from the SAME geometry the march uses. Two answers to that is how
-    // a map ends up confidently pointing at the wrong turn of a spiral and looking plausible.
-    const core::f32 mps = geometry.metresPerSample();
-    if (mps <= 0.0f)
-        return;
-    const core::f32 world[3]{eye.position.z / mps, eye.position.y / mps, eye.position.x / mps};
-    const core::f32 forward[3]{eye.forward.z, eye.forward.y, eye.forward.x};
-
-    const core::f32 spanU = static_cast<core::f32>(geometry.samples[u]);
-    const core::f32 spanV = static_cast<core::f32>(geometry.samples[v]);
-    if (spanU <= 0.0f || spanV <= 0.0f)
-        return;
-    const core::f32 fx = world[u] / spanU;
-    const core::f32 fy = world[v] / spanV;
-    // Clamped rather than dropped: an eye outside the subject is a real place to be -- you can fly
-    // out of a scroll -- and a marker that vanished there would read as the map being broken.
-    const core::f32 cx = static_cast<core::f32>(style.left) +
-                         (fx < 0.0f ? 0.0f : (fx > 1.0f ? 1.0f : fx)) * static_cast<core::f32>(style.width - 1u);
-    const core::f32 cy = static_cast<core::f32>(style.top) +
-                         (fy < 0.0f ? 0.0f : (fy > 1.0f ? 1.0f : fy)) * static_cast<core::f32>(style.height - 1u);
-
-    // The heading, projected into the slice. Without it the marker says where you are and not
-    // which way you are facing, and in a spiral those are the same question.
-    core::f32 du = forward[u];
-    core::f32 dv = forward[v];
-    const core::f32 len2 = du * du + dv * dv;
-
-    // ⚠ **Looking ALONG the slice normal is the common case, not an edge case, and a heading that
-    // projects to nothing must say so rather than disappear.** On a scroll the interesting
-    // direction is down the axis -- which is exactly the direction this slice is cut across -- so
-    // the arrow would vanish precisely when somebody is doing the normal thing. A ring means "into
-    // or out of the page", and it is drawn instead of the line rather than beside it.
-    if (len2 <= 0.05f)
-    {
-        for (core::i32 dy = -7; dy <= 7; ++dy)
-        {
-            for (core::i32 dx = -7; dx <= 7; ++dx)
-            {
-                const core::i32 r2 = dx * dx + dy * dy;
-                if (r2 < 30 || r2 > 49)
-                    continue;
-                const core::f32 x = cx + static_cast<core::f32>(dx);
-                const core::f32 y = cy + static_cast<core::f32>(dy);
-                if (x < static_cast<core::f32>(style.left) || y < static_cast<core::f32>(style.top) ||
-                    x >= static_cast<core::f32>(right) || y >= static_cast<core::f32>(bottom))
-                    continue;
-                put(static_cast<core::u32>(x), static_cast<core::u32>(y), style.marker);
-            }
-        }
-    }
-    else
-    {
-        core::f32 g = len2 > 1.0f ? len2 : 1.0f;
-        for (int i = 0; i < 12; ++i)
-            g = 0.5f * (g + len2 / g);
-        du /= g;
-        dv /= g;
-        for (core::f32 step = 0.0f; step < style.coneLength; step += 0.5f)
-        {
-            const core::f32 x = cx + du * step;
-            const core::f32 y = cy + dv * step;
-            if (x < static_cast<core::f32>(style.left) || y < static_cast<core::f32>(style.top) ||
-                x >= static_cast<core::f32>(right) || y >= static_cast<core::f32>(bottom))
-                break;
-            put(static_cast<core::u32>(x), static_cast<core::u32>(y), style.marker);
-        }
-    }
-
-    for (core::i32 dy = -2; dy <= 2; ++dy)
-    {
-        for (core::i32 dx = -2; dx <= 2; ++dx)
-        {
-            if (dx * dx + dy * dy > 5)
-                continue;
-            const core::f32 x = cx + static_cast<core::f32>(dx);
-            const core::f32 y = cy + static_cast<core::f32>(dy);
-            if (x < static_cast<core::f32>(style.left) || y < static_cast<core::f32>(style.top) ||
-                x >= static_cast<core::f32>(right) || y >= static_cast<core::f32>(bottom))
-                continue;
-            put(static_cast<core::u32>(x), static_cast<core::u32>(y), style.marker);
-        }
-    }
+    const SliceAxes axes = spanAxes(slice.axis);
+    const PanelPoint eyePoint = eyeOnPanel(panel, slice, geometry, eye, axes);
+    drawHeading(panel, eyePoint, eye, axes, style);
+    stampAnnulus(panel, eyePoint, 0, kDotRadiusSquared, style.marker);
+    return true;
 }
 
 } // namespace lpl::voxel

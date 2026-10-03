@@ -157,4 +157,22 @@ const BrickView *BrickMosaic::find(core::i64 bz, core::i64 by, core::i64 bx) con
     return nullptr;
 }
 
+std::optional<core::u8> BrickMosaic::sampleAt(core::i64 bz, core::i64 by, core::i64 bx) const noexcept
+{
+    const BrickView *brick = find(bz, by, bx);
+    if (brick == nullptr)
+        return std::nullopt;
+
+    const core::i64 base[3]{bz, by, bx};
+    core::u32 local[3]{};
+    for (core::u32 axis = 0u; axis < 3u; ++axis)
+    {
+        const core::i64 cell = (base[axis] - brickOriginInBaseSamples(brick->key, axis)) >> brick->key.level;
+        if (cell < 0 || cell >= static_cast<core::i64>(kBrickEdge))
+            return std::nullopt;
+        local[axis] = static_cast<core::u32>(cell);
+    }
+    return brick->at(local[0], local[1], local[2]);
+}
+
 } // namespace lpl::voxel

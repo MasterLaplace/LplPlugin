@@ -243,6 +243,23 @@ int main()
         checkEq(m.count(), 1, "the count follows the removal");
     }
 
+    // ── the nearest sample, read from the brick find returns ──────────────
+    {
+        std::vector<u8> risingAlongX(voxel::kBrickVoxels, 0u);
+        for (u32 lx = 0u; lx < voxel::kBrickEdge; ++lx)
+            risingAlongX[lx] = static_cast<u8>(100u + lx);
+        voxel::BrickMosaic m;
+        check(m.insert(viewOf(risingAlongX, voxel::BrickKey{1u, 0, 0, 1})),
+              "a level-1 brick at x 256 to 511 is listed");
+
+        checkEq(m.sampleAt(0, 0, 256).value_or(0u), 100, "its first cell answers at its origin");
+        checkEq(m.sampleAt(1, 1, 261).value_or(0u), 102, "a level-1 cell spans two level-0 samples on every axis");
+        check(!m.sampleAt(0, 0, 255).has_value(), "nothing answers where nothing is resident");
+        // 2^40 + 256 lands in brick index 2^32 + 1, which an i32 index holds as 1: this brick.
+        check(!m.sampleAt(0, 0, (static_cast<i64>(1) << 40) + 256).has_value(),
+              "nor where a coordinate is past what a brick index holds, rather than the brick it wraps onto");
+    }
+
     // ── residency: nearest first ───────────────────────────────────────────
     {
         voxel::VolumeGeometry geometry{};
