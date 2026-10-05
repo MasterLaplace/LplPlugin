@@ -3,9 +3,9 @@
  * @brief Compile-time platform detection, compiler intrinsics, and
  *        portability macros.
  *
- * Detects the target operating system, CPU architecture, and compiler at
- * preprocessing time. Provides branch-prediction hints, forced inlining,
- * cache-line constants, and the LPL_HD macro for CUDA host+device functions.
+ * Names the target operating system, CPU architecture, and compiler that
+ * lpl/config.h detects. Provides forced inlining, cache-line constants, and
+ * the LPL_HD macro for CUDA host+device functions.
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -17,43 +17,50 @@
 #ifndef LPL_CORE_PLATFORM_HPP
 #    define LPL_CORE_PLATFORM_HPP
 
-// ---- Operating System ----------------------------------------------------
+#    include <lpl/config.h>
 
-#    if defined(_WIN32) || defined(_WIN64)
+/**
+ * @name Operating system, processor and compiler
+ *
+ * Derived from lpl/config.h, the one place they are detected, under the names the
+ * engine has always used. The Laplace Kernel is a system like the others:
+ * LPL_OS_LAPLACE_KERNEL is defined for code compiled for it.
+ * @{
+ */
+#    if defined(LPLPLUGIN_SYSTEM_LAPLACE_KERNEL)
+#        define LPL_OS_LAPLACE_KERNEL 1
+#    elif defined(LPLPLUGIN_SYSTEM_WINDOWS)
 #        define LPL_OS_WINDOWS 1
-#    elif defined(__linux__)
-#        define LPL_OS_LINUX 1
-#    elif defined(__APPLE__)
-#        define LPL_OS_MACOS 1
-#    elif defined(__ANDROID__)
+#    elif defined(LPLPLUGIN_SYSTEM_ANDROID)
 #        define LPL_OS_ANDROID 1
+#    elif defined(LPLPLUGIN_SYSTEM_LINUX)
+#        define LPL_OS_LINUX 1
+#    elif defined(LPLPLUGIN_SYSTEM_MACOS)
+#        define LPL_OS_MACOS 1
 #    else
 #        define LPL_OS_UNKNOWN 1
 #    endif
 
-// ---- CPU Architecture ----------------------------------------------------
-
-#    if defined(__x86_64__) || defined(_M_X64)
+#    if defined(LPLPLUGIN_ARCH_X64)
 #        define LPL_ARCH_X64 1
-#    elif defined(__aarch64__) || defined(_M_ARM64)
+#    elif defined(LPLPLUGIN_ARCH_ARM64)
 #        define LPL_ARCH_ARM64 1
-#    elif defined(__i386__) || defined(_M_IX86)
+#    elif defined(LPLPLUGIN_ARCH_X86)
 #        define LPL_ARCH_X86 1
 #    else
 #        define LPL_ARCH_UNKNOWN 1
 #    endif
 
-// ---- Compiler ------------------------------------------------------------
-
-#    if defined(__clang__)
+#    if defined(LPLPLUGIN_COMPILER_CLANG)
 #        define LPL_COMPILER_CLANG 1
-#    elif defined(__GNUC__)
+#    elif defined(LPLPLUGIN_COMPILER_GCC) || defined(LPLPLUGIN_COMPILER_MINGW) || defined(LPLPLUGIN_COMPILER_CYGWIN)
 #        define LPL_COMPILER_GCC 1
-#    elif defined(_MSC_VER)
+#    elif defined(LPLPLUGIN_COMPILER_MSVC)
 #        define LPL_COMPILER_MSVC 1
 #    else
 #        define LPL_COMPILER_UNKNOWN 1
 #    endif
+/** @} */
 
 // ---- Target runtime ------------------------------------------------------
 //
@@ -70,20 +77,14 @@
 // ---- Intrinsics ----------------------------------------------------------
 
 #    if defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG)
-#        define LPL_LIKELY(x)   __builtin_expect(!!(x), 1)
-#        define LPL_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #        define LPL_FORCEINLINE inline __attribute__((always_inline))
 #        define LPL_NOINLINE    __attribute__((noinline))
 #        define LPL_RESTRICT    __restrict__
 #    elif defined(LPL_COMPILER_MSVC)
-#        define LPL_LIKELY(x)   (x)
-#        define LPL_UNLIKELY(x) (x)
 #        define LPL_FORCEINLINE __forceinline
 #        define LPL_NOINLINE    __declspec(noinline)
 #        define LPL_RESTRICT    __restrict
 #    else
-#        define LPL_LIKELY(x)   (x)
-#        define LPL_UNLIKELY(x) (x)
 #        define LPL_FORCEINLINE inline
 #        define LPL_NOINLINE
 #        define LPL_RESTRICT
