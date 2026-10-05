@@ -1,20 +1,21 @@
 /**************************************************************************
  * VkWrapper v0.0.4
  *
- * VkWrapper is a software package, part of the Engine².
+ * VkWrapper is a software package, part of LplPlugin.
  *
- * This file is part of the VkWrapper project that is under GPL-3.0 License.
- * Copyright © 2024 by @EngineSquared, All rights reserved.
+ * This file is part of the VkWrapper project that is under the MIT License.
+ * https://opensource.org/license/mit
+ * Copyright © 2024 by @MasterLaplace, All rights reserved.
  *
- * VkWrapper is a free software: you can redistribute it and/or modify
- * it under the terms of the GPL-3.0 License as published by the
- * Free Software Foundation. See the GPL-3.0 License for more details.
+ * VkWrapper is free software: you can use, copy, modify, merge, publish and
+ * distribute it under the terms of the MIT License, provided this copyright
+ * notice and the permission notice are kept. See the LICENSE file.
  *
  * @file Wrapper.hpp
  * @brief Wrapper class declaration.
  *
  * This class is a wrapper for the Vulkan API.
- * It is used to simplify the use of Vulkan in the Engine².
+ * It is used to simplify the use of Vulkan in LplPlugin.
  *
  * @author @MasterLaplace
  * @version 0.0.4
@@ -35,7 +36,7 @@ namespace lpl::render::vk {
  * @brief Wrapper class.
  *
  * This class is a wrapper for the Vulkan API.
- * It is used to simplify the use of Vulkan in the Engine².
+ * It is used to simplify the use of Vulkan in LplPlugin.
  *
  * @example "Usage of the Wrapper class:"
  * @code

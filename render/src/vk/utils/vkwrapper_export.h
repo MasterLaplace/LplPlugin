@@ -1,14 +1,15 @@
 /**************************************************************************
  * VkWrapper v0.0.0
  *
- * VkWrapper is a software package, part of the Engine².
+ * VkWrapper is a software package, part of LplPlugin.
  *
- * This file is part of the VkWrapper project that is under GPL-3.0 License.
- * Copyright © 2024 by @EngineSquared, All rights reserved.
+ * This file is part of the VkWrapper project that is under the MIT License.
+ * https://opensource.org/license/mit
+ * Copyright © 2024 by @MasterLaplace, All rights reserved.
  *
- * VkWrapper is a free software: you can redistribute it and/or modify
- * it under the terms of the GPL-3.0 License as published by the
- * Free Software Foundation. See the GPL-3.0 License for more details.
+ * VkWrapper is free software: you can use, copy, modify, merge, publish and
+ * distribute it under the terms of the MIT License, provided this copyright
+ * notice and the permission notice are kept. See the LICENSE file.
  *
  * @file vkwrapper_export.h
  * @brief Compile-Time exportation of the project path.
