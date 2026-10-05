@@ -5,7 +5,8 @@ abstract: "A modular C++23 engine for deterministic, neuro-immersive simulations
 version: "0.2.0"
 date-released: "2026-10-05"
 authors:
-  - alias: "MasterLaplace"
+  - family-names: "MasterLaplace"
+    alias: "MasterLaplace"
     orcid: "https://orcid.org/0009-0006-1371-4119"
     website: "https://github.com/MasterLaplace"
 repository-code: "https://github.com/MasterLaplace/LplPlugin"
