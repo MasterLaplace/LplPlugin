@@ -13,7 +13,9 @@ image: the sources listed in its `libengine/arch/i386/make.config`. That code ob
 [determinism contract](https://github.com/MasterLaplace/LplKernel/blob/main/.github/CONTRIBUTING.md#the-determinism-contract),
 and a feature that reaches the kernel ships as a
 [slice](https://github.com/MasterLaplace/LplKernel/blob/main/.github/CONTRIBUTING.md#a-slice-one-feature-proven-on-both-targets).
-For the kernel port, change this repository through LplKernel's `LplPlugin/` submodule.
+LplKernel finds this repository next to it, at `../LplPlugin`, so there is one checkout of it for
+both; its `DEPENDENCIES.lock` names the commit the kernel was tested with, and a change here that the
+kernel needs is merged before the kernel's.
 
 - A module meant to be linked into the kernel uses `lpl::pmr` and the `lpl/std/` headers, never the
   `std::` containers, which need a heap the kernel does not have. Host tools (`editor/`, `bench/`,
@@ -40,8 +42,6 @@ already raw.
 
 ## Traps that are not checks yet
 
-- `xmake` resolves its project from the current directory, and inside LplKernel this repository is a
-  nested project: build it with `xmake -P <path to LplPlugin>`.
 - `xmake build` takes one target. Without one it skips the targets declared `set_default(false)`,
   the tests among them, so use `xmake build -a` for everything; `xmake build a b` refuses the second
   name and builds nothing.
