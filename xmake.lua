@@ -11,7 +11,22 @@
 -- /////////////////////////////////////////////////////////////////////////////
 
 set_project("LplPlugin")
-set_version("0.2.0")
+
+local kConfigHeader = path.join(os.scriptdir(), "core/include/lpl/config.h")
+
+rule("laplace.version")
+    on_load(function (target)
+        local text = io.readfile(kConfigHeader)
+        local version = {}
+        for _, part in ipairs({"MAJOR", "MINOR", "PATCH"}) do
+            table.insert(version, text:match("#define LPLPLUGIN_VERSION_" .. part .. " (%d+)"))
+        end
+        target:set("version", table.concat(version, "."))
+    end)
+rule_end()
+
+add_rules("laplace.version")
+
 set_xmakever("2.9.0")
 
 set_languages("c++23", "c17")
