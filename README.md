@@ -2,7 +2,7 @@
 
 > A modular, experimental ultra-optimized C++23 engine for neuro-immersive simulations.
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Build: xmake](https://img.shields.io/badge/build-xmake-brightgreen)](https://xmake.io)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)]()
 
@@ -111,4 +111,4 @@ Full documentation is available in the **[Wiki](LplPlugin.wiki/Home.md)** — ar
 
 ## License
 
-This project is licensed under the **GPL-3.0** — see [LICENSE](LICENSE) for details.
+This project is licensed under the **MIT License**: see [LICENSE](LICENSE).

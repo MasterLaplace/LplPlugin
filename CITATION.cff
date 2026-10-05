@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "LplPlugin"
+abstract: "A modular C++23 engine for deterministic, neuro-immersive simulations, built to run both on a host and in ring 0."
+authors:
+  - alias: "MasterLaplace"
+    orcid: "https://orcid.org/0009-0006-1371-4119"
+    website: "https://github.com/MasterLaplace"
+repository-code: "https://github.com/MasterLaplace/LplPlugin"
+license: MIT
