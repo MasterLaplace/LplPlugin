@@ -4,7 +4,7 @@
  *        portability macros.
  *
  * Names the target operating system, CPU architecture, and compiler that
- * lpl/config.h detects. Provides forced inlining, cache-line constants, and
+ * lplplugin/config.h detects. Provides forced inlining, cache-line constants, and
  * the LPL_HD macro for CUDA host+device functions.
  *
  * @author MasterLaplace
@@ -17,12 +17,12 @@
 #ifndef LPL_CORE_PLATFORM_HPP
 #    define LPL_CORE_PLATFORM_HPP
 
-#    include <lpl/config.h>
+#    include <lplplugin/config.h>
 
 /**
  * @name Operating system, processor and compiler
  *
- * Derived from lpl/config.h, the one place they are detected, under the names the
+ * Derived from lplplugin/config.h, the one place they are detected, under the names the
  * engine has always used. The Laplace Kernel is a system like the others:
  * LPL_OS_LAPLACE_KERNEL is defined for code compiled for it.
  * @{

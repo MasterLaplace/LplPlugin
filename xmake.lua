@@ -12,7 +12,7 @@
 
 set_project("LplPlugin")
 
-local kConfigHeader = path.join(os.scriptdir(), "core/include/lpl/config.h")
+local kConfigHeader = path.join(os.scriptdir(), "core/include/lplplugin/config.h")
 
 rule("laplace.version")
     on_load(function (target)
