@@ -12,7 +12,7 @@
 ** carry the camera basis and the world's noise.
 **
 ** Prints the folds the in-kernel smoke folds (libengine/src/smoke/
-** p10_botany_smoke.cpp), so validate.sh can diff them bit for bit.
+** p10_botany_smoke.cpp), so the full validation can diff them bit for bit.
 */
 #include <lpl/procgen/Botany.hpp>
 

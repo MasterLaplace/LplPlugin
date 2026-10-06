@@ -232,7 +232,7 @@ int main()
     //
     // It cannot be compared byte for byte here, because it is baked from a FILE
     // (assets/games/worldview.lplscene) and a test run by `xmake run` has no
-    // dependable working directory. validate.sh does that comparison, by
+    // dependable working directory. The full validation does that comparison, by
     // regenerating both headers into a scratch copy and diffing. What is asserted
     // here is the part that catches the likelier fault: a blob regenerated from a
     // DIFFERENT scene would still open and still parse.
