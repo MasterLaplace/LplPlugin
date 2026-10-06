@@ -23,7 +23,7 @@
  *              assets/games/worldview.lplscene \
  *              pack/include/lpl/pack/ViewerPackBlob.hpp
  *
- * validate.sh runs exactly that into a scratch copy and diffs, so a stale blob
+ * The full validation runs exactly that into a scratch copy and diffs, so a stale blob
  * fails a check rather than quietly shipping last month's world. That guard used
  * to be claimed here and not implemented: test-game-pack compares the PARITY blob
  * byte for byte, and only reads fields out of this one. The blob was in fact stale

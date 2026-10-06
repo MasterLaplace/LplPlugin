@@ -474,7 +474,7 @@ target_end()
 -- property that can fail, not a signature that merely pins today's arithmetic.
 --
 -- A gate is declared here only once its source asserts something. A target whose
--- main() is `return 0` is worse than no target: validate.sh discovers it, runs
+-- main() is `return 0` is worse than no target: the full validation discovers it, runs
 -- it, and the absence of an "ALL PASS" line makes the whole battery red — or, if
 -- it were taught to print that line, it would become a check that cannot fail,
 -- the anti-pattern this repo has already paid for twice. So the scaffolding
