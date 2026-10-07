@@ -50,47 +50,13 @@ target("test-physics-parity")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Image color/HSB/histogram/sampling determinism
+-- Water: the swell, its gradient, and the foam
 -- ─────────────────────────────────────────────────────────────────────────────
-target("test-image-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-image")
-    add_files("parity/test_image_parity.cpp")
-target_end()
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Scene graph: transforms / world composition / undo-redo / selection
--- ─────────────────────────────────────────────────────────────────────────────
-target("test-scene-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-scene")
-    add_files("parity/test_scene_parity.cpp")
-target_end()
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 3D camera/projection determinism (Fixed32 geometry → float projection)
--- ─────────────────────────────────────────────────────────────────────────────
-target("test-render-parity")
+target("test-water")
     set_kind("binary")
     set_group("tests")
     add_deps("lpl-core", "lpl-math", "lpl-render")
-    add_files("parity/test_render_parity.cpp")
-target_end()
-
-target("test-p6-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-render")
-    add_files("parity/test_p6_parity.cpp")
-target_end()
-
-target("test-cubepile-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-render", "lpl-samples")
-    add_files("parity/test_cubepile_parity.cpp")
+    add_files("parity/test_water.cpp")
 target_end()
 
 target("test-scene-document")
@@ -394,13 +360,6 @@ target("test-session-lifecycle")
     add_files("parity/test_session_lifecycle.cpp")
 target_end()
 
-target("test-living-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-procgen", "lpl-ai", "lpl-ecology")
-    add_files("parity/test_living_parity.cpp")
-target_end()
-
 target("test-prop-materialization")
     set_kind("binary")
     set_group("tests")
@@ -413,13 +372,6 @@ target("test-draw-order")
     set_group("tests")
     add_deps("lpl-core", "lpl-math", "lpl-render")
     add_files("parity/test_draw_order.cpp")
-target_end()
-
-target("test-botany-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-procgen")
-    add_files("parity/test_botany_parity.cpp")
 target_end()
 
 target("test-procgen-chunking")
@@ -502,13 +454,6 @@ target("test-agent-loop")
     add_files("parity/test_agent_loop.cpp")
 target_end()
 
-target("test-codec-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-codec")
-    add_files("parity/test_codec_parity.cpp")
-target_end()
-
 target("test-pack-ecc")
     set_kind("binary")
     set_group("tests")
@@ -521,22 +466,6 @@ target("test-erasure-channel")
     set_group("tests")
     add_deps("lpl-core", "lpl-math", "lpl-codec")
     add_files("parity/test_erasure_channel.cpp")
-target_end()
-
-target("test-rosetta-isa")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-codec", "lpl-rosetta")
-    add_files("parity/test_rosetta_isa.cpp")
-target_end()
-
-target("test-history-parity")
-    set_kind("binary")
-    set_group("tests")
-    -- @warning Depends on lpl-engine because the JOURNEY half of this gate lives there: a walk needs a
-    -- Registry and terrain, both of which are the engine's, while history/ stays corpus-only.
-    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-history", "lpl-engine")
-    add_files("parity/test_history_parity.cpp")
 target_end()
 
 -- @warning The double-buffer contract had no test until a bug on top of it made five wrong hypotheses

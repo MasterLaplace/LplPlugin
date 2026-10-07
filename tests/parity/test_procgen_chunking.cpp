@@ -44,7 +44,7 @@ void check(bool condition, const char *what)
     }
 }
 
-/// The canonical parameters, from the one constexpr the kernel smoke also reads.
+/// The canonical parameters, from the one constexpr the engine test `chunking` also reads.
 [[nodiscard]] procgen::ChunkParams makeParams() { return procgen::parityChunkParams(); }
 
 void testHeightSeamsAreExact()
@@ -606,19 +606,6 @@ int main()
     testWhatTheWalkedWorldIsMadeOf();
     testLandmarksAreAgreedOn();
     testDeterminism();
-
-    // ── The signatures the kernel must reproduce ────────────────────────────
-    {
-        const procgen::ChunkParams params = makeParams();
-        const procgen::EndlessFoldResult folded =
-            procgen::foldEndlessPatch(params, procgen::parityRiverParams(), procgen::kParityPatchRadius);
-        std::printf("\n-- signatures the kernel must reproduce --\n");
-        std::printf("  height_sig = 0x%08X\n", folded.heightSignature);
-        std::printf("  river_sig  = 0x%08X\n", folded.riverSignature);
-        std::printf("  chunks     = %u\n", folded.chunks);
-        std::printf("  river      = %u\n", folded.riverCells);
-        std::printf("  seams      = %u\n", folded.seamMismatches);
-    }
 
     if (gFailures == 0)
         std::printf("\nALL PASS (0 failures, %d checks)\n", gChecks);
