@@ -566,13 +566,6 @@ target("test-terrain-routes")
     add_files("parity/test_terrain_routes.cpp")
 target_end()
 
-target("test-relief-parity")
-    set_kind("binary")
-    set_group("tests")
-    add_deps("lpl-core", "lpl-math", "lpl-procgen", "lpl-engine")
-    add_files("parity/test_relief_parity.cpp")
-target_end()
-
 target("test-geo-projection")
     set_kind("binary")
     set_group("tests")
@@ -645,4 +638,17 @@ target("test-minimap")
     set_group("tests")
     add_deps("lpl-core", "lpl-math", "lpl-voxel")
     add_files("parity/test_minimap.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- The engine tests: every LPL_TEST of tests/<module>/, in KTAP. A debug kernel
+-- runs the same sources in ring 0, and its records must equal these.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-engine")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-testing", "lpl-core", "lpl-math", "lpl-memory", "lpl-concurrency", "lpl-ecs", "lpl-physics",
+             "lpl-image", "lpl-scene", "lpl-render", "lpl-samples", "lpl-procgen", "lpl-ai", "lpl-ecology",
+             "lpl-codec", "lpl-rosetta", "lpl-history", "lpl-pack", "lpl-engine")
+    add_files("main.cpp", "*/*.cpp|parity/*.cpp")
 target_end()
