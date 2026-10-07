@@ -15,11 +15,14 @@ public:
 } // namespace
 
 /**
- * @brief Runs the engine tests on the host and prints KTAP, the oracle a debug kernel is compared with.
+ * @brief Runs the tests linked into this binary on the host and prints KTAP, the oracle a debug kernel
+ *        is compared with.
  *
- * @details `test-engine 'relief.*,codec.*'` runs only the tests those patterns name. The exit status
- *          is 0 when no test failed and the selection, if any, named one. Standard output is flushed line by line, so a
- * line the engine logs on standard error never lands inside a KTAP line.
+ * @details A repository whose tests use lpl::testing builds its host binary from this file and
+ *          `testing/src/Runner.cpp`. `test-engine 'relief.*,codec.*'` runs only the tests those
+ *          patterns name. The exit status is 0 when no test failed and the selection, if any, named
+ *          one. Standard output is flushed line by line, so a line logged on standard error never
+ *          lands inside a KTAP line.
  */
 int main(int argc, char **argv)
 {

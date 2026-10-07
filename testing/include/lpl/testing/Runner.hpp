@@ -1,9 +1,9 @@
 /**
  * @file Runner.hpp
- * @brief Runs every engine test and writes KTAP, the same way on the host and in ring 0.
+ * @brief Runs every declared test and writes KTAP, the same way on the host and in ring 0.
  *
- * The caller writes the KTAP header and the totals: the host runner around the engine's suites
- * alone, the kernel around its own suites and these. Each suite is one subtest, and each test
+ * The caller writes the KTAP header and the totals: `testing/host/main.cpp` on a host, the kernel
+ * around its own suites and these. Each suite is one subtest, and each test
  * reports its claims that did not hold and its records.
  *
  * @author MasterLaplace
