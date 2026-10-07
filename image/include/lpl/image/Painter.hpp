@@ -70,7 +70,7 @@ private:
 /**
  * @brief Paint a fixed reference scene into @p image.
  *
- * Shared by the host parity test and the kernel smoke so both fold the exact
+ * Painted by the engine test `image` on both targets, so both fold the exact
  * same drawn pixels — any cross-target divergence in the integer rasterisers
  * shows up as a different foldSignature().
  */

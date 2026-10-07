@@ -144,7 +144,7 @@ struct Engine::Impl {
     bool initialised{false};
 
     /// Real-time violation counter sampled once the World is up. The counter is
-    /// global and kernel smokes bump it before we start, so only the DELTA from
+    /// global and the kernel's tests bump it before we start, so only the DELTA from
     /// this baseline says anything about our own tick.
     core::u32 realTimeViolationBaseline{0};
     core::u32 realTimeBoundedBaseline{0};
@@ -217,7 +217,7 @@ core::Expected<void> Engine::init()
     core::Log::info("Engine::init — wiring subsystems");
 
     // Probe the injected platform seam (clock / display / input / GPU-memory),
-    // the hosted mirror of the kernel's p2_hal_smoke. The engine reaches every
+    // the hosted mirror of the engine test `kernel_platform`. The engine reaches every
     // host or kernel facility exclusively through these backends.
     {
         platform::IPlatform &plat = *_impl->platform;
@@ -518,7 +518,7 @@ core::Expected<void> Engine::init()
     }
 
     // Baselines, never absolutes: these counters are global and the kernel's own
-    // smoke battery moves them well before the engine ever runs a step.
+    // tests move them well before the engine ever runs a step.
     _impl->realTimeViolationBaseline = _impl->platform->memory().realTimeViolationCount();
     _impl->realTimeBoundedBaseline = _impl->platform->memory().realTimeBoundedCount();
     _impl->initialised = true;

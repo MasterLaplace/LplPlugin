@@ -9,8 +9,8 @@
  * noise for a first slice: every step is integer/Fixed32, no gradients, no sqrt.
  * Fractional Brownian motion (fBm) sums octaves for natural-looking relief.
  *
- * Header-only and freestanding-safe (no heap, no exceptions): usable in the
- * kernel smoke path exactly like the CubePile sample.
+ * Header-only and freestanding-safe (no heap, no exceptions): usable in ring 0
+ * exactly like the CubePile sample.
  *
  * @author MasterLaplace
  * @version 0.1.0

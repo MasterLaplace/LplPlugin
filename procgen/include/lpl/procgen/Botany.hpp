@@ -134,7 +134,7 @@ struct TreeSkeleton {
 /**
  * @brief The three species the parity gate grows, so both sides grow the same.
  *
- * One definition, read by the host oracle and by the in-kernel smoke alike —
+ * One definition, read by the engine test `botany` on both targets —
  * the same rule the world recipe follows, for the same reason.
  */
 [[nodiscard]] TreeParams parityTreeParams(TreeSpecies species);

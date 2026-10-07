@@ -2,9 +2,9 @@
  * @file Parity.hpp
  * @brief The single constexpr case both sides of the gate encode.
  *
- * Same discipline as parityWorldRecipe(): one definition, read by the Linux
- * oracle and by the kernel smoke, so the two cannot drift by editing their own
- * copy of the parameters. foldCodecState() folds raw words, never a decimal.
+ * Same discipline as parityWorldRecipe(): one definition, which the engine test
+ * reads on both targets, so the two cannot drift by editing their own copy of
+ * the parameters. foldCodecState() folds raw words, never a decimal.
  *
  * What makes gate P11 different from every gate before it: the two targets run
  * genuinely DIFFERENT code. Everywhere else the contract is "the same source
@@ -84,8 +84,8 @@ namespace lpl::codec {
  * @struct CodecFoldResult
  * @brief The signatures the kernel must reproduce.
  *
- * Deliberately free of Fixed32 and bool so the kernel smoke can copy it into a plain
- * C struct field by field, the same reason WorldRecipeResult is.
+ * Free of Fixed32 and bool: each field is a word the engine test records as it is,
+ * as WorldRecipeResult's are.
  */
 struct CodecFoldResult {
     core::u32 solitonSignature{0u}; ///< Fold of the degree distribution's weights.
@@ -104,7 +104,7 @@ struct CodecFoldResult {
 /**
  * @brief Runs the canonical case and folds every stage of it.
  *
- * One function, called by the host oracle and by the kernel smoke. Folding the
+ * One function, which the engine test `codec` runs on both targets. Folding the
  * intermediate stages and not only the answer is deliberate: a payload that comes
  * back correct proves the decode worked, and says nothing about whether the two
  * targets built the same distribution or reduced the same matrix on the way there.

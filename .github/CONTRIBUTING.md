@@ -33,9 +33,15 @@ already raw.
 
 ## Tests
 
-- A test is a `test-*` target of `tests/xmake.lua`, and it ends on `ALL PASS (0 failures, N checks)`.
-  A target that prints no verdict counts as a failure, so a test target is declared by the change
-  that fills it.
+- A test of code the kernel links is an `LPL_TEST(name)` in `tests/<module>/`, under one
+  `LPL_TEST_SUITE` per file: no list to update. `test-engine` runs it here, a debug kernel runs the
+  same source in ring 0, and every `key=value` it measures must come out the same on both, so a size
+  or an address is never measured. A test of what only the kernel compiles goes in
+  `tests/<module>/kernel/`, and runs in ring 0 alone. `xmake run test-engine 'relief.*'` runs one
+  suite.
+- Any other test is a `test-*` target of `tests/xmake.lua`, and it ends on
+  `ALL PASS (0 failures, N checks)`. A target that prints no verdict counts as a failure, so a test
+  target is declared by the change that fills it.
 - A generator or a simulation step earns three tests: it reproduces bit for bit, it changes with its
   seed, and it keeps an invariant stated as a property (the steep erodes more than the flat), not as a
   folded signature. A signature that stays stable proves nothing about what it folds.

@@ -16,7 +16,7 @@
  * step its own copy: it only seeds the entities (@ref CubePile::init) and reads
  * them back for rendering. onRender is float/pixel work and is never folded, so
  * nothing here perturbs the parity signature (folded separately, off the
- * engine, by @ref runCubePileAndFold for the oracle/kernel-smoke path).
+ * engine, by @ref runCubePileAndFold for the engine test).
  *
  * @author MasterLaplace
  * @version 0.1.0

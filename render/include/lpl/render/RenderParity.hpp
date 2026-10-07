@@ -1,7 +1,7 @@
 /**
  * @file RenderParity.hpp
- * @brief Shared deterministic 3D projection scene used by both the Linux oracle
- *        parity test and the in-kernel smoke, so they fold the SAME geometry.
+ * @brief Shared deterministic 3D projection scene, which the engine test `render`
+ *        folds on both targets, so they fold the SAME geometry.
  *
  * Geometry and the model transform are authored in Fixed32 (CORDIC rotation) =
  * authoritative state. The view/projection and the perspective divide run in

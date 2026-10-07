@@ -340,7 +340,7 @@ struct SimFoldResult {
     core::u32 image_signature{0u};
 };
 
-/// Convenience used by both the oracle parity test and the in-kernel smoke:
+/// Convenience the engine test `cube_pile` runs on both targets:
 /// seed, advance @p ticks deterministic steps, render into @p rt, fold both.
 [[nodiscard]] inline SimFoldResult runCubePileAndFold(const RenderTarget &rt, core::u32 ticks) noexcept
 {
