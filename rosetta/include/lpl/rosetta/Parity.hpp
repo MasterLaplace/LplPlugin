@@ -43,7 +43,7 @@ struct RosettaFoldResult {
 /**
  * @brief Runs the canonical program, engraves the canonical plate, and folds both.
  *
- * One function, called by the host oracle and by the kernel smoke, for the reason
+ * One function, which the engine test `rosetta` runs on both targets, for the reason
  * every parity case in this project is one function: two copies of the parameters are
  * two things that can be edited apart.
  *

@@ -5,7 +5,7 @@
  * Compiled only into the hosted build (LPL_TARGET_KERNEL=0); empty on the
  * kernel build. The display backend is a host-memory software linear
  * framebuffer that mirrors the kernel's software-LFB path bit-for-bit, so the
- * same engine code and the same smoke produce identical pixels on both targets.
+ * same engine code produces identical pixels on both targets.
  *
  * @author MasterLaplace
  * @version 0.1.0

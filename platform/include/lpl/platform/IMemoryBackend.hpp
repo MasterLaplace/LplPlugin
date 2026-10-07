@@ -24,9 +24,9 @@ namespace lpl::platform {
  *
  * This is the seam the engine's allocators sit ON, not a replacement for them:
  * lpl::memory::ArenaAllocator stays the single, portable, deterministic bump
- * allocator on every target — its byte accounting is a determinism gate (the P1
- * arena smoke folds arena.used() and requires it to match the Linux oracle
- * bit-for-bit, which two different arena implementations could not guarantee).
+ * allocator on every target — its byte accounting is a determinism gate (the
+ * engine test `arena_allocator` checks arena.used() to the byte on both targets,
+ * which two different arena implementations could not guarantee).
  * What differs per platform is only WHERE the arena's backing block comes from:
  * malloc on a host, a pre-mapped region in the kernel.
  *

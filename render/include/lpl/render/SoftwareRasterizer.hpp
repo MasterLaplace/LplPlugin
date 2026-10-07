@@ -7,7 +7,7 @@
  * authored in Fixed32 (CORDIC) = authoritative; projection, the perspective
  * divide and the per-pixel barycentric fill run in float (SSE,
  * -ffp-contract=off) which is bit-identical host vs kernel. The same code path
- * drives the Linux oracle parity test and the in-kernel present smoke.
+ * draws the engine test `render` on both targets and what ring 0 presents.
  *
  * @author MasterLaplace
  * @version 0.1.0

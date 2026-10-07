@@ -165,8 +165,8 @@ void foldCodecState(CodecFoldResult &out)
     if (mismatch != 0u)
     {
         // The two eliminations disagreeing is not a signature to compare, it is a
-        // fault. Reported by poisoning the verdict rather than by a separate flag the
-        // kernel smoke would have to remember to print.
+        // fault. Reported by poisoning the verdict rather than by a separate flag a
+        // test would have to remember to check.
         out.recovered = 0u;
     }
 }

@@ -126,6 +126,7 @@ add_defines("LPL_HAS_NET", "LPL_HAS_BCI")
 
 includes(
     "core",
+    "testing",
     "bench",
     "math",
     "memory",

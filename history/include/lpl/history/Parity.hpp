@@ -79,7 +79,7 @@ struct HistoryFoldResult {
 /**
  * @brief Builds the canonical world, runs it, and folds every stage.
  *
- * One function, called by the host oracle and by the kernel smoke.
+ * One function, which the engine test `history` runs on both targets.
  *
  * @param out Receives the signatures.
  */

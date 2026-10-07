@@ -258,11 +258,10 @@ struct WorldRecipe {
 
 /**
  * @struct WorldRecipeResult
- * @brief What baking a recipe produced, in a form a C caller can print.
+ * @brief What baking a recipe produced, every field a word.
  *
- * Deliberately free of Fixed32 and bool so the kernel smoke can copy it into a
- * plain C struct field by field without a conversion that might differ between
- * targets.
+ * Free of Fixed32 and bool, so the engine test records each field as the same
+ * word on both targets, without a conversion that might differ between them.
  *
  * Three signatures rather than one, and that is the point of the gate. The state
  * fold only sees where entities ended up, so a pass that reshapes the terrain
@@ -285,6 +284,9 @@ struct WorldRecipeResult {
     core::u32 gateVisited{0u};     ///< Cells the gate's flood actually reached.
     core::u32 gatePathLength{0u};  ///< Steps from entrance to exit.
     core::u32 ok{0u};              ///< 1 if the world is non-empty AND passes its gate.
+
+    /** @brief Whether two bakes produced the same world, field for field. */
+    [[nodiscard]] bool operator==(const WorldRecipeResult &) const noexcept = default;
 };
 
 /**

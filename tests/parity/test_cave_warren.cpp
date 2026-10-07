@@ -8,13 +8,15 @@
  * with the run that has to FAIL, because "the body got inside" is satisfied by a
  * collider that lets everything through.
  *
+ * The walk in and its sealed control are the engine test `caves` (tests/engine/caves.cpp),
+ * which runs on both targets.
+ *
  * @author MasterLaplace
  * @version 0.1.0
  * @date 2026-08-06
  * @copyright MIT License
  */
 
-#include <lpl/engine/CaveParity.hpp>
 #include <lpl/procgen/CaveWarren.hpp>
 #include <lpl/procgen/EndlessPlan.hpp>
 #include <lpl/procgen/WorldRecipe.hpp>
@@ -239,39 +241,6 @@ int main()
         check(!outside.enclosed, "and the shelf it opens onto is open sky");
     }
 
-    // ── The walk, and the walk that must not work ────────────────────────────
-    std::printf("\n-- walking in --\n");
-    const engine::CaveFoldResult open = engine::foldCaveParity();
-    const engine::CaveFoldResult sealed = engine::foldSealedCaveParity();
-
-    std::printf("  open:   enclosed %u ticks, descended %u levels, blocked %u, head %u\n", open.enclosedTicks,
-                open.descendedLevels, open.blocked, open.headBumps);
-    std::printf("  sealed: enclosed %u ticks, blocked %u\n", sealed.enclosedTicks, sealed.blocked);
-
-    check(open.warrenSignature != 0u, "the gate found a cave to walk into");
-    check(open.enclosedTicks > 0u, "a body walking at the mouth ends up under rock", open.enclosedTicks);
-    // The control. Without it the check above is satisfied by a collider that lets
-    // everything through, and a collider that let everything through would also let a
-    // body through a mountain.
-    check(sealed.enclosedTicks == 0u, "and a doorway filled with rock lets nobody in", sealed.enclosedTicks);
-    check(sealed.blocked > open.blocked, "the sealed run is stopped, not merely slower", sealed.blocked);
-    check(open.walkSignature != sealed.walkSignature, "the two walks are genuinely different runs");
-    check(open.spanSignature != sealed.spanSignature, "and they disagree about where the rock is");
-
-    std::printf("\n-- signatures the kernel must reproduce --\n");
-    std::printf("  warren_sig = 0x%08X\n", open.warrenSignature);
-    std::printf("  walk_sig   = 0x%08X\n", open.walkSignature);
-    std::printf("  span_sig   = 0x%08X\n", open.spanSignature);
-    std::printf("  sealed_sig = 0x%08X\n", sealed.walkSignature);
-    std::printf("  covered    = %u\n", open.coveredColumns);
-    std::printf("  open       = %u\n", open.openCells);
-    std::printf("  reachable  = %u\n", open.reachableCells);
-    std::printf("  aperture   = %u\n", open.apertureCells);
-    std::printf("  path       = %u\n", open.pathLength);
-    std::printf("  enclosed   = %u\n", open.enclosedTicks);
-    std::printf("  descended  = %u\n", open.descendedLevels);
-    std::printf("  kind       = %u\n", open.kind);
-
-    std::printf("\nALL PASS (%u failures, %u checks)\n", gFailures, gChecks);
+    std::printf("\n%s (%u failures, %u checks)\n", gFailures == 0u ? "ALL PASS" : "FAILURES", gFailures, gChecks);
     return gFailures == 0u ? 0 : 1;
 }
