@@ -5,7 +5,17 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.2.0] - 2026-10-05
+## [0.3.0] - 2026-10-07
+
+### Added
+
+- **testing**: Declare each engine test once, for the host and ring 0 (#389)
+
+### Documentation
+
+- Call it the full validation, as the issues do (#385)
+
+## [0.2.0] - 2026-10-06
 
 ### Added
 
