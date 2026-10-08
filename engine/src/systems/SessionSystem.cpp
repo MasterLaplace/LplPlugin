@@ -16,8 +16,6 @@
 #include <lpl/net/protocol/Protocol.hpp>
 
 #include <cstring>
-#include <netinet/in.h>
-#include <sys/socket.h>
 
 namespace lpl::engine::systems {
 
