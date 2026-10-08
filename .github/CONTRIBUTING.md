@@ -29,7 +29,8 @@ kernel needs is merged before the kernel's.
 
 `lpl::math::Fixed32{n}` builds from the raw Q16.16 word: `Fixed32{10}` is 10/65536, not ten. Write
 `Fixed32::fromInt(10)`, `Fixed32::one()` or `Fixed32::half()`; reserve the braces for a value that is
-already raw.
+already raw, and write a raw literal as `Fixed32::fromRaw(1)`. `tools/check-fixed-literal.sh` refuses a
+non-zero literal in the braces, and the linter workflow runs it.
 
 ## Tests
 

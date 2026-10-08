@@ -82,7 +82,8 @@ void benchmarkFixedMath()
         {
             r = a * b;
             a = r;
-            b = b + math::Fixed32{1};
+            // TODO(#361): one raw unit (1/65536), or math::Fixed32::one()?
+            b = b + math::Fixed32::fromRaw(1);
         }
         bench::doNotOptimize(r);
     });
