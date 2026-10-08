@@ -7,7 +7,7 @@
 target("lpl-bench")
     set_kind("static")
     set_group("modules")
-    add_deps("lpl-core", "lpl-math", "lpl-voxel")
+    add_deps("lpl-core", "lpl-math", "lpl-voxel", "lpl-container")
     add_headerfiles("include/(lpl/bench/*.hpp)")
     add_includedirs("include", {public = true})
     add_files("src/*.cpp")

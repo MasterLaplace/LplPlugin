@@ -104,6 +104,21 @@
 
 inline constexpr std::size_t kCacheLineSize = 64;
 
+/**
+ * @brief Distance between two values written by different cores, so they never share a cache line.
+ *
+ * @details The compiler's figure for the target, __GCC_DESTRUCTIVE_SIZE (256 on ARM64, where some
+ *          cores have 256-byte lines, 128 on POWER), and never less than 128: x86's spatial
+ *          prefetcher fetches 64-byte lines in 128-byte aligned pairs, and Apple's ARM64 cores have
+ *          128-byte lines. Too much distance costs memory only; too little brings back the coherence
+ *          traffic it is there to remove.
+ */
+#    if defined(__GCC_DESTRUCTIVE_SIZE) && __GCC_DESTRUCTIVE_SIZE > 128
+inline constexpr std::size_t kDestructiveInterferenceSize = __GCC_DESTRUCTIVE_SIZE;
+#    else
+inline constexpr std::size_t kDestructiveInterferenceSize = 128u;
+#    endif
+
 // ---- CPU Pause Hint ------------------------------------------------------
 
 #    if defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)

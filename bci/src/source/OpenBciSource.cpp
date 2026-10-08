@@ -50,17 +50,7 @@ Expected<std::size_t> OpenBciSource::read(std::span<Sample> buffer)
         return std::unexpected(Error::make(ErrorCode::kNotInitialized, "OpenBciSource not started"));
     }
 
-    std::size_t count = 0;
-    for (auto &sample : buffer)
-    {
-        if (!_ring.pop(sample))
-        {
-            break;
-        }
-        ++count;
-    }
-
-    return count;
+    return _ring.drain(buffer);
 }
 
 void OpenBciSource::stop() noexcept
