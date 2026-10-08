@@ -206,6 +206,32 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     to.flags = from.collidable ? kScatterFlagCollidable : 0u;
 }
 
+/**
+ * @brief Reads a species' prey index, or refuses it.
+ *
+ * Refused, never clamped, exactly as an unknown enum is: the trophic web subscripts its species
+ * vector by this index when it is stepped, so an index past the table a cartridge declares reads
+ * and writes out of bounds — in ring 0, where the ecosystem runs, past no allocator guard. The
+ * content hash is a checksum and not a signature, so a crafted image reaches here.
+ *
+ * @param value        The index the wire holds.
+ * @param speciesCount Number of species the recipe declares.
+ * @param out          Receives the index; untouched when refused.
+ * @param outRefusal   Receives the field and the value it held when refused; untouched otherwise.
+ * @return false when @p value is neither Species::kNoPrey nor a species the table holds.
+ */
+[[nodiscard]] inline bool readPreyIndex(core::u32 value, core::u32 speciesCount, core::u32 &out,
+                                        WireRefusal &outRefusal) noexcept
+{
+    if (value != ecology::Species::kNoPrey && value >= speciesCount)
+    {
+        outRefusal = WireRefusal{"species.preyIndex", value};
+        return false;
+    }
+    out = value;
+    return true;
+}
+
 } // namespace detail
 
 /**
@@ -700,7 +726,8 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
         to.params.capacity = math::Fixed32::fromRaw(from.capacity);
         to.params.refuge = math::Fixed32::fromRaw(from.refuge);
         to.initial = math::Fixed32::fromRaw(from.initial);
-        to.preyIndex = from.preyIndex;
+        if (!detail::readPreyIndex(from.preyIndex, count, to.preyIndex, outRefusal))
+            return false;
     }
     recipe.speciesCount = count;
 
