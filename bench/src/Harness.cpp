@@ -69,7 +69,8 @@ void printLegend()
 
 void section(const char *title) { std::printf("\n  --- %s ---\n", title); }
 
-Result report(const char *label, std::vector<core::f64> &samplesNs, std::optional<core::f64> microjoulesPerRep)
+Result report(const char *label, std::vector<core::f64> &samplesNs,
+              std::expected<core::f64, EnergyAbsence> microjoulesPerRep)
 {
     std::sort(samplesNs.begin(), samplesNs.end());
 
