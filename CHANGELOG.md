@@ -5,6 +5,12 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.4.0] - 2026-10-08
+
+### Added
+
+- **testing**: One host entry point for the tests of every repository (#391)
+
 ## [0.3.0] - 2026-10-07
 
 ### Added

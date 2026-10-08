@@ -1,6 +1,6 @@
 /**
  * @file Test.hpp
- * @brief One declaration per engine test, run on the host and in ring 0, and reported in KTAP.
+ * @brief One declaration per test, run on the host and in ring 0, and reported in KTAP.
  *
  * A test file declares its suite once, then each test once, next to nothing else:
  *
@@ -17,8 +17,9 @@
  *
  * - Registration: the declaration puts a pointer in the `lpl_tests` section; no list names a test.
  *   Every `.cpp` of `tests/<module>/`, for a module the kernel compiles against, is built into
- *   `test-engine` and into debug kernels; `tests/<module>/kernel/` holds the tests of what only the
- *   kernel compiles.
+ *   the repository's host test binary (`test-engine` here) and into debug kernels. Here,
+ *   `tests/<module>/kernel/` holds the tests of what only the kernel compiles; LplKernel keeps
+ *   the kernel-only tests of other repositories next to their library.
  * - Order: file, then line, the same on both targets.
  * - Records: every `key=value` a test of both targets measures is compared between the host and
  *   ring 0, so such a test never measures a value that differs between them (a size, an address, a

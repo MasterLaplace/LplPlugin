@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "LplPlugin"
 abstract: "A modular C++23 engine for deterministic, neuro-immersive simulations, built to run both on a host and in ring 0."
-version: "0.3.0"
-date-released: "2026-10-07"
+version: "0.4.0"
+date-released: "2026-10-08"
 authors:
   - family-names: "MasterLaplace"
     alias: "MasterLaplace"
