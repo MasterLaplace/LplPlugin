@@ -12,6 +12,7 @@ on:
       - '**.cu'
       - '**.cuh'
       - '.github/workflows/linter.yml'
+      - 'tools/check-fixed-literal.sh'
 
 permissions:
   contents: write
@@ -79,6 +80,12 @@ jobs:
       - name: Show git status
         run: |
           git status --porcelain
+
+      - name: Refuse a Fixed32 built from a non-zero integer literal
+        if: ${{ !cancelled() }}
+        run: |
+          tools/check-fixed-literal.sh --self-test
+          tools/check-fixed-literal.sh
 
       - name: Commit the formatting, signed by GitHub
         if: ${{ steps.files.outputs.files != '' }}
