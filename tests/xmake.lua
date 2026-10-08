@@ -262,8 +262,8 @@ target("test-energy-meter")
     add_files("parity/test_energy_meter.cpp")
 target_end()
 
--- What a benchmark run records about itself: the commit it was built from and the
--- class of machine it ran on.
+-- What a benchmark run records: the commit it was built from, the class of machine it
+-- ran on, and the JSON rows it writes.
 target("test-bench-records")
     set_kind("binary")
     set_group("tests")

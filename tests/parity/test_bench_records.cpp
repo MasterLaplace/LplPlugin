@@ -1,9 +1,18 @@
+#include <lpl/bench/EnergyMeter.hpp>
+#include <lpl/bench/Harness.hpp>
+#include <lpl/bench/JsonRows.hpp>
 #include <lpl/bench/SystemInfo.hpp>
 
 #include <cctype>
+#include <chrono>
 #include <cstdio>
+#include <expected>
+#include <filesystem>
+#include <fstream>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -112,6 +121,161 @@ void expectThisBuildToKnowItsCommit()
     std::printf("  commit: %s\n  machine class: %s\n", here.commit.c_str(), lpl::bench::machineClass(here).c_str());
 }
 
+lpl::bench::Result exampleResult()
+{
+    lpl::bench::Result result;
+    result.minNs = 91180.5;
+    result.medianNs = 100300.0;
+    result.meanNs = 100000.0;
+    result.p99Ns = 249400.0;
+    result.stddevNs = 25000.0;
+    result.samples = 1373u;
+    result.microjoulesPerRep = 12.5;
+    return result;
+}
+
+void expectAMeasuredRowToHoldEveryFieldInOrder()
+{
+    expect(lpl::bench::formatJsonRow("ArenaAllocator 10k allocs", exampleResult(), exampleMachine()) ==
+               R"({"schema":1,"label":"ArenaAllocator 10k allocs","median_ns":100300,"cv_percent":25,)"
+               R"("min_ns":91180.5,"p99_ns":249400,"n":1373,"energy_uj_per_rep":12.5,"energy_absent_reason":null,)"
+               R"("commit":"0123abc","build":"Release","compiler":"GCC 15.2.0",)"
+               R"("machine_class":"Linux x86_64, Example CPU 9000, 8 logical cores, bare metal"})",
+           "a measured row holds every field, in the documented order, and a null reason");
+}
+
+void expectARowWithoutEnergyToSayWhy()
+{
+    lpl::bench::Result withoutEnergy = exampleResult();
+    withoutEnergy.microjoulesPerRep = std::unexpected{lpl::bench::EnergyAbsence::Absent};
+    const std::string row = lpl::bench::formatJsonRow("ArenaAllocator 10k allocs", withoutEnergy, exampleMachine());
+    expect(row.find(R"("n":1373,"energy_uj_per_rep":null,"energy_absent_reason":"absent","commit":)") !=
+               std::string::npos,
+           "a row without energy writes null, never zero, and the reason beside it");
+
+    withoutEnergy.microjoulesPerRep = std::unexpected{lpl::bench::EnergyAbsence::ShortWindow};
+    expect(lpl::bench::formatJsonRow("x", withoutEnergy, exampleMachine())
+                   .find(R"("energy_absent_reason":"short-window")") != std::string::npos,
+           "the reason is the stable name of the absence");
+}
+
+void expectStringsToBeEscaped()
+{
+    const std::string label = "quote \" backslash \\ newline \n tab \t control \x01 unit separator \x1f delete \x7f "
+                              "N\u00b2 \xe2\x80\xa6";
+    const std::string row = lpl::bench::formatJsonRow(label, exampleResult(), exampleMachine());
+    expect(row.find(R"("label":"quote \" backslash \\ newline \n tab \t control \u0001 unit separator \u001f delete )"
+                    "\x7f N\u00b2 \xe2\x80\xa6\",") != std::string::npos,
+           "quotes, backslashes and control characters are escaped; other bytes pass as they are");
+}
+
+void expectANumberThatIsNotFiniteToBeNull()
+{
+    lpl::bench::Result notFinite = exampleResult();
+    notFinite.medianNs = std::numeric_limits<double>::quiet_NaN();
+    notFinite.p99Ns = std::numeric_limits<double>::infinity();
+    const std::string row = lpl::bench::formatJsonRow("x", notFinite, exampleMachine());
+    expect(row.find(R"("median_ns":null,)") != std::string::npos, "a NaN is written null, which JSON can carry");
+    expect(row.find(R"("p99_ns":null,)") != std::string::npos, "an infinity is written null, which JSON can carry");
+
+    lpl::bench::Result zeroMean = exampleResult();
+    zeroMean.meanNs = 0.0;
+    zeroMean.stddevNs = 0.0;
+    expect(lpl::bench::formatJsonRow("x", zeroMean, exampleMachine()).find(R"("cv_percent":null,)") !=
+               std::string::npos,
+           "a spread over a mean of zero means nothing, and is written null rather than zero");
+}
+
+void expectTheDocumentedReasonsToBeTheWrittenOnes()
+{
+    std::string_view reasonMeaning;
+    for (const lpl::bench::JsonRowField &field : lpl::bench::kJsonRowFields)
+        if (field.key == "energy_absent_reason")
+            reasonMeaning = field.meaning;
+    expect(!reasonMeaning.empty(), "the fields document energy_absent_reason");
+
+    const lpl::bench::EnergyAbsence reasons[] = {
+        lpl::bench::EnergyAbsence::Denied,        lpl::bench::EnergyAbsence::Unreadable,
+        lpl::bench::EnergyAbsence::Absent,        lpl::bench::EnergyAbsence::NoRepetition,
+        lpl::bench::EnergyAbsence::ShortWindow,   lpl::bench::EnergyAbsence::ReadFailed,
+        lpl::bench::EnergyAbsence::AmbiguousWrap,
+    };
+    for (const lpl::bench::EnergyAbsence reason : reasons)
+        expect(reasonMeaning.find(lpl::bench::energyAbsenceName(reason)) != std::string_view::npos,
+               "every reason a row can write is named where the fields are documented");
+}
+
+std::filesystem::path scratchFile(const char *scenario)
+{
+    return std::filesystem::temp_directory_path() /
+           ("lpl-bench-rows-" + std::string{scenario} + "-" +
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".jsonl");
+}
+
+std::vector<std::string> linesOf(const std::filesystem::path &path)
+{
+    std::vector<std::string> lines;
+    std::ifstream input{path};
+    for (std::string line; std::getline(input, line);)
+        lines.push_back(line);
+    return lines;
+}
+
+void expectAFileToHoldOneRowPerLabel()
+{
+    const std::filesystem::path path = scratchFile("file");
+    {
+        std::expected<lpl::bench::JsonRowFile, std::string> file =
+            lpl::bench::JsonRowFile::create(path.string(), exampleMachine());
+        expect(file.has_value(), "a file in a writable directory is created");
+        if (!file)
+            return;
+
+        file->append("first", exampleResult());
+        file->append("second", exampleResult());
+        expect(!file->failure().has_value(), "two rows with their own labels are written without a failure");
+        file->append("first", exampleResult());
+        expect(file->failure().has_value() && file->failure()->find("'first'") != std::string::npos,
+               "a second row with a label already written is refused, and the refusal names the label");
+        expect(file->rowCount() == 2u, "the refused row is not counted");
+    }
+
+    const std::vector<std::string> lines = linesOf(path);
+    expect(lines.size() == 2u, "the file holds one line per row written");
+    if (lines.size() == 2u)
+    {
+        expect(lines[0] == lpl::bench::formatJsonRow("first", exampleResult(), exampleMachine()),
+               "each line is the row formatJsonRow gives");
+        expect(lines[1] == lpl::bench::formatJsonRow("second", exampleResult(), exampleMachine()),
+               "rows keep the order they were measured in");
+    }
+    std::filesystem::remove(path);
+}
+
+void expectAnExistingFileToBeOverwritten()
+{
+    const std::filesystem::path path = scratchFile("overwrite");
+    std::ofstream{path} << "a previous run\nwith two lines\n";
+    {
+        std::expected<lpl::bench::JsonRowFile, std::string> file =
+            lpl::bench::JsonRowFile::create(path.string(), exampleMachine());
+        if (file)
+            file->append("only", exampleResult());
+    }
+    expect(linesOf(path).size() == 1u, "a file that already exists is overwritten, not appended to");
+    std::filesystem::remove(path);
+}
+
+void expectAPathThatCannotBeOpenedToBeNamed()
+{
+    const std::filesystem::path path = scratchFile("missing-directory") / "rows.jsonl";
+    const std::expected<lpl::bench::JsonRowFile, std::string> file =
+        lpl::bench::JsonRowFile::create(path.string(), exampleMachine());
+    expect(!file.has_value(), "a path in a missing directory cannot be opened");
+    if (!file)
+        expect(file.error().find(path.string()) != std::string::npos, "the refusal names the path it could not open");
+}
+
 } // namespace
 
 int main()
@@ -123,6 +287,15 @@ int main()
     expectTheMachineClassToIgnoreWhatChangesBetweenRunsOfOneMachine();
     expectTheMachineClassToSeparateDifferentMachines();
     expectThisBuildToKnowItsCommit();
+
+    expectAMeasuredRowToHoldEveryFieldInOrder();
+    expectARowWithoutEnergyToSayWhy();
+    expectStringsToBeEscaped();
+    expectANumberThatIsNotFiniteToBeNull();
+    expectTheDocumentedReasonsToBeTheWrittenOnes();
+    expectAFileToHoldOneRowPerLabel();
+    expectAnExistingFileToBeOverwritten();
+    expectAPathThatCannotBeOpenedToBeNamed();
 
     if (failures == 0)
         std::printf("ALL PASS (0 failures, %d checks)\n", checks);
