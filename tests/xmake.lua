@@ -581,3 +581,74 @@ target("test-engine")
              "lpl-codec", "lpl-rosetta", "lpl-history", "lpl-pack", "lpl-engine")
     add_files("../testing/host/main.cpp", "*/*.cpp|parity/*.cpp")
 target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Every public header compiles on its own (#364). Each .hpp under
+-- <module>/include/lpl/ gets a translation unit that includes it and nothing
+-- else, generated into the build directory and compiled by headers-<module>
+-- against that module's public interface. A header that only compiles after
+-- another include fails here, and the failing unit is named after it.
+--
+-- A .inl is compiled through the header that includes it, and a .cuh needs nvcc:
+-- neither is a header a caller includes alone.
+--
+-- `xmake build -g tests` and `xmake build -a` build these targets, a plain
+-- `xmake` does not: they compile one unit per header, about as many units as
+-- the rest of the build. `xmake build headers-engine` checks one module.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+local kRepositoryRoot = path.directory(os.scriptdir())
+
+-- Each header excused from compiling alone, by its path from the repository root, with the reason.
+-- xmake refuses to load the project while an entry names no header, so the list cannot outlive what it
+-- excuses.
+local kHeadersExcusedFromCompilingAlone = {
+    ["bci/include/lpl/bci/source/BrainFlowSource.hpp"] =
+        "BrainFlow's bundled json.hpp fails -Wextra in C++23; only lpl-bci includes it, and builds with -Wall",
+    ["bci/include/lpl/bci/source/LslSource.hpp"] =
+        "lsl_cpp.h throws; only lpl-bci includes it, the one module built with -fexceptions",
+    ["net/include/lpl/net/netcode/RollbackVerifier.hpp"] =
+        "nothing includes it and it does not compile: it calls a formatting Log::warn that does not exist",
+}
+
+rule("laplace.header_alone")
+    on_load(function (target)
+        for header, reason in pairs(kHeadersExcusedFromCompilingAlone) do
+            if not os.isfile(path.join(kRepositoryRoot, header)) then
+                raise("tests/xmake.lua excuses %s from compiling alone (%s), but there is no such header", header,
+                      reason)
+            end
+        end
+
+        local module = target:values("header_alone.module")
+        local include_dir = path.join(kRepositoryRoot, module, "include")
+        local headers = os.files(path.join(include_dir, "lpl", "**.hpp"))
+        if #headers == 0 then
+            raise("%s has an include/lpl/ directory but no header in it to compile", module)
+        end
+
+        for _, header in ipairs(headers) do
+            local include_path = path.unix(path.relative(header, include_dir))
+            if not kHeadersExcusedFromCompilingAlone[module .. "/include/" .. include_path] then
+                local unit = path.join(target:autogendir(), include_path .. ".cpp")
+                local text = "#include <" .. include_path .. ">\n"
+                if not os.isfile(unit) or io.readfile(unit) ~= text then
+                    io.writefile(unit, text)
+                end
+                target:add("files", unit)
+            end
+        end
+    end)
+rule_end()
+
+for _, include_dir in ipairs(os.dirs(path.join(kRepositoryRoot, "*", "include", "lpl"))) do
+    local module = path.filename(path.directory(path.directory(include_dir)))
+    target("headers-" .. module)
+        set_kind("object")
+        set_group("tests")
+        set_default(false)
+        add_deps("lpl-" .. module)
+        add_rules("laplace.header_alone")
+        set_values("header_alone.module", module)
+    target_end()
+end

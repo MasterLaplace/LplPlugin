@@ -45,6 +45,9 @@ already raw.
 - A generator or a simulation step earns three tests: it reproduces bit for bit, it changes with its
   seed, and it keeps an invariant stated as a property (the steep erodes more than the flat), not as a
   folded signature. A signature that stays stable proves nothing about what it folds.
+- Every `.hpp` of `<module>/include/lpl/` compiles on its own: `headers-<module>` builds one unit per
+  header with `xmake build -g tests` or `-a`, never with a plain `xmake`. A header that cannot is
+  excused in `tests/xmake.lua`, with its reason.
 
 ## Traps that are not checks yet
 
