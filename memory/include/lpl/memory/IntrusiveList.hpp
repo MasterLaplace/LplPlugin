@@ -19,6 +19,8 @@
 
 #    include <lpl/core/Types.hpp>
 
+#    include <concepts>
+
 namespace lpl::memory {
 
 /**
