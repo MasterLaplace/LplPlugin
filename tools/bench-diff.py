@@ -5,9 +5,10 @@ Compares two files of rows written by `lpl-benchmark --json PATH`, row by row. R
 their label, and a label found in one file only is listed apart. The fields of a row are
 listed by `lpl-benchmark --help`.
 
-Each file must be one run: every line a row of schema 1, every label once, one commit, build,
-compiler and machine class, and a reason beside every missing energy figure. A file that is
-not is refused, with its line and what is wrong.
+Each file must be one run: UTF-8, every line a row of schema 1 whose fields hold values of their
+type, every label once, one commit, build, compiler and machine class, and beside every energy
+figure no reason, beside every missing one a reason lpl-benchmark writes. A file that is not is
+refused, with its line and what is wrong.
 
 Prints where each file comes from, warns on stderr when the two differ in machine class, build
 or compiler, since their times are then not comparable, then one line per label: the two
@@ -25,10 +26,51 @@ SCHEMA = 1
 RUN_FIELDS = ("commit", "build", "compiler", "machine_class")
 ROW_FIELDS = ("schema", "label", "median_ns", "cv_percent", "min_ns", "p99_ns", "n",
               "energy_uj_per_rep", "energy_absent_reason") + RUN_FIELDS
+MEASURE_FIELDS = ("median_ns", "cv_percent", "min_ns", "p99_ns", "energy_uj_per_rep")
+TEXT_FIELDS = ("label",) + RUN_FIELDS
+ENERGY_ABSENCE_REASONS = ("denied", "unreadable", "absent", "no-repetition", "short-window", "read-failed",
+                          "ambiguous-wrap")
 
 
 class Refused(Exception):
     """A file that is not one run of lpl-benchmark rows, with where and why."""
+
+
+def is_integer(value):
+    """Whether a JSON value is an integer; Python reads true and false as integers too."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def is_number(value):
+    """Whether a JSON value is a number."""
+    return is_integer(value) or isinstance(value, float)
+
+
+def refusal_of_types(row):
+    """Says which field of a row holds a value of the wrong type, or None."""
+    if not is_integer(row["schema"]) or row["schema"] != SCHEMA:
+        return f"schema {json.dumps(row['schema'])}, and this script reads schema {SCHEMA}"
+    if not is_integer(row["n"]) or row["n"] < 0:
+        return f"n is {json.dumps(row['n'])}, where a count of repetitions is expected"
+    for field in MEASURE_FIELDS:
+        if row[field] is not None and not is_number(row[field]):
+            return f"{field} is {json.dumps(row[field])}, where a number or null is expected"
+    for field in TEXT_FIELDS:
+        if not isinstance(row[field], str) or not row[field]:
+            return f"{field} is {json.dumps(row[field])}, where a non-empty string is expected"
+    return None
+
+
+def refusal_of_energy(row):
+    """Says what is wrong with the energy of a row: a figure and a reason are never both there."""
+    figure, reason = row["energy_uj_per_rep"], row["energy_absent_reason"]
+    if figure is not None and reason is not None:
+        return (f"energy_uj_per_rep is {json.dumps(figure)} and energy_absent_reason is {json.dumps(reason)}: "
+                "one or the other")
+    if figure is None and reason not in ENERGY_ABSENCE_REASONS:
+        return (f"energy_uj_per_rep is null and energy_absent_reason is {json.dumps(reason)}, "
+                f"not one of {', '.join(ENERGY_ABSENCE_REASONS)}")
+    return None
 
 
 def refusal_of_row(row, run, labels):
@@ -38,15 +80,15 @@ def refusal_of_row(row, run, labels):
     missing = [field for field in ROW_FIELDS if field not in row]
     if missing:
         return "missing " + ", ".join(missing)
-    if row["schema"] != SCHEMA:
-        return f"schema {row['schema']!r}, and this script reads schema {SCHEMA}"
+    refusal = refusal_of_types(row) or refusal_of_energy(row)
+    if refusal is not None:
+        return refusal
     if row["label"] in labels:
-        return f"the label {row['label']!r} is already on line {labels[row['label']]}"
-    if row["energy_uj_per_rep"] is None and row["energy_absent_reason"] is None:
-        return "energy_uj_per_rep is null and energy_absent_reason does not say why"
+        return f"the label {json.dumps(row['label'])} is already on line {labels[row['label']]}"
     for field in RUN_FIELDS:
         if run is not None and row[field] != run[field]:
-            return f"{field} is {row[field]!r}, where line 1 has {run[field]!r}: a file holds one run"
+            return (f"{field} is {json.dumps(row[field])}, where line 1 has {json.dumps(run[field])}: "
+                    "a file holds one run")
     return None
 
 
@@ -65,6 +107,8 @@ def read_run(path):
             lines = list(file)
     except OSError as error:
         raise Refused(f"{path}: {error.strerror}") from error
+    except UnicodeDecodeError as error:
+        raise Refused(f"{path}: not UTF-8 text, at byte {error.start}") from error
     for number, line in enumerate(lines, start=1):
         try:
             row = json.loads(line, parse_constant=reject_constant)
@@ -124,8 +168,8 @@ def compare(before_path, after_path):
               f"  ({len(rows)} rows, {path})")
     for field in ("machine_class", "build", "compiler"):
         if before_run[field] != after_run[field]:
-            print(f"bench-diff: warning: {field} differs, {before_run[field]!r} then {after_run[field]!r}: "
-                  "the times are not comparable", file=sys.stderr)
+            print(f"bench-diff: warning: {field} differs, {json.dumps(before_run[field])} then "
+                  f"{json.dumps(after_run[field])}: the times are not comparable", file=sys.stderr)
 
     paired = [label for label in before_rows if label in after_rows]
     width = max([len("label")] + [len(label) for label in paired])

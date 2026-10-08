@@ -3,12 +3,12 @@
  * @brief One JSON row per measurement, so that two runs can be compared row by row and a
  *        series of commits kept, instead of results lost with the terminal.
  *
- * A file of rows is JSON Lines: one object per line, each one whole, so files are
- * concatenated into a series and read by any JSON reader, line by line. Each row carries
- * the label that pairs it with the same measurement in another file, its statistics, its
- * energy or the reason it has none, and what it must be read against: the commit, the
- * build, the compiler and the machine class. @ref kJsonRowFields lists the fields in the
- * order they are written, and `lpl-benchmark --help` prints them.
+ * A file holds one run, as JSON Lines: one object per line, which any JSON reader takes
+ * line by line. Each row is whole: the label that pairs it with the same measurement in
+ * another file, its statistics, its energy or the reason it has none, and what it must be
+ * read against, the commit, the build, the compiler and the machine class, so a row read
+ * alone still says all of it. @ref kJsonRowFields lists the fields in the order they are
+ * written, and `lpl-benchmark --help` prints them.
  *
  * Strings are written as UTF-8, with quotes, backslashes and control characters escaped.
  * A number that is not finite is written null, the only value JSON has for it.
