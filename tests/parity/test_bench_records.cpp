@@ -2,6 +2,7 @@
 #include <lpl/bench/Harness.hpp>
 #include <lpl/bench/JsonRows.hpp>
 #include <lpl/bench/SystemInfo.hpp>
+#include <lplplugin/config.h>
 
 #include <cctype>
 #include <chrono>
@@ -115,7 +116,10 @@ bool isStampedCommit(std::string_view commit)
 void expectThisBuildToKnowItsCommit()
 {
     const lpl::bench::SystemInfo here = lpl::bench::collectSystemInfo();
-    expect(isStampedCommit(here.commit), "the build stamps the short commit, with -dirty for a modified tree");
+    expect(here.commit == LPLPLUGIN_COMMIT,
+           "lpl-bench reports the commit this build was stamped with, unknown on both sides without git");
+    expect(here.commit == "unknown" || isStampedCommit(here.commit),
+           "a stamped commit is the short hash, with -dirty for a modified tree");
     expect(lpl::bench::machineClass(here).find(here.cpu) != std::string::npos,
            "the class of this machine names its processor");
     std::printf("  commit: %s\n  machine class: %s\n", here.commit.c_str(), lpl::bench::machineClass(here).c_str());

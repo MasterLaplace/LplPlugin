@@ -269,6 +269,7 @@ target("test-bench-records")
     set_group("tests")
     add_deps("lpl-core", "lpl-bench")
     add_files("parity/test_bench_records.cpp")
+    add_rules("laplace.commit", {files = "parity/test_bench_records.cpp"})
 target_end()
 
 target("test-server-routing")
