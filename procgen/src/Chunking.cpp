@@ -764,48 +764,4 @@ TileGrid borderConstraintsFrom(core::u32 size, const TileGrid &neighbour, core::
     return preset;
 }
 
-EndlessFoldResult foldEndlessPatch(const ChunkParams &params, const EndlessRiverParams &rivers, core::u32 radius)
-{
-    constexpr core::u32 kFnvOffset = 0x811C9DC5u;
-    constexpr core::u32 kFnvPrime = 0x01000193u;
-
-    const auto foldWord = [](core::u32 &hash, core::u32 word) {
-        for (core::u32 byte = 0u; byte < 4u; ++byte)
-        {
-            hash ^= (word >> (byte * 8u)) & 0xFFu;
-            hash *= kFnvPrime;
-        }
-    };
-
-    EndlessFoldResult result{};
-    result.heightSignature = kFnvOffset;
-    result.riverSignature = kFnvOffset;
-
-    const core::i32 reach = static_cast<core::i32>(radius);
-    for (core::i32 cz = -reach; cz <= reach; ++cz)
-        for (core::i32 cx = -reach; cx <= reach; ++cx)
-        {
-            const ChunkCoord coord{cx, cz};
-            const Heightfield height = generateChunkTerrain(params, coord);
-            const Grid<core::u8> water = markChunkRivers(params, rivers, coord);
-
-            // Raw Q16.16 words, never a decimal rendering: the fold must be an
-            // identity on the bits.
-            for (core::u32 i = 0u; i < height.cellCount(); ++i)
-                foldWord(result.heightSignature, static_cast<core::u32>(height[i].raw()));
-            for (core::u32 i = 0u; i < water.cellCount(); ++i)
-            {
-                foldWord(result.riverSignature, water[i]);
-                result.riverCells += water[i] != 0u ? 1u : 0u;
-            }
-
-            if (cx < reach)
-                result.seamMismatches += countSeamMismatches(params, coord, {cx + 1, cz});
-            if (cz < reach)
-                result.seamMismatches += countSeamMismatches(params, coord, {cx, cz + 1});
-            ++result.chunks;
-        }
-    return result;
-}
-
 } // namespace lpl::procgen
