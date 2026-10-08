@@ -32,6 +32,7 @@
 #    include <lpl/core/Types.hpp>
 
 #    include <chrono>
+#    include <expected>
 #    include <optional>
 #    include <string>
 #    include <string_view>
@@ -45,6 +46,25 @@ enum class EnergyAvailability : core::u8 {
     Unreadable, ///< A package zone exists and one of its files could not be read or holds no usable value.
     Absent,     ///< There is no counter this build knows how to read.
 };
+
+/** Why a window of repetitions carries no energy figure. */
+enum class EnergyAbsence : core::u8 {
+    Denied,        ///< The meter's counter exists and this process may not read it.
+    Unreadable,    ///< The meter found a package zone it could not read, or that holds no usable value.
+    Absent,        ///< There is no counter this build knows how to read.
+    NoRepetition,  ///< No repetition ran in the window.
+    ShortWindow,   ///< The window lasted less than @ref EnergyBracket::kMinimumWindow.
+    ReadFailed,    ///< The counter could not be read when the window opened or when it closed.
+    AmbiguousWrap, ///< The two readings cannot describe a single wrap of the counter.
+};
+
+/**
+ * @brief The stable name of a reason, the one a JSON row writes.
+ * @param absence The reason.
+ * @return "denied", "unreadable", "absent", "no-repetition", "short-window", "read-failed" or
+ *         "ambiguous-wrap".
+ */
+[[nodiscard]] std::string_view energyAbsenceName(EnergyAbsence absence) noexcept;
 
 /**
  * @brief Microjoules spent between two readings of a counter that wraps.
@@ -144,11 +164,12 @@ public:
      * @brief Shares the energy spent since the bracket opened among @p repetitions; each
      *        call reads the counter and the clock again.
      * @param repetitions How many repetitions ran since the bracket opened.
-     * @return Microjoules per repetition, or nothing when the meter is not measuring, a read
-     *         failed, the readings cannot describe a single wrap, no repetition ran, or less
-     *         than @ref kMinimumWindow has passed since the bracket opened.
+     * @return Microjoules per repetition, or why there are none: the meter's own availability
+     *         when it is not measuring, then a failed read at the opening, no repetition, less
+     *         than @ref kMinimumWindow since the bracket opened, a failed read at the closing,
+     *         and readings that cannot describe a single wrap, the first that holds.
      */
-    [[nodiscard]] std::optional<core::f64> microjoulesPerRepetition(core::usize repetitions) const;
+    [[nodiscard]] std::expected<core::f64, EnergyAbsence> microjoulesPerRepetition(core::usize repetitions) const;
 
 private:
     const EnergyMeter &_meter;

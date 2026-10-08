@@ -26,7 +26,7 @@
 #    include <lpl/core/Types.hpp>
 
 #    include <chrono>
-#    include <optional>
+#    include <expected>
 #    include <string>
 #    include <vector>
 
@@ -73,11 +73,27 @@ struct Result {
     core::u32 samples = 0;    ///< Number of timed repetitions collected.
 
     /**
-     * Package energy per repetition, absent when no counter could bracket the run or the
-     * run was shorter than @ref EnergyBracket::kMinimumWindow.
+     * Package energy per repetition, or why there is none. A result that holds no sample
+     * holds no energy either.
      */
-    std::optional<core::f64> microjoulesPerRep;
+    std::expected<core::f64, EnergyAbsence> microjoulesPerRep{std::unexpected{EnergyAbsence::NoRepetition}};
 };
+
+/**
+ * @brief The spread of a result's repetition times.
+ * @param result The statistics.
+ * @return Standard deviation over mean, in percent; not a number when the mean is not positive,
+ *         where the ratio means nothing.
+ */
+[[nodiscard]] core::f64 coefficientOfVariationPercent(const Result &result) noexcept;
+
+class JsonRowFile;
+
+/**
+ * @brief From now on, every row @ref report prints is also appended to @p file.
+ * @param file The rows file, which must outlive the reports; nullptr stops the appending.
+ */
+void writeRowsTo(JsonRowFile *file) noexcept;
 
 /**
  * @brief Stopping policy for @ref run: how long to warm up and how many
@@ -119,14 +135,15 @@ void section(const char *title);
 
 /**
  * @brief Reduces raw nanosecond samples to a @ref Result, prints a one-line
- *        summary, and returns the statistics.
+ *        summary, appends it to the rows file when one is set by @ref writeRowsTo,
+ *        and returns the statistics.
  * @param label Kernel name shown on the summary line.
  * @param samplesNs Timed samples in nanoseconds (sorted in place).
- * @param microjoulesPerRep Package energy per repetition, when it was measured.
+ * @param microjoulesPerRep Package energy per repetition, or why it was not measured.
  * @return Reduced statistics. Behaviour is undefined if @p samplesNs is empty.
  */
 [[nodiscard]] Result report(const char *label, std::vector<core::f64> &samplesNs,
-                            std::optional<core::f64> microjoulesPerRep = std::nullopt);
+                            std::expected<core::f64, EnergyAbsence> microjoulesPerRep);
 
 /**
  * @brief Times @p fn repeatedly and reports its statistics.

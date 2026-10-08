@@ -11,6 +11,7 @@
  */
 
 #include <lpl/bench/Harness.hpp>
+#include <lpl/bench/JsonRows.hpp>
 #include <lpl/bench/SystemInfo.hpp>
 #include <lpl/bench/VoxelBench.hpp>
 
@@ -53,6 +54,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace lpl;
@@ -782,7 +784,8 @@ void benchmarkNetworking()
         cfg.minReps = 3;
         cfg.maxReps = 100;
         cfg.targetTotalMs = 300.0;
-        const bench::Result r = bench::run("full-broadcast", [&]() { full.execute(dt); }, cfg);
+        const std::string label = std::format("full-broadcast {} clients", c);
+        const bench::Result r = bench::run(label.c_str(), [&]() { full.execute(dt); }, cfg);
         std::printf("    %6u | %10llu | %11.2f | %10.1f\n", c, static_cast<unsigned long long>(bytesPerTick), gbit,
                     r.medianNs / 1e3);
     }
@@ -811,7 +814,8 @@ void benchmarkNetworking()
         cfg.minReps = 3;
         cfg.maxReps = 100;
         cfg.targetTotalMs = 300.0;
-        const bench::Result r = bench::run("aoi-broadcast", [&]() { aoi.execute(dt); }, cfg);
+        const std::string label = std::format("aoi-broadcast {} clients", c);
+        const bench::Result r = bench::run(label.c_str(), [&]() { aoi.execute(dt); }, cfg);
         std::printf("    %6u | %10llu | %11.2f | %10.1f | %8.1f\n", c, static_cast<unsigned long long>(bytesPerTick),
                     gbit, r.medianNs / 1e3, k);
     }
@@ -901,22 +905,83 @@ constexpr std::array kSections{
     return std::ranges::any_of(kSections, [name](const Section &section) { return section.name == name; });
 }
 
+/** Width the help wraps its descriptions at. */
+constexpr std::size_t kHelpWidth = 100;
+
+void printWrapped(std::FILE *stream, std::size_t indent, std::string_view text)
+{
+    std::size_t column = indent;
+    while (!text.empty())
+    {
+        const std::size_t wordEnd = std::min(text.find(' '), text.size());
+        const std::string_view word = text.substr(0, wordEnd);
+        if (column > indent && column + 1 + word.size() > kHelpWidth)
+        {
+            std::fprintf(stream, "\n%*s", static_cast<int>(indent), "");
+            column = indent;
+        }
+        else if (column > indent)
+        {
+            std::fputc(' ', stream);
+            ++column;
+        }
+        std::fprintf(stream, "%.*s", static_cast<int>(word.size()), word.data());
+        column += word.size();
+        text.remove_prefix(std::min(wordEnd + 1, text.size()));
+    }
+    std::fputc('\n', stream);
+}
+
+consteval std::size_t longestRowFieldKey()
+{
+    std::size_t longest = 0;
+    for (const bench::JsonRowField &field : bench::kJsonRowFields)
+        longest = std::max(longest, field.key.size());
+    return longest;
+}
+
+constexpr char kSynopsis[] = "usage: lpl-benchmark [-o|--only SECTION] [--json PATH] [-h|--help]\n";
+
 void printUsage(std::FILE *stream)
 {
-    std::fputs("usage: lpl-benchmark [-o|--only SECTION] [-h|--help]\n"
-               "  Measures the engine's building blocks and prints the results on stdout.\n"
+    std::fputs(kSynopsis, stream);
+    std::fputs("  Measures the engine's building blocks and prints the results on stdout.\n"
                "\n"
-               "Without --only, every section runs, in this order:\n",
+               "  -o, --only SECTION  run that section alone; default: every section\n"
+               "  --json PATH         also write one JSON row per measurement to PATH, which is created or\n"
+               "                      overwritten; default: no file\n"
+               "  -h, --help          print this help\n"
+               "\n"
+               "Sections, in the order they run:\n",
                stream);
     for (const Section &section : kSections)
         std::fprintf(stream, "  %.*s\n", static_cast<int>(section.name.size()), section.name.data());
+
+    constexpr std::size_t kKeyWidth = longestRowFieldKey();
+    std::fputs("\nFields of a JSON row, one object per line, in this order:\n", stream);
+    for (const bench::JsonRowField &field : bench::kJsonRowFields)
+    {
+        std::fprintf(stream, "  %-*.*s  ", static_cast<int>(kKeyWidth), static_cast<int>(field.key.size()),
+                     field.key.data());
+        printWrapped(stream, kKeyWidth + 4u, field.meaning);
+    }
+
     const std::string_view exampleSection = kSections.front().name;
-    std::fprintf(stream, "\nExample: lpl-benchmark --only %.*s\n", static_cast<int>(exampleSection.size()),
-                 exampleSection.data());
+    std::fprintf(stream,
+                 "\nExit status: 0 when every measurement ran and, with --json, every row is in PATH; 1 when a\n"
+                 "row is missing from PATH (a write failed, or two measurements share a label); 2 on a usage\n"
+                 "error, or when PATH cannot be opened.\n"
+                 "\n"
+                 "Examples:\n"
+                 "  lpl-benchmark --only %.*s\n"
+                 "  lpl-benchmark --json before.jsonl\n"
+                 "  tools/bench-diff.py before.jsonl after.jsonl    compares two runs row by row\n",
+                 static_cast<int>(exampleSection.size()), exampleSection.data());
 }
 
 struct Arguments {
     std::optional<std::string_view> onlySection;
+    std::optional<std::string_view> jsonPath;
     bool helpRequested{false};
 };
 
@@ -927,17 +992,49 @@ struct Arguments {
     {
         const std::string_view argument = argv[i];
         if (argument == "--help" || argument == "-h")
-            return Arguments{.onlySection = std::nullopt, .helpRequested = true};
-        if (argument != "--only" && argument != "-o")
+            return Arguments{.onlySection = std::nullopt, .jsonPath = std::nullopt, .helpRequested = true};
+        const bool namesSection = argument == "--only" || argument == "-o";
+        const bool namesPath = argument == "--json";
+        if (!namesSection && !namesPath)
             return std::unexpected(std::format("unknown argument '{}'", argument));
         if (i + 1 == argc)
-            return std::unexpected(std::format("'{}' needs a SECTION", argument));
-        const std::string_view section = argv[++i];
-        if (!isSectionName(section))
-            return std::unexpected(std::format("unknown section '{}'", section));
-        arguments.onlySection = section;
+            return std::unexpected(std::format("'{}' needs a {}", argument, namesSection ? "SECTION" : "PATH"));
+        const std::string_view value = argv[++i];
+        if (namesPath)
+        {
+            arguments.jsonPath = value;
+            continue;
+        }
+        if (!isSectionName(value))
+            return std::unexpected(std::format("unknown section '{}'", value));
+        arguments.onlySection = value;
     }
     return arguments;
+}
+
+[[nodiscard]] std::expected<std::optional<bench::JsonRowFile>, std::string>
+openRowsFile(std::optional<std::string_view> path, const bench::SystemInfo &system)
+{
+    if (!path)
+        return std::optional<bench::JsonRowFile>{};
+    std::expected<bench::JsonRowFile, std::string> file = bench::JsonRowFile::create(std::string{*path}, system);
+    if (!file)
+        return std::unexpected(std::move(file.error()));
+    return std::optional<bench::JsonRowFile>{*std::move(file)};
+}
+
+[[nodiscard]] int reportRows(const std::optional<bench::JsonRowFile> &rowsFile)
+{
+    if (!rowsFile)
+    {
+        std::printf("\nDone.\n");
+        return 0;
+    }
+    std::printf("\nDone. Rows written to %s: %zu\n", rowsFile->path().c_str(), rowsFile->rowCount());
+    if (!rowsFile->failure())
+        return 0;
+    std::fprintf(stderr, "lpl-benchmark: --json: %s\n", rowsFile->failure()->c_str());
+    return 1;
 }
 
 } // anonymous namespace
@@ -947,8 +1044,10 @@ int main(int argc, char *argv[])
     const std::expected<Arguments, std::string> arguments = parseArguments(argc, argv);
     if (!arguments)
     {
-        std::fprintf(stderr, "lpl-benchmark: %s\n\n", arguments.error().c_str());
-        printUsage(stderr);
+        std::fprintf(stderr,
+                     "lpl-benchmark: %s\n%sRun 'lpl-benchmark --help' for the sections, the fields of a JSON row "
+                     "and the exit status.\n",
+                     arguments.error().c_str(), kSynopsis);
         return 2;
     }
     if (arguments->helpRequested)
@@ -957,16 +1056,26 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    const bench::SystemInfo system = bench::collectSystemInfo();
+    std::expected<std::optional<bench::JsonRowFile>, std::string> rowsFile = openRowsFile(arguments->jsonPath, system);
+    if (!rowsFile)
+    {
+        std::fprintf(stderr, "lpl-benchmark: --json: %s\n", rowsFile.error().c_str());
+        return 2;
+    }
+    if (*rowsFile)
+        bench::writeRowsTo(&**rowsFile);
+
     core::Log::info("=== LplPlugin Benchmark ===");
     std::printf("\n");
 
-    bench::printSystemInfo();
+    bench::printSystemInfo(system);
     bench::printLegend();
 
     for (const Section &section : kSections)
         if (!arguments->onlySection || *arguments->onlySection == section.name)
             section.run();
 
-    std::printf("\nDone.\n");
-    return 0;
+    bench::writeRowsTo(nullptr);
+    return reportRows(*rowsFile);
 }
