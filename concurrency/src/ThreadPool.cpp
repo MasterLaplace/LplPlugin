@@ -39,9 +39,13 @@ ThreadPool::~ThreadPool() { shutdown(); }
 
 void ThreadPool::shutdown()
 {
-    if (_stopping.exchange(true, std::memory_order_acq_rel))
     {
-        return;
+        std::lock_guard<std::mutex> lock{_mutex};
+        if (_stopping)
+        {
+            return;
+        }
+        _stopping = true;
     }
 
     _cv.notify_all();
@@ -69,7 +73,7 @@ void ThreadPool::workerLoop()
 
         {
             std::unique_lock<std::mutex> lock{_mutex};
-            _cv.wait(lock, [this] { return _stopping.load(std::memory_order_relaxed) || !_tasks.empty(); });
+            _cv.wait(lock, [this] { return _stopping || !_tasks.empty(); });
 
             if (_tasks.empty())
             {
