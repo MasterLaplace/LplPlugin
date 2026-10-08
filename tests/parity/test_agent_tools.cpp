@@ -22,7 +22,6 @@
 #include <lpl/agent/Dispatcher.hpp>
 #include <lpl/agent/Grammar.hpp>
 #include <lpl/agent/Observation.hpp>
-#include <lpl/agent/Parity.hpp>
 #include <lpl/agent/Schema.hpp>
 #include <lpl/agent/Tool.hpp>
 #include <lpl/agent/ToolCall.hpp>
@@ -38,6 +37,7 @@
 
 #include <cstdio>
 #include <string>
+#include <string_view>
 
 using namespace lpl;
 
@@ -55,6 +55,35 @@ static void seedWorld(ecs::Registry &registry)
 {
     procgen::WorldRecipe recipe = procgen::parityWorldRecipe();
     (void) procgen::bakeWorld(registry, recipe);
+}
+
+static constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
+static constexpr core::u32 kFnv1aPrime = 0x01000193u;
+
+static core::u32 foldBytes(core::u32 seed, std::string_view bytes)
+{
+    core::u32 hash = seed;
+
+    for (const char byte : bytes)
+    {
+        hash ^= static_cast<core::u32>(static_cast<unsigned char>(byte));
+        hash *= kFnv1aPrime;
+    }
+    return hash;
+}
+
+/**
+ * @brief FNV-1a over the JSON Schema and the GBNF grammar of @p registry.
+ *
+ * @details A tripwire on the surface an intelligence is offered, not a parity gate between
+ *          targets: nothing of agent/ is linked into the kernel. Rename a tool, move a bound, add an
+ *          enum value or reorder the table, and the signature moves. Both artefacts, not one: two
+ *          emitters derive them from the same table, and a change that moved only one of them is
+ *          the silent divergence this catches.
+ */
+static core::u32 foldToolSurface(const agent::ToolRegistry &registry)
+{
+    return foldBytes(foldBytes(kFnv1aOffsetBasis, agent::emitJsonSchema(registry)), agent::emitGbnf(registry));
 }
 
 int main()
@@ -223,12 +252,12 @@ int main()
     // ── 6. The surface signature is stable, and moves when the surface moves ──
     std::printf("\n-- the surface signature --\n");
     {
-        const core::u32 a = agent::foldToolSurface(onFull);
-        const core::u32 b = agent::foldToolSurface(onFull);
+        const core::u32 a = foldToolSurface(onFull);
+        const core::u32 b = foldToolSurface(onFull);
         char buf[80];
         std::snprintf(buf, sizeof(buf), "tool surface fold 0x%08X is deterministic", a);
         check(a == b, buf);
-        check(agent::foldToolSurface(onEmpty) != a, "a narrower surface signs differently");
+        check(foldToolSurface(onEmpty) != a, "a narrower surface signs differently");
 
         // The ungated view offers every declared capability, so it signs like a
         // populated world — and that equality is the assertion, not an accident:
@@ -237,8 +266,8 @@ int main()
         const agent::ToolRegistry every = agent::ToolRegistry::ungated();
         check(every.size() == agent::kToolCount,
               "the ungated surface offers all " + std::to_string(agent::kToolCount) + " capabilities");
-        check(agent::foldToolSurface(every) == a, "no capability is gated on an empty world today");
-        check(agent::foldToolSurface(every) != agent::foldToolSurface(onEmpty), "and the empty world sees fewer");
+        check(foldToolSurface(every) == a, "no capability is gated on an empty world today");
+        check(foldToolSurface(every) != foldToolSurface(onEmpty), "and the empty world sees fewer");
     }
 
     // ── 7. Looking: the capture is repeatable, and it is agent-hosted ─────────

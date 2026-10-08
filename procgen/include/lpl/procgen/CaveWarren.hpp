@@ -421,9 +421,9 @@ struct CaveWarren {
  * planned first as a cheap filter (a handful of noise samples), which rejects the
  * quarter of sites that have no cover within reach before any of that is paid.
  *
- * @ref CaveParity keeps its own search on purpose and is not folded into this one: its
- * window and its traversal order are part of what the gate MEANS, so a change here that
- * merely reordered candidates would move a signature.
+ * The test of gate P19 caves keeps its own search on purpose and is not folded into this
+ * one: its window and its traversal order are part of what the gate MEANS, so a change here
+ * that merely reordered candidates would move a signature.
  *
  * @param params     World parameters.
  * @param mouths     Cave-mouth siting rule.

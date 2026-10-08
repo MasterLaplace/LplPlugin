@@ -316,7 +316,7 @@ inline constexpr ToolParam kDiffScenesParams[] = {
 /**
  * @brief Every capability the engine can offer, before gating.
  *
- * Order is stable and load-bearing: @ref foldToolSurface signs this table, so a
+ * Order is stable and load-bearing: test-agent-tools signs this table, so a
  * reordering is a deliberate change that a test reports rather than a silent one.
  */
 inline constexpr ToolDesc kTools[] = {

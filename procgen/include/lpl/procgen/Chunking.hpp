@@ -535,46 +535,6 @@ struct EndlessRiverParams {
     return params;
 }
 
-/// @brief The river parameters both sides of the endless gate use.
-[[nodiscard]] constexpr EndlessRiverParams parityRiverParams() noexcept { return EndlessRiverParams{}; }
-
-/// @brief Chunks either side of the origin the endless gate folds.
-inline constexpr core::u32 kParityPatchRadius = 1u;
-
-/**
- * @struct EndlessFoldResult
- * @brief What folding a patch of the endless world produced.
- */
-struct EndlessFoldResult {
-    core::u32 heightSignature{0u}; ///< FNV-1a over every cell of every chunk folded.
-    core::u32 riverSignature{0u};  ///< FNV-1a over the river masks.
-    core::u32 chunks{0u};          ///< Chunks visited.
-    core::u32 riverCells{0u};      ///< Cells carrying water.
-    core::u32 seamMismatches{0u};  ///< Height disagreements across the patch's seams.
-};
-
-/**
- * @brief Folds a square patch of the endless world, for the cross-target gate.
- *
- * The bounded world has been under the determinism contract since P7 and the
- * running simulation since P8; the endless one was verified on the host and
- * merely assumed on the target — the exact assumption this project refuses
- * everywhere else. This is what puts it under contract: same seed, same chunks,
- * same bits, on Linux and in ring 0.
- *
- * The seam count travels with the signatures on purpose. A fold proves two
- * machines agree; it says nothing about whether they agree on something correct,
- * and a chunked world that seams identically on both targets would pass a
- * signature check every time.
- *
- * @param params World parameters.
- * @param rivers How a river is decided.
- * @param radius Chunks either side of the origin; the patch is (2r+1) squared.
- * @return The signatures and the counts behind them.
- */
-[[nodiscard]] EndlessFoldResult foldEndlessPatch(const ChunkParams &params, const EndlessRiverParams &rivers,
-                                                 core::u32 radius);
-
 } // namespace lpl::procgen
 
 #endif // LPL_PROCGEN_CHUNKING_HPP
