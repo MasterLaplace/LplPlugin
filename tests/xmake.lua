@@ -262,6 +262,15 @@ target("test-energy-meter")
     add_files("parity/test_energy_meter.cpp")
 target_end()
 
+-- What a benchmark run records about itself: the commit it was built from and the
+-- class of machine it ran on.
+target("test-bench-records")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-bench")
+    add_files("parity/test_bench_records.cpp")
+target_end()
+
 target("test-server-routing")
     set_kind("binary")
     set_group("tests")

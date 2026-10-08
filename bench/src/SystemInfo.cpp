@@ -70,6 +70,41 @@ std::string cpuBrandString()
 #endif
 }
 
+/** CPUID leaf 1 sets this bit of ECX when the processor runs under a hypervisor. */
+constexpr core::u32 kHypervisorPresentBit = 1u << 31u;
+
+/** CPUID leaf where a hypervisor writes its vendor name, in EBX, ECX and EDX. */
+constexpr core::u32 kHypervisorVendorLeaf = 0x40000000u;
+
+/**
+ * @brief The hypervisor this process runs under, as CPUID names it.
+ * @return The vendor, such as "Microsoft Hv" or "KVMKVMKVM"; "unnamed" when a hypervisor runs and
+ *         gives no name; "none" on bare metal; "unknown" off x86 or under a compiler whose CPUID
+ *         intrinsics this file does not use.
+ */
+std::string hypervisorVendor()
+{
+#if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) && (defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG))
+    core::u32 eax = 0u;
+    core::u32 ebx = 0u;
+    core::u32 ecx = 0u;
+    core::u32 edx = 0u;
+    if (__get_cpuid(1u, &eax, &ebx, &ecx, &edx) == 0 || (ecx & kHypervisorPresentBit) == 0u)
+        return "none";
+
+    __cpuid(kHypervisorVendorLeaf, eax, ebx, ecx, edx);
+    const core::u32 vendorRegisters[3] = {ebx, ecx, edx};
+    char vendor[sizeof(vendorRegisters) + 1u] = {};
+    std::memcpy(vendor, vendorRegisters, sizeof(vendorRegisters));
+    std::string name{vendor};
+    while (!name.empty() && name.back() == ' ')
+        name.pop_back();
+    return name.empty() ? "unnamed" : name;
+#else
+    return "unknown";
+#endif
+}
+
 /// Returns "<OS> (<kernel/build release>) <arch>".
 std::string osDescription()
 {
@@ -166,17 +201,26 @@ const char *buildConfig()
 
 } // namespace
 
+std::string machineClass(const SystemInfo &info)
+{
+    const std::string underWhat = info.hypervisor == "none" ? "bare metal" : "hypervisor " + info.hypervisor;
+    return info.platform + ", " + info.cpu + ", " + std::to_string(info.logicalCores) + " logical cores, " + underWhat;
+}
+
 SystemInfo collectSystemInfo()
 {
     SystemInfo info;
     info.os = osDescription();
+    info.platform = LPLPLUGIN_SYSTEM_STRING " " LPLPLUGIN_ARCH_STRING;
     const std::string cpu = cpuBrandString();
     info.cpu = cpu.empty() ? "Unknown" : cpu;
     info.logicalCores = std::thread::hardware_concurrency();
+    info.hypervisor = hypervisorVendor();
     info.ramBytes = totalPhysicalRamBytes();
     info.compiler = compilerDescription();
     info.buildConfig = buildConfig();
     info.cpuGovernor = cpuGovernor();
+    info.commit = LPLPLUGIN_COMMIT;
     return info;
 }
 
@@ -191,9 +235,11 @@ void printSystemInfo(const SystemInfo &info)
 
     std::printf("=== System Info ===\n");
     std::printf("  Date            : %s (local)\n", timeBuf);
+    std::printf("  Commit          : %s\n", info.commit.c_str());
     std::printf("  OS              : %s\n", info.os.c_str());
     std::printf("  CPU             : %s\n", info.cpu.c_str());
     std::printf("  Logical cores   : %u\n", info.logicalCores);
+    std::printf("  Hypervisor      : %s\n", info.hypervisor.c_str());
     std::printf("  RAM             : %.2f GiB\n", ramGiB);
     std::printf("  Compiler        : %s\n", info.compiler.c_str());
     std::printf("  Build config    : %s\n", info.buildConfig.c_str());
@@ -201,6 +247,7 @@ void printSystemInfo(const SystemInfo &info)
     std::printf("  CPU governor    : %s%s\n", info.cpuGovernor.c_str(),
                 info.cpuGovernor == "performance" ? "" : "  [warning: may add timing noise]");
 #endif
+    std::printf("  Machine class   : %s\n", machineClass(info).c_str());
     std::printf("\n");
 }
 
