@@ -350,7 +350,7 @@ static int __init lpl_init(void)
         bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
         bind_addr.sin_port = 0; /* ephemeral port */
 
-        ret = kernel_bind(udp_sock, (struct sockaddr *) &bind_addr, sizeof(bind_addr));
+        ret = kernel_bind(udp_sock, (void *) &bind_addr, sizeof(bind_addr));
         if (ret < 0)
             pr_warn("lpl: UDP bind failed (%d)\n", ret);
     }
