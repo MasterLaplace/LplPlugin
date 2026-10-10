@@ -41,6 +41,30 @@ void check(bool condition, const char *label)
         ++g_failures;
 }
 
+/**
+ * @brief Decodes @p wire as a host does, failing the run when the reader refuses it.
+ */
+lpl::procgen::WorldRecipe decodeRecipe(const lpl::pack::RecipeV1 &wire)
+{
+    lpl::procgen::WorldRecipe recipe{};
+    lpl::pack::WireRefusal refusal{};
+
+    check(lpl::pack::toEngineRecipe(wire, recipe, refusal), "the reader accepts the recipe");
+    return recipe;
+}
+
+/**
+ * @brief Decodes @p wire as a host does, failing the run when the reader refuses it.
+ */
+lpl::ecology::LivingRecipe decodeLiving(const lpl::pack::LivingV1 &wire)
+{
+    lpl::ecology::LivingRecipe living{};
+    lpl::pack::WireRefusal refusal{};
+
+    check(lpl::pack::toEngineLiving(wire, living, refusal), "the reader accepts the living recipe");
+    return living;
+}
+
 /// The authored document: what a human, the editor, or the AI writes and git
 /// versions. States exactly the fields parityWorldRecipe() overrides, and no
 /// others: both start from the engine defaults, so a default that moves moves
@@ -108,7 +132,7 @@ int main()
     // ── Client/server agreement: two consumers, one document ────────────────
     // "Server": expands the recipe straight from the authored document.
     // "Client": expands it from the baked pack, as a constrained target would.
-    const procgen::WorldRecipe fromPack = pack::toEngineRecipe(wire);
+    const procgen::WorldRecipe fromPack = decodeRecipe(wire);
     ecs::Registry clientWorld;
     const auto clientBaked = procgen::bakeWorld(clientWorld, fromPack);
 
@@ -182,7 +206,7 @@ int main()
         pack::LivingV1 lifeWire{};
         check(lifeView.readLiving(lifeWire), "the living section reads");
 
-        const ecology::LivingRecipe decoded = pack::toEngineLiving(lifeWire);
+        const ecology::LivingRecipe decoded = decodeLiving(lifeWire);
         check(decoded.seed == living.seed, "the seed survives the round trip");
         check(decoded.ticks == living.ticks, "the tick count survives");
         check(decoded.speciesCount == living.speciesCount, "every species survives");
@@ -266,7 +290,7 @@ int main()
         //
         // Nothing was broken anywhere: every layer did exactly what it says it does.
         // That is what makes this worth an assertion rather than a fix.
-        const procgen::WorldRecipe viewerRecipe = pack::toEngineRecipe(viewerWorld);
+        const procgen::WorldRecipe viewerRecipe = decodeRecipe(viewerWorld);
         check(viewerRecipe.biomes.seaLevel == viewerLook.seaLevel, "and the sea it classifies is the sea it draws");
 
         // ── The document can name a SEA, not only a water colour ─────────────
@@ -337,7 +361,7 @@ int main()
 
         pack::RecipeV1 grownWire{};
         check(grownView.readRecipe(grownWire), "the recipe section reads back");
-        const procgen::WorldRecipe decoded = pack::toEngineRecipe(grownWire);
+        const procgen::WorldRecipe decoded = decodeRecipe(grownWire);
 
         check(decoded.seed == layered.seed, "the terrain survives");
         check(decoded.caveKind == procgen::CaveKind::Layered, "the cave kind round-trips");
@@ -350,7 +374,7 @@ int main()
         {
             procgen::WorldRecipe every = layered;
             every.caveKind = static_cast<procgen::CaveKind>(k);
-            check(pack::toEngineRecipe(pack::toWireRecipe(every)).caveKind == every.caveKind,
+            check(decodeRecipe(pack::toWireRecipe(every)).caveKind == every.caveKind,
                   procgen::caveKindName(every.caveKind));
         }
         check(decoded.terraceSteps == 5u, "so do the terraces");
@@ -370,16 +394,19 @@ int main()
                         decoded.scatter[i].biome == static_cast<procgen::BiomeId>(i + 1u);
         check(sameRules, "including the two past the old ceiling of four");
 
-        // A byte from disk naming a fifth generator must be clamped, not indexed into
-        // a switch that has four.
+        // A byte from disk naming a generator this build does not have must be refused,
+        // naming its field, not clamped to one it does have.
         pack::RecipeV1 corrupt = grownWire;
         corrupt.caveKind = 99u;
-        check(pack::toEngineRecipe(corrupt).caveKind == procgen::CaveKind::Cellular,
-              "an out-of-range cave kind falls back, not through");
+        procgen::WorldRecipe refused{};
+        pack::WireRefusal refusal{};
+        check(!pack::toEngineRecipe(corrupt, refused, refusal) && refusal.field != nullptr &&
+                  std::string{refusal.field} == "caveKind" && refusal.value == 99u,
+              "an out-of-range cave kind is refused, naming its field and its value");
         // Same for a count: a cartridge is input, not a promise.
         corrupt = grownWire;
         corrupt.scatterCount = 4000u;
-        check(pack::toEngineRecipe(corrupt).scatterCount == pack::kWireScatterRules,
+        check(decodeRecipe(corrupt).scatterCount == pack::kWireScatterRules,
               "an out-of-range scatter count is clamped to what the array holds");
 
         // And the built world must actually differ, or the passes are decoration.

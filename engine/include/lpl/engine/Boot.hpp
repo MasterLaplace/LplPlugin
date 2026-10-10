@@ -36,10 +36,32 @@
 #    include <lpl/platform/IPlatform.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 #    include <lpl/std/memory.hpp>
+#    include <lpl/std/string.hpp>
 
 #    include <utility>
 
 namespace lpl::engine {
+
+namespace detail {
+
+/**
+ * @brief Logs the field a refused pack held an unknown value in, which the line a corrupt
+ *        pack gets cannot say.
+ *
+ * The value stays in BootResult::refusal: ring 0 has no number formatter to print it with.
+ *
+ * @param field The refused field, as the section struct spells it.
+ */
+inline void logRefusedField(const char *field)
+{
+    pmr::string line{"Boot: the pack holds a value this build does not know in "};
+
+    line += field;
+    line += " — falling back to the compiled recipe";
+    core::Log::error(line);
+}
+
+} // namespace detail
 
 /**
  * @struct BootRequest
@@ -72,6 +94,7 @@ struct BootResult {
     bool initialised{false};
     pack::CartridgeSource source{pack::CartridgeSource::Defaults};
     bool packFailed{false};
+    pack::WireRefusal refusal{};  /**< The field and value that refused the pack; empty unless a field did. */
     core::u32 configWarnings{0u}; ///< Inconsistencies the config check reported.
     bool viewFromPack{false};     ///< The pack said what the world looks like.
 };
@@ -104,13 +127,16 @@ BootResult bootGame(const BootRequest &request, pmr::unique_ptr<platform::IPlatf
         procgen::parityWorldRecipe(), ecology::parityLivingRecipe(), repair);
     result.source = cartridge.source;
     result.packFailed = cartridge.failed;
+    result.refusal = cartridge.refusal;
 
     if (repair.present && repair.damagedCodewords != 0u)
         core::Log::info("Boot: the cartridge was damaged and its parity section repaired it");
     else if (repair.present && !repair.repaired)
         core::Log::error("Boot: the cartridge is damaged beyond what its parity can correct");
 
-    if (cartridge.failed)
+    if (cartridge.refusal.field != nullptr)
+        detail::logRefusedField(cartridge.refusal.field);
+    else if (cartridge.failed)
         core::Log::error("Boot: the pack failed to validate — falling back to the compiled recipe");
     else if (cartridge.source == pack::CartridgeSource::Cartridge)
         core::Log::info("Boot: world decoded from the cartridge");
