@@ -217,7 +217,7 @@ core::Expected<core::u32> KernelTransport::sendBatch(std::span<const Datagram> d
     return accepted;
 }
 
-core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, Endpoint * /*fromAddress*/)
+core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, Endpoint *fromAddress)
 {
     if (!_impl->shm)
     {
@@ -240,6 +240,8 @@ core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer,
     }
 
     std::memcpy(buffer.data(), slot->data, length);
+    if (fromAddress != nullptr)
+        *fromAddress = Endpoint(slot->src_ip, slot->src_port);
     ++_impl->rxReadIndex;
     smp_store_release(&_impl->shm->rx.reader.read_index, _impl->rxReadIndex);
 

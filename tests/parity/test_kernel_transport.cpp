@@ -202,6 +202,7 @@ void receivesWhatTheModulePublished()
     received = transport.receive(buffer, &from);
     check("the first packet comes back whole",
           received.has_value() && *received == 5u && std::memcmp(buffer.data(), "alpha", 5u) == 0);
+    check("with its sender", from.address() == 0x0A000002u && from.port() == 4242u);
 
     received = transport.receive(small, &from);
     check("a buffer too small is refused", !received.has_value());
@@ -211,6 +212,7 @@ void receivesWhatTheModulePublished()
     received = transport.receive(buffer, &from);
     check("the second packet comes back whole",
           received.has_value() && *received == 13u && std::memcmp(buffer.data(), "bravo charlie", 13u) == 0);
+    check("with its own sender", from.address() == 0x0A000003u && from.port() == 4243u);
     check("and the module sees both read", __atomic_load_n(&module.shm().rx.reader.read_index, __ATOMIC_ACQUIRE) == 2u);
 }
 
