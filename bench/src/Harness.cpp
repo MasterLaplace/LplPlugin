@@ -11,11 +11,28 @@
 
 #include <lpl/bench/Harness.hpp>
 
+#include <lpl/bench/JsonRows.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 namespace lpl::bench {
+
+namespace {
+
+JsonRowFile *rowsFile = nullptr;
+
+} // namespace
+
+core::f64 coefficientOfVariationPercent(const Result &result) noexcept
+{
+    return result.meanNs > 0.0 ? (result.stddevNs / result.meanNs) * 100.0 :
+                                 std::numeric_limits<core::f64>::quiet_NaN();
+}
+
+void writeRowsTo(JsonRowFile *file) noexcept { rowsFile = file; }
 
 std::string formatDuration(core::f64 ns)
 {
@@ -69,7 +86,8 @@ void printLegend()
 
 void section(const char *title) { std::printf("\n  --- %s ---\n", title); }
 
-Result report(const char *label, std::vector<core::f64> &samplesNs, std::optional<core::f64> microjoulesPerRep)
+Result report(const char *label, std::vector<core::f64> &samplesNs,
+              std::expected<core::f64, EnergyAbsence> microjoulesPerRep)
 {
     std::sort(samplesNs.begin(), samplesNs.end());
 
@@ -94,11 +112,12 @@ Result report(const char *label, std::vector<core::f64> &samplesNs, std::optiona
     }
     r.stddevNs = n > 1 ? std::sqrt(var / static_cast<core::f64>(n - 1)) : 0.0;
 
-    const core::f64 cv = r.meanNs > 0.0 ? (r.stddevNs / r.meanNs) * 100.0 : 0.0;
     r.microjoulesPerRep = microjoulesPerRep;
     std::printf("  %-40s %11s  ±%4.1f%%  [min %-10s p99 %-10s] n=%-5u %s\n", label, formatDuration(r.medianNs).c_str(),
-                cv, formatDuration(r.minNs).c_str(), formatDuration(r.p99Ns).c_str(), r.samples,
-                microjoulesPerRep ? formatEnergy(*microjoulesPerRep).c_str() : "-");
+                coefficientOfVariationPercent(r), formatDuration(r.minNs).c_str(), formatDuration(r.p99Ns).c_str(),
+                r.samples, microjoulesPerRep ? formatEnergy(*microjoulesPerRep).c_str() : "-");
+    if (rowsFile != nullptr)
+        rowsFile->append(label, r);
     return r;
 }
 

@@ -84,8 +84,10 @@ xmake run test-physics-parity
 xmake run lpl-server         # terminal 1
 xmake run lpl-client         # terminal 2
 
-# Benchmarks
+# Benchmarks (options, JSON fields, exit status: xmake run lpl-benchmark --help)
 xmake run lpl-benchmark
+xmake run lpl-benchmark --json "$PWD/before.jsonl"   # one JSON row per measurement
+tools/bench-diff.py before.jsonl after.jsonl         # two runs, row by row
 ```
 
 ### Build Options

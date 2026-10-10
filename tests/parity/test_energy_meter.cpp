@@ -16,9 +16,12 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <expected>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
@@ -37,6 +40,12 @@ void expect(bool condition, const char *what)
         return;
     ++failures;
     std::printf("  FAIL  %s\n", what);
+}
+
+bool reportsNoEnergyBecause(const std::expected<lpl::core::f64, lpl::bench::EnergyAbsence> &energy,
+                            lpl::bench::EnergyAbsence reason)
+{
+    return !energy.has_value() && energy.error() == reason;
 }
 
 class FakePowercap final : public lpl::core::NonCopyable<FakePowercap> {
@@ -67,6 +76,8 @@ public:
         write("intel-rapl:0/energy_uj", counter);
         write("intel-rapl:0/max_energy_range_uj", range);
     }
+
+    void remove(const std::string &relativePath) const { std::filesystem::remove(_root / relativePath); }
 
     [[nodiscard]] std::string root() const { return _root.string(); }
 
@@ -99,7 +110,8 @@ void expectAWindowAcrossOneWrapToShareTheUnwrappedEnergy()
 
     expect(bracket.microjoulesPerRepetition(10u) == 15.0,
            "a window across one wrap shares the unwrapped energy among its repetitions");
-    expect(!bracket.microjoulesPerRepetition(0u).has_value(), "a window with no repetition reports no energy");
+    expect(reportsNoEnergyBecause(bracket.microjoulesPerRepetition(0u), lpl::bench::EnergyAbsence::NoRepetition),
+           "a window with no repetition reports no energy, and says so");
 }
 
 void expectAShortWindowToReportNoEnergy()
@@ -111,8 +123,82 @@ void expectAShortWindowToReportNoEnergy()
     const EnergyBracket bracket{meter};
     powercap.write("intel-rapl:0/energy_uj", "950\n");
 
-    expect(!bracket.microjoulesPerRepetition(10u).has_value(),
-           "a window shorter than the minimum reports no energy, rather than one counter step");
+    expect(reportsNoEnergyBecause(bracket.microjoulesPerRepetition(10u), lpl::bench::EnergyAbsence::ShortWindow),
+           "a window shorter than the minimum reports no energy, rather than one counter step, and says so");
+}
+
+void expectACounterThatVanishesToReportAFailedRead()
+{
+    const FakePowercap atOpening{"vanished-at-opening"};
+    atOpening.writePackageZone("900\n", "1000\n");
+    const EnergyMeter openingMeter = EnergyMeter::probe(atOpening.root());
+    atOpening.remove("intel-rapl:0/energy_uj");
+    const EnergyBracket openingBracket{openingMeter};
+    std::this_thread::sleep_for(EnergyBracket::kMinimumWindow);
+    expect(reportsNoEnergyBecause(openingBracket.microjoulesPerRepetition(10u), lpl::bench::EnergyAbsence::ReadFailed),
+           "a counter that cannot be read when the window opens reports a failed read");
+
+    const FakePowercap atClosing{"vanished-at-closing"};
+    atClosing.writePackageZone("900\n", "1000\n");
+    const EnergyMeter closingMeter = EnergyMeter::probe(atClosing.root());
+    const EnergyBracket closingBracket{closingMeter};
+    atClosing.remove("intel-rapl:0/energy_uj");
+    std::this_thread::sleep_for(EnergyBracket::kMinimumWindow);
+    expect(reportsNoEnergyBecause(closingBracket.microjoulesPerRepetition(10u), lpl::bench::EnergyAbsence::ReadFailed),
+           "a counter that cannot be read when the window closes reports a failed read");
+}
+
+void expectReadingsBeyondTheRangeToReportAnAmbiguousWrap()
+{
+    const FakePowercap powercap{"beyond-range"};
+    powercap.writePackageZone("1200\n", "1000\n");
+    const EnergyMeter meter = EnergyMeter::probe(powercap.root());
+
+    const EnergyBracket bracket{meter};
+    powercap.write("intel-rapl:0/energy_uj", "50\n");
+    std::this_thread::sleep_for(EnergyBracket::kMinimumWindow);
+
+    expect(reportsNoEnergyBecause(bracket.microjoulesPerRepetition(10u), lpl::bench::EnergyAbsence::AmbiguousWrap),
+           "readings that cannot describe one wrap report an ambiguous wrap, not a number");
+}
+
+void expectAMeterThatIsNotMeasuringToGiveItsOwnReason()
+{
+    const FakePowercap missingCounter{"bracket-unreadable"};
+    missingCounter.write("intel-rapl:0/name", "package-0\n");
+    const EnergyMeter unreadableMeter = EnergyMeter::probe(missingCounter.root());
+    const EnergyBracket unreadableBracket{unreadableMeter};
+
+    const FakePowercap noPackage{"bracket-absent"};
+    noPackage.write("intel-rapl:0/name", "core\n");
+    const EnergyMeter absentMeter = EnergyMeter::probe(noPackage.root());
+    const EnergyBracket absentBracket{absentMeter};
+
+    std::this_thread::sleep_for(EnergyBracket::kMinimumWindow);
+    expect(
+        reportsNoEnergyBecause(unreadableBracket.microjoulesPerRepetition(10u), lpl::bench::EnergyAbsence::Unreadable),
+        "a bracket on an unreadable meter gives the meter's reason, not a failed read");
+    expect(reportsNoEnergyBecause(absentBracket.microjoulesPerRepetition(10u), lpl::bench::EnergyAbsence::Absent),
+           "a bracket on an absent meter gives the meter's reason, even over a long window");
+    expect(reportsNoEnergyBecause(absentBracket.microjoulesPerRepetition(0u), lpl::bench::EnergyAbsence::Absent),
+           "a meter that is not measuring is the first reason given, before the repetitions");
+}
+
+void expectEveryReasonToHaveItsOwnName()
+{
+    const std::string_view names[] = {
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::Denied),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::Unreadable),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::Absent),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::NoRepetition),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::ShortWindow),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::ReadFailed),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::AmbiguousWrap),
+    };
+    const std::string_view expected[] = {"denied",       "unreadable",  "absent",        "no-repetition",
+                                         "short-window", "read-failed", "ambiguous-wrap"};
+    for (std::size_t i = 0; i < std::size(expected); ++i)
+        expect(names[i] == expected[i], "each reason has the stable name a JSON row writes");
 }
 
 void expectAPackageZoneThatCannotBeReadToSayWhy()
@@ -172,6 +258,10 @@ int main()
     expectAReadablePackageZoneToBeMeasured();
     expectAWindowAcrossOneWrapToShareTheUnwrappedEnergy();
     expectAShortWindowToReportNoEnergy();
+    expectACounterThatVanishesToReportAFailedRead();
+    expectReadingsBeyondTheRangeToReportAnAmbiguousWrap();
+    expectAMeterThatIsNotMeasuringToGiveItsOwnReason();
+    expectEveryReasonToHaveItsOwnName();
     expectAPackageZoneThatCannotBeReadToSayWhy();
     expectATreeWithoutAPackageZoneToBeAbsent();
 

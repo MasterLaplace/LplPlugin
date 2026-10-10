@@ -23,6 +23,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <format>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace lpl::bench {
@@ -215,6 +218,9 @@ void benchmarkMarch()
         std::snprintf(label, sizeof(label), "march %ux%u, %u bricks, %llu MiB", kFrameWidth, kFrameHeight,
                       scene.mosaic.count(), static_cast<unsigned long long>(residentMebibytes));
         timeMarch(label, scene, params, frame);
+        const auto variantLabel = [&scene](std::string_view change) {
+            return std::format("  ... {} bricks, {}", scene.mosaic.count(), change);
+        };
 
         // Each summary line below times the same frame with one thing changed. That can move the sample count too,
         // because rays stop at another depth or a longer step crosses the same depth in fewer samples, so a frame
@@ -223,19 +229,19 @@ void benchmarkMarch()
         voxel::MarchParams gradientOff = params;
         gradientOff.shading = 0.0f;
         gradientOff.boundaryOpacity = 0.0f;
-        timeMarch("  ... gradient off (shading, boundary)", scene, gradientOff, frame);
+        timeMarch(variantLabel("no shading or boundary").c_str(), scene, gradientOff, frame);
 
         voxel::MarchParams nearest = params;
         nearest.trilinear = false;
-        timeMarch("  ... nearest instead of trilinear", scene, nearest, frame);
+        timeMarch(variantLabel("nearest, not trilinear").c_str(), scene, nearest, frame);
 
         voxel::MarchParams coarse = params;
         coarse.stepSamples = 2.0f;
-        timeMarch("  ... two samples a step", scene, coarse, frame);
+        timeMarch(variantLabel("two samples a step").c_str(), scene, coarse, frame);
 
         voxel::MarchParams noBlend = params;
         noBlend.levelBlendSamples = 0.0f;
-        timeMarch("  ... without the level blend", scene, noBlend, frame);
+        timeMarch(variantLabel("no level blend").c_str(), scene, noBlend, frame);
     }
 }
 
