@@ -60,6 +60,6 @@ else
         set_kind("headeronly")
         set_group("modules")
         add_includedirs("include", {public = true})
-        add_deps("lpl-core", "lpl-image")
+        add_deps("lpl-core", "lpl-math", "lpl-image")
     target_end()
 end

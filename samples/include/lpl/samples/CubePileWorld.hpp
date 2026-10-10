@@ -31,6 +31,7 @@
 
 #    include <lpl/core/Log.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/engine/Engine.hpp>
 #    include <lpl/engine/World.hpp>
 #    include <lpl/image/Font8x16.hpp>
 #    include <lpl/platform/IPlatform.hpp>

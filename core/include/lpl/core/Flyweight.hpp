@@ -13,6 +13,7 @@
 #ifndef LPL_CORE_FLYWEIGHT_HPP
 #    define LPL_CORE_FLYWEIGHT_HPP
 
+#    include <lpl/core/Types.hpp>
 #    include <lpl/std/mutex.hpp>
 #    include <lpl/std/unordered_map.hpp>
 
