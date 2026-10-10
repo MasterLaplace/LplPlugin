@@ -53,7 +53,22 @@ static struct class *lpl_class;
 static struct device *lpl_device;
 
 static LplSharedMemory *shm; /* vmalloc_user shared memory    */
-static struct lpl_stats stats;
+
+/**
+ * @brief Serializes the RX producers.
+ *
+ * @details The Netfilter hook runs on whichever CPU received the packet, so with several receive
+ *          queues, RPS or loopback traffic from several CPUs, two CPUs claim a slot at once. The
+ *          lock makes the hook the single producer the ring is built for, and guards the RX counters.
+ */
+static DEFINE_SPINLOCK(rx_lock);
+
+static uint64_t rx_packets; /**< Under rx_lock. */
+static uint64_t rx_bytes;   /**< Under rx_lock. */
+static uint64_t rx_drops;   /**< Under rx_lock. */
+static uint64_t tx_packets; /**< Written by the TX thread only. */
+static uint64_t tx_bytes;   /**< Written by the TX thread only. */
+static uint64_t tx_drops;   /**< Written by the TX thread only. */
 
 static struct task_struct *tx_task; /* TX kthread                    */
 static wait_queue_head_t tx_wq;     /* wait queue for TX kick        */
@@ -132,12 +147,12 @@ static int tx_thread_fn(void *data)
 
             if (ret >= 0)
             {
-                stats.tx_packets++;
-                stats.tx_bytes += (uint64_t) ret;
+                tx_packets++;
+                tx_bytes += (uint64_t) ret;
             }
             else
             {
-                stats.drops++;
+                tx_drops++;
             }
 
             tail++;
@@ -186,7 +201,7 @@ static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const st
     if (payload_len == 0 || payload_len > LPL_MAX_PACKET_SIZE)
         return NF_ACCEPT;
 
-    /* Lockless SPSC: producer = Netfilter (this hook), consumer = userspace */
+    spin_lock_bh(&rx_lock);
     head = smp_load_acquire(&shm->rx.idx.head);
     tail = smp_load_acquire(&shm->rx.idx.tail);
     next = head + 1;
@@ -194,7 +209,8 @@ static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const st
     /* Ring full check */
     if ((next - tail) > LPL_RING_SLOTS)
     {
-        stats.drops++;
+        rx_drops++;
+        spin_unlock_bh(&rx_lock);
         return NF_DROP;
     }
 
@@ -207,13 +223,15 @@ static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const st
        handles IP options; sizeof(struct iphdr) only works for 20-byte headers) */
     if (skb_copy_bits(skb, iph->ihl * 4u + sizeof(struct udphdr), slot->data, payload_len) < 0)
     {
-        stats.drops++;
+        rx_drops++;
+        spin_unlock_bh(&rx_lock);
         return NF_DROP;
     }
 
     smp_store_release(&shm->rx.idx.head, next);
-    stats.rx_packets++;
-    stats.rx_bytes += payload_len;
+    rx_packets++;
+    rx_bytes += payload_len;
+    spin_unlock_bh(&rx_lock);
 
     return NF_DROP; /* bypass normal stack for LPL packets */
 }
@@ -266,6 +284,7 @@ static long lpl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     switch (cmd)
     {
     case LPL_IOCTL_RESET:
+        spin_lock_bh(&rx_lock);
         if (shm)
         {
             shm->rx.idx.head = 0;
@@ -273,13 +292,30 @@ static long lpl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             shm->tx.idx.head = 0;
             shm->tx.idx.tail = 0;
         }
-        memset(&stats, 0, sizeof(stats));
+        rx_packets = 0;
+        rx_bytes = 0;
+        rx_drops = 0;
+        spin_unlock_bh(&rx_lock);
+        tx_packets = 0;
+        tx_bytes = 0;
+        tx_drops = 0;
         return 0;
 
-    case LPL_IOCTL_GET_STATS:
-        if (copy_to_user((void __user *) arg, &stats, sizeof(stats)))
+    case LPL_IOCTL_GET_STATS: {
+        struct lpl_stats snapshot;
+
+        spin_lock_bh(&rx_lock);
+        snapshot.rx_packets = rx_packets;
+        snapshot.rx_bytes = rx_bytes;
+        snapshot.drops = rx_drops;
+        spin_unlock_bh(&rx_lock);
+        snapshot.tx_packets = READ_ONCE(tx_packets);
+        snapshot.tx_bytes = READ_ONCE(tx_bytes);
+        snapshot.drops += READ_ONCE(tx_drops);
+        if (copy_to_user((void __user *) arg, &snapshot, sizeof(snapshot)))
             return -EFAULT;
         return 0;
+    }
 
     case LPL_IOCTL_KICK_TX: wake_up_interruptible(&tx_wq); return 0;
 
