@@ -52,6 +52,11 @@ end
 add_cxxflags("-fno-rtti", {force = true})
 add_cxxflags("-fno-exceptions", {force = true})
 
+-- The float flags of LplKernel's libengine/arch/i386/make.config, less the ones specific to i686.
+-- Without -ffp-contract=off, a host with FMA (-march=native, aarch64) fuses a*b+c into one rounding,
+-- and its test records stop matching the ones ring 0 prints.
+add_cxflags("-ffp-contract=off", "-fno-math-errno", {force = true})
+
 -- /////////////////////////////////////////////////////////////////////////////
 -- Build options
 -- /////////////////////////////////////////////////////////////////////////////

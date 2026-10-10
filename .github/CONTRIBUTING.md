@@ -24,6 +24,9 @@ kernel needs is merged before the kernel's.
   `xmake.lua` defines on the host and the kernel build leaves undefined.
 - A `.cpp` added to a module the kernel compiles also goes into LplKernel's build lists: until it
   does, the kernel link fails with `undefined reference`.
+- `xmake.lua` compiles the whole hosted build with the float flags of the kernel's `make.config`, less
+  the ones specific to i686 (`-ffp-contract=off`, `-fno-math-errno`). A float flag added there goes
+  here too, or a host with other hardware stops printing the records ring 0 prints.
 
 ## Fixed32
 
