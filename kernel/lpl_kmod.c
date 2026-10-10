@@ -64,27 +64,41 @@ static struct nf_hook_ops lpl_nf_ops; /* Netfilter hook registration   */
 
 /* ─── UDP send from kernel space ────────────────────────────────────────── */
 
-static int send_udp_packet(LplTxPacket *pkt)
+/**
+ * @brief Sends one TX slot from the kernel UDP socket.
+ *
+ * @details The slot lives in memory the process maps and may rewrite at any moment, so its header
+ *          is read once, checked, and only the copies are used: a length checked in the slot and
+ *          read again from it could have grown in between, and kernel_sendmsg would read past the
+ *          slot.
+ *
+ * @param pkt The slot, in the shared mapping.
+ * @return The bytes sent, or a negative errno.
+ */
+static int send_udp_packet(const LplTxPacket *pkt)
 {
     struct msghdr msg = {};
     struct kvec iov;
     struct sockaddr_in dst;
+    const uint16_t length = READ_ONCE(pkt->length);
+    const uint16_t dst_port = READ_ONCE(pkt->dst_port);
+    const uint32_t dst_ip = READ_ONCE(pkt->dst_ip);
 
-    if (!udp_sock || pkt->length == 0 || pkt->length > LPL_MAX_PACKET_SIZE)
+    if (!udp_sock || length == 0 || length > LPL_MAX_PACKET_SIZE)
         return -EINVAL;
 
     memset(&dst, 0, sizeof(dst));
     dst.sin_family = AF_INET;
-    dst.sin_port = htons(pkt->dst_port);
-    dst.sin_addr.s_addr = htonl(pkt->dst_ip);
+    dst.sin_port = htons(dst_port);
+    dst.sin_addr.s_addr = htonl(dst_ip);
 
-    iov.iov_base = pkt->data;
-    iov.iov_len = pkt->length;
+    iov.iov_base = (void *) pkt->data;
+    iov.iov_len = length;
 
     msg.msg_name = &dst;
     msg.msg_namelen = sizeof(dst);
 
-    return kernel_sendmsg(udp_sock, &msg, &iov, 1, pkt->length);
+    return kernel_sendmsg(udp_sock, &msg, &iov, 1, length);
 }
 
 /* ─── TX kthread ────────────────────────────────────────────────────────── */
@@ -119,7 +133,7 @@ static int tx_thread_fn(void *data)
             if (ret >= 0)
             {
                 stats.tx_packets++;
-                stats.tx_bytes += pkt->length;
+                stats.tx_bytes += (uint64_t) ret;
             }
             else
             {
