@@ -2,7 +2,6 @@
 #include <lpl/rosetta/Bootstrap.hpp>
 #include <lpl/rosetta/Engraving.hpp>
 #include <lpl/rosetta/Interpreter.hpp>
-#include <lpl/rosetta/Parity.hpp>
 #include <lpl/rosetta/SelfDescribing.hpp>
 #include <lpl/std/vector.hpp>
 #include <lpl/testing/Test.hpp>
@@ -12,6 +11,10 @@ LPL_TEST_SUITE(rosetta);
 namespace {
 
 constexpr lpl::core::u32 kOpcodeCount = static_cast<lpl::core::u32>(lpl::rosetta::Opcode::Count);
+constexpr lpl::core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
+constexpr lpl::core::u32 kFnv1aPrime = 0x01000193u;
+constexpr lpl::core::u32 kCanonicalMemoryBytes = 16u;
+constexpr lpl::core::u32 kCanonicalStepBudget = 4096u;
 
 /**
  * @brief The specification the plate carries, emitted once per test that reads it.
@@ -35,6 +38,165 @@ struct Specification {
             spelt = spelt && table.entry[entry].mnemonic[character] == reference[character];
     }
     return spelt;
+}
+
+/**
+ * @struct Instruction
+ * @brief One instruction of the canonical program, before it is encoded.
+ */
+struct Instruction {
+    lpl::rosetta::Opcode opcode; /**< What the instruction does. */
+    lpl::core::u8 a;             /**< First operand. */
+    lpl::core::u8 b;             /**< Second operand. */
+    lpl::core::u8 c;             /**< Third operand. */
+};
+
+/**
+ * @brief The canonical program: XOR a sixteen-byte buffer with a rolling key.
+ *
+ * @details It exercises every class of opcode the ISA has (a constant, a load, arithmetic, a store,
+ *          a conditional and a jump) in the shortest program that does work a reader would
+ *          recognise. A program that only added numbers would leave the memory opcodes untested,
+ *          and those are the ones a decompressor needs. The registers are r0 the index, r1 the
+ *          limit, r2 scratch, r3 the key and r4 one.
+ *
+ *          The exit jumps to 12, not 11: aimed at 11 it lands on the jump that closes the loop, so
+ *          the program runs until its budget instead of halting, while producing exactly the right
+ *          memory, because the loop is idempotent past the sixteenth byte. The trace signature was
+ *          stable and the payload correct; only the step count sitting at the budget said that
+ *          anything was wrong.
+ */
+constexpr Instruction kCanonicalProgram[] = {
+    {lpl::rosetta::Opcode::Set,        0u, 0u, 0u   }, // 0: index = 0
+    {lpl::rosetta::Opcode::Set,        1u, 0u, 16u  }, // 1: limit = 16
+    {lpl::rosetta::Opcode::Set,        3u, 0u, 0x5Au}, // 2: key = 0x5A
+    {lpl::rosetta::Opcode::Set,        4u, 0u, 1u   }, // 3: one = 1
+    {lpl::rosetta::Opcode::Load,       2u, 0u, 0u   }, // 4: scratch = memory[index]
+    {lpl::rosetta::Opcode::Xor,        2u, 2u, 3u   }, // 5: scratch ^= key
+    {lpl::rosetta::Opcode::Store,      2u, 0u, 0u   }, // 6: memory[index] = scratch
+    {lpl::rosetta::Opcode::Add,        3u, 3u, 4u   }, // 7: key += 1, rolling
+    {lpl::rosetta::Opcode::Add,        0u, 0u, 4u   }, // 8: ++index
+    {lpl::rosetta::Opcode::Sub,        5u, 0u, 1u   }, // 9: r5 = index - limit
+    {lpl::rosetta::Opcode::JumpIfZero, 5u, 0u, 12u  }, // 10: done when equal
+    {lpl::rosetta::Opcode::Jump,       0u, 0u, 4u   }, // 11: otherwise round again
+    {lpl::rosetta::Opcode::Halt,       0u, 0u, 0u   }, // 12
+};
+
+/**
+ * @struct RosettaFoldResult
+ * @brief What gate P12 rosetta records: the signatures both targets must reproduce, and the
+ *        counters behind them.
+ */
+struct RosettaFoldResult {
+    lpl::core::u32 traceSignature{0u};   /**< Fold of every instruction retired and its result. */
+    lpl::core::u32 specSignature{0u};    /**< Fold of the engraved instruction-set description. */
+    lpl::core::u32 plateSignature{0u};   /**< Fold of the whole plate image. */
+    lpl::core::u32 payloadSignature{0u}; /**< Fold of the payload read back off the plate. */
+    lpl::core::u32 steps{0u};            /**< Instructions the canonical program retired. */
+    lpl::core::u32 halted{0u};           /**< 1 when it reached HALT rather than its budget. */
+    lpl::core::u32 plateBytes{0u};       /**< Size of the plate. */
+    lpl::core::u32 rebuiltOpcodes{0u};   /**< Opcodes an interpreter rebuilt from the plate knows. */
+    lpl::core::u32 selfHosting{0u};      /**< 1 when the rebuilt reader decoded the plate. */
+};
+
+[[nodiscard]] lpl::core::u32 foldBytes(const lpl::core::u8 *bytes, lpl::core::u32 size) noexcept
+{
+    lpl::core::u32 hash = kFnv1aOffsetBasis;
+
+    for (lpl::core::u32 index = 0u; index < size; ++index)
+        hash = (hash ^ bytes[index]) * kFnv1aPrime;
+    return hash;
+}
+
+void buildCanonicalProgram(lpl::pmr::vector<lpl::core::u8> &out)
+{
+    out.clear();
+    for (const Instruction &instruction : kCanonicalProgram)
+    {
+        lpl::core::u8 word[lpl::rosetta::kInstructionBytes]{};
+
+        lpl::rosetta::encodeInstruction(instruction.opcode, instruction.a, instruction.b, instruction.c, word);
+        for (lpl::core::u32 index = 0u; index < lpl::rosetta::kInstructionBytes; ++index)
+            out.push_back(word[index]);
+    }
+}
+
+/**
+ * @brief The memory the canonical program XORs: byte i holds 7i + 3.
+ */
+void fillCanonicalMemory(lpl::core::u8 (&memory)[kCanonicalMemoryBytes])
+{
+    for (lpl::core::u32 index = 0u; index < kCanonicalMemoryBytes; ++index)
+        memory[index] = static_cast<lpl::core::u8>(index * 7u + 3u);
+}
+
+/**
+ * @brief Runs the canonical program, engraves the canonical plate, and folds both.
+ *
+ * @details The stage that proves something is the last one: a reader rebuilt from what was
+ *          engraved runs the same program to the same trace. If it cannot, the specification the
+ *          plate carries is not enough to rebuild the reader, which is the one thing the whole
+ *          artifact claims.
+ *
+ * @param out Receives the signatures; a stage that fails leaves the later fields at zero.
+ */
+void foldRosettaState(RosettaFoldResult &out)
+{
+    out = RosettaFoldResult{};
+
+    lpl::pmr::vector<lpl::core::u8> program;
+    lpl::core::u8 memory[kCanonicalMemoryBytes]{};
+    const lpl::rosetta::Interpreter machine = lpl::rosetta::Interpreter::reference();
+    lpl::rosetta::ExecutionReport execution{};
+
+    buildCanonicalProgram(program);
+    fillCanonicalMemory(memory);
+    (void) machine.run(program.data(), static_cast<lpl::core::u32>(program.size()), memory, kCanonicalMemoryBytes,
+                       kCanonicalStepBudget, execution);
+    out.traceSignature = execution.traceSignature;
+    out.steps = execution.steps;
+    out.halted = execution.halted ? 1u : 0u;
+
+    lpl::core::u8 specification[lpl::rosetta::kSpecificationBytes]{};
+    const lpl::core::u32 specificationBytes =
+        lpl::rosetta::emitSpecification(specification, lpl::rosetta::kSpecificationBytes);
+
+    out.specSignature = foldBytes(specification, specificationBytes);
+
+    const lpl::rosetta::Bootstrap bootstrap = lpl::rosetta::standardBootstrap();
+    lpl::rosetta::Engraving plate;
+
+    plate.setMedium(lpl::rosetta::Medium::FusedQuartz);
+    plate.setParityShare(200u);
+    if (!plate.engrave(bootstrap, memory, kCanonicalMemoryBytes))
+        return;
+    out.plateBytes = static_cast<lpl::core::u32>(plate.image().size());
+    out.plateSignature = foldBytes(plate.image().data(), out.plateBytes);
+
+    lpl::pmr::vector<lpl::core::u8> working = plate.image();
+    lpl::pmr::vector<lpl::core::u8> engravedSpecification;
+    lpl::pmr::vector<lpl::core::u8> readPayload;
+    lpl::rosetta::EngravingReport report{};
+
+    if (!lpl::rosetta::Engraving::read(working.data(), static_cast<lpl::core::u32>(working.size()),
+                                       engravedSpecification, readPayload, report))
+        return;
+    out.payloadSignature = foldBytes(readPayload.data(), static_cast<lpl::core::u32>(readPayload.size()));
+
+    lpl::rosetta::Interpreter rebuilt;
+
+    if (!lpl::rosetta::Interpreter::fromSpecification(
+            engravedSpecification.data(), static_cast<lpl::core::u32>(engravedSpecification.size()), rebuilt))
+        return;
+    out.rebuiltOpcodes = rebuilt.knownOpcodes();
+
+    lpl::core::u8 rebuiltMemory[kCanonicalMemoryBytes]{};
+    lpl::rosetta::ExecutionReport rebuiltRun{};
+
+    fillCanonicalMemory(rebuiltMemory);
+    (void) rebuilt.run(program.data(), static_cast<lpl::core::u32>(program.size()), rebuiltMemory,
+                       kCanonicalMemoryBytes, kCanonicalStepBudget, rebuiltRun);
+    out.selfHosting = (rebuiltRun.traceSignature == execution.traceSignature && report.payloadRecovered) ? 1u : 0u;
 }
 
 } // namespace
@@ -150,9 +312,9 @@ LPL_TEST(engraved_plate_carries_its_reader)
  */
 LPL_TEST(rebuilt_reader_runs_the_canonical_program)
 {
-    lpl::rosetta::RosettaFoldResult folded{};
+    RosettaFoldResult folded{};
 
-    lpl::rosetta::foldRosettaState(folded);
+    foldRosettaState(folded);
     test.check(folded.selfHosting == 1u, "the reader rebuilt from the engraving runs the program identically");
     test.check(folded.halted == 1u, "the program halts instead of running out its budget");
     test.check(folded.steps > 16u && folded.steps < 512u, "in a step count fitting sixteen bytes of work");

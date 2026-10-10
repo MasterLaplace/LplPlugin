@@ -19,8 +19,8 @@
 -- through editor::CommandProcessor — the WRITER side of the reader/writer line
 -- that keeps ring 0 free of tooling. Nothing here is listed in
 -- libengine/arch/i386/make.config or in the kernel's xmake source list, and
--- agent/Parity.hpp is a drift tripwire on the tool surface, not a cross-ring
--- parity gate.
+-- the signature of the tool surface that test-agent-tools folds is a drift
+-- tripwire, not a cross-ring parity gate.
 -- /////////////////////////////////////////////////////////////////////////////
 
 target("lpl-agent")
