@@ -51,6 +51,15 @@ public:
 
     [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) override;
 
+    /**
+     * @brief Batched receive: copies every packet that fits, then frees their slots at once.
+     *
+     * Reads the module's write index at most once and publishes the read index once for the whole
+     * batch. A packet larger than its slot's buffer stops the batch before it, and is an error only
+     * when it is the first.
+     */
+    [[nodiscard]] core::Expected<core::u32> receiveBatch(std::span<ReceiveSlot> slots) override;
+
     [[nodiscard]] const char *name() const noexcept override;
 
     /**

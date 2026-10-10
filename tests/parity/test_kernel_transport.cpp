@@ -216,6 +216,33 @@ void receivesWhatTheModulePublished()
     check("and the module sees both read", __atomic_load_n(&module.shm().rx.reader.read_index, __ATOMIC_ACQUIRE) == 2u);
 }
 
+void receivesInOneBatch()
+{
+    FakeModule module;
+    module.writeHeader(LPL_PROTOCOL_VERSION);
+    lpl::net::transport::KernelTransport transport(module.path());
+    std::array<std::array<lpl::core::byte, LPL_MAX_PACKET_SIZE>, 8> buffers{};
+    std::array<lpl::net::transport::ReceiveSlot, 8> slots{};
+
+    for (std::size_t i = 0u; i < slots.size(); ++i)
+        slots[i].buffer = buffers[i];
+    check("the transport opens", transport.open().has_value());
+    for (uint32_t i = 0u; i < 5u; ++i)
+        module.publishRx(i, 0x0A000000u + i, static_cast<uint16_t>(5000u + i), std::string(1u + i, 'a'));
+
+    auto received = transport.receiveBatch(std::span(slots).first(3u));
+    check("a batch of three takes the three oldest, in order", received.has_value() && *received == 3u &&
+                                                                   slots[0].length == 1u && slots[2].length == 3u &&
+                                                                   slots[2].source.port() == 5002u);
+    check("and frees their slots at once", __atomic_load_n(&module.shm().rx.reader.read_index, __ATOMIC_ACQUIRE) == 3u);
+
+    received = transport.receiveBatch(slots);
+    check("a batch of eight takes the two left",
+          received.has_value() && *received == 2u && slots[1].length == 5u && slots[1].source.address() == 0x0A000004u);
+    received = transport.receiveBatch(slots);
+    check("an empty ring gives a batch of none", received.has_value() && *received == 0u);
+}
+
 } // namespace
 
 int main()
@@ -226,6 +253,7 @@ int main()
     publishesTransmitsAndKicksOnlyASleeper();
     waitsForTheModuleWhenFull();
     receivesWhatTheModulePublished();
+    receivesInOneBatch();
 
     std::printf("\n%s (%d failure(s))\n", failures == 0 ? "ALL PASSED" : "SOME FAILED", failures);
     return failures == 0 ? 0 : 1;

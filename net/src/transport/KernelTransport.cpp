@@ -248,6 +248,48 @@ core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer,
     return static_cast<core::u32>(length);
 }
 
+core::Expected<core::u32> KernelTransport::receiveBatch(std::span<ReceiveSlot> slots)
+{
+    if (!_impl->shm)
+    {
+        return core::makeError(core::ErrorCode::InvalidState, "Device not open");
+    }
+
+    core::u32 ready = _impl->rxCachedWriteIndex - _impl->rxReadIndex;
+    if (ready < slots.size())
+    {
+        _impl->rxCachedWriteIndex = smp_load_acquire(&_impl->shm->rx.writer.write_index);
+        ready = _impl->rxCachedWriteIndex - _impl->rxReadIndex;
+    }
+
+    const core::u32 wanted = slots.size() < ready ? static_cast<core::u32>(slots.size()) : ready;
+    core::u32 received = 0;
+
+    for (; received < wanted; ++received)
+    {
+        const LplRxPacket *packet = &_impl->shm->rx.packets[(_impl->rxReadIndex + received) & LPL_RING_MASK];
+        const core::u16 length = packet->length;
+        ReceiveSlot &slot = slots[received];
+
+        if (length > slot.buffer.size())
+        {
+            if (received == 0)
+                return core::makeError(core::ErrorCode::InvalidArgument, "Buffer too small");
+            break;
+        }
+        std::memcpy(slot.buffer.data(), packet->data, length);
+        slot.source = Endpoint(packet->src_ip, packet->src_port);
+        slot.length = length;
+    }
+
+    if (received != 0)
+    {
+        _impl->rxReadIndex += received;
+        smp_store_release(&_impl->shm->rx.reader.read_index, _impl->rxReadIndex);
+    }
+    return received;
+}
+
 const char *KernelTransport::name() const noexcept { return "KernelTransport"; }
 
 core::u64 KernelTransport::kickCount() const noexcept { return _impl->kicks; }
