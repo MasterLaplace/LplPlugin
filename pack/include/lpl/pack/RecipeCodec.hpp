@@ -21,6 +21,8 @@
 #    include <lpl/pack/GamePack.hpp>
 #    include <lpl/procgen/WorldRecipe.hpp>
 
+#    include <type_traits>
+
 static_assert(lpl::pack::kWireScatterRules == lpl::procgen::kMaxScatterRules,
               "wire and engine must agree on how many scatter rules a recipe carries");
 
@@ -33,18 +35,144 @@ static_assert(sizeof(lpl::pack::LivingV1::species) / sizeof(lpl::pack::LivingSpe
 
 namespace lpl::pack {
 
+/**
+ * @struct WireRefusal
+ * @brief Why a decoder refused a section: the field it could not read, and the value it held.
+ */
+struct WireRefusal {
+    const char *field{nullptr}; /**< The field, spelled as its section struct spells it; null when none was refused. */
+    core::u32 value{0u};        /**< The value the field held. */
+};
+
 namespace detail {
 
 /**
- * @brief Reads one wire scatter rule.
+ * @name The values an enum of the wire may hold
+ * @brief Whether a value is one this build knows, for each enum a section carries.
+ *
+ * A switch with no default, on purpose: an enumerator added to one of these enums and not
+ * here is a -Wswitch warning, which the host build turns into an error. A bound written as the
+ * enum's last value cannot say that, and went stale exactly that way: `CaveKind::Auto` was
+ * added after the bound was spelled `Layered`, and every `auto` in a document decoded as
+ * `cellular`.
+ * @{
+ */
+[[nodiscard]] constexpr bool isKnown(procgen::NoiseKind kind) noexcept
+{
+    switch (kind)
+    {
+    case procgen::NoiseKind::Fbm:
+    case procgen::NoiseKind::Ridged:
+    case procgen::NoiseKind::Billow: return true;
+    }
+    return false;
+}
+
+[[nodiscard]] constexpr bool isKnown(procgen::DistanceMetric metric) noexcept
+{
+    switch (metric)
+    {
+    case procgen::DistanceMetric::Euclidean:
+    case procgen::DistanceMetric::Manhattan:
+    case procgen::DistanceMetric::Chebyshev: return true;
+    }
+    return false;
+}
+
+[[nodiscard]] constexpr bool isKnown(procgen::CaveKind kind) noexcept
+{
+    switch (kind)
+    {
+    case procgen::CaveKind::Cellular:
+    case procgen::CaveKind::Bsp:
+    case procgen::CaveKind::Dla:
+    case procgen::CaveKind::Layered:
+    case procgen::CaveKind::Auto: return true;
+    }
+    return false;
+}
+
+[[nodiscard]] constexpr bool isKnown(procgen::BiomeId biome) noexcept
+{
+    switch (biome)
+    {
+    case procgen::BiomeId::Ocean:
+    case procgen::BiomeId::Beach:
+    case procgen::BiomeId::Snow:
+    case procgen::BiomeId::Tundra:
+    case procgen::BiomeId::Taiga:
+    case procgen::BiomeId::Rock:
+    case procgen::BiomeId::Desert:
+    case procgen::BiomeId::Savanna:
+    case procgen::BiomeId::Grassland:
+    case procgen::BiomeId::Forest:
+    case procgen::BiomeId::Rainforest:
+    case procgen::BiomeId::Marsh:
+    case procgen::BiomeId::Lake: return true;
+    case procgen::BiomeId::Count: return false;
+    }
+    return false;
+}
+
+[[nodiscard]] constexpr bool isKnown(ecology::TrophicLevel level) noexcept
+{
+    switch (level)
+    {
+    case ecology::TrophicLevel::Producer:
+    case ecology::TrophicLevel::Primary:
+    case ecology::TrophicLevel::Secondary:
+    case ecology::TrophicLevel::Apex: return true;
+    }
+    return false;
+}
+/** @} */
+
+/**
+ * @brief Reads an enum from the value a section holds: the one conversion every enum of the
+ *        wire goes through.
+ *
+ * Refused, never clamped: a cartridge naming a generator this build does not know describes
+ * another world, and running a neighbouring one in its place would say nothing.
+ *
+ * @param field      The field, spelled as its section struct spells it; named by the refusal.
+ * @param value      The value the field holds.
+ * @param out        Receives the enum; untouched when refused.
+ * @param outRefusal Receives @p field and @p value when refused; untouched otherwise.
+ * @return false when @p value is not a value of @p Enum this build knows, a value that only
+ *         fits once truncated to the enum's underlying type included.
+ */
+template <typename Enum>
+requires std::is_scoped_enum_v<Enum>
+[[nodiscard]] constexpr bool readEnum(const char *field, core::u32 value, Enum &out, WireRefusal &outRefusal) noexcept
+{
+    const Enum candidate = static_cast<Enum>(value);
+
+    if (static_cast<core::u32>(candidate) != value || !isKnown(candidate))
+    {
+        outRefusal = WireRefusal{field, value};
+        return false;
+    }
+    out = candidate;
+    return true;
+}
+
+/**
+ * @brief Reads one wire scatter rule, or refuses it.
  *
  * A free function because a rule is converted in both directions and a field-by-field
  * copy written twice is a field silently dropped in one of them the day a rule grows a
  * knob.
+ *
+ * @param from       The wire rule.
+ * @param to         Receives the engine rule; untouched when refused.
+ * @param outRefusal Receives the field refused and the value it held.
+ * @return false when the rule names a biome this build does not know.
  */
-inline void readScatterRule(const ScatterV1 &from, procgen::ScatterRule &to) noexcept
+[[nodiscard]] inline bool readScatterRule(const ScatterV1 &from, procgen::ScatterRule &to,
+                                          WireRefusal &outRefusal) noexcept
 {
-    to.biome = static_cast<procgen::BiomeId>(from.biome);
+    if (!readEnum("scatter.biome", from.biome, to.biome, outRefusal))
+        return false;
     to.density = from.density;
     to.halfExtent = from.halfExtent;
     to.maxSlope = from.maxSlope;
@@ -57,6 +185,7 @@ inline void readScatterRule(const ScatterV1 &from, procgen::ScatterRule &to) noe
     to.maxRiverDistance = from.maxRiverDistance;
     to.endemicShare = from.endemicShare;
     to.collidable = (from.flags & kScatterFlagCollidable) != 0u;
+    return true;
 }
 
 /// Flattens one scatter rule into its wire form. See @ref readScatterRule.
@@ -80,11 +209,17 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
 } // namespace detail
 
 /**
- * @brief Expands a wire recipe into the engine's in-memory recipe.
- * @param wire The decoded section payload.
- * @return The recipe procgen::bakeWorld consumes.
+ * @brief Expands a wire recipe into the engine's in-memory recipe, or refuses it.
+ *
+ * Refused when an enum field holds a value this build does not know (see @ref detail::readEnum).
+ *
+ * @param wire       The decoded section payload.
+ * @param outRecipe  Receives the recipe procgen::bakeWorld consumes; untouched when refused.
+ * @param outRefusal Receives the first field refused and the value it held; untouched otherwise.
+ * @return false when the recipe is refused.
  */
-[[nodiscard]] inline procgen::WorldRecipe toEngineRecipe(const RecipeV1 &wire) noexcept
+[[nodiscard]] inline bool toEngineRecipe(const RecipeV1 &wire, procgen::WorldRecipe &outRecipe,
+                                         WireRefusal &outRefusal) noexcept
 {
     procgen::WorldRecipe recipe{};
 
@@ -101,7 +236,8 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     recipe.terrain.lacunarity = wire.noiseLacunarity;
     recipe.terrain.persistence = wire.noisePersistence;
     recipe.terrain.warpStrength = wire.noiseWarpStrength;
-    recipe.terrain.kind = static_cast<procgen::NoiseKind>(wire.noiseKind);
+    if (!detail::readEnum("noiseKind", wire.noiseKind, recipe.terrain.kind, outRefusal))
+        return false;
     recipe.heightLow = wire.heightLow;
     recipe.heightHigh = wire.heightHigh;
     recipe.groundClearance = wire.groundClearance;
@@ -155,20 +291,12 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     recipe.provinces.cellSize = wire.provinceCellSize;
     recipe.provinces.jitter = wire.provinceJitter;
     recipe.provinces.warpStrength = wire.provinceWarpStrength;
-    recipe.provinces.metric = static_cast<procgen::DistanceMetric>(wire.provinceMetric);
+    if (!detail::readEnum("provinceMetric", wire.provinceMetric, recipe.provinces.metric, outRefusal))
+        return false;
 
     recipe.terraceSteps = wire.terraceSteps;
-    // Clamped rather than trusted: a byte from disk naming a generator that does not
-    // exist would otherwise index a switch that has no case for it.
-    //
-    // @warning The bound is the enum's LAST value and must stay that way. It was written out
-    // as `Layered` and went stale the moment `Auto` was added: a cartridge that said
-    // "auto" baked a 4, the decoder clamped it back to Cellular, and the document's
-    // word was silently discarded on the way in. Nothing failed — the world just was
-    // not the one the document asked for, which is the quietest way a format can lie.
-    recipe.caveKind = wire.caveKind <= static_cast<core::u32>(procgen::CaveKind::Auto) ?
-                          static_cast<procgen::CaveKind>(wire.caveKind) :
-                          procgen::CaveKind::Cellular;
+    if (!detail::readEnum("caveKind", wire.caveKind, recipe.caveKind, outRefusal))
+        return false;
 
     recipe.rooms.width = wire.roomsWidth;
     recipe.rooms.depth = wire.roomsDepth;
@@ -259,7 +387,8 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     // rather than trusted: a cartridge is input, not a promise.
     recipe.scatterCount = wire.scatterCount < kWireScatterRules ? wire.scatterCount : kWireScatterRules;
     for (core::u32 i = 0u; i < recipe.scatterCount; ++i)
-        detail::readScatterRule(wire.scatter[i], recipe.scatter[i]);
+        if (!detail::readScatterRule(wire.scatter[i], recipe.scatter[i], outRefusal))
+            return false;
 
     recipe.normalizeTerrain = (wire.flags & kRecipeFlagNormalizeTerrain) != 0u;
     recipe.erodeTerrain = (wire.flags & kRecipeFlagErodeTerrain) != 0u;
@@ -271,7 +400,8 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     recipe.growRoads = (wire.flags & kRecipeFlagGrowRoads) != 0u;
     recipe.checkPlayability = (wire.flags & kRecipeFlagCheckPlayability) != 0u;
 
-    return recipe;
+    outRecipe = recipe;
+    return true;
 }
 
 /**
@@ -491,12 +621,16 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
  *
  * Field by field and by NAME, like its world counterpart: a rename on either
  * side is then a compile error rather than a silently reinterpreted ecosystem.
- * Fixed32 crosses as its raw Q16.16 word — the value is the bits.
+ * Fixed32 crosses as its raw Q16.16 word — the value is the bits. Refused when a species
+ * sits at a trophic level this build does not know (see @ref detail::readEnum).
  *
- * @param wire Decoded living section.
- * @return The engine recipe it describes.
+ * @param wire       Decoded living section.
+ * @param outLiving  Receives the engine recipe it describes; untouched when refused.
+ * @param outRefusal Receives the first field refused and the value it held; untouched otherwise.
+ * @return false when the living recipe is refused.
  */
-[[nodiscard]] inline ecology::LivingRecipe toEngineLiving(const LivingV1 &wire) noexcept
+[[nodiscard]] inline bool toEngineLiving(const LivingV1 &wire, ecology::LivingRecipe &outLiving,
+                                         WireRefusal &outRefusal) noexcept
 {
     ecology::LivingRecipe recipe{};
 
@@ -557,7 +691,8 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     {
         const LivingSpeciesV1 &from = wire.species[i];
         ecology::LivingSpecies &to = recipe.species[i];
-        to.params.level = static_cast<ecology::TrophicLevel>(from.level);
+        if (!detail::readEnum("species.level", from.level, to.params.level, outRefusal))
+            return false;
         to.params.growth = math::Fixed32::fromRaw(from.growth);
         to.params.mortality = math::Fixed32::fromRaw(from.mortality);
         to.params.predation = math::Fixed32::fromRaw(from.predation);
@@ -569,7 +704,8 @@ inline void writeScatterRule(const procgen::ScatterRule &from, ScatterV1 &to) no
     }
     recipe.speciesCount = count;
 
-    return recipe;
+    outLiving = recipe;
+    return true;
 }
 
 /**
