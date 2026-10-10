@@ -149,6 +149,8 @@ void publishesTransmitsAndKicksOnlyASleeper()
     check("each slot holds its bytes", txSlotCarries(module.shm(), 0u, first) &&
                                            txSlotCarries(module.shm(), 1u, second) &&
                                            txSlotCarries(module.shm(), 2u, first));
+    check("each slot names its destination in host byte order, which the module converts",
+          module.shm().tx.packets[0].dst_ip == 0x7F000001u && module.shm().tx.packets[0].dst_port == 9999u);
     check("an awake sender is not kicked", transport.kickCount() == 0u);
 
     __atomic_store_n(&module.shm().tx.wake.sleeping, 1u, __ATOMIC_RELEASE);

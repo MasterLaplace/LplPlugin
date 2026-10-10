@@ -14,7 +14,6 @@
 
 #include "../../../kernel/lpl_protocol.h"
 
-#include <arpa/inet.h>
 #include <atomic>
 #include <cerrno>
 #include <cstring>
@@ -134,13 +133,10 @@ bool KernelTransport::pushSlot(std::span<const core::byte> data, const Endpoint 
 
     LplTxPacket *slot = &_impl->shm->tx.packets[_impl->txWriteIndex & LPL_RING_MASK];
 
-    // The module expects network byte order, exactly as the legacy driver path
-    // wrote it (htonl/htons on a host-order address). Leaving these at 0, as
-    // this did before, addressed every packet to 0.0.0.0:0.
     if (address != nullptr && address->valid())
     {
-        slot->dst_ip = htonl(address->address());
-        slot->dst_port = htons(address->port());
+        slot->dst_ip = address->address();
+        slot->dst_port = address->port();
     }
     else
     {
