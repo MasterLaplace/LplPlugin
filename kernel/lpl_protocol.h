@@ -15,6 +15,7 @@
 
 #ifdef __KERNEL__
 #    include <asm/barrier.h>
+#    include <linux/stddef.h>
 #    include <linux/types.h>
 #else
 #    include <stddef.h>
@@ -103,25 +104,55 @@ LPL_STATIC_ASSERT(sizeof(struct lpl_packet_header) == 16, "lpl_packet_header mus
 
 /* ─── Ring buffer structures (lockless, mmap-shared) ────────────────────── */
 
-/**
- * @brief Ring buffer index header with cache-line padding.
- *
- * The `_pad[6]` fields ensure `head` and `tail` reside on separate
- * 32-byte boundaries, preventing false sharing between producer
- * and consumer cores.
- */
-typedef struct {
-    uint32_t head;
-    uint32_t tail;
-    uint32_t _pad[6]; /* pad to 32 bytes — prevent false sharing */
-} LplRingHeader;
-
-LPL_STATIC_ASSERT(sizeof(LplRingHeader) == 32, "LplRingHeader must be exactly 32 bytes");
+/** Version of the layout below. The module writes it in LplSharedHeader; KernelTransport refuses another. */
+#define LPL_PROTOCOL_VERSION 3U
 
 /**
- * @brief RX packet slot (network → userspace).
+ * Distance between what the two sides of a ring write: two 64-byte lines, because x86 prefetches lines
+ * in 128-byte aligned pairs. Fixed rather than taken from the compiler: the module and the process may
+ * be built by different compilers, and they must agree on every offset of the mapping.
  */
-typedef struct {
+#define LPL_RING_INTERFERENCE_SIZE 128U
+
+/** Alignment of a slot, so that a slot never shares a cache line with the next one. */
+#define LPL_RING_SLOT_ALIGNMENT 64U
+
+/**
+ * @brief What the producer of a ring writes, alone in its interference span.
+ */
+typedef struct __attribute__((aligned(LPL_RING_INTERFERENCE_SIZE))) {
+    uint32_t write_index; /**< Next slot to fill, free-running, published with release. */
+} LplRingWriter;
+
+/**
+ * @brief What the consumer of a ring writes, alone in its interference span.
+ */
+typedef struct __attribute__((aligned(LPL_RING_INTERFERENCE_SIZE))) {
+    uint32_t read_index; /**< Next slot to read, free-running, published with release. */
+} LplRingReader;
+
+/**
+ * @brief Whether the module's sender sleeps, alone in its span: the process reads it after every
+ *        publish, and the module writes it only when the sender goes to sleep or wakes up.
+ */
+typedef struct __attribute__((aligned(LPL_RING_INTERFERENCE_SIZE))) {
+    uint32_t sleeping; /**< Nonzero while the sender sleeps: the process then kicks it with LPL_IOCTL_KICK_TX. */
+} LplRingWake;
+
+/**
+ * @brief Start of the mapping, written once by the module when it loads.
+ */
+typedef struct __attribute__((aligned(LPL_RING_INTERFERENCE_SIZE))) {
+    uint32_t magic;   /**< LPL_MAGIC. */
+    uint32_t version; /**< LPL_PROTOCOL_VERSION. */
+    uint32_t slots;   /**< LPL_RING_SLOTS. */
+    uint32_t size;    /**< sizeof(LplSharedMemory). */
+} LplSharedHeader;
+
+/**
+ * @brief RX packet slot (network → process). Address and port in host byte order.
+ */
+typedef struct __attribute__((aligned(LPL_RING_SLOT_ALIGNMENT))) {
     uint32_t src_ip;
     uint16_t src_port;
     uint16_t length;
@@ -129,9 +160,9 @@ typedef struct {
 } LplRxPacket;
 
 /**
- * @brief TX packet slot (userspace → network).
+ * @brief TX packet slot (process → network). Address and port in host byte order: the module converts.
  */
-typedef struct {
+typedef struct __attribute__((aligned(LPL_RING_SLOT_ALIGNMENT))) {
     uint32_t dst_ip;
     uint16_t dst_port;
     uint16_t length;
@@ -139,32 +170,48 @@ typedef struct {
 } LplTxPacket;
 
 /**
- * @brief RX ring buffer (Netfilter → userspace, SPSC lockless).
+ * @brief RX ring: the module's Netfilter hook produces, the process consumes.
  */
 typedef struct {
-    LplRingHeader idx;
+    LplRingWriter writer; /**< Written by the module. */
+    LplRingReader reader; /**< Written by the process. */
     LplRxPacket packets[LPL_RING_SLOTS];
 } LplRxRing;
 
 /**
- * @brief TX ring buffer (userspace → kthread TX, SPSC lockless).
+ * @brief TX ring: the process produces, the module's sender consumes.
  */
 typedef struct {
-    LplRingHeader idx;
+    LplRingWriter writer; /**< Written by the process. */
+    LplRingReader reader; /**< Written by the module. */
+    LplRingWake wake;     /**< Written by the module. */
     LplTxPacket packets[LPL_RING_SLOTS];
 } LplTxRing;
 
 /**
  * @brief Top-level shared memory layout for mmap.
  *
- * Mapped via `vmalloc_user` in kernel, `mmap` in userspace.
- * Contains both RX and TX ring buffers for bidirectional
- * zero-copy IPC.
+ * Mapped via `vmalloc_user` in kernel, `mmap` in userspace. Each side keeps its own index and its
+ * last read of the other side's in private memory, and reads the shared one again only when its
+ * copy says the ring is full or empty: a value read from the mapping is never trusted beyond the
+ * slots it can address.
  */
 typedef struct {
+    LplSharedHeader header;
     LplRxRing rx;
     LplTxRing tx;
 } LplSharedMemory;
+
+LPL_STATIC_ASSERT(sizeof(LplRingWriter) == LPL_RING_INTERFERENCE_SIZE &&
+                      sizeof(LplRingReader) == LPL_RING_INTERFERENCE_SIZE &&
+                      sizeof(LplRingWake) == LPL_RING_INTERFERENCE_SIZE,
+                  "each index of a ring fills exactly one interference span");
+LPL_STATIC_ASSERT(sizeof(LplRxPacket) % LPL_RING_SLOT_ALIGNMENT == 0 &&
+                      sizeof(LplTxPacket) % LPL_RING_SLOT_ALIGNMENT == 0,
+                  "a slot never shares a cache line with the next one");
+LPL_STATIC_ASSERT(offsetof(LplRxRing, packets) % LPL_RING_INTERFERENCE_SIZE == 0 &&
+                      offsetof(LplTxRing, packets) % LPL_RING_INTERFERENCE_SIZE == 0,
+                  "the slots never share a span with the indices");
 
 /* ─── Simple ring slot (for non-mmap fallback path) ─────────────────────── */
 

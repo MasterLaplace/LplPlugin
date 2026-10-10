@@ -51,14 +51,36 @@ public:
 
     [[nodiscard]] core::Expected<core::u32> receive(std::span<core::byte> buffer, Endpoint *fromAddress) override;
 
+    /**
+     * @brief Batched receive: copies every packet that fits, then frees their slots at once.
+     *
+     * Reads the module's write index at most once and publishes the read index once for the whole
+     * batch. A packet larger than its slot's buffer stops the batch before it, and is an error only
+     * when it is the first.
+     */
+    [[nodiscard]] core::Expected<core::u32> receiveBatch(std::span<ReceiveSlot> slots) override;
+
     [[nodiscard]] const char *name() const noexcept override;
+
+    /**
+     * @brief How many times this transport woke the module's sender with a system call.
+     *
+     * A publish that finds the sender awake costs no system call, so under load this stays far
+     * below the number of sends.
+     */
+    [[nodiscard]] core::u64 kickCount() const noexcept;
 
 private:
     /**
-     * @brief Copy one packet into the next free TX slot, without kicking.
+     * @brief Copy one packet into the next free TX slot, without publishing it.
      * @return false if the ring is full or the packet is oversized.
      */
     [[nodiscard]] bool pushSlot(std::span<const core::byte> data, const Endpoint *address) noexcept;
+
+    /**
+     * @brief Publishes the filled TX slots, then kicks the module's sender only if it sleeps.
+     */
+    void publishTx() noexcept;
 
     struct Impl;
     std::unique_ptr<Impl> _impl;

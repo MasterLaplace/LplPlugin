@@ -276,6 +276,14 @@ target("test-transport-batching")
     add_files("parity/test_transport_batching.cpp")
 target_end()
 
+-- The process side of the Linux module's rings, against a file mapped as the module maps them.
+target("test-kernel-transport")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-net")
+    add_files("parity/test_kernel_transport.cpp")
+target_end()
+
 target("test-bitstream-quant")
     set_kind("binary")
     set_group("tests")

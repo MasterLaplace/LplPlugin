@@ -14,10 +14,11 @@
 
 #include "../../../kernel/lpl_protocol.h"
 
-#include <arpa/inet.h>
+#include <atomic>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <string>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -28,9 +29,25 @@ struct KernelTransport::Impl {
     const char *devicePath;
     int fd{-1};
     LplSharedMemory *shm{nullptr};
+    std::size_t mappedLength{0};     /**< Length passed to mmap, for munmap. */
+    core::u32 txWriteIndex{0};       /**< Next TX slot this process fills; published to shm->tx.writer. */
+    core::u32 txCachedReadIndex{0};  /**< The module's TX read index, as last read. */
+    core::u32 rxReadIndex{0};        /**< Next RX slot this process reads; published to shm->rx.reader. */
+    core::u32 rxCachedWriteIndex{0}; /**< The module's RX write index, as last read. */
+    core::u64 kicks{0};              /**< System calls that woke the module's sender. */
 
     explicit Impl(const char *path) : devicePath{path} {}
 };
+
+namespace {
+
+[[nodiscard]] bool speaksThisProtocol(const LplSharedMemory &shm) noexcept
+{
+    return shm.header.magic == LPL_MAGIC && shm.header.version == LPL_PROTOCOL_VERSION &&
+           shm.header.slots == LPL_RING_SLOTS && shm.header.size == sizeof(LplSharedMemory);
+}
+
+} // namespace
 
 KernelTransport::KernelTransport(const char *devicePath) : _impl{std::make_unique<Impl>(devicePath)} {}
 
@@ -67,6 +84,21 @@ core::Expected<void> KernelTransport::open()
     }
 
     _impl->shm = static_cast<LplSharedMemory *>(mapped);
+    _impl->mappedLength = len;
+
+    if (!speaksThisProtocol(*_impl->shm))
+    {
+        core::Log::error(std::string("KernelTransport: the module's mapping is protocol ") +
+                         std::to_string(_impl->shm->header.version) + ", this build speaks " +
+                         std::to_string(LPL_PROTOCOL_VERSION));
+        close();
+        return core::makeError(core::ErrorCode::InvalidState, "Kernel module speaks another protocol");
+    }
+
+    _impl->txWriteIndex = smp_load_acquire(&_impl->shm->tx.writer.write_index);
+    _impl->txCachedReadIndex = smp_load_acquire(&_impl->shm->tx.reader.read_index);
+    _impl->rxReadIndex = smp_load_acquire(&_impl->shm->rx.reader.read_index);
+    _impl->rxCachedWriteIndex = _impl->rxReadIndex;
 
     core::Log::info("KernelTransport: opened device and mmap'd shared memory");
     return {};
@@ -76,7 +108,7 @@ void KernelTransport::close()
 {
     if (_impl->shm && _impl->shm != MAP_FAILED)
     {
-        ::munmap(_impl->shm, sizeof(LplSharedMemory));
+        ::munmap(_impl->shm, _impl->mappedLength);
         _impl->shm = nullptr;
     }
 
@@ -92,22 +124,19 @@ bool KernelTransport::pushSlot(std::span<const core::byte> data, const Endpoint 
     if (data.size() > LPL_MAX_PACKET_SIZE)
         return false;
 
-    const uint32_t head = smp_load_acquire(&_impl->shm->tx.idx.head);
-    const uint32_t tail = smp_load_acquire(&_impl->shm->tx.idx.tail);
-    const uint32_t next = head + 1;
+    if (_impl->txWriteIndex - _impl->txCachedReadIndex >= LPL_RING_SLOTS)
+    {
+        _impl->txCachedReadIndex = smp_load_acquire(&_impl->shm->tx.reader.read_index);
+        if (_impl->txWriteIndex - _impl->txCachedReadIndex >= LPL_RING_SLOTS)
+            return false;
+    }
 
-    if ((next - tail) > LPL_RING_SLOTS)
-        return false; // ring full
+    LplTxPacket *slot = &_impl->shm->tx.packets[_impl->txWriteIndex & LPL_RING_MASK];
 
-    LplTxPacket *slot = &_impl->shm->tx.packets[head & LPL_RING_MASK];
-
-    // The module expects network byte order, exactly as the legacy driver path
-    // wrote it (htonl/htons on a host-order address). Leaving these at 0, as
-    // this did before, addressed every packet to 0.0.0.0:0.
     if (address != nullptr && address->valid())
     {
-        slot->dst_ip = htonl(address->address());
-        slot->dst_port = htons(address->port());
+        slot->dst_ip = address->address();
+        slot->dst_port = address->port();
     }
     else
     {
@@ -118,8 +147,19 @@ bool KernelTransport::pushSlot(std::span<const core::byte> data, const Endpoint 
     slot->length = static_cast<uint16_t>(data.size());
     std::memcpy(slot->data, data.data(), data.size());
 
-    smp_store_release(&_impl->shm->tx.idx.head, next);
+    ++_impl->txWriteIndex;
     return true;
+}
+
+void KernelTransport::publishTx() noexcept
+{
+    smp_store_release(&_impl->shm->tx.writer.write_index, _impl->txWriteIndex);
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    if (__atomic_load_n(&_impl->shm->tx.wake.sleeping, __ATOMIC_RELAXED) != 0u)
+    {
+        ::ioctl(_impl->fd, LPL_IOCTL_KICK_TX);
+        ++_impl->kicks;
+    }
 }
 
 core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data, const Endpoint *address)
@@ -139,8 +179,7 @@ core::Expected<core::u32> KernelTransport::send(std::span<const core::byte> data
         return core::makeError(core::ErrorCode::IoError, "TX ring buffer full");
     }
 
-    // Kick the kthread to wake up and send UDP
-    ::ioctl(_impl->fd, LPL_IOCTL_KICK_TX);
+    publishTx();
 
     return static_cast<core::u32>(data.size());
 }
@@ -172,43 +211,87 @@ core::Expected<core::u32> KernelTransport::sendBatch(std::span<const Datagram> d
 
     if (accepted > 0)
     {
-        ::ioctl(_impl->fd, LPL_IOCTL_KICK_TX);
+        publishTx();
     }
 
     return accepted;
 }
 
-core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, Endpoint * /*fromAddress*/)
+core::Expected<core::u32> KernelTransport::receive(std::span<core::byte> buffer, Endpoint *fromAddress)
 {
     if (!_impl->shm)
     {
         return core::makeError(core::ErrorCode::InvalidState, "Device not open");
     }
 
-    uint32_t head = smp_load_acquire(&_impl->shm->rx.idx.head);
-    uint32_t tail = smp_load_acquire(&_impl->shm->rx.idx.tail);
-
-    if (tail == head)
+    if (_impl->rxCachedWriteIndex == _impl->rxReadIndex)
     {
-        return core::u32{0}; // Empty
+        _impl->rxCachedWriteIndex = smp_load_acquire(&_impl->shm->rx.writer.write_index);
+        if (_impl->rxCachedWriteIndex == _impl->rxReadIndex)
+            return core::u32{0};
     }
 
-    LplRxPacket *slot = &_impl->shm->rx.packets[tail & LPL_RING_MASK];
+    const LplRxPacket *slot = &_impl->shm->rx.packets[_impl->rxReadIndex & LPL_RING_MASK];
+    const core::u16 length = slot->length;
 
-    if (slot->length > buffer.size())
+    if (length > buffer.size())
     {
         return core::makeError(core::ErrorCode::InvalidArgument, "Buffer too small");
     }
 
-    std::memcpy(buffer.data(), slot->data, slot->length);
+    std::memcpy(buffer.data(), slot->data, length);
+    if (fromAddress != nullptr)
+        *fromAddress = Endpoint(slot->src_ip, slot->src_port);
+    ++_impl->rxReadIndex;
+    smp_store_release(&_impl->shm->rx.reader.read_index, _impl->rxReadIndex);
 
-    // Address handling would go here
+    return static_cast<core::u32>(length);
+}
 
-    smp_store_release(&_impl->shm->rx.idx.tail, tail + 1);
+core::Expected<core::u32> KernelTransport::receiveBatch(std::span<ReceiveSlot> slots)
+{
+    if (!_impl->shm)
+    {
+        return core::makeError(core::ErrorCode::InvalidState, "Device not open");
+    }
 
-    return static_cast<core::u32>(slot->length);
+    core::u32 ready = _impl->rxCachedWriteIndex - _impl->rxReadIndex;
+    if (ready < slots.size())
+    {
+        _impl->rxCachedWriteIndex = smp_load_acquire(&_impl->shm->rx.writer.write_index);
+        ready = _impl->rxCachedWriteIndex - _impl->rxReadIndex;
+    }
+
+    const core::u32 wanted = slots.size() < ready ? static_cast<core::u32>(slots.size()) : ready;
+    core::u32 received = 0;
+
+    for (; received < wanted; ++received)
+    {
+        const LplRxPacket *packet = &_impl->shm->rx.packets[(_impl->rxReadIndex + received) & LPL_RING_MASK];
+        const core::u16 length = packet->length;
+        ReceiveSlot &slot = slots[received];
+
+        if (length > slot.buffer.size())
+        {
+            if (received == 0)
+                return core::makeError(core::ErrorCode::InvalidArgument, "Buffer too small");
+            break;
+        }
+        std::memcpy(slot.buffer.data(), packet->data, length);
+        slot.source = Endpoint(packet->src_ip, packet->src_port);
+        slot.length = length;
+    }
+
+    if (received != 0)
+    {
+        _impl->rxReadIndex += received;
+        smp_store_release(&_impl->shm->rx.reader.read_index, _impl->rxReadIndex);
+    }
+    return received;
 }
 
 const char *KernelTransport::name() const noexcept { return "KernelTransport"; }
+
+core::u64 KernelTransport::kickCount() const noexcept { return _impl->kicks; }
 
 } // namespace lpl::net::transport
