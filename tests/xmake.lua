@@ -29,6 +29,13 @@ target("test-spinlock")
     add_files("parity/test_spinlock.cpp")
 target_end()
 
+target("test-threadpool")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-concurrency")
+    add_files("parity/test_threadpool.cpp")
+target_end()
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Morton encoding/decoding roundtrip
 -- ─────────────────────────────────────────────────────────────────────────────
