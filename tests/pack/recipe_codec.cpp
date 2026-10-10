@@ -31,6 +31,13 @@ constexpr lpl::core::u32 kFirstRuleBiome =
 constexpr lpl::core::u32 kFirstSpeciesLevel =
     offsetof(lpl::pack::LivingV1, species) + offsetof(lpl::pack::LivingSpeciesV1, level);
 
+/** @brief Where the prey index of the first species sits in a living recipe. */
+constexpr lpl::core::u32 kFirstSpeciesPrey =
+    offsetof(lpl::pack::LivingV1, species) + offsetof(lpl::pack::LivingSpeciesV1, preyIndex);
+
+/** @brief A prey index no pack here can hold: not the producer sentinel, and past every table. */
+constexpr lpl::core::u32 kOutOfRangePrey = 50u;
+
 /**
  * @brief Recomputes the content hash of @p image, so a field written into it is the only thing
  *        wrong with it.
@@ -227,6 +234,22 @@ LPL_TEST(an_unknown_scatter_biome_refuses_the_image)
 LPL_TEST(an_unknown_trophic_level_refuses_the_image)
 {
     checkRefused(test, viewerLivingWith(kFirstSpeciesLevel, kUnknownWord), "species.level", kUnknownWord);
+}
+
+/**
+ * @brief A prey index past the species table refuses the image: unchecked, it subscripts the
+ *        trophic web's vector out of bounds. The producer sentinel and an in-table index still
+ *        decode, so the refusal takes nothing a valid pack can hold.
+ */
+LPL_TEST(a_prey_index_past_the_table_refuses_the_image)
+{
+    checkRefused(test, viewerLivingWith(kFirstSpeciesPrey, kOutOfRangePrey), "species.preyIndex", kOutOfRangePrey);
+
+    const lpl::pack::Cartridge sentinel = load(viewerLivingWith(kFirstSpeciesPrey, lpl::ecology::Species::kNoPrey));
+    test.check(!sentinel.failed && sentinel.livingFromPack, "the producer sentinel is accepted");
+
+    const lpl::pack::Cartridge inTable = load(viewerLivingWith(kFirstSpeciesPrey, 2u));
+    test.check(!inTable.failed && inTable.livingFromPack, "an index inside the table is accepted");
 }
 
 /**
