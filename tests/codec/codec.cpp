@@ -1,8 +1,8 @@
 #include <lpl/codec/BitMatrix.hpp>
+#include <lpl/codec/Erasure.hpp>
 #include <lpl/codec/FourRussians.hpp>
 #include <lpl/codec/GaloisField.hpp>
 #include <lpl/codec/GaussJordan.hpp>
-#include <lpl/codec/Parity.hpp>
 #include <lpl/codec/XorKernel.hpp>
 #include <lpl/math/Random.hpp>
 #include <lpl/std/vector.hpp>
@@ -13,6 +13,23 @@ LPL_TEST_SUITE(codec);
 namespace {
 
 constexpr lpl::core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
+constexpr lpl::core::u32 kFnv1aPrime = 0x01000193u;
+
+/**
+ * @brief Bytes of the payload gate P11 codec encodes.
+ */
+constexpr lpl::core::u32 kCanonicalPayloadBytes = 384u;
+
+/**
+ * @brief Droplets the gate discards before decoding, one in this many.
+ *
+ * @details Dropping is what makes the gate test a code rather than a copy: a rateless code is
+ *          defined by surviving loss, and a run that keeps every droplet only proves that the
+ *          encoder and the decoder are inverses. It does not force the decode through the Gaussian
+ *          tail: at the overhead the gate uses, peeling resolves all twenty-four blocks on its own,
+ *          which is why the fold reduces a system of its own, unconditionally.
+ */
+constexpr lpl::core::u32 kDropStride = 7u;
 
 [[nodiscard]] lpl::core::u64 randomWord(lpl::math::Random &stream)
 {
@@ -40,6 +57,222 @@ void fillRandomly(lpl::codec::BitMatrix &matrix, lpl::core::u32 rows, lpl::core:
                 matrix.set(row, column);
         }
     }
+}
+
+/**
+ * @struct CodecFoldResult
+ * @brief What gate P11 codec records: the signatures both targets must reproduce, and the counters
+ *        behind them.
+ */
+struct CodecFoldResult {
+    lpl::core::u32 solitonSignature{0u}; /**< Fold of the degree distribution's weights. */
+    lpl::core::u32 dropletSignature{0u}; /**< Fold of every emitted droplet, seed and payload. */
+    lpl::core::u32 matrixSignature{0u};  /**< Fold of a reduced GF(2) system. */
+    lpl::core::u32 payloadSignature{0u}; /**< Fold of the recovered payload. */
+    lpl::core::u32 emitted{0u};          /**< Droplets the fountain produced. */
+    lpl::core::u32 delivered{0u};        /**< Droplets left after the gate's drops. */
+    lpl::core::u32 peeledBlocks{0u};     /**< Blocks belief propagation resolved. */
+    lpl::core::u32 eliminatedBlocks{0u}; /**< Blocks the Gaussian tail finished. */
+    lpl::core::u32 residualRows{0u};     /**< Rows the elimination was given. */
+    lpl::core::u32 recovered{0u};        /**< 1 when the payload came back byte for byte. */
+};
+
+/**
+ * @brief The case gate P11 codec encodes and decodes.
+ *
+ * @details Sized for the kernel's 4 MiB heap: twenty-four blocks of sixteen bytes, and a residual
+ *          system of a few hundred columns. Its tuning puts c near 0.04 and delta near 0.05.
+ *
+ *          The overhead, 80 %, is measured rather than chosen. The paper's epsilon of 2 to 5 % is
+ *          asymptotic, and at twenty-four blocks the soliton's guarantees do not hold. Over the
+ *          first 64 seeds, with one droplet in seven discarded, 44 decode at 30 % overhead, 52 at
+ *          40 %, 57 at 50 %, 61 at 60 %, and all 64 from 80 % on. A gate has to succeed every time on
+ *          both targets, so it takes the first value that does, not the smallest that passes today.
+ */
+[[nodiscard]] constexpr lpl::codec::ErasureParams canonicalErasureParams() noexcept
+{
+    lpl::codec::ErasureParams params;
+
+    params.blockBytes = 16u;
+    params.overheadPermille = 800u;
+    params.firstSeed = 0x5EEDu;
+    params.tuning.c = lpl::math::Fixed32::fromRaw(2621);
+    params.tuning.delta = lpl::math::Fixed32::fromRaw(3277);
+    return params;
+}
+
+void foldWord(lpl::core::u32 &hash, lpl::core::u32 word) noexcept { hash = (hash ^ word) * kFnv1aPrime; }
+
+[[nodiscard]] lpl::core::u32 foldBytes(const lpl::pmr::vector<lpl::core::u8> &bytes) noexcept
+{
+    lpl::core::u32 hash = kFnv1aOffsetBasis;
+
+    for (lpl::core::usize index = 0u; index < bytes.size(); ++index)
+        foldWord(hash, bytes[index]);
+    return hash;
+}
+
+[[nodiscard]] bool sameBytes(const lpl::pmr::vector<lpl::core::u8> &lhs, const lpl::pmr::vector<lpl::core::u8> &rhs)
+{
+    bool same = lhs.size() == rhs.size();
+
+    for (lpl::core::usize index = 0u; same && index < lhs.size(); ++index)
+        same = lhs[index] == rhs[index];
+    return same;
+}
+
+/**
+ * @brief Builds the payload the gate encodes, from a seed.
+ *
+ * @details Not a literal: a 384-byte array is a thing that gets edited, and the gate would then
+ *          compare two different payloads while reporting a signature mismatch as an arithmetic
+ *          fault.
+ */
+void buildCanonicalPayload(lpl::pmr::vector<lpl::core::u8> &out)
+{
+    lpl::math::Random stream{0xC0DECu};
+
+    out.clear();
+    out.resize(kCanonicalPayloadBytes, lpl::core::u8{0});
+    for (lpl::core::u32 index = 0u; index < kCanonicalPayloadBytes; ++index)
+        out[index] = static_cast<lpl::core::u8>(stream.next() & 0xFFu);
+}
+
+/**
+ * @brief Folds the degree distribution the encoder drew from.
+ *
+ * @details Folded on its own: two targets that disagree about one weight disagree about which
+ *          droplets exist, and that has to be a gate failure rather than an occasional undecodable
+ *          payload months later.
+ */
+[[nodiscard]] lpl::core::u32 foldSolitonTable(const lpl::codec::ErasureParams &params,
+                                              const lpl::codec::ErasureShape &shape)
+{
+    lpl::codec::SolitonParams tuning = params.tuning;
+    lpl::codec::SolitonTable table;
+
+    tuning.sourceBlocks = shape.blockCount;
+    table.build(tuning);
+    return table.fold(kFnv1aOffsetBasis);
+}
+
+[[nodiscard]] lpl::core::u32 foldDroplets(const lpl::pmr::vector<lpl::codec::Droplet> &droplets)
+{
+    lpl::core::u32 hash = kFnv1aOffsetBasis;
+
+    for (lpl::core::usize droplet = 0u; droplet < droplets.size(); ++droplet)
+    {
+        foldWord(hash, droplets[droplet].seed);
+        for (lpl::core::usize byte = 0u; byte < droplets[droplet].payload.size(); ++byte)
+            foldWord(hash, droplets[droplet].payload[byte]);
+    }
+    return hash;
+}
+
+void dropOneInStride(const lpl::pmr::vector<lpl::codec::Droplet> &droplets,
+                     lpl::pmr::vector<lpl::codec::Droplet> &delivered)
+{
+    for (lpl::core::usize index = 0u; index < droplets.size(); ++index)
+    {
+        if ((index + 1u) % kDropStride == 0u)
+            continue;
+
+        lpl::codec::Droplet kept;
+
+        kept.seed = droplets[index].seed;
+        kept.payload = droplets[index].payload;
+        delivered.push_back(kept);
+    }
+}
+
+/**
+ * @brief Reduces one GF(2) system with both eliminations, and folds the result.
+ *
+ * @details A stage of its own because the decode only reaches the elimination when peeling stalls,
+ *          which depends on the droplets: this runs it on every boot. M4RI and the plain path must
+ *          produce the same reduced form, bit for bit, or one of them is not computing reduced row
+ *          echelon form.
+ *
+ * @param outMismatch Set to 1 when the two eliminations disagree.
+ * @return The fold of the reduced matrix.
+ */
+[[nodiscard]] lpl::core::u32 foldReducedSystem(lpl::core::u32 &outMismatch)
+{
+    constexpr lpl::core::u32 kRows = 48u;
+    constexpr lpl::core::u32 kColumns = 40u;
+    lpl::codec::BitMatrix plain{kRows, kColumns};
+    lpl::codec::BitMatrix blocked{kRows, kColumns};
+    lpl::math::Random stream{0xB17Au};
+
+    for (lpl::core::u32 row = 0u; row < kRows; ++row)
+    {
+        for (lpl::core::u32 column = 0u; column < kColumns; ++column)
+        {
+            if ((stream.next() & 1u) == 0u)
+                continue;
+            plain.set(row, column);
+            blocked.set(row, column);
+        }
+    }
+
+    const lpl::codec::EliminationResult plainResult = lpl::codec::gaussJordan(plain, kColumns);
+    const lpl::codec::EliminationResult blockedResult = lpl::codec::fourRussiansEliminate(blocked, kColumns, 4u);
+
+    outMismatch =
+        (plain.fold(kFnv1aOffsetBasis) == blocked.fold(kFnv1aOffsetBasis) && plainResult.rank == blockedResult.rank) ?
+            0u :
+            1u;
+    return plain.fold(kFnv1aOffsetBasis);
+}
+
+/**
+ * @brief Runs the canonical case and folds every stage of it.
+ *
+ * @details The stages are folded, not only the answer: a payload that comes back proves the decode
+ *          worked, and says nothing about whether the two targets built the same distribution or
+ *          reduced the same matrix on the way. Two eliminations that disagree are a fault, not a
+ *          signature to compare: they clear the verdict, which the test already checks, rather
+ *          than set a flag a test would have to remember.
+ *
+ * @param out Receives the signatures; a payload that does not encode leaves them at zero.
+ */
+void foldCodecState(CodecFoldResult &out)
+{
+    out = CodecFoldResult{};
+
+    const lpl::codec::ErasureParams params = canonicalErasureParams();
+    lpl::pmr::vector<lpl::core::u8> payload;
+    lpl::codec::ErasureShape shape{};
+    lpl::pmr::vector<lpl::codec::Droplet> droplets;
+
+    buildCanonicalPayload(payload);
+    if (!lpl::codec::encodeErasure(payload.data(), static_cast<lpl::core::u32>(payload.size()), params, shape,
+                                   droplets))
+        return;
+    out.emitted = static_cast<lpl::core::u32>(droplets.size());
+    out.solitonSignature = foldSolitonTable(params, shape);
+    out.dropletSignature = foldDroplets(droplets);
+
+    lpl::pmr::vector<lpl::codec::Droplet> delivered;
+
+    dropOneInStride(droplets, delivered);
+    out.delivered = static_cast<lpl::core::u32>(delivered.size());
+
+    lpl::pmr::vector<lpl::core::u8> recovered;
+    lpl::codec::DecodeReport report{};
+    const bool decoded = lpl::codec::decodeErasure(delivered, shape, params, recovered, report);
+
+    out.peeledBlocks = report.peeledBlocks;
+    out.eliminatedBlocks = report.eliminatedBlocks;
+    out.residualRows = report.residualRows;
+    out.recovered = (decoded && sameBytes(recovered, payload)) ? 1u : 0u;
+    out.payloadSignature = foldBytes(recovered);
+
+    lpl::core::u32 mismatch = 0u;
+
+    out.matrixSignature = foldReducedSystem(mismatch);
+    if (mismatch != 0u)
+        out.recovered = 0u;
 }
 
 } // namespace
@@ -182,9 +415,9 @@ LPL_TEST(gray_code_table_is_cheap_and_exact)
  */
 LPL_TEST(payload_survives_a_lossy_channel)
 {
-    lpl::codec::CodecFoldResult folded{};
+    CodecFoldResult folded{};
 
-    lpl::codec::foldCodecState(folded);
+    foldCodecState(folded);
     test.check(folded.recovered == 1u, "the payload comes back byte for byte");
     test.check(folded.delivered < folded.emitted, "although droplets were dropped");
 

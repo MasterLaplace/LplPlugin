@@ -27,6 +27,33 @@ rule_end()
 
 add_rules("laplace.version")
 
+-- The commit this checkout is at, with -dirty when tracked files differ from it, stamped as
+-- LPLPLUGIN_COMMIT (the build stamp config.h declares) into the files a target names, and no
+-- other: add_rules("laplace.commit", {files = "src/SystemInfo.cpp"}). A new commit recompiles
+-- those files alone. LplKernel stamps its identity the same way.
+local kRepositoryRoot = os.scriptdir()
+
+rule("laplace.commit")
+    on_load(function (target)
+        local function git(arguments)
+            local output = try { function ()
+                return os.iorunv("git", table.join({"-C", kRepositoryRoot}, arguments))
+            end }
+            return output and output:trim() or ""
+        end
+        local commit = git({"rev-parse", "--short=7", "HEAD"})
+        if commit == "" then
+            commit = "unknown"
+        elseif git({"status", "--porcelain", "--untracked-files=no"}) ~= "" then
+            commit = commit .. "-dirty"
+        end
+        for _, file in ipairs(table.wrap(target:extraconf("rules", "laplace.commit", "files"))) do
+            local stamped = path.relative(path.join(target:scriptdir(), file), os.projectdir())
+            target:fileconfig_add(stamped, {defines = 'LPLPLUGIN_COMMIT="' .. commit .. '"'})
+        end
+    end)
+rule_end()
+
 set_xmakever("2.9.0")
 
 set_languages("c++23", "c17")
@@ -51,6 +78,11 @@ end
 
 add_cxxflags("-fno-rtti", {force = true})
 add_cxxflags("-fno-exceptions", {force = true})
+
+-- The float flags of LplKernel's libengine/arch/i386/make.config, less the ones specific to i686.
+-- Without -ffp-contract=off, a host with FMA (-march=native, aarch64) fuses a*b+c into one rounding,
+-- and its test records stop matching the ones ring 0 prints.
+add_cxflags("-ffp-contract=off", "-fno-math-errno", {force = true})
 
 -- /////////////////////////////////////////////////////////////////////////////
 -- Build options

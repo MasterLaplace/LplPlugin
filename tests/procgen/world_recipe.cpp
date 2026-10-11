@@ -34,12 +34,15 @@ LPL_TEST(reference_pack_bakes_the_parity_world)
 {
     lpl::pack::View view;
     lpl::pack::RecipeV1 wire{};
+    lpl::procgen::WorldRecipe recipe{};
+    lpl::pack::WireRefusal refusal{};
 
-    if (!test.check(view.open(lpl::pack::kParityPackBytes, lpl::pack::kParityPackSize) && view.readRecipe(wire),
+    if (!test.check(view.open(lpl::pack::kParityPackBytes, lpl::pack::kParityPackSize) && view.readRecipe(wire) &&
+                        lpl::pack::toEngineRecipe(wire, recipe, refusal),
                     "the reference pack opens and its recipe decodes"))
         return;
 
-    const lpl::procgen::WorldRecipeResult baked = bake(lpl::pack::toEngineRecipe(wire));
+    const lpl::procgen::WorldRecipeResult baked = bake(recipe);
 
     test.check(baked == bake(lpl::procgen::parityWorldRecipe()),
                "it bakes the world the parity recipe bakes, field for field");

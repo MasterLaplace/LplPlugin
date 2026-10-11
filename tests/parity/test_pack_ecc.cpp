@@ -52,7 +52,9 @@ void check(bool condition, const char *what)
     lpl::pack::RecipeV1 wire{};
     if (!view.readRecipe(wire))
         return false;
-    return lpl::pack::toEngineRecipe(wire).seed == seed;
+    lpl::procgen::WorldRecipe recipe{};
+    lpl::pack::WireRefusal refusal{};
+    return lpl::pack::toEngineRecipe(wire, recipe, refusal) && recipe.seed == seed;
 }
 
 } // namespace

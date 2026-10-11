@@ -8,10 +8,12 @@
  * half of it the hard way — with no baker on the runner there is no cartridge, so
  * whatever the fallback happens to be IS the published demo.
  *
- * Two rules are encoded here rather than left to each caller:
+ * Three rules are encoded here rather than left to each caller:
  *  - a cartridge that fails to validate is NOT silently replaced by the built-in
  *    one. A corrupt game must be reported; papering over it hides the corruption
  *    behind a world that looks fine.
+ *  - a cartridge holding a value this build does not know, in any enum of any section,
+ *    is refused whole, and the refusal names the field and the value.
  *  - an absent ecosystem section is legitimate. A pack may describe a world with
  *    nothing declared living on it, and the host keeps its own defaults; only a
  *    wrong-SIZED section is a fault, and the reader already refuses that.
@@ -49,6 +51,7 @@ struct Cartridge {
     CartridgeSource source{CartridgeSource::Defaults};
     bool livingFromPack{false}; ///< False when the pack declared no ecosystem.
     bool failed{false};         ///< A pack was offered and did not validate.
+    WireRefusal refusal{};      /**< What refused it, when a field held an unknown value; empty otherwise. */
 
     /**
      * @brief The view profile, still in wire form.
@@ -61,6 +64,27 @@ struct Cartridge {
     ViewV1 view{};
     bool viewFromPack{false}; ///< False when the pack said nothing about looks.
 };
+
+namespace detail {
+
+/**
+ * @brief Decodes the world and, when the pack declares one, the ecosystem of @p view into @p out.
+ *
+ * @return false when the pack is refused: @p out then holds part of it, and @c out.refusal names
+ *         the field when an enum field was what refused it.
+ */
+[[nodiscard]] inline bool decodeRecipes(const View &view, Cartridge &out) noexcept
+{
+    RecipeV1 wire{};
+    LivingV1 livingWire{};
+
+    if (!view.readRecipe(wire) || !toEngineRecipe(wire, out.recipe, out.refusal))
+        return false;
+    out.livingFromPack = view.readLiving(livingWire);
+    return !out.livingFromPack || toEngineLiving(livingWire, out.living, out.refusal);
+}
+
+} // namespace detail
 
 /**
  * @brief Decodes @p bytes, or @p fallbackBytes, into the recipes to run.
@@ -96,21 +120,14 @@ struct Cartridge {
     }
 
     View view;
-    RecipeV1 wire{};
-    if (!view.open(chosen, chosenSize) || !view.readRecipe(wire))
+    if (!view.open(chosen, chosenSize) || !detail::decodeRecipes(view, out))
     {
+        out.recipe = defaults;
+        out.living = defaultLiving;
+        out.livingFromPack = false;
         out.failed = true;
         out.source = CartridgeSource::Defaults;
         return out;
-    }
-
-    out.recipe = toEngineRecipe(wire);
-
-    LivingV1 livingWire{};
-    if (view.readLiving(livingWire))
-    {
-        out.living = toEngineLiving(livingWire);
-        out.livingFromPack = true;
     }
 
     ViewV1 viewWire{};

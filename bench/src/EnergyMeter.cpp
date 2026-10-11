@@ -77,7 +77,39 @@ bool runningUnderWindowsSubsystem()
     return release.find("microsoft") != std::string::npos || release.find("Microsoft") != std::string::npos;
 }
 
+/**
+ * @brief Why a meter gives no energy, when it is not measuring.
+ * @param availability What the meter can claim.
+ * @return The meter's own reason, or nothing when it is measuring.
+ */
+std::optional<EnergyAbsence> absenceOfAMeterNotMeasuring(EnergyAvailability availability) noexcept
+{
+    switch (availability)
+    {
+    case EnergyAvailability::Measured: return std::nullopt;
+    case EnergyAvailability::Denied: return EnergyAbsence::Denied;
+    case EnergyAvailability::Unreadable: return EnergyAbsence::Unreadable;
+    case EnergyAvailability::Absent: return EnergyAbsence::Absent;
+    }
+    std::unreachable();
+}
+
 } // namespace
+
+std::string_view energyAbsenceName(EnergyAbsence absence) noexcept
+{
+    switch (absence)
+    {
+    case EnergyAbsence::Denied: return "denied";
+    case EnergyAbsence::Unreadable: return "unreadable";
+    case EnergyAbsence::Absent: return "absent";
+    case EnergyAbsence::NoRepetition: return "no-repetition";
+    case EnergyAbsence::ShortWindow: return "short-window";
+    case EnergyAbsence::ReadFailed: return "read-failed";
+    case EnergyAbsence::AmbiguousWrap: return "ambiguous-wrap";
+    }
+    std::unreachable();
+}
 
 std::optional<core::u64> energyDeltaMicrojoules(core::u64 before, core::u64 after, core::u64 rangeMicrojoules) noexcept
 {
@@ -203,19 +235,25 @@ EnergyBracket::EnergyBracket(const EnergyMeter &meter)
 {
 }
 
-std::optional<core::f64> EnergyBracket::microjoulesPerRepetition(core::usize repetitions) const
+std::expected<core::f64, EnergyAbsence> EnergyBracket::microjoulesPerRepetition(core::usize repetitions) const
 {
-    if (!_counterAtOpening || repetitions == 0u || std::chrono::steady_clock::now() - _openedAt < kMinimumWindow)
-        return std::nullopt;
+    if (const std::optional<EnergyAbsence> meterAbsence = absenceOfAMeterNotMeasuring(_meter.availability()))
+        return std::unexpected{*meterAbsence};
+    if (!_counterAtOpening)
+        return std::unexpected{EnergyAbsence::ReadFailed};
+    if (repetitions == 0u)
+        return std::unexpected{EnergyAbsence::NoRepetition};
+    if (std::chrono::steady_clock::now() - _openedAt < kMinimumWindow)
+        return std::unexpected{EnergyAbsence::ShortWindow};
 
     const std::optional<core::u64> counterAtClosing = _meter.read();
     if (!counterAtClosing)
-        return std::nullopt;
+        return std::unexpected{EnergyAbsence::ReadFailed};
 
     const std::optional<core::u64> spent =
         energyDeltaMicrojoules(*_counterAtOpening, *counterAtClosing, _meter.rangeMicrojoules());
     if (!spent)
-        return std::nullopt;
+        return std::unexpected{EnergyAbsence::AmbiguousWrap};
     return static_cast<core::f64>(*spent) / static_cast<core::f64>(repetitions);
 }
 

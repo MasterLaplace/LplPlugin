@@ -5,6 +5,12 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.4.1] - 2026-10-08
+
+### Fixed
+
+- **build**: Compile the host with the float flags of the kernel (#393)
+
 ## [0.4.0] - 2026-10-08
 
 ### Added

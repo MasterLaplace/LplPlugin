@@ -24,12 +24,16 @@ kernel needs is merged before the kernel's.
   `xmake.lua` defines on the host and the kernel build leaves undefined.
 - A `.cpp` added to a module the kernel compiles also goes into LplKernel's build lists: until it
   does, the kernel link fails with `undefined reference`.
+- `xmake.lua` compiles the whole hosted build with the float flags of the kernel's `make.config`, less
+  the ones specific to i686 (`-ffp-contract=off`, `-fno-math-errno`). A float flag added there goes
+  here too, or a host with other hardware stops printing the records ring 0 prints.
 
 ## Fixed32
 
 `lpl::math::Fixed32{n}` builds from the raw Q16.16 word: `Fixed32{10}` is 10/65536, not ten. Write
 `Fixed32::fromInt(10)`, `Fixed32::one()` or `Fixed32::half()`; reserve the braces for a value that is
-already raw.
+already raw, and write a raw literal as `Fixed32::fromRaw(1)`. `tools/check-fixed-literal.sh` refuses a
+non-zero literal in the braces, and the linter workflow runs it.
 
 ## Tests
 
@@ -45,6 +49,9 @@ already raw.
 - A generator or a simulation step earns three tests: it reproduces bit for bit, it changes with its
   seed, and it keeps an invariant stated as a property (the steep erodes more than the flat), not as a
   folded signature. A signature that stays stable proves nothing about what it folds.
+- Every `.hpp` of `<module>/include/lpl/` compiles on its own: `headers-<module>` builds one unit per
+  header with `xmake build -g tests` or `-a`, never with a plain `xmake`. A header that cannot is
+  excused in `tests/xmake.lua`, with its reason.
 
 ## Traps that are not checks yet
 

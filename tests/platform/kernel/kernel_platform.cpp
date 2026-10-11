@@ -46,11 +46,8 @@ LPL_TEST(clock_ticks_and_its_counter_advances)
 }
 
 /**
- * @brief Gate P2 HAL, input: the ring hands out no more characters than it said it held, and holds
- *        none afterwards.
- *
- * @note The kernel counts scan codes, an upper bound on the characters: a key release decodes to
- *       nothing (MasterLaplace/LplKernel#481).
+ * @brief Gate P2 HAL, input: the ring hands out exactly as many characters as it said it held, and
+ *        holds none afterwards.
  */
 LPL_TEST(input_ring_drains)
 {
@@ -62,7 +59,7 @@ LPL_TEST(input_ring_drains)
 
     while (input.tryPopCharacter(character))
         ++popped;
-    test.check(popped <= pending, "the ring hands out no more characters than it said it held");
+    test.check(popped == pending, "the ring hands out as many characters as it said it held");
     test.check(input.pendingCount() == 0u, "and holds none afterwards");
 
     test.measure("pending", pending);

@@ -11,9 +11,10 @@
  * ground bounce + AABB collision with octree broad-phase and sleeping). The
  * authoritative state is Fixed32, so both the state fold and the float
  * projection's image fold are bit-identical across the Linux oracle and the
- * i686 kernel — the cross-target signature checked by tests/parity. This is the
- * reconciliation of the two worlds: the reference sim is now expressed as ECS
- * entities stepped by engine systems, exactly like a loaded scene.
+ * i686 kernel — the cross-target signature the engine test `cube_pile`
+ * records. This is the reconciliation of the two worlds: the reference sim is
+ * now expressed as ECS entities stepped by engine systems, exactly like a
+ * loaded scene.
  *
  * @author MasterLaplace
  * @version 0.2.0
@@ -38,8 +39,6 @@
 #    include <lpl/render/Projection.hpp>
 #    include <lpl/render/RenderParity.hpp>
 #    include <lpl/render/SoftwareRasterizer.hpp>
-
-#    include <new>
 
 namespace lpl::samples {
 
@@ -332,36 +331,6 @@ private:
         }
     }
 };
-
-/// Result of running the demo for @p ticks and rendering frame @p ticks: the
-/// authoritative state signature plus the folded rendered image signature.
-struct SimFoldResult {
-    core::u32 state_signature{0u};
-    core::u32 image_signature{0u};
-};
-
-/// Convenience the engine test `cube_pile` runs on both targets:
-/// seed, advance @p ticks deterministic steps, render into @p rt, fold both.
-[[nodiscard]] inline SimFoldResult runCubePileAndFold(const RenderTarget &rt, core::u32 ticks) noexcept
-{
-    // A fresh registry + CubePile each call, so every run is deterministic. Both
-    // live in BSS, not on the stack: a CubePile carries a 4 KiB tint table and
-    // the registry drives 1024 heap chunks — far too much for a freestanding
-    // kernel's small stack. The registry is a throwaway local one here; on the
-    // live engine path CubePile instead runs on the hosting World's registry.
-    alignas(ecs::Registry) static unsigned char registryStorage[sizeof(ecs::Registry)];
-    alignas(CubePile) static unsigned char sceneStorage[sizeof(CubePile)];
-    ecs::Registry *registry = ::new (static_cast<void *>(registryStorage)) ecs::Registry();
-    CubePile *scene = ::new (static_cast<void *>(sceneStorage)) CubePile(*registry);
-    scene->init();
-    for (core::u32 t = 0; t < ticks; ++t)
-        scene->step();
-    scene->render(rt, CubePile::Camera{});
-    const SimFoldResult result{scene->stateSignature(), foldTarget(rt)};
-    scene->~CubePile();
-    registry->~Registry();
-    return result;
-}
 
 } // namespace lpl::samples
 

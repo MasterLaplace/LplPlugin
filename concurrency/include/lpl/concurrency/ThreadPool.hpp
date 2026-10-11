@@ -17,7 +17,6 @@
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Types.hpp>
 
-#    include <atomic>
 #    include <condition_variable>
 #    include <deque>
 #    include <functional>
@@ -95,7 +94,8 @@ private:
     std::deque<std::function<void()>> _tasks;
     std::mutex _mutex;
     std::condition_variable _cv;
-    std::atomic<bool> _stopping{false};
+    bool _stopping = false; /**< Set by @ref shutdown, read and written under @c _mutex only, so that a worker
+                                 between its check of the flag and its wait cannot miss the wake-up. */
 };
 
 // /////////////////////////////////////////////////////////////////////////////
