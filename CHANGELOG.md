@@ -5,7 +5,35 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.4.1] - 2026-10-08
+## [0.5.0] - 2026-10-11
+
+### Breaking
+
+- Move each parity fold into its engine test (#404)
+- **pack**: Refuse an unknown enum value in a cartridge instead of clamping it (#395)
+
+### Added
+
+- **bench,apps**: Write one JSON row per measurement with --json (#403)
+
+### Fixed
+
+- **kmod**: Read a TX slot's header once, before checking it (#408)
+- **concurrency**: Set the stop flag under the pool's mutex, so no worker misses it (#405)
+- **engine**: Drop the BSD socket headers SessionSystem never used (#397)
+- **pack**: Refuse a prey index past the species table (#406)
+
+### Performance
+
+- **kmod,net**: The module's rings on the cached-index protocol, checked on Linux 7.0 (#409)
+- **container**: An SPSC ring whose two ends never share a line, with batch and in-place calls (#407)
+
+### Housekeeping
+
+- **tests**: Compile every public header on its own (#401)
+- **tools**: Refuse a Fixed32 built from a non-zero integer literal (#396)
+
+## [0.4.1] - 2026-10-10
 
 ### Fixed
 
