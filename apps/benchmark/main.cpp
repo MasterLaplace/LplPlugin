@@ -11,8 +11,8 @@
  */
 
 #include <lpl/bench/Harness.hpp>
-#include <lpl/bench/RingBench.hpp>
 #include <lpl/bench/JsonRows.hpp>
+#include <lpl/bench/RingBench.hpp>
 #include <lpl/bench/SystemInfo.hpp>
 #include <lpl/bench/VoxelBench.hpp>
 
