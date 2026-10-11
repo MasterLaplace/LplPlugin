@@ -53,7 +53,34 @@ static struct class *lpl_class;
 static struct device *lpl_device;
 
 static LplSharedMemory *shm; /* vmalloc_user shared memory    */
-static struct lpl_stats stats;
+
+/**
+ * @brief Serializes the RX producers.
+ *
+ * @details The Netfilter hook runs on whichever CPU received the packet, so with several receive
+ *          queues, RPS or loopback traffic from several CPUs, two CPUs claim a slot at once. The
+ *          lock makes the hook the single producer the ring is built for, and guards the RX counters.
+ */
+static DEFINE_SPINLOCK(rx_lock);
+
+static uint64_t rx_packets; /**< Under rx_lock. */
+static uint64_t rx_bytes;   /**< Under rx_lock. */
+static uint64_t rx_drops;   /**< Under rx_lock. */
+static uint64_t tx_packets; /**< Written by the TX thread only. */
+static uint64_t tx_bytes;   /**< Written by the TX thread only. */
+static uint64_t tx_drops;   /**< Written by the TX thread only. */
+
+static uint32_t rx_write_index;       /**< Next RX slot to fill, under rx_lock; published to shm->rx.writer. */
+static uint32_t rx_cached_read_index; /**< Last read index of the process the hook read, under rx_lock. */
+
+/** @brief Serializes the TX thread's runs with LPL_IOCTL_RESET and LPL_IOCTL_GET_STATS. */
+static DEFINE_MUTEX(tx_lock);
+
+static uint32_t tx_read_index;         /**< Next TX slot to send, under tx_lock; published to shm->tx.reader. */
+static uint32_t tx_cached_write_index; /**< Last write index of the process the thread read, under tx_lock. */
+
+/** Most TX slots sent before the thread publishes its read index and yields. */
+#define LPL_TX_RUN 64U
 
 static struct task_struct *tx_task; /* TX kthread                    */
 static wait_queue_head_t tx_wq;     /* wait queue for TX kick        */
@@ -104,8 +131,76 @@ static int send_udp_packet(const LplTxPacket *pkt)
 /* ─── TX kthread ────────────────────────────────────────────────────────── */
 
 /**
- * TX thread drains the TX ring and sends packets via kernel UDP socket.
- * Sleeps via wait_event_interruptible until kicked by ioctl or signaled.
+ * @brief TX slots the process published and the thread has not sent, under tx_lock.
+ *
+ * @details Reads the process's write index again only when the cached copy shows none. An index
+ *          that claims more slots than the ring holds was not written by a process that follows the
+ *          protocol: the thread skips to it and counts one drop, rather than sending stale slots.
+ */
+static uint32_t tx_ready_slots(void)
+{
+    uint32_t ready = tx_cached_write_index - tx_read_index;
+
+    if (ready == 0)
+    {
+        tx_cached_write_index = smp_load_acquire(&shm->tx.writer.write_index);
+        ready = tx_cached_write_index - tx_read_index;
+    }
+    if (ready > LPL_RING_SLOTS)
+    {
+        tx_drops++;
+        tx_read_index = tx_cached_write_index;
+        smp_store_release(&shm->tx.reader.read_index, tx_read_index);
+        return 0;
+    }
+    return ready;
+}
+
+/**
+ * @brief Sends up to LPL_TX_RUN of the @p ready slots, then publishes the read index once, under tx_lock.
+ */
+static void tx_send_run(uint32_t ready)
+{
+    const uint32_t run = ready < LPL_TX_RUN ? ready : LPL_TX_RUN;
+    uint32_t offset;
+
+    for (offset = 0; offset < run; ++offset)
+    {
+        const int sent = send_udp_packet(&shm->tx.packets[(tx_read_index + offset) & LPL_RING_MASK]);
+
+        if (sent >= 0)
+        {
+            tx_packets++;
+            tx_bytes += (uint64_t) sent;
+        }
+        else
+        {
+            tx_drops++;
+        }
+    }
+    tx_read_index += run;
+    smp_store_release(&shm->tx.reader.read_index, tx_read_index);
+}
+
+/**
+ * @brief Sleeps until the process publishes a slot past those sent, or the module unloads.
+ *
+ * @details The thread says it sleeps, then checks the ring a last time; the process publishes,
+ *          then reads that word. With a full barrier on each side, either the thread sees the new
+ *          slot or the process sees the thread asleep and kicks it, and a process that finds the
+ *          thread awake publishes with no system call.
+ */
+static void tx_sleep_until_kicked(void)
+{
+    WRITE_ONCE(shm->tx.wake.sleeping, 1U);
+    smp_mb();
+    wait_event_interruptible(tx_wq, kthread_should_stop() ||
+                                        smp_load_acquire(&shm->tx.writer.write_index) != READ_ONCE(tx_read_index));
+    WRITE_ONCE(shm->tx.wake.sleeping, 0U);
+}
+
+/**
+ * @brief Drains the TX ring a run at a time, and sleeps when it is empty.
  */
 static int tx_thread_fn(void *data)
 {
@@ -113,37 +208,18 @@ static int tx_thread_fn(void *data)
 
     while (!kthread_should_stop())
     {
-        uint32_t head, tail;
-        uint32_t loop_safety = LPL_RING_SLOTS * 2;
+        uint32_t ready;
 
-        wait_event_interruptible(tx_wq, kthread_should_stop() || (smp_load_acquire(&shm->tx.idx.head) !=
-                                                                  smp_load_acquire(&shm->tx.idx.tail)));
+        mutex_lock(&tx_lock);
+        ready = tx_ready_slots();
+        if (ready != 0)
+            tx_send_run(ready);
+        mutex_unlock(&tx_lock);
 
-        if (kthread_should_stop())
-            break;
-
-        head = smp_load_acquire(&shm->tx.idx.head);
-        tail = smp_load_acquire(&shm->tx.idx.tail);
-
-        while (tail != head && loop_safety-- > 0)
-        {
-            LplTxPacket *pkt = &shm->tx.packets[tail & LPL_RING_MASK];
-            int ret = send_udp_packet(pkt);
-
-            if (ret >= 0)
-            {
-                stats.tx_packets++;
-                stats.tx_bytes += (uint64_t) ret;
-            }
-            else
-            {
-                stats.drops++;
-            }
-
-            tail++;
-            smp_store_release(&shm->tx.idx.tail, tail);
+        if (ready == 0)
+            tx_sleep_until_kicked();
+        else
             cond_resched();
-        }
     }
 
     return 0;
@@ -152,15 +228,35 @@ static int tx_thread_fn(void *data)
 /* ─── Netfilter hook: capture UDP packets for LPL_PORT ──────────────────── */
 
 /**
- * Hooks NF_INET_PRE_ROUTING to intercept UDP packets destined for LPL_PORT.
- * Copies the payload directly into the RX ring via skb_copy_bits (zero-copy
- * from skb). Returns NF_DROP to bypass the normal network stack.
+ * @brief Hooks NF_INET_PRE_ROUTING to take the UDP packets for LPL_PORT into the RX ring.
+ *
+ * @details The payload is copied from the skb at the IP header's own length (ihl * 4), which
+ *          counts IP options, straight into the claimed slot. The packet then leaves the normal
+ *          stack (NF_DROP), counted as dropped when the ring is full.
  */
+/**
+ * @brief The next RX slot, under rx_lock, or NULL when the ring is full.
+ *
+ * @details Reads the process's read index again only when the cached copy says the ring is full. A
+ *          read index ahead of the write index, or one that frees more than the ring holds, leaves
+ *          the difference out of range and the ring reads as full: whatever index the process
+ *          writes, the hook writes into the slots and nowhere else.
+ */
+static LplRxPacket *rx_claim_slot(void)
+{
+    if (rx_write_index - rx_cached_read_index >= LPL_RING_SLOTS)
+    {
+        rx_cached_read_index = smp_load_acquire(&shm->rx.reader.read_index);
+        if (rx_write_index - rx_cached_read_index >= LPL_RING_SLOTS)
+            return NULL;
+    }
+    return &shm->rx.packets[rx_write_index & LPL_RING_MASK];
+}
+
 static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
     struct iphdr *iph;
     struct udphdr *udph;
-    uint32_t head, tail, next;
     LplRxPacket *slot;
     uint16_t payload_len;
 
@@ -186,34 +282,23 @@ static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const st
     if (payload_len == 0 || payload_len > LPL_MAX_PACKET_SIZE)
         return NF_ACCEPT;
 
-    /* Lockless SPSC: producer = Netfilter (this hook), consumer = userspace */
-    head = smp_load_acquire(&shm->rx.idx.head);
-    tail = smp_load_acquire(&shm->rx.idx.tail);
-    next = head + 1;
-
-    /* Ring full check */
-    if ((next - tail) > LPL_RING_SLOTS)
+    spin_lock_bh(&rx_lock);
+    slot = rx_claim_slot();
+    if (!slot || skb_copy_bits(skb, iph->ihl * 4u + sizeof(struct udphdr), slot->data, payload_len) < 0)
     {
-        stats.drops++;
+        rx_drops++;
+        spin_unlock_bh(&rx_lock);
         return NF_DROP;
     }
 
-    slot = &shm->rx.packets[head & LPL_RING_MASK];
     slot->src_ip = ntohl(iph->saddr);
     slot->src_port = ntohs(udph->source);
     slot->length = payload_len;
-
-    /* Copy payload from SKB using correct IP header length (iph->ihl * 4u
-       handles IP options; sizeof(struct iphdr) only works for 20-byte headers) */
-    if (skb_copy_bits(skb, iph->ihl * 4u + sizeof(struct udphdr), slot->data, payload_len) < 0)
-    {
-        stats.drops++;
-        return NF_DROP;
-    }
-
-    smp_store_release(&shm->rx.idx.head, next);
-    stats.rx_packets++;
-    stats.rx_bytes += payload_len;
+    rx_write_index++;
+    smp_store_release(&shm->rx.writer.write_index, rx_write_index);
+    rx_packets++;
+    rx_bytes += payload_len;
+    spin_unlock_bh(&rx_lock);
 
     return NF_DROP; /* bypass normal stack for LPL packets */
 }
@@ -266,20 +351,43 @@ static long lpl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     switch (cmd)
     {
     case LPL_IOCTL_RESET:
-        if (shm)
-        {
-            shm->rx.idx.head = 0;
-            shm->rx.idx.tail = 0;
-            shm->tx.idx.head = 0;
-            shm->tx.idx.tail = 0;
-        }
-        memset(&stats, 0, sizeof(stats));
+        spin_lock_bh(&rx_lock);
+        rx_write_index = 0;
+        rx_cached_read_index = 0;
+        WRITE_ONCE(shm->rx.writer.write_index, 0U);
+        WRITE_ONCE(shm->rx.reader.read_index, 0U);
+        rx_packets = 0;
+        rx_bytes = 0;
+        rx_drops = 0;
+        spin_unlock_bh(&rx_lock);
+        mutex_lock(&tx_lock);
+        tx_read_index = 0;
+        tx_cached_write_index = 0;
+        WRITE_ONCE(shm->tx.writer.write_index, 0U);
+        WRITE_ONCE(shm->tx.reader.read_index, 0U);
+        tx_packets = 0;
+        tx_bytes = 0;
+        tx_drops = 0;
+        mutex_unlock(&tx_lock);
         return 0;
 
-    case LPL_IOCTL_GET_STATS:
-        if (copy_to_user((void __user *) arg, &stats, sizeof(stats)))
+    case LPL_IOCTL_GET_STATS: {
+        struct lpl_stats snapshot;
+
+        spin_lock_bh(&rx_lock);
+        snapshot.rx_packets = rx_packets;
+        snapshot.rx_bytes = rx_bytes;
+        snapshot.drops = rx_drops;
+        spin_unlock_bh(&rx_lock);
+        mutex_lock(&tx_lock);
+        snapshot.tx_packets = tx_packets;
+        snapshot.tx_bytes = tx_bytes;
+        snapshot.drops += tx_drops;
+        mutex_unlock(&tx_lock);
+        if (copy_to_user((void __user *) arg, &snapshot, sizeof(snapshot)))
             return -EFAULT;
         return 0;
+    }
 
     case LPL_IOCTL_KICK_TX: wake_up_interruptible(&tx_wq); return 0;
 
@@ -308,6 +416,10 @@ static int __init lpl_init(void)
         return -ENOMEM;
 
     memset(shm, 0, sizeof(LplSharedMemory));
+    shm->header.magic = LPL_MAGIC;
+    shm->header.version = LPL_PROTOCOL_VERSION;
+    shm->header.slots = LPL_RING_SLOTS;
+    shm->header.size = sizeof(LplSharedMemory);
 
     /* 2. Create character device */
     ret = alloc_chrdev_region(&lpl_devno, 0, 1, LPL_DEVICE_NAME);
@@ -350,7 +462,7 @@ static int __init lpl_init(void)
         bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
         bind_addr.sin_port = 0; /* ephemeral port */
 
-        ret = kernel_bind(udp_sock, (struct sockaddr *) &bind_addr, sizeof(bind_addr));
+        ret = kernel_bind(udp_sock, (void *) &bind_addr, sizeof(bind_addr));
         if (ret < 0)
             pr_warn("lpl: UDP bind failed (%d)\n", ret);
     }
