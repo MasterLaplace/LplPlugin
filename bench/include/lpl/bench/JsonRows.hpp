@@ -60,7 +60,7 @@ inline constexpr std::array<JsonRowField, 13> kJsonRowFields{
      {"n", "number of timed repetitions"},
      {"energy_uj_per_rep", "package energy of one repetition, in microjoules, or null"},
      {"energy_absent_reason", "null beside an energy figure, else why there is none: denied, unreadable, absent, "
-                                 "no-repetition, short-window, read-failed or ambiguous-wrap"},
+                                 "no-repetition, short-window, read-failed, ambiguous-wrap or interleaved"},
      {"commit", "short commit lpl-benchmark was built from, -dirty for a modified tree, or unknown"},
      {"build", "build configuration: Release, Profile, Debug or Unknown"},
      {"compiler", "compiler name and version"},

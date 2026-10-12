@@ -56,13 +56,14 @@ enum class EnergyAbsence : core::u8 {
     ShortWindow,   ///< The window lasted less than @ref EnergyBracket::kMinimumWindow.
     ReadFailed,    ///< The counter could not be read when the window opened or when it closed.
     AmbiguousWrap, ///< The two readings cannot describe a single wrap of the counter.
+    Interleaved,   ///< The repetitions alternated with another measurement's, so no window holds them alone.
 };
 
 /**
  * @brief The stable name of a reason, the one a JSON row writes.
  * @param absence The reason.
  * @return "denied", "unreadable", "absent", "no-repetition", "short-window", "read-failed" or
- *         "ambiguous-wrap".
+ *         "ambiguous-wrap" or "interleaved".
  */
 [[nodiscard]] std::string_view energyAbsenceName(EnergyAbsence absence) noexcept;
 

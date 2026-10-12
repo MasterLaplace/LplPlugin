@@ -202,7 +202,7 @@ void expectTheDocumentedReasonsToBeTheWrittenOnes()
         lpl::bench::EnergyAbsence::Denied,        lpl::bench::EnergyAbsence::Unreadable,
         lpl::bench::EnergyAbsence::Absent,        lpl::bench::EnergyAbsence::NoRepetition,
         lpl::bench::EnergyAbsence::ShortWindow,   lpl::bench::EnergyAbsence::ReadFailed,
-        lpl::bench::EnergyAbsence::AmbiguousWrap,
+        lpl::bench::EnergyAbsence::AmbiguousWrap, lpl::bench::EnergyAbsence::Interleaved,
     };
     for (const lpl::bench::EnergyAbsence reason : reasons)
         expect(reasonMeaning.find(lpl::bench::energyAbsenceName(reason)) != std::string_view::npos,
