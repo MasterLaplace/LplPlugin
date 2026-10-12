@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -371,9 +372,16 @@ private:
     std::thread _thread;
 };
 
+/** @brief The names of the two rings a workload times, as its rows spell them. */
+struct Arms {
+    const char *seed = "seed ring";     /**< The baseline. */
+    const char *current = "RingBuffer"; /**< The ring under test. */
+};
+
 /** @brief Time of each repetition of one workload, per element or per round trip, for both rings. */
 struct Comparison {
     const char *workload = "";             /**< What the two rings moved. */
+    Arms arms = {};                        /**< Which two rings moved it. */
     std::vector<core::f64> seedNs = {};    /**< Baseline ring, one entry per repetition. */
     std::vector<core::f64> currentNs = {}; /**< Current ring, one entry per repetition, paired with seedNs. */
 };
@@ -391,9 +399,10 @@ template <typename Repetition> [[nodiscard]] core::f64 timeOnce(Repetition &repe
  *        the same placement of the two threads on the cores and the same load on the machine.
  */
 template <typename Seed, typename Current>
-[[nodiscard]] Comparison comparePaired(const char *workload, core::f64 perUnit, Seed &&seed, Current &&current)
+[[nodiscard]] Comparison comparePaired(const char *workload, core::f64 perUnit, Seed &&seed, Current &&current,
+                                       Arms arms = {})
 {
-    Comparison comparison{.workload = workload, .seedNs = {}, .currentNs = {}};
+    Comparison comparison{.workload = workload, .arms = arms, .seedNs = {}, .currentNs = {}};
 
     for (core::u32 pair = 0u; pair < kWarmupPairs; ++pair)
     {
@@ -431,6 +440,24 @@ void printComparison(const Comparison &comparison)
     std::printf("  %-34s %9.2f ns %9.2f ns %9.2fx  [%5.2fx .. %5.2fx]\n", comparison.workload,
                 quantileOf(comparison.seedNs, 0.5), quantileOf(comparison.currentNs, 0.5), quantileOf(speedUps, 0.5),
                 quantileOf(speedUps, 0.1), quantileOf(speedUps, 0.9));
+}
+
+/**
+ * @brief Reports both rings of one workload through the harness, so --json writes them as rows: the
+ *        samples are the time per element, or per round trip, of each repetition.
+ *
+ * No energy figure: the two rings' repetitions interleave, so no window of the meter holds one ring
+ * alone.
+ */
+void reportComparison(const Comparison &comparison)
+{
+    const std::string seedLabel = std::string("ring: ") + comparison.workload + ", " + comparison.arms.seed;
+    const std::string currentLabel = std::string("ring: ") + comparison.workload + ", " + comparison.arms.current;
+    std::vector<core::f64> seedNs = comparison.seedNs;
+    std::vector<core::f64> currentNs = comparison.currentNs;
+
+    (void) report(seedLabel.c_str(), seedNs, std::unexpected(EnergyAbsence::Interleaved));
+    (void) report(currentLabel.c_str(), currentNs, std::unexpected(EnergyAbsence::Interleaved));
 }
 
 template <typename Ring, typename Element>
@@ -496,7 +523,8 @@ void runPinned(int producerCore, int consumerCore)
                       roundTrips(partner, *ringEcho)),
         comparePaired("control: RingBuffer against itself", kElementCount,
                       oneByOne<RingU32, core::u32>(partner, *controlU32, intact),
-                      oneByOne<RingU32, core::u32>(partner, *ringU32, intact)),
+                      oneByOne<RingU32, core::u32>(partner, *ringU32, intact),
+                      Arms{.seed = "first RingBuffer", .current = "second RingBuffer"}),
     };
 
     if (!intact || !seedEcho->intact || !ringEcho->intact)
@@ -508,6 +536,9 @@ void runPinned(int producerCore, int consumerCore)
                 "speed-up", "[10th .. 90th percentile]");
     for (const Comparison &comparison : comparisons)
         printComparison(comparison);
+    std::printf("\n");
+    for (const Comparison &comparison : comparisons)
+        reportComparison(comparison);
 }
 
 #endif
