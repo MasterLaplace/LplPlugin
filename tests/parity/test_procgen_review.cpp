@@ -31,6 +31,7 @@
 #include <lpl/procgen/ValueNoise.hpp>
 #include <lpl/procgen/Voronoi.hpp>
 #include <lpl/procgen/WorldBuilder.hpp>
+#include <lpl/procgen/WorldRecipe.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -301,6 +302,24 @@ int main()
         excessive.cellSize = 1u;
         check(procgen::computeVoronoi(excessive).regionCount == 0u,
               "a partition too fine for a u16 id is refused, not wrapped");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    std::printf("\n-- a world past what a Fixed32 counts --\n");
+    {
+        // 65,536 cells: a cell count as a Fixed32 wraps to zero, and a share of the map
+        // divided by it traps; 33,124 cells wrap it negative.
+        for (const core::u32 side : {256u, 182u})
+        {
+            procgen::WorldRecipe recipe = procgen::parityWorldRecipe();
+            recipe.width = side;
+            recipe.depth = side;
+            ecs::Registry first;
+            ecs::Registry second;
+            const procgen::WorldRecipeResult baked = procgen::bakeWorld(first, recipe);
+            check(baked.entityCount > 0u && baked.biomeSignature != 0u, "a world past 32,767 cells bakes");
+            check(baked == procgen::bakeWorld(second, recipe), "and bakes the same twice");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

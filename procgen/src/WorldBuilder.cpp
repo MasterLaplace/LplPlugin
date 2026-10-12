@@ -811,9 +811,9 @@ void WorldBuilder::selectBlueNoise(const ScatterRule &rule, lpl::pmr::vector<cor
     if (cells.empty())
         return;
 
-    const core::u32 target = static_cast<core::u32>(
-        (math::Fixed32::fromFloat(rule.density) * math::Fixed32::fromInt(static_cast<core::i32>(cells.size())))
-            .toInt());
+    const core::i32 share = math::Fixed32::fromFloat(rule.density).raw();
+    const core::u32 target =
+        share <= 0 ? 0u : static_cast<core::u32>((static_cast<core::u64>(share) * cells.size()) >> 16u);
     if (target == 0u)
     {
         cells.clear();
