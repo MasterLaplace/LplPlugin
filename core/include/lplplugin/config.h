@@ -27,8 +27,8 @@
  */
 #define LPLPLUGIN_NAME "LplPlugin"
 #define LPLPLUGIN_VERSION_MAJOR 0
-#define LPLPLUGIN_VERSION_MINOR 4
-#define LPLPLUGIN_VERSION_PATCH 1
+#define LPLPLUGIN_VERSION_MINOR 5
+#define LPLPLUGIN_VERSION_PATCH 0
 /** @} */
 
 /** The shared part, down to the Requirements group: laplace-config v1, from MasterLaplace/.github templates/config.h. */
