@@ -10,6 +10,7 @@
 #include <lpl/std/vector.hpp>
 #include <lpl/testing/Test.hpp>
 
+#include <bit>
 #include <cstddef>
 #include <string_view>
 
@@ -37,6 +38,21 @@ constexpr lpl::core::u32 kFirstSpeciesPrey =
 
 /** @brief A prey index no pack here can hold: not the producer sentinel, and past every table. */
 constexpr lpl::core::u32 kOutOfRangePrey = 50u;
+
+/** @brief A quiet NaN, as a word. */
+constexpr lpl::core::u32 kNotANumber = 0x7FC00000u;
+
+/** @brief Positive infinity, as a word. */
+constexpr lpl::core::u32 kInfinity = 0x7F800000u;
+
+/** @brief Where @p member sits in its section, in bytes. */
+template <typename Section, typename Field> [[nodiscard]] lpl::core::u32 offsetIn(Field Section::*member)
+{
+    const Section probe{};
+
+    return static_cast<lpl::core::u32>(reinterpret_cast<const lpl::core::u8 *>(&(probe.*member)) -
+                                       reinterpret_cast<const lpl::core::u8 *>(&probe));
+}
 
 /**
  * @brief Recomputes the content hash of @p image, so a field written into it is the only thing
@@ -129,6 +145,36 @@ void checkRefused(lpl::testing::Test &test, const lpl::pmr::vector<lpl::core::u8
                "the defaults it was given stay in place");
     test.check(names(cartridge.refusal, field), "the refusal names the field");
     test.check(cartridge.refusal.value == word, "and the value it held");
+}
+
+/** @brief An image with a word written into one of its sections, at an offset. */
+using ImageWith = lpl::pmr::vector<lpl::core::u8> (*)(lpl::core::u32 fieldOffset, lpl::core::u32 word);
+
+/** @brief Checks that @p word at @p fieldOffset, a field's bound, is not refused for @p field. */
+void checkNotRefusedFor(lpl::testing::Test &test, ImageWith imageWith, lpl::core::u32 fieldOffset,
+                        std::string_view field, lpl::core::u32 word)
+{
+    const lpl::pack::Cartridge cartridge = load(imageWith(fieldOffset, word));
+
+    test.check(!cartridge.failed || !names(cartridge.refusal, field), "a field's bound is not refused for it");
+}
+
+/**
+ * @brief Checks that the real at @p fieldOffset refuses one past each end of [@p least, @p most],
+ *        NaN and infinity, naming @p field, and holds both ends.
+ */
+void checkRealBound(lpl::testing::Test &test, ImageWith imageWith, lpl::core::u32 fieldOffset, std::string_view field,
+                    lpl::core::f32 least, lpl::core::f32 most)
+{
+    const lpl::core::u32 above = std::bit_cast<lpl::core::u32>(most + 1.0f);
+    const lpl::core::u32 below = std::bit_cast<lpl::core::u32>(least - 1.0f);
+
+    checkRefused(test, imageWith(fieldOffset, above), field, above);
+    checkRefused(test, imageWith(fieldOffset, below), field, below);
+    checkRefused(test, imageWith(fieldOffset, kNotANumber), field, kNotANumber);
+    checkRefused(test, imageWith(fieldOffset, kInfinity), field, kInfinity);
+    checkNotRefusedFor(test, imageWith, fieldOffset, field, std::bit_cast<lpl::core::u32>(most));
+    checkNotRefusedFor(test, imageWith, fieldOffset, field, std::bit_cast<lpl::core::u32>(least));
 }
 
 /** @brief Whether @p recipe comes back from the wire, decoded into @p outDecoded. */
@@ -250,6 +296,79 @@ LPL_TEST(a_prey_index_past_the_table_refuses_the_image)
 
     const lpl::pack::Cartridge inTable = load(viewerLivingWith(kFirstSpeciesPrey, 2u));
     test.check(!inTable.failed && inTable.livingFromPack, "an index inside the table is accepted");
+}
+
+/**
+ * @brief Every count a world recipe bounds refuses one past its bound, naming the field, and holds
+ *        the bound itself: a size, an iteration count, a radius or a level its generator cannot
+ *        hold never reaches it.
+ */
+LPL_TEST(every_count_of_a_world_recipe_refuses_one_past_its_bound)
+{
+    for (const lpl::pack::detail::CountBound<lpl::pack::RecipeV1> &bound : lpl::pack::detail::kRecipeCounts)
+    {
+        checkRefused(test, parityWith(offsetIn(bound.member), bound.most + 1u), bound.field, bound.most + 1u);
+        checkNotRefusedFor(test, parityWith, offsetIn(bound.member), bound.field, bound.most);
+    }
+}
+
+/**
+ * @brief Every real of a world recipe refuses what a Fixed32 cannot hold, NaN and the infinities
+ *        included, and so does every real of a scatter rule past its range.
+ */
+LPL_TEST(every_real_of_a_world_recipe_refuses_what_its_range_excludes)
+{
+    for (const lpl::pack::detail::RealBound<lpl::pack::RecipeV1> &bound : lpl::pack::detail::kRecipeReals)
+        checkRealBound(test, parityWith, offsetIn(bound.member), bound.field, bound.least, bound.most);
+    for (const lpl::pack::detail::RealBound<lpl::pack::ScatterV1> &bound : lpl::pack::detail::kScatterReals)
+        checkRealBound(test, parityWith, offsetof(lpl::pack::RecipeV1, scatter) + offsetIn(bound.member), bound.field,
+                       bound.least, bound.most);
+}
+
+/**
+ * @brief The levels a volume stacks and the steps an aggregation walks are bounded as the
+ *        generator computes them, across the fields that multiply.
+ */
+LPL_TEST(a_volume_or_a_walk_past_its_bound_refuses_the_image)
+{
+    constexpr lpl::core::u32 kLevelsPerLayer = 100u;
+    constexpr lpl::core::u32 kRoofHeight = 251u;
+    constexpr lpl::core::u32 kParticles = 1u << 16u;
+    const lpl::procgen::WorldRecipe parity = lpl::procgen::parityWorldRecipe();
+    const lpl::core::u32 storeys = parity.buildings.maxFloors * parity.buildings.floorHeight;
+
+    checkRefused(test, parityWith(offsetof(lpl::pack::RecipeV1, systemLevelsPerLayer), kLevelsPerLayer),
+                 "systemLayers * systemLevelsPerLayer", parity.caveSystem.layers * kLevelsPerLayer);
+    checkRefused(test, parityWith(offsetof(lpl::pack::RecipeV1, buildingRoofHeight), kRoofHeight),
+                 "buildingBaseHeight + buildingMaxFloors * buildingFloorHeight + buildingRoofHeight",
+                 parity.buildings.baseHeight + storeys + kRoofHeight);
+    checkRefused(test, parityWith(offsetof(lpl::pack::RecipeV1, dlaParticles), kParticles),
+                 "dlaParticles * dlaMaxStepsPerParticle", kParticles * parity.aggregation.maxStepsPerParticle);
+}
+
+/**
+ * @brief Every bound of a living recipe refuses one past it, naming the field: its sizes and
+ *        populations, its reals, and the Fixed32 words of its species.
+ */
+LPL_TEST(every_bound_of_a_living_recipe_refuses_one_past_it)
+{
+    for (const lpl::pack::detail::CountBound<lpl::pack::LivingV1> &bound : lpl::pack::detail::kLivingCounts)
+    {
+        checkRefused(test, viewerLivingWith(offsetIn(bound.member), bound.most + 1u), bound.field, bound.most + 1u);
+        checkNotRefusedFor(test, viewerLivingWith, offsetIn(bound.member), bound.field, bound.most);
+    }
+    for (const lpl::pack::detail::RealBound<lpl::pack::LivingV1> &bound : lpl::pack::detail::kLivingReals)
+        checkRealBound(test, viewerLivingWith, offsetIn(bound.member), bound.field, bound.least, bound.most);
+    for (const lpl::pack::detail::RawBound<lpl::pack::LivingSpeciesV1> &bound : lpl::pack::detail::kSpeciesRaws)
+    {
+        const lpl::core::u32 offset = offsetof(lpl::pack::LivingV1, species) + offsetIn(bound.member);
+        const lpl::core::u32 above = static_cast<lpl::core::u32>(bound.most + 1);
+        const lpl::core::u32 below = static_cast<lpl::core::u32>(bound.least - 1);
+
+        checkRefused(test, viewerLivingWith(offset, above), bound.field, above);
+        checkRefused(test, viewerLivingWith(offset, below), bound.field, below);
+        checkNotRefusedFor(test, viewerLivingWith, offset, bound.field, static_cast<lpl::core::u32>(bound.most));
+    }
 }
 
 /**
