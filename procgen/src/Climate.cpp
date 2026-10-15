@@ -132,8 +132,8 @@ void rankNormalize(Heightfield &field)
     {
         const core::u32 here = histogram[b];
         const core::u32 midpoint = below + here / 2u;
-        rank[b] = math::Fixed32::fromInt(static_cast<core::i32>(midpoint)) /
-                  math::Fixed32::fromInt(static_cast<core::i32>(cells));
+        rank[b] = math::Fixed32::fromRaw(
+            static_cast<core::i32>((static_cast<core::u64>(midpoint) << 16u) / static_cast<core::u64>(cells)));
         below += here;
     }
 
