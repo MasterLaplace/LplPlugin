@@ -25,10 +25,14 @@
 #    include <lpl/std/memory.hpp>
 #    include <lpl/std/vector.hpp>
 
+#    include <array>
 #    include <cstddef>
 #    include <span>
 
 namespace lpl::ecs {
+
+/** @brief Bytes per component, indexed by ComponentId: what the double buffer moved of each. */
+using ComponentBytes = std::array<core::u64, static_cast<core::usize>(ComponentId::Count)>;
 
 /**
  * @class Chunk
@@ -92,8 +96,12 @@ public:
      */
     [[nodiscard]] void *writeComponent(ComponentId id) noexcept;
 
-    /** @brief Swaps front and back buffers (publish step at tick boundary). */
-    void swapBuffers() noexcept;
+    /**
+     * @brief Publishes the back buffers at a tick boundary: copies each one onto its front buffer,
+     *        then swaps the two.
+     * @param outBytes Receives, added to what it holds, the bytes copied for each component.
+     */
+    void swapBuffers(ComponentBytes &outBytes) noexcept;
 
     /** @brief Returns the archetype of this chunk. */
     [[nodiscard]] const Archetype &archetype() const noexcept;
@@ -154,8 +162,11 @@ public:
     /** @brief Returns a read-only view of all chunks. */
     [[nodiscard]] std::span<const lpl::pmr::unique_ptr<Chunk>> chunks() const noexcept;
 
-    /** @brief Swaps front/back buffers on every chunk. */
-    void swapAllBuffers() noexcept;
+    /**
+     * @brief Swaps front/back buffers on every chunk.
+     * @param outBytes Receives, added to what it holds, the bytes copied for each component.
+     */
+    void swapAllBuffers(ComponentBytes &outBytes) noexcept;
 
     /** @brief Returns the archetype. */
     [[nodiscard]] const Archetype &archetype() const noexcept;
