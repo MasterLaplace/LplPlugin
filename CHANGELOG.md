@@ -5,7 +5,17 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.5.0] - 2026-10-11
+## [0.6.0] - 2026-10-15
+
+### Added
+
+- **bench**: The ring benchmark writes its JSON rows (#413)
+
+### Fixed
+
+- **pack,procgen**: Refuse what the generators cannot hold (#415)
+
+## [0.5.0] - 2026-10-12
 
 ### Breaking
 
