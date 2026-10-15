@@ -68,3 +68,37 @@ LPL_TEST(freed_slots_are_reused_last_in_first_out)
 
     test.measureHexadecimal("first_entity", created[0].raw());
 }
+
+/**
+ * @brief A swap counts exactly the bytes it copies from back to front buffers, per component and
+ *        in total: the data the double buffer moves, the same on both targets.
+ */
+LPL_TEST(a_swap_counts_the_bytes_it_copies)
+{
+    const lpl::ecs::ComponentId components[] = {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::Mass};
+    lpl::ecs::Archetype archetype{components};
+    lpl::ecs::Registry registry;
+    constexpr lpl::core::u32 kCount = 3u;
+
+    for (lpl::core::u32 created = 0u; created < kCount; ++created)
+        if (!test.check(static_cast<bool>(registry.createEntity(archetype)), "an entity is created"))
+            return;
+    test.check(registry.swappedBytes() == 0u, "nothing is counted before the first swap");
+
+    registry.swapAllBuffers();
+
+    const lpl::core::u64 position =
+        static_cast<lpl::core::u64>(kCount) * lpl::ecs::defaultLayout(lpl::ecs::ComponentId::Position).size;
+    const lpl::core::u64 mass =
+        static_cast<lpl::core::u64>(kCount) * lpl::ecs::defaultLayout(lpl::ecs::ComponentId::Mass).size;
+    test.check(registry.swappedBytes(lpl::ecs::ComponentId::Position) == position &&
+                   registry.swappedBytes(lpl::ecs::ComponentId::Mass) == mass,
+               "each component counts the bytes of its own buffers");
+    test.check(registry.swappedBytes(lpl::ecs::ComponentId::Velocity) == 0u,
+               "a component no entity carries counts nothing");
+
+    registry.swapAllBuffers();
+
+    test.check(registry.swappedBytes() == 2u * (position + mass), "and every swap adds what it copied");
+    test.measure("swapped_bytes", static_cast<lpl::core::u32>(registry.swappedBytes()));
+}

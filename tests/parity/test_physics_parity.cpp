@@ -74,7 +74,8 @@ static RunResult runOnce(core::u32 entityCount)
                 }
             }
 
-            chunk->swapBuffers();
+            ecs::ComponentBytes moved{};
+            chunk->swapBuffers(moved);
         }
     }
 

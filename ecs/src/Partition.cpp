@@ -196,7 +196,7 @@ void *Chunk::writeComponent(ComponentId id) noexcept
     return _impl->buffers[cid].second;
 }
 
-void Chunk::swapBuffers() noexcept
+void Chunk::swapBuffers(ComponentBytes &outBytes) noexcept
 {
     // Copy back (write) → front (read) so the new write buffer starts
     // with up-to-date data after the swap (prevents 2-frame-stale reads).
@@ -208,6 +208,7 @@ void Chunk::swapBuffers() noexcept
         const core::usize cid = static_cast<core::usize>(layout.id);
         const core::usize bytes = static_cast<core::usize>(layout.size) * static_cast<core::usize>(_impl->count);
         lpl::pmr::memcpy(_impl->buffers[cid].first, _impl->buffers[cid].second, bytes);
+        outBytes[cid] += bytes;
 
         std::swap(_impl->buffers[cid].first, _impl->buffers[cid].second);
     }
@@ -279,11 +280,11 @@ core::u32 Partition::entityCount() const noexcept
 
 std::span<const lpl::pmr::unique_ptr<Chunk>> Partition::chunks() const noexcept { return _chunks; }
 
-void Partition::swapAllBuffers() noexcept
+void Partition::swapAllBuffers(ComponentBytes &outBytes) noexcept
 {
     for (auto &chunk : _chunks)
     {
-        chunk->swapBuffers();
+        chunk->swapBuffers(outBytes);
     }
 }
 

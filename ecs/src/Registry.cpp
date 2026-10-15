@@ -29,6 +29,9 @@ struct Registry::Impl {
     /// Optional arena backing chunk storage (see Registry::setAllocator).
     memory::IAllocator *allocator = nullptr;
 
+    /// Bytes the swaps have copied, per component, since construction.
+    ComponentBytes swappedBytes{};
+
     /** @brief Sentinel value meaning "no next slot". */
     static constexpr core::u32 kNoNext = ~core::u32{0};
     static constexpr core::u32 kInitCap = 1024;
@@ -345,8 +348,22 @@ void Registry::swapAllBuffers() noexcept
 {
     for (auto &partition : _impl->partitions)
     {
-        partition->swapAllBuffers();
+        partition->swapAllBuffers(_impl->swappedBytes);
     }
+}
+
+core::u64 Registry::swappedBytes() const noexcept
+{
+    core::u64 total = 0u;
+    for (const core::u64 bytes : _impl->swappedBytes)
+        total += bytes;
+    return total;
+}
+
+core::u64 Registry::swappedBytes(ComponentId id) const noexcept
+{
+    const core::usize index = static_cast<core::usize>(id);
+    return index < _impl->swappedBytes.size() ? _impl->swappedBytes[index] : 0u;
 }
 
 } // namespace lpl::ecs

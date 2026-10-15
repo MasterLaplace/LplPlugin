@@ -142,6 +142,15 @@ public:
     /** @brief Swaps front/back buffers on every partition (end-of-tick). */
     void swapAllBuffers() noexcept;
 
+    /**
+     * @brief Bytes every swap since construction has copied from back to front buffers: the data
+     *        the double buffer moves, counted exactly, the same on every target.
+     */
+    [[nodiscard]] core::u64 swappedBytes() const noexcept;
+
+    /** @brief The share of @ref swappedBytes that buffers of @p id account for. */
+    [[nodiscard]] core::u64 swappedBytes(ComponentId id) const noexcept;
+
 private:
     struct Impl;
     lpl::pmr::unique_ptr<Impl> _impl;
