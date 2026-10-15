@@ -15,10 +15,12 @@ namespace {
  * @brief Most bytes the server's tick may copy from back to front buffers.
  *
  * The 1024 bodies of the cube pile carry a Position, a Velocity and an AABB of 12 bytes and a Mass
- * of 4: 40 bytes a body, 40,960 a tick. A ratchet, as the zero-allocation gate is: a change that
- * moves fewer bytes lowers it in the same pull request, and one that moves more fails here first.
+ * of 4. The physics writes the first two and only reads the others, so a swap copies 24 bytes a
+ * body, 24,576 a tick, where it copied all 40 before. A ratchet, as the zero-allocation gate is:
+ * a change that moves fewer bytes lowers it in the same pull request, and one that moves more
+ * fails here first.
  */
-constexpr lpl::core::u32 kSwapBytesPerTickBudget = 40960u;
+constexpr lpl::core::u32 kSwapBytesPerTickBudget = 24576u;
 
 /** @brief Ticks run before the count starts, and ticks counted. */
 constexpr lpl::core::u32 kWarmTicks = 1u;

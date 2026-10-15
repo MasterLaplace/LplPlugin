@@ -60,7 +60,7 @@ inline const core::u32 *Herd::creatureOf(ecs::Registry &registry, ecs::EntityId 
     if (chunk == nullptr || !chunk->archetype().has(ecs::ComponentId::Creature))
         return nullptr;
     // The WRITE side, like every other creature read: that is where the systems write.
-    const auto *creature = static_cast<const core::u32 *>(chunk->writeComponent(ecs::ComponentId::Creature));
+    const auto *creature = static_cast<const core::u32 *>(chunk->latestComponent(ecs::ComponentId::Creature));
     if (creature == nullptr)
         return nullptr;
     return creature + static_cast<core::usize>(row) * 2u;

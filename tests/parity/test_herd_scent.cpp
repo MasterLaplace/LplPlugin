@@ -147,7 +147,7 @@ math::Vec3<math::Fixed32> positionOf(ecs::Registry &registry, ecs::EntityId id)
         if (ref.value().localIndex >= entities.size() || entities[ref.value().localIndex] != id)
             continue;
         const auto *p =
-            static_cast<const math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
+            static_cast<const math::Vec3<math::Fixed32> *>(chunk.latestComponent(ecs::ComponentId::Position));
         return p != nullptr ? p[ref.value().localIndex] : math::Vec3<math::Fixed32>{};
     }
     return {};
@@ -482,7 +482,7 @@ int main()
                 if (!chunk || chunk->count() < 2u)
                     continue;
                 const auto *v =
-                    static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+                    static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Velocity));
                 deerX = v[0].x;
                 wolfX = v[1].x;
             }

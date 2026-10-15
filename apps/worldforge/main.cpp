@@ -895,9 +895,9 @@ void drawAtlas(EditorUi &ui)
             if (chunk == nullptr || !chunk->archetype().has(lpl::ecs::ComponentId::Creature))
                 continue;
             // The write side, like every creature system: nothing here swaps buffers.
-            const auto *position = static_cast<const FVec3 *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+            const auto *position = static_cast<const FVec3 *>(chunk->latestComponent(lpl::ecs::ComponentId::Position));
             const auto *creature =
-                static_cast<const lpl::core::u32 *>(chunk->writeComponent(lpl::ecs::ComponentId::Creature));
+                static_cast<const lpl::core::u32 *>(chunk->latestComponent(lpl::ecs::ComponentId::Creature));
             if (position == nullptr || creature == nullptr)
                 continue;
             const float cx = origin.x + (position[row].x.toFloat() + static_cast<float>(halfW)) * cell;

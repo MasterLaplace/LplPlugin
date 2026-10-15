@@ -57,8 +57,8 @@ void HeightfieldCollisionSystem::execute(core::f32 /*dt*/)
             // an eye catches; it is the first thing a test does.
             auto *positions = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
             auto *velocities = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Velocity));
-            const auto *aabb = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::AABB));
-            const auto *mass = static_cast<const math::Fixed32 *>(chunk->writeComponent(ecs::ComponentId::Mass));
+            const auto *aabb = static_cast<const FVec3 *>(chunk->latestComponent(ecs::ComponentId::AABB));
+            const auto *mass = static_cast<const math::Fixed32 *>(chunk->latestComponent(ecs::ComponentId::Mass));
             // A chunk without Velocity is scenery: it was never going to move, so
             // there is nothing to correct.
             if (positions == nullptr || velocities == nullptr)

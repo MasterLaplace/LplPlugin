@@ -140,8 +140,8 @@ struct CubePile {
             for (const auto &chunk : partition->chunks())
             {
                 const core::u32 count = chunk->count();
-                const auto *pos = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
-                const auto *vel = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::Velocity));
+                const auto *pos = static_cast<const FVec3 *>(chunk->latestComponent(ecs::ComponentId::Position));
+                const auto *vel = static_cast<const FVec3 *>(chunk->latestComponent(ecs::ComponentId::Velocity));
                 if (!pos || !vel)
                     continue;
                 for (core::u32 li = 0; li < count; ++li)
@@ -189,7 +189,7 @@ struct CubePile {
             for (const auto &chunk : partition->chunks())
             {
                 const core::u32 count = chunk->count();
-                const auto *pos = static_cast<const FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
+                const auto *pos = static_cast<const FVec3 *>(chunk->latestComponent(ecs::ComponentId::Position));
                 if (!pos)
                     continue;
                 for (core::u32 li = 0; li < count && gi < kCount; ++li, ++gi)
