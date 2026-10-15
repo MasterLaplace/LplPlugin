@@ -521,40 +521,35 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         }
         else
         {
-            // Octree broad-phase for larger chunks (O(N log N) vs O(N²))
-            // Build world-bounds from all entities (already Fixed32)
-            FVec3 wMin{Fixed32::fromFloat(-500.0f), Fixed32::fromFloat(-500.0f), Fixed32::fromFloat(-500.0f)};
-            FVec3 wMax{Fixed32::fromFloat(500.0f), Fixed32::fromFloat(500.0f), Fixed32::fromFloat(500.0f)};
-            // World bounds are fixed, so the index is built once and thereafter
-            // only cleared and refilled — no allocation on a warm step.
+            // Octree broad-phase for larger chunks (O(N log N) vs O(N²)), over the box the bodies
+            // span this pass: across a fixed ±500 units the pile's leaves stopped at the depth
+            // limit, dozens of bodies each, and every query scanned them. The index is built once
+            // and thereafter only cleared, refilled and re-bounded — no allocation on a warm step.
+            const auto boxOf = [&](core::u32 i) {
+                const FVec3 &pos = *refs[i].position;
+                const FVec3 halfSz = *refs[i].size * kHalf;
+                return math::AABB<Fixed32>{
+                    {pos.x - halfSz.x, pos.y - halfSz.y, pos.z - halfSz.z},
+                    {pos.x + halfSz.x, pos.y + halfSz.y, pos.z + halfSz.z}
+                };
+            };
+            math::AABB<Fixed32> span = boxOf(0);
+            for (core::u32 i = 1; i < count; ++i)
+                span = span.merge(boxOf(i));
+
             if (!_impl->broadPhase)
-                _impl->broadPhase = lpl::pmr::make_unique<Octree>(math::AABB<Fixed32>{wMin, wMax});
+                _impl->broadPhase = lpl::pmr::make_unique<Octree>(span);
             Octree &octree = *_impl->broadPhase;
             octree.clear();
+            octree.setWorldBounds(span);
 
-            // Insert all entities into the octree
             for (core::u32 i = 0; i < count; ++i)
-            {
-                const FVec3 &pos = *refs[i].position;
-                FVec3 halfSz = *refs[i].size * kHalf;
-                math::AABB<Fixed32> aabb{
-                    {pos.x - halfSz.x, pos.y - halfSz.y, pos.z - halfSz.z},
-                    {pos.x + halfSz.x, pos.y + halfSz.y, pos.z + halfSz.z}
-                };
-                octree.insert(i, aabb);
-            }
+                octree.insert(i, boxOf(i));
             octree.rebuild();
 
-            // Query each entity's expanded AABB for candidate pairs
             for (core::u32 i = 0; i < count; ++i)
             {
-                const FVec3 &pos = *refs[i].position;
-                FVec3 halfSz = *refs[i].size * kHalf;
-                // Slightly expanded query region
-                math::AABB<Fixed32> queryRegion{
-                    {pos.x - halfSz.x, pos.y - halfSz.y, pos.z - halfSz.z},
-                    {pos.x + halfSz.x, pos.y + halfSz.y, pos.z + halfSz.z}
-                };
+                const math::AABB<Fixed32> queryRegion = boxOf(i);
 
                 octree.query(queryRegion, [&](core::u32 j) {
                     if (j > i) // avoid duplicate pairs
