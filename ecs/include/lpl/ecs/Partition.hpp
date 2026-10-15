@@ -90,15 +90,29 @@ public:
     [[nodiscard]] const void *readComponent(ComponentId id) const noexcept;
 
     /**
-     * @brief Gets a writable pointer to the back buffer of a component.
+     * @brief Gets a writable pointer to the back buffer of a component, and marks the component
+     *        written: the next swap publishes it.
      * @param id Component to access.
      * @return Pointer to the back array, or nullptr if not present.
      */
     [[nodiscard]] void *writeComponent(ComponentId id) noexcept;
 
     /**
-     * @brief Publishes the back buffers at a tick boundary: copies each one onto its front buffer,
-     *        then swaps the two.
+     * @brief Gets a read-only pointer to the back buffer of a component: this tick's values as
+     *        written so far, the side every system reads, without marking the component written.
+     * @param id Component to access.
+     * @return Pointer to the back array, or nullptr if not present.
+     */
+    [[nodiscard]] const void *latestComponent(ComponentId id) const noexcept;
+
+    /**
+     * @brief Publishes the back buffers at a tick boundary: copies each one written since the last
+     *        swap onto its front buffer, then swaps the two.
+     *
+     * A component nothing asked to write since the last swap is left as it is: its two buffers
+     * already hold the same bytes, since a swap leaves them equal and only @ref writeComponent
+     * hands out a way to change one.
+     *
      * @param outBytes Receives, added to what it holds, the bytes copied for each component.
      */
     void swapBuffers(ComponentBytes &outBytes) noexcept;

@@ -54,7 +54,7 @@ const ecs::Archetype kArch{kIds};
         return false;
     auto &chunk = *chunks[ref.value().chunkIndex];
     const auto *positions =
-        static_cast<const math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
+        static_cast<const math::Vec3<math::Fixed32> *>(chunk.latestComponent(ecs::ComponentId::Position));
     if (!positions)
         return false;
     out = positions[ref.value().localIndex];

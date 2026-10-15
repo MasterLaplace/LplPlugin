@@ -78,7 +78,7 @@ void PhysicsSystem::execute(core::f32 dt)
             // Read from the write buffer (post-physics positions) — already
             // authoritative Fixed32, no float conversion needed anymore.
             auto *positions =
-                static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position));
             if (!positions)
                 continue;
 

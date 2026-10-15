@@ -235,7 +235,7 @@ void JourneySystem::execute(core::f32 dt)
             auto *positions =
                 static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
             const auto *bodies =
-                static_cast<const ecs::HistoricalBody *>(chunk.writeComponent(ecs::ComponentId::Historical));
+                static_cast<const ecs::HistoricalBody *>(chunk.latestComponent(ecs::ComponentId::Historical));
             if (positions == nullptr || bodies == nullptr)
                 continue;
 

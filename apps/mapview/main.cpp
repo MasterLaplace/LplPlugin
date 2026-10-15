@@ -934,7 +934,7 @@ public:
         // The WRITE side, like every creature system: nothing here swaps buffers, so
         // the front one holds whatever a component was born with.
         const auto *positions =
-            static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
+            static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position));
         return positions != nullptr ? positions[row] : math::Vec3<math::Fixed32>{};
     }
 

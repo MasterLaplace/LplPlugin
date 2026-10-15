@@ -640,10 +640,10 @@ void foldDeeds(const lpl::history::Chronicle &chronicle, JourneyFoldResult &resu
 
 [[nodiscard]] lpl::core::u32 foldBodies(lpl::ecs::Chunk &chunk, lpl::core::u32 signature)
 {
-    const auto *positions =
-        static_cast<const lpl::math::Vec3<lpl::math::Fixed32> *>(chunk.writeComponent(lpl::ecs::ComponentId::Position));
+    const auto *positions = static_cast<const lpl::math::Vec3<lpl::math::Fixed32> *>(
+        chunk.latestComponent(lpl::ecs::ComponentId::Position));
     const auto *bodies =
-        static_cast<const lpl::ecs::HistoricalBody *>(chunk.writeComponent(lpl::ecs::ComponentId::Historical));
+        static_cast<const lpl::ecs::HistoricalBody *>(chunk.latestComponent(lpl::ecs::ComponentId::Historical));
 
     if (positions == nullptr || bodies == nullptr)
         return signature;

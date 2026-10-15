@@ -2,6 +2,8 @@
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Entity.hpp>
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/math/FixedPoint.hpp>
+#include <lpl/math/Vec3.hpp>
 #include <lpl/testing/Test.hpp>
 
 LPL_TEST_SUITE(registry);
@@ -15,6 +17,14 @@ namespace {
     for (const auto &partition : registry.partitions())
         entities += partition->entityCount();
     return entities;
+}
+
+/** @brief Hands out the write buffer of @p id in every chunk, as a system that writes it does. */
+void handOutForWriting(lpl::ecs::Registry &registry, lpl::ecs::ComponentId id)
+{
+    for (const auto &partition : registry.partitions())
+        for (const auto &chunk : partition->chunks())
+            (void) chunk->writeComponent(id);
 }
 
 } // namespace
@@ -85,6 +95,8 @@ LPL_TEST(a_swap_counts_the_bytes_it_copies)
             return;
     test.check(registry.swappedBytes() == 0u, "nothing is counted before the first swap");
 
+    handOutForWriting(registry, lpl::ecs::ComponentId::Position);
+    handOutForWriting(registry, lpl::ecs::ComponentId::Mass);
     registry.swapAllBuffers();
 
     const lpl::core::u64 position =
@@ -97,8 +109,52 @@ LPL_TEST(a_swap_counts_the_bytes_it_copies)
     test.check(registry.swappedBytes(lpl::ecs::ComponentId::Velocity) == 0u,
                "a component no entity carries counts nothing");
 
+    handOutForWriting(registry, lpl::ecs::ComponentId::Position);
+    handOutForWriting(registry, lpl::ecs::ComponentId::Mass);
     registry.swapAllBuffers();
 
     test.check(registry.swappedBytes() == 2u * (position + mass), "and every swap adds what it copied");
     test.measure("swapped_bytes", static_cast<lpl::core::u32>(registry.swappedBytes()));
+}
+
+/**
+ * @brief A swap copies only the components handed out for writing since the last one: a component
+ *        only read through @ref lpl::ecs::Chunk::latestComponent keeps its two buffers, which
+ *        already agree, and the written one is published.
+ */
+LPL_TEST(a_swap_copies_only_what_was_handed_out_for_writing)
+{
+    const lpl::ecs::ComponentId components[] = {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::Mass};
+    lpl::ecs::Archetype archetype{components};
+    lpl::ecs::Registry registry;
+    const auto entity = registry.createEntity(archetype);
+    lpl::core::u32 row = 0u;
+
+    if (!test.check(static_cast<bool>(entity), "an entity is created"))
+        return;
+    lpl::ecs::Chunk *chunk = registry.chunkOf(entity.value(), row);
+    if (!test.check(chunk != nullptr, "its chunk is found"))
+        return;
+
+    const lpl::core::u64 massBefore = registry.swappedBytes(lpl::ecs::ComponentId::Mass);
+    auto *positions =
+        static_cast<lpl::math::Vec3<lpl::math::Fixed32> *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+    const auto *masses = static_cast<const lpl::math::Fixed32 *>(chunk->latestComponent(lpl::ecs::ComponentId::Mass));
+    positions[row].x = lpl::math::Fixed32::fromInt(7);
+    const lpl::math::Fixed32 mass = masses[row];
+
+    registry.swapAllBuffers();
+
+    const auto *published =
+        static_cast<const lpl::math::Vec3<lpl::math::Fixed32> *>(chunk->readComponent(lpl::ecs::ComponentId::Position));
+    const auto *publishedMass =
+        static_cast<const lpl::math::Fixed32 *>(chunk->readComponent(lpl::ecs::ComponentId::Mass));
+    test.check(registry.swappedBytes(lpl::ecs::ComponentId::Position) ==
+                   lpl::ecs::defaultLayout(lpl::ecs::ComponentId::Position).size,
+               "the written component is copied");
+    test.check(registry.swappedBytes(lpl::ecs::ComponentId::Mass) == massBefore, "the one only read is not");
+    test.check(published[row].x == lpl::math::Fixed32::fromInt(7), "the written value is published");
+    test.check(publishedMass[row] == mass && static_cast<const lpl::math::Fixed32 *>(
+                                                 chunk->latestComponent(lpl::ecs::ComponentId::Mass))[row] == mass,
+               "and both buffers of the one only read still hold its value");
 }

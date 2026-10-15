@@ -90,7 +90,7 @@ struct CpuPhysicsBackend::Impl {
         FVec3 *position;
         FVec3 *velocity;
         const Fixed32 *mass;
-        FVec3 *size;
+        const FVec3 *size;
     };
 
     ecs::Registry &registry;
@@ -238,7 +238,7 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             auto *positions = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Position));
             auto *velocities = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::Velocity));
             auto *masses = static_cast<const Fixed32 *>(chunk->readComponent(ecs::ComponentId::Mass));
-            auto *aabbs = static_cast<FVec3 *>(chunk->writeComponent(ecs::ComponentId::AABB));
+            auto *aabbs = static_cast<const FVec3 *>(chunk->latestComponent(ecs::ComponentId::AABB));
             if (!positions || !velocities || !masses || !aabbs)
             {
                 continue;

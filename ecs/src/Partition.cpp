@@ -20,6 +20,8 @@
 
 namespace lpl::ecs {
 
+static_assert(static_cast<core::usize>(ComponentId::Count) <= 32u, "a chunk marks its written components in one u32");
+
 // ========================================================================== //
 //  Chunk::Impl                                                               //
 // ========================================================================== //
@@ -35,6 +37,8 @@ struct Chunk::Impl {
     /// Capacity = 2^kSlotBits (16 384) to cover all valid entity slots.
     container::SparseSet<core::u32> slotToLocal{1u << EntityId::kSlotBits};
     core::u32 count{0};
+    /// One bit per ComponentId: handed out for writing since the last swap.
+    core::u32 written{0};
     Alloc alloc{};
 
     Impl(const Archetype &arch, std::span<const ComponentLayout> lyts, memory::IAllocator *external)
@@ -193,6 +197,17 @@ void *Chunk::writeComponent(ComponentId id) noexcept
     {
         return nullptr;
     }
+    _impl->written |= 1u << cid;
+    return _impl->buffers[cid].second;
+}
+
+const void *Chunk::latestComponent(ComponentId id) const noexcept
+{
+    const core::usize cid = static_cast<core::usize>(id);
+    if (cid >= static_cast<core::usize>(ComponentId::Count))
+    {
+        return nullptr;
+    }
     return _impl->buffers[cid].second;
 }
 
@@ -202,16 +217,17 @@ void Chunk::swapBuffers(ComponentBytes &outBytes) noexcept
     // with up-to-date data after the swap (prevents 2-frame-stale reads).
     for (const auto &layout : _impl->layouts)
     {
-        if (!_impl->archetype.has(layout.id))
+        const core::usize cid = static_cast<core::usize>(layout.id);
+        if (!_impl->archetype.has(layout.id) || (_impl->written & (1u << cid)) == 0u)
             continue;
 
-        const core::usize cid = static_cast<core::usize>(layout.id);
         const core::usize bytes = static_cast<core::usize>(layout.size) * static_cast<core::usize>(_impl->count);
         lpl::pmr::memcpy(_impl->buffers[cid].first, _impl->buffers[cid].second, bytes);
         outBytes[cid] += bytes;
 
         std::swap(_impl->buffers[cid].first, _impl->buffers[cid].second);
     }
+    _impl->written = 0u;
 }
 
 const Archetype &Chunk::archetype() const noexcept { return _impl->archetype; }

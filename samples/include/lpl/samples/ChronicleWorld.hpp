@@ -596,7 +596,7 @@ private:
                     continue;
                 // The WRITE side, which is where the systems that moved these bodies wrote them.
                 const auto *positions = static_cast<const math::Vec3<math::Fixed32> *>(
-                    chunkPtr->writeComponent(ecs::ComponentId::Position));
+                    chunkPtr->latestComponent(ecs::ComponentId::Position));
                 if (positions == nullptr)
                     continue;
                 for (core::u32 row = 0u; row < chunkPtr->count(); ++row)

@@ -106,9 +106,9 @@ template <typename Visit> void forEachCreature(const ecs::Registry &registry, Vi
             if (!chunk)
                 continue;
             const auto *positions =
-                static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
-            const auto *creature = static_cast<const core::u32 *>(chunk->writeComponent(ecs::ComponentId::Creature));
-            const auto *genome = static_cast<const ecology::Genome *>(chunk->writeComponent(ecs::ComponentId::Genome));
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position));
+            const auto *creature = static_cast<const core::u32 *>(chunk->latestComponent(ecs::ComponentId::Creature));
+            const auto *genome = static_cast<const ecology::Genome *>(chunk->latestComponent(ecs::ComponentId::Genome));
             if (positions == nullptr || creature == nullptr || genome == nullptr)
                 continue;
             for (core::u32 i = 0u; i < chunk->count(); ++i)

@@ -72,11 +72,11 @@ bool viewCreatures(const Partition &part, Chunk &chunk, CreatureChunk &out, core
         return false;
 
     out.positions = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position));
-    out.creature = static_cast<const core::u32 *>(chunk.writeComponent(ecs::ComponentId::Creature));
+    out.creature = static_cast<const core::u32 *>(chunk.latestComponent(ecs::ComponentId::Creature));
     if ((needs & kNeedVelocity) != 0u)
         out.velocities = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Velocity));
     if ((needs & kNeedGenome) != 0u)
-        out.genome = static_cast<const ecology::Genome *>(chunk.writeComponent(ecs::ComponentId::Genome));
+        out.genome = static_cast<const ecology::Genome *>(chunk.latestComponent(ecs::ComponentId::Genome));
     if ((needs & kNeedHeading) != 0u)
         out.heading = static_cast<math::Fixed32 *>(chunk.writeComponent(ecs::ComponentId::Heading));
     out.count = chunk.count();

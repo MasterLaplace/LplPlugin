@@ -734,10 +734,10 @@ core::u32 TerrainRenderer::drawHerd(const render::RenderTarget &rt, const math::
             if (!chunk)
                 continue;
             const auto *positions =
-                static_cast<const math::Vec3<math::Fixed32> *>(chunk->writeComponent(ecs::ComponentId::Position));
-            const auto *creature = static_cast<const core::u32 *>(chunk->writeComponent(ecs::ComponentId::Creature));
+                static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position));
+            const auto *creature = static_cast<const core::u32 *>(chunk->latestComponent(ecs::ComponentId::Creature));
             const auto *genome =
-                hasGenome ? static_cast<const ecology::Genome *>(chunk->writeComponent(ecs::ComponentId::Genome)) :
+                hasGenome ? static_cast<const ecology::Genome *>(chunk->latestComponent(ecs::ComponentId::Genome)) :
                             nullptr;
             if (positions == nullptr || creature == nullptr)
                 continue;
