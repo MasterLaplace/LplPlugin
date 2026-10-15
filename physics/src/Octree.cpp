@@ -34,9 +34,23 @@ struct Octree::Impl {
     static constexpr core::u8 kMaxDepth = 8;
     core::u32 leafCapacity{32u};
 
+    /** @brief A box that holds nothing and intersects nothing: the reach of an empty node. */
+    static constexpr math::AABB<math::Fixed32> kNothing{
+        {math::Fixed32::fromRaw(0x7FFFFFFF),      math::Fixed32::fromRaw(0x7FFFFFFF),      math::Fixed32::fromRaw(0x7FFFFFFF)},
+        {math::Fixed32::fromRaw(-0x7FFFFFFF - 1), math::Fixed32::fromRaw(-0x7FFFFFFF - 1),
+         math::Fixed32::fromRaw(-0x7FFFFFFF - 1)                                                                             }
+    };
+
     /** @brief Flat node (POD, GPU-transferable). */
     struct FlatNode {
-        math::AABB<math::Fixed32> bound;
+        math::AABB<math::Fixed32> bound; /**< The cell: the octant of its parent this node splits. */
+        /**
+         * Every box the node and its descendants hold, merged. An entry belongs to the cell its
+         * centre falls in, and its box reaches past the cell by up to half its size, so a region can
+         * intersect an entry without intersecting its cell: a search rejects on the reach, never on
+         * the cell.
+         */
+        math::AABB<math::Fixed32> reach{kNothing};
         core::i32 firstChild{-1};
         core::u32 entityStart{0};
         core::u32 entityCount{0};
@@ -226,6 +240,9 @@ struct Octree::Impl {
             auto &node = nodes[nodeIdx];
             node.entityStart = start;
             node.entityCount = entityCount;
+            node.reach = kNothing;
+            for (core::u32 index = start; index < end; ++index)
+                node.reach = node.reach.merge(sortedEntries[index].aabb);
             return;
         }
 
@@ -308,6 +325,11 @@ struct Octree::Impl {
 
             recurseBuild(firstChildIdx + octant, childStart, current, depth + 1);
         }
+
+        math::AABB<math::Fixed32> reach = kNothing;
+        for (core::u32 octant = 0; octant < 8; ++octant)
+            reach = reach.merge(nodes[firstChildIdx + octant].reach);
+        nodes[nodeIdx].reach = reach;
     }
 
     // ────────────────────────────────────────────────────────────────────── //
@@ -323,7 +345,7 @@ struct Octree::Impl {
         const auto &node = nodes[nodeIdx];
         if (visited != nullptr)
             ++(*visited);
-        if (!nodeVisible(node.bound))
+        if (!nodeVisible(node.reach))
         {
             if (pruned != nullptr)
                 ++(*pruned);
@@ -344,23 +366,22 @@ struct Octree::Impl {
             const core::u32 fc = static_cast<core::u32>(node.firstChild);
             for (core::u32 i = 0; i < 8; ++i)
             {
-                visibleRecurse(fc + i, nodeVisible, callback, visited, pruned);
+                if (nodes[fc + i].entityCount != 0u || nodes[fc + i].firstChild >= 0)
+                    visibleRecurse(fc + i, nodeVisible, callback, visited, pruned);
             }
         }
     }
 
+    /**
+     * @brief Reports the entries of a node whose reach the caller found @p region to intersect, and
+     *        of its descendants, that intersect @p region: depth first, children in octant order,
+     *        each child tested on its reach before the call that would visit it.
+     */
     void queryRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region,
                       const lpl::pmr::function<void(core::u32)> &callback) const
     {
         const auto &node = nodes[nodeIdx];
 
-        // Early rejection: region doesn't intersect this node's bounds
-        if (!node.bound.intersects(region))
-        {
-            return;
-        }
-
-        // Check leaf entities
         for (core::u32 i = 0; i < node.entityCount; ++i)
         {
             const auto &entry = sortedEntries[node.entityStart + i];
@@ -370,13 +391,13 @@ struct Octree::Impl {
             }
         }
 
-        // Recurse into children
         if (node.firstChild >= 0)
         {
             const core::u32 fc = static_cast<core::u32>(node.firstChild);
             for (core::u32 i = 0; i < 8; ++i)
             {
-                queryRecurse(fc + i, region, callback);
+                if (nodes[fc + i].reach.intersects(region))
+                    queryRecurse(fc + i, region, callback);
             }
         }
     }
@@ -443,7 +464,10 @@ void Octree::query(const math::AABB<math::Fixed32> &region, const lpl::pmr::func
         return;
     }
 
-    _impl->queryRecurse(0, region, callback);
+    if (_impl->nodes[0].reach.intersects(region))
+    {
+        _impl->queryRecurse(0, region, callback);
+    }
 }
 
 void Octree::queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
