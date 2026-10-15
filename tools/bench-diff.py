@@ -29,7 +29,7 @@ ROW_FIELDS = ("schema", "label", "median_ns", "cv_percent", "min_ns", "p99_ns", 
 MEASURE_FIELDS = ("median_ns", "cv_percent", "min_ns", "p99_ns", "energy_uj_per_rep")
 TEXT_FIELDS = ("label",) + RUN_FIELDS
 ENERGY_ABSENCE_REASONS = ("denied", "unreadable", "absent", "no-repetition", "short-window", "read-failed",
-                          "ambiguous-wrap")
+                          "ambiguous-wrap", "interleaved")
 
 
 class Refused(Exception):

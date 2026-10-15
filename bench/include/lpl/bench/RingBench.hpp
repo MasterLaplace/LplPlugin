@@ -35,6 +35,9 @@ namespace lpl::bench {
 /**
  * @brief Runs every ring benchmark, the baseline and the current ring interleaved, and prints a
  *        summary of the time per element and the speed-up for each workload.
+ *
+ * Each ring of each workload is then reported through the harness, its samples the time per
+ * element or per round trip, so `lpl-benchmark --json` writes them as rows.
  */
 void runRingBenchmarks();
 

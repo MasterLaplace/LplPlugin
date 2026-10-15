@@ -194,9 +194,10 @@ void expectEveryReasonToHaveItsOwnName()
         lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::ShortWindow),
         lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::ReadFailed),
         lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::AmbiguousWrap),
+        lpl::bench::energyAbsenceName(lpl::bench::EnergyAbsence::Interleaved),
     };
-    const std::string_view expected[] = {"denied",       "unreadable",  "absent",        "no-repetition",
-                                         "short-window", "read-failed", "ambiguous-wrap"};
+    const std::string_view expected[] = {"denied",       "unreadable",  "absent",         "no-repetition",
+                                         "short-window", "read-failed", "ambiguous-wrap", "interleaved"};
     for (std::size_t i = 0; i < std::size(expected); ++i)
         expect(names[i] == expected[i], "each reason has the stable name a JSON row writes");
 }

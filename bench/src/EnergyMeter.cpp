@@ -107,6 +107,7 @@ std::string_view energyAbsenceName(EnergyAbsence absence) noexcept
     case EnergyAbsence::ShortWindow: return "short-window";
     case EnergyAbsence::ReadFailed: return "read-failed";
     case EnergyAbsence::AmbiguousWrap: return "ambiguous-wrap";
+    case EnergyAbsence::Interleaved: return "interleaved";
     }
     std::unreachable();
 }
