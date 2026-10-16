@@ -167,8 +167,7 @@ struct CpuPhysicsBackend::Impl {
      * would need one index per worker, not one per backend.
      */
     lpl::pmr::unique_ptr<Octree> broadPhase;
-    /** The objects one broad-phase query found, refilled per query; its capacity survives the step. */
-    lpl::pmr::vector<core::u32> candidates;
+    lpl::pmr::vector<core::u32> candidates; /**< What one search found, refilled per search; its capacity stays. */
 
     /**
      * @name Neighbour lists, made when a step finds them stale: see kNeighbourMargin.
