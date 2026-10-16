@@ -660,9 +660,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
 
             Octree &octree = *_impl->broadPhase;
             octree.setWorldBounds(span);
-            _impl->filedKeys.resize(count);
-            for (core::u32 j = 0; j < count; ++j)
-                _impl->filedKeys[j] = octree.keyOf(_impl->filedBoxes[j]);
+            octree.keysOf(_impl->filedBoxes, _impl->filedKeys);
             _impl->candidates.reserve(count);
             bool treeBuilt = false;
 

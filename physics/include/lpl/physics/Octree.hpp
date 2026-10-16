@@ -73,12 +73,14 @@ public:
     void collect(const math::AABB<math::Fixed32> &region, core::u32 firstId, lpl::pmr::vector<core::u32> &out) const;
 
     /**
-     * @brief The key @ref insert files @p aabb under, with the bounds @ref setWorldBounds last set.
+     * @brief Writes in @p keys, one for each of @p boxes, the key @ref insert files it under, with
+     *        the bounds @ref setWorldBounds last set.
      *
      * A search reports the boxes it finds in the order of these keys, and boxes of equal keys in
      * the order they were inserted, so a caller can put boxes it found another way in that order.
+     * One call keys every box, without a call and a reload of the tree's bounds per box.
      */
-    [[nodiscard]] core::u32 keyOf(const math::AABB<math::Fixed32> &aabb) const noexcept;
+    void keysOf(const lpl::pmr::vector<math::AABB<math::Fixed32>> &boxes, lpl::pmr::vector<core::u32> &keys) const;
 
     /**
      * @brief Drops every object but keeps all buffers and their capacity.
