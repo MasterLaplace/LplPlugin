@@ -44,7 +44,9 @@ public:
 
     constexpr FixedPoint() = default;
 
-    /** @brief Construct from a raw integer value (direct bit pattern). */
+    /**
+     * @brief Construct from a raw integer value (direct bit pattern).
+     */
     explicit constexpr FixedPoint(IntType rawValue) : _raw{rawValue} {}
 
     static constexpr FixedPoint fromRaw(IntType raw);
@@ -88,6 +90,15 @@ public:
     static constexpr FixedPoint min();
 
     [[nodiscard]] constexpr FixedPoint abs() const;
+    /**
+     * @brief one() / *this, which must not be zero.
+     *
+     * one() shifted by FracBits is 2^N for a word of N bits, one past the word, so the quotient
+     * takes a double-width division: on i686, a libgcc call for Fixed32. For a value of three raw
+     * units or more, the quotient fits in the word and is floor((2^N - 1) / raw), one more when
+     * the remainder is raw - 1: one division of the word. Any other value goes through operator/.
+     */
+    [[nodiscard]] constexpr FixedPoint reciprocal() const;
     [[nodiscard]] constexpr FixedPoint saturatingAdd(FixedPoint rhs) const;
     [[nodiscard]] constexpr FixedPoint saturatingSub(FixedPoint rhs) const;
 

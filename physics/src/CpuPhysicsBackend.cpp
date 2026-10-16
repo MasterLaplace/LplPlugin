@@ -401,7 +401,7 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             {
                 _impl->physicsEntities.push_back(
                     Impl::PhysicsEntityRef{entities[i], &positions[i], &velocities[i], aabbs[i] * kHalf,
-                                           masses[i] > kMassEpsilon ? Fixed32::one() / masses[i] : Fixed32::zero()});
+                                           masses[i] > kMassEpsilon ? masses[i].reciprocal() : Fixed32::zero()});
             }
         }
     }

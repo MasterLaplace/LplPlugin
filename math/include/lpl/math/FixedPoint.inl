@@ -204,6 +204,25 @@ constexpr FixedPoint<I, F> FixedPoint<I, F>::abs() const
 
 template <typename I, core::u32 F>
 requires std::is_signed_v<I>
+constexpr FixedPoint<I, F> FixedPoint<I, F>::reciprocal() const
+{
+    if constexpr (2u * F == 8u * sizeof(I))
+    {
+        if (_raw > 2)
+        {
+            using unsigned_type = std::make_unsigned_t<I>;
+            constexpr unsigned_type kWordMax = std::numeric_limits<unsigned_type>::max();
+            const auto divisor = static_cast<unsigned_type>(_raw);
+            const unsigned_type below = kWordMax / divisor;
+            const unsigned_type carry = kWordMax % divisor == divisor - 1u ? 1u : 0u;
+            return fromRaw(static_cast<I>(below + carry));
+        }
+    }
+    return one() / *this;
+}
+
+template <typename I, core::u32 F>
+requires std::is_signed_v<I>
 constexpr FixedPoint<I, F> FixedPoint<I, F>::saturatingAdd(FixedPoint rhs) const
 {
     auto wide = static_cast<wide_type>(_raw) + static_cast<wide_type>(rhs._raw);
