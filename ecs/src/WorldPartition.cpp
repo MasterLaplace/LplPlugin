@@ -55,10 +55,23 @@ struct SpatialCell {
 //  Impl                                                                      //
 // ========================================================================== //
 
+/**
+ * @brief Where an entity is filed: the key of its cell, and the grid coordinates it was taken from.
+ *
+ * A tick files every entity again, and most stay in their cell: three coordinates compared tell so
+ * without the key, which costs nine table loads.
+ */
+struct FiledCell {
+    core::u64 key; /**< The key of the cell: what cellKey gives for x, y and z. */
+    core::i32 x;   /**< The grid coordinate along x, bias included. */
+    core::i32 y;   /**< The grid coordinate along y, bias included. */
+    core::i32 z;   /**< The grid coordinate along z, bias included. */
+};
+
 struct WorldPartition::Impl {
     math::Fixed32 cellSize;
     container::FlatAtomicHashMap<SpatialCell> cells;
-    pmr::unordered_map<core::u32, core::u64> entityToMorton;
+    pmr::unordered_map<core::u32, FiledCell> entityToCell;
     gpu::IComputeBackend *gpuBackend{nullptr};
 
     Impl(math::Fixed32 cs, core::u32 cellCapacity) : cellSize{cs}, cells{cellCapacity} {}
@@ -139,25 +152,30 @@ WorldPartition::~WorldPartition() = default;
 
 core::Expected<void> WorldPartition::insertOrUpdate(EntityId id, const math::Vec3<math::Fixed32> &pos)
 {
-    const core::u64 morton = mortonForPosition(pos);
+    const core::i32 x = gridAlong(pos.x, _impl->cellSize);
+    const core::i32 y = gridAlong(pos.y, _impl->cellSize);
+    const core::i32 z = gridAlong(pos.z, _impl->cellSize);
     const core::u32 raw = id.raw();
 
-    auto it = _impl->entityToMorton.find(raw);
-    if (it != _impl->entityToMorton.end())
+    auto it = _impl->entityToCell.find(raw);
+    if (it != _impl->entityToCell.end() && it->second.x == x && it->second.y == y && it->second.z == z)
+        return {};
+
+    const core::u64 morton = cellKey(x, y, z);
+    if (it != _impl->entityToCell.end())
     {
-        if (it->second == morton)
+        if (it->second.key == morton)
         {
+            it->second = FiledCell{morton, x, y, z};
             return {};
         }
 
-        // Remove from old cell
-        if (auto *oldCell = _impl->cells.get(it->second))
+        if (auto *oldCell = _impl->cells.get(it->second.key))
         {
             oldCell->erase(raw);
         }
     }
 
-    // Insert into new cell (create cell if absent)
     auto *cell = _impl->cells.get(morton);
     if (!cell)
     {
@@ -170,7 +188,7 @@ core::Expected<void> WorldPartition::insertOrUpdate(EntityId id, const math::Vec
         }
     }
     cell->insert(raw);
-    _impl->entityToMorton[raw] = morton;
+    _impl->entityToCell[raw] = FiledCell{morton, x, y, z};
 
     return {};
 }
@@ -178,17 +196,17 @@ core::Expected<void> WorldPartition::insertOrUpdate(EntityId id, const math::Vec
 core::Expected<void> WorldPartition::remove(EntityId id)
 {
     const core::u32 raw = id.raw();
-    auto it = _impl->entityToMorton.find(raw);
-    if (it == _impl->entityToMorton.end())
+    auto it = _impl->entityToCell.find(raw);
+    if (it == _impl->entityToCell.end())
     {
         return core::makeError(core::ErrorCode::NotFound, "Entity not in world partition");
     }
 
-    if (auto *cell = _impl->cells.get(it->second))
+    if (auto *cell = _impl->cells.get(it->second.key))
     {
         cell->erase(raw);
     }
-    _impl->entityToMorton.erase(it);
+    _impl->entityToCell.erase(it);
 
     return {};
 }
@@ -250,7 +268,7 @@ void WorldPartition::setGpuBackend(gpu::IComputeBackend *backend) noexcept
 
 void WorldPartition::step(core::f32 dt)
 {
-    const core::u32 entityCount = static_cast<core::u32>(_impl->entityToMorton.size());
+    const core::u32 entityCount = static_cast<core::u32>(_impl->entityToCell.size());
 
     if (_impl->gpuBackend && entityCount >= kGpuThreshold)
     {
@@ -271,7 +289,7 @@ void WorldPartition::step(core::f32 dt)
         pmr::memcpy(ptr, &entityCount, sizeof(entityCount));
         ptr += sizeof(entityCount);
 
-        for (const auto &[raw, _cellMorton] : _impl->entityToMorton)
+        for (const auto &[raw, _filed] : _impl->entityToCell)
         {
             pmr::memcpy(ptr, &raw, sizeof(raw));
             ptr += sizeof(raw);
@@ -309,12 +327,12 @@ core::u32 WorldPartition::migrateEntities(const pmr::function<math::Vec3<math::F
     // Collect entities that need migration
     pmr::vector<std::pair<core::u32, math::Vec3<math::Fixed32>>> toMigrate;
 
-    for (auto &[raw, oldMorton] : _impl->entityToMorton)
+    for (auto &[raw, filed] : _impl->entityToCell)
     {
         auto pos = positionOf(raw);
         core::u64 newMorton = mortonForPosition(pos);
 
-        if (newMorton != oldMorton)
+        if (newMorton != filed.key)
         {
             toMigrate.push_back({raw, pos});
         }
