@@ -30,6 +30,7 @@ template <typename T> inline u32 EventBus::subscribe(lpl::pmr::function<void(con
     auto &handlers = _handlers[getEventId<T>()];
 
     handlers.push_back({id, [cb = std::move(callback)](const void *ev) { cb(*static_cast<const T *>(ev)); }});
+    _subscriptions.fetch_add(1u, std::memory_order_relaxed);
 
     return id;
 }
@@ -47,6 +48,7 @@ template <typename T> inline void EventBus::unsubscribe(u32 id)
         if (handlerIt->id == id)
         {
             handlerIt = handlers.erase(handlerIt);
+            _subscriptions.fetch_sub(1u, std::memory_order_relaxed);
         }
         else
         {
@@ -57,6 +59,9 @@ template <typename T> inline void EventBus::unsubscribe(u32 id)
 
 template <typename T> inline void EventBus::publish(const T &event)
 {
+    if (!hasSubscribers())
+        return;
+
     lpl::pmr::vector<lpl::pmr::function<void(const void *)>> callbacksToInvoke;
 
     {
@@ -81,7 +86,10 @@ inline void EventBus::clear()
 {
     lpl::pmr::lock_guard lock{_mutex};
     _handlers.clear();
+    _subscriptions.store(0u, std::memory_order_relaxed);
 }
+
+inline bool EventBus::hasSubscribers() const noexcept { return _subscriptions.load(std::memory_order_relaxed) != 0u; }
 
 } // namespace lpl::core
 

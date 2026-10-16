@@ -74,6 +74,15 @@ public:
      */
     void clear();
 
+    /**
+     * @brief Whether any handler is subscribed, to any event type.
+     *
+     * Read without the lock, so that a publisher can skip building an event nobody can receive. A
+     * subscription another thread makes meanwhile is seen at a later call, as an event published
+     * just before it would have missed it.
+     */
+    [[nodiscard]] bool hasSubscribers() const noexcept;
+
 private:
     EventBus() = default;
     ~EventBus() = default;
@@ -86,6 +95,7 @@ private:
     lpl::pmr::mutex _mutex;
     u32 _nextId{0};
     lpl::pmr::unordered_map<u32, lpl::pmr::vector<Handler>> _handlers;
+    std::atomic<u32> _subscriptions{0}; /**< Handlers subscribed, every event type together. */
 };
 
 } // namespace lpl::core
