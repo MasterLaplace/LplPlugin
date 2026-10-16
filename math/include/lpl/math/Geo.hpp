@@ -62,7 +62,7 @@
 namespace lpl::math {
 
 /**
- * Metres in one degree of latitude.
+ * @brief Metres in one degree of latitude.
  *
  * @warning A spherical mean, not an ellipsoidal truth: the real figure runs from 110 574 m at the
  * equator to 111 694 m at the pole, a spread of about 1%. Stated rather than hidden because a
@@ -79,53 +79,39 @@ inline constexpr core::i64 kMetresPerDegreeLatitude = 111320;
  * @warning Every field is part of the world's identity. Two runs that disagree on any of them put the
  * same place in two different valleys, which is not a rendering difference -- it is a different
  * journey with different arrivals.
+ *
+ * @warning **The origin is the NORTH-west corner and not the south-west, which is the opposite of how
+ * tiles are named, and the choice removes a flip rather than hiding one.** Every elevation product on
+ * earth stores its north row first, so a world whose origin is its north-west corner indexes relief
+ * directly: cell row zero is data row zero. The alternative -- a south-west origin, matching tile
+ * names -- needs a north-south mirror somewhere between the tile and the sampler, and a mirror that
+ * exists in one of two code paths is a world whose mountains sit opposite its own coastline while
+ * still looking exactly like terrain. Converting a tile's southern edge into this is one addition,
+ * done once at construction.
+ *
+ * @warning The origin is held as raw words rather than floats because this is exactly what
+ * `knowledge::GazetteerEntryV1` carries, and re-encoding a coordinate on the way in is where a
+ * last-bit disagreement is born.
+ *
+ * The reference latitude is in whole degrees on purpose: it is a choice about a region, not a
+ * measurement, and a fractional standard parallel invites the belief that the projection is more
+ * accurate than it is.
+ *
+ * @warning @ref unitsPerMetre is where a mountain range becomes either scenery or a wall. It is
+ * separate from @ref metresPerCell because vertical exaggeration is a legitimate artistic choice -- a
+ * real landscape at true scale reads as flat from eye height -- while horizontal scale is not.
+ *
+ * @warning @ref seaLevelUnits is THE reconciliation. It must be the recipe's `biomes.seaLevel` and
+ * nothing else: the data's zero is mean sea level by construction, so anything else there draws the
+ * coastline in a place the classifier does not agree is a coastline.
  */
 struct GeoProjection {
-    /**
-     * NORTH-west corner of the world, in degrees, as a raw Q16.16 word.
-     *
-     * @warning **North-west and not south-west, which is the opposite of how tiles are named, and the
-     * choice removes a flip rather than hiding one.** Every elevation product on earth stores its
-     * north row first, so a world whose origin is its north-west corner indexes relief directly:
-     * cell row zero is data row zero. The alternative -- a south-west origin, matching tile names --
-     * needs a north-south mirror somewhere between the tile and the sampler, and a mirror that
-     * exists in one of two code paths is a world whose mountains sit opposite its own coastline
-     * while still looking exactly like terrain. Converting a tile's southern edge into this is one
-     * addition, done once at construction.
-     *
-     * @warning Raw words rather than floats because this is exactly what `knowledge::GazetteerEntryV1`
-     * carries, and re-encoding a coordinate on the way in is where a last-bit disagreement is born.
-     */
-    core::i32 originLatitudeRaw{0};
-    core::i32 originLongitudeRaw{0}; ///< West edge, degrees, raw Q16.16.
-
-    /**
-     * Latitude the east-west scale is exact at, in whole degrees.
-     *
-     * Whole degrees on purpose: it is a choice about a region, not a measurement, and a fractional
-     * standard parallel invites the belief that the projection is more accurate than it is.
-     */
-    core::i32 referenceLatitude{0};
-
-    core::u32 metresPerCell{30u}; ///< Ground a cell covers. Thirty is about one arc-second.
-
-    /**
-     * World units per metre of elevation.
-     *
-     * @warning This is where a mountain range becomes either scenery or a wall. It is separate from
-     * @ref metresPerCell because vertical exaggeration is a legitimate artistic choice -- a real
-     * landscape at true scale reads as flat from eye height -- while horizontal scale is not.
-     */
-    Fixed32 unitsPerMetre{Fixed32::one()};
-
-    /**
-     * World height that elevation zero maps to.
-     *
-     * @warning THE reconciliation. It must be the recipe's `biomes.seaLevel` and nothing else: the
-     * data's zero is mean sea level by construction, so anything else here draws the coastline in
-     * a place the classifier does not agree is a coastline.
-     */
-    Fixed32 seaLevelUnits{};
+    core::i32 originLatitudeRaw{0};        /**< North edge, degrees, raw Q16.16. */
+    core::i32 originLongitudeRaw{0};       /**< West edge, degrees, raw Q16.16. */
+    core::i32 referenceLatitude{0};        /**< Latitude the east-west scale is exact at, in whole degrees. */
+    core::u32 metresPerCell{30u};          /**< Ground a cell covers. Thirty is about one arc-second. */
+    Fixed32 unitsPerMetre{Fixed32::one()}; /**< World units per metre of elevation. */
+    Fixed32 seaLevelUnits{};               /**< World height that elevation zero maps to. */
 };
 
 /**
@@ -147,10 +133,12 @@ struct GeoProjection {
  * parallel near the equator, and the columns it wraps at are that parallel's.
  */
 struct GlobeWrap {
-    core::i32 columns{0}; ///< Cells around the globe. Zero disables wrapping entirely.
-    core::i32 rows{0};    ///< Cells from pole to pole.
+    core::i32 columns{0}; /**< Cells around the globe. Zero disables wrapping entirely. */
+    core::i32 rows{0};    /**< Cells from pole to pole. */
 
-    /// @return Whether this describes a closed world.
+    /**
+     * @brief Whether this describes a closed world.
+     */
     [[nodiscard]] constexpr bool valid() const noexcept { return columns > 0 && rows > 0; }
 };
 
@@ -161,20 +149,19 @@ struct GlobeWrap {
  * Built once by @ref makeReliefProjection because the cosine of the standard parallel is a CORDIC
  * evaluation, and doing it per sample would be both slower and -- worse -- a second opportunity to
  * get a different answer.
+ *
+ * The longitude scale is held at fixed-point precision rather than rounded to metres: rounding it is
+ * a systematic east-west stretch of up to half a metre per degree, which accumulates across a region.
  */
 struct ReliefProjection {
     GeoProjection projection{};
-
-    /**
-     * Metres in one degree of longitude at the standard parallel, as a Q16.16 word.
-     *
-     * Held at fixed-point precision rather than rounded to metres: rounding here is a systematic
-     * east-west stretch of up to half a metre per degree, which accumulates across a region.
-     */
-    core::i64 metresPerDegreeLongitudeQ16{0};
+    core::i64 metresPerDegreeLongitudeQ16{0}; /**< Metres in a degree of longitude at the standard parallel. */
 
     /**
      * @brief Cell column a longitude falls in.
+     *
+     * The degrees from the origin and the longitude scale are both Q16.16, so their product carries
+     * two scalings: one divide undoes both and converts metres to cells.
      *
      * @param longitudeRaw Degrees east, raw Q16.16.
      * @return The cell column; negative west of the origin.
@@ -185,7 +172,7 @@ struct ReliefProjection {
      * @brief Cell row a latitude falls in.
      *
      * @warning Rows increase SOUTHWARD, away from the north-west origin, so a region's rows run in the
-     * same direction as the rows of the data it is made of. See @ref GeoProjection::originLatitudeRaw
+     * same direction as the rows of the data it is made of. See @ref GeoProjection
      * for why that is worth an unfamiliar corner.
      *
      * @param latitudeRaw Degrees north, raw Q16.16.
@@ -204,6 +191,12 @@ struct ReliefProjection {
      * n is the smallest longitude that falls in column n. A half-cell offset here shifts an entire
      * survey by fifteen metres, which reads as a slightly different coastline.
      *
+     * It undoes @ref cellX exactly: that divides by 65536 * 65536 * metresPerCell after multiplying by
+     * the Q16.16 metres per degree, so this multiplies by 65536 * 65536 and divides by the same scale.
+     * The quotient is CEILED, so the value returned is the west edge -- the smallest longitude that
+     * still floors to the column -- rather than a point one raw unit inside the previous column; the
+     * doc of ceilDivide, in Geo.cpp, says what flooring here measured.
+     *
      * @param column Cell column.
      * @return Degrees east, raw Q16.16.
      */
@@ -212,6 +205,8 @@ struct ReliefProjection {
     /**
      * @brief Latitude at a cell row's NORTH edge.
      *
+     * Rows run southward, so a larger row is a SMALLER latitude.
+     *
      * @param row Cell row, increasing southward.
      * @return Degrees north, raw Q16.16.
      */
@@ -219,6 +214,9 @@ struct ReliefProjection {
 
     /**
      * @brief World height an elevation in metres maps to.
+     *
+     * THE reconciliation, and it is one line on purpose: elevation zero is mean sea level by
+     * construction of the data, so it lands on the world's sea level and nowhere else.
      *
      * @warning Saturates at the Fixed32 range rather than wrapping. A wrap would put the top of a
      * mountain below the sea, which reads as terrain and not as an error; saturation reads as a
@@ -252,6 +250,9 @@ struct ReliefProjection {
      * projection's map actually has -- an equidistant cylindrical sheet is as wide as its parallel
      * is long -- so the wrap is exact in the coordinates everything else uses.
      *
+     * The rows are 180 degrees of latitude over the cell size. The Q16.16 in the longitude scale is
+     * undone by the same divide that converts metres to cells.
+     *
      * @return The wrap; a projection with a degenerate scale yields an invalid one.
      */
     [[nodiscard]] GlobeWrap globe() const noexcept;
@@ -262,6 +263,12 @@ struct ReliefProjection {
  *
  * @warning The cosine comes from CORDIC, which is shifts and additions -- so this is exact on both
  * targets and callable from ring 0, where `cos` does not exist and must not.
+ *
+ * The reference latitude goes from degrees to radians at Q32, then down to the Q16.16 the CORDIC
+ * speaks. A standard parallel at the pole would collapse the east-west scale to zero and divide the
+ * world by nothing, so the cosine is clamped to one raw unit rather than refused: a projection is a
+ * struct a document can hold, and a document that names 90 has asked for something degenerate, not
+ * something malformed.
  *
  * @param projection What to resolve.
  * @return The resolved form.
@@ -275,6 +282,15 @@ struct ReliefProjection {
  * distance outside comes back. A version that folded once would leave a body that ran two laps
  * somewhere off the map, and "somewhere off the map" reads as ground rather than as an error
  * because the sampler answers there.
+ *
+ * Crossing a pole reflects the row and turns the longitude by half the globe: the cell one row north
+ * of the top row IS the top row, half a world away. The reflection is looped rather than done once
+ * because a body may in principle run past both poles in a single step at a silly speed, and bounded
+ * so a malformed wrap cannot spin here forever. East-west is the easy half: a floored modulo, not the
+ * remainder operator, since C++ leaves a negative dividend negative and a body one cell west of
+ * column zero would come back at -1 rather than at the far east. A wrap so malformed that the
+ * reflection never converged leaves the row out of range, and it is clamped rather than emitted as a
+ * cell nothing can index.
  *
  * @param wrap  The closed world, or an invalid one to do nothing.
  * @param x     Column, adjusted in place.
@@ -298,6 +314,10 @@ void wrapCell(const GlobeWrap &wrap, core::i32 &x, core::i32 &z) noexcept;
  * pole, and finding that route is a ROUTER's job -- something that can emit a path with a turn in
  * it -- not a delta's.
  *
+ * On a closed world both ends are brought onto the world first: a delta between an unwrapped cell and
+ * a wrapped one is a lap of the planet plus the real distance. The column delta is then folded by
+ * @ref foldOntoShorterWay, the one rule the Fixed32 callers share.
+ *
  * @param wrap  The closed world; an invalid one gives a plain subtraction.
  * @param fromX Start column.
  * @param fromZ Start row.
@@ -320,40 +340,25 @@ void shortestDelta(const GlobeWrap &wrap, core::i32 fromX, core::i32 fromZ, core
  * @warning Anything past half the span is shorter the other way. Callers with an open world pass a
  * span of zero and get their separation back untouched.
  *
+ * @warning **Doubled rather than halved, and that is not a style choice.** Writing `span / T{2}`
+ * constructs a Fixed32 from the RAW word 2 -- two sixty-five-thousandths, not two -- so the
+ * half came out enormous, the comparison inverted, and an ordinary inland separation of 120 was
+ * rewritten as -880. That is the `Fixed32{N}` trap this repository has already audited and
+ * fixed in five places, written again here the moment the arithmetic went generic. Adding a
+ * value to itself needs no literal at all, so the trap cannot recur.
+ *
+ * @warning **Looped, because a separation can be WIDER than the world.** A single subtraction only
+ * folds one lap, so a gap of 300 across a world 120 wide came back as 180 -- still most of the
+ * way round, and still wrong in the direction that makes a body walk the long way. @ref shortestDelta
+ * never sees this because it wraps both ends first; a caller holding two raw positions does.
+ * Bounded so a malformed span cannot spin here, the same guard @ref wrapCell carries.
+ *
  * @tparam T An integer or Fixed32.
  * @param span      Width of the closed world, or zero for an open one.
  * @param separation The raw difference.
  * @return The separation, folded.
  */
-template <typename T> [[nodiscard]] constexpr T foldOntoShorterWay(T span, T separation) noexcept
-{
-    if (!(span > T{}))
-        return separation;
-    // @warning **Doubled rather than halved, and that is not a style choice.** Writing `span / T{2}`
-    // constructs a Fixed32 from the RAW word 2 -- two sixty-five-thousandths, not two -- so the
-    // half came out enormous, the comparison inverted, and an ordinary inland separation of 120 was
-    // rewritten as -880. That is the `Fixed32{N}` trap this repository has already audited and
-    // fixed in five places, written again here the moment the arithmetic went generic. Adding a
-    // value to itself needs no literal at all, so the trap cannot recur.
-    //
-    // @warning **Looped, because a separation can be WIDER than the world.** A single subtraction only
-    // folds one lap, so a gap of 300 across a world 120 wide came back as 180 -- still most of the
-    // way round, and still wrong in the direction that makes a body walk the long way. `shortestDelta`
-    // never sees this because it wraps both ends first; a caller holding two raw positions does.
-    // Bounded so a malformed span cannot spin here, the same guard `wrapCell` carries.
-    T folded = separation;
-    for (core::u32 guard = 0u; guard < 64u; ++guard)
-    {
-        const T doubled = folded + folded;
-        if (doubled > span)
-            folded = folded - span;
-        else if (T{} - doubled > span)
-            folded = folded + span;
-        else
-            break;
-    }
-    return folded;
-}
+template <typename T> [[nodiscard]] constexpr T foldOntoShorterWay(T span, T separation) noexcept;
 
 /**
  * @struct ReliefField
@@ -368,58 +373,50 @@ template <typename T> [[nodiscard]] constexpr T foldOntoShorterWay(T span, T sep
  *
  * @warning **Non-owning.** In ring 0 these samples are a window onto a section of a baked image that
  * was never copied. A field that owned its samples would need a heap on a path that has none.
+ *
+ * @warning @ref blendCells is not decoration and not a taste setting: without it the boundary of the
+ * data is a vertical cliff of whatever the two surfaces happen to differ by, and a body walking east
+ * out of Greece falls off the edge of the survey. Zero is legal and means a hard border, which is
+ * only correct for a world that refuses to be walked past its data.
+ *
+ * @warning **The fade belongs to the edge of the SURVEY, never to the edge of a tile, and
+ * @ref exposedEdges is the whole difference between a tiled world and a quilt.** A tile that faded on
+ * every side would put a band of half-invented ground around itself, so a world made of tiles would
+ * come out cross-hatched with visible seams at every boundary -- and each seam would look like
+ * terrain, because a fade between two similar surfaces is a gentle valley rather than an error.
+ * Where a neighbour is resident the weight stays at one right up to the boundary, so the two
+ * tiles meet exactly. All four exposed is the default because a lone field IS a world whose every
+ * side faces nothing -- which keeps a single-tile world behaving exactly as it did before tiling
+ * existed.
+ *
+ * @warning **@ref level is carried so a mosaic can prefer the FINEST tile covering a cell,
+ * deterministically.** Coarse and fine tiles legitimately overlap -- that is what a distance-based
+ * budget produces -- and without a level the tile that answers is whichever was streamed in first.
+ * Which ground a world has would then depend on the order tiles happened to arrive, which is not a
+ * property of the world at all, and two targets would disagree the moment their loaders raced.
  */
 struct ReliefField {
-    const core::i16 *samples{nullptr}; ///< Row-major, NORTH row first; @ref kReliefNoSample for a gap.
-    core::u32 width{0u};               ///< Columns, in world cells.
-    core::u32 height{0u};              ///< Rows, in world cells.
-    core::i32 originCellX{0};          ///< World cell of column zero.
-    core::i32 originCellZ{0};          ///< World cell of row zero.
+    const core::i16 *samples{nullptr}; /**< Row-major, NORTH row first; @ref kReliefNoSample for a gap. */
+    core::u32 width{0u};               /**< Columns, in world cells. */
+    core::u32 height{0u};              /**< Rows, in world cells. */
+    core::i32 originCellX{0};          /**< World cell of column zero. */
+    core::i32 originCellZ{0};          /**< World cell of row zero. */
 
-    ReliefProjection projection{}; ///< How its metres become world units. Same one the baker used.
-
-    /**
-     * Cells over which real ground gives way to invented ground at the field's edge.
-     *
-     * @warning Not decoration and not a taste setting: without it the boundary of the data is a
-     * vertical cliff of whatever the two surfaces happen to differ by, and a body walking east out
-     * of Greece falls off the edge of the survey. Zero is legal and means a hard border, which is
-     * only correct for a world that refuses to be walked past its data.
-     */
-    core::u32 blendCells{64u};
+    ReliefProjection projection{}; /**< How its metres become world units. Same one the baker used. */
+    core::u32 blendCells{64u};     /**< Cells over which real ground gives way to invented ground at an edge. */
+    core::u32 exposedEdges{0xFu};  /**< Which of this tile's four edges face nothing, and therefore fade. */
+    core::u32 level{0u};           /**< Zero is full resolution; each step covers four times the ground. */
 
     /**
-     * Which of this tile's four edges face nothing, and therefore fade.
-     *
-     * @warning **The fade belongs to the edge of the SURVEY, never to the edge of a tile, and this
-     * mask is the whole difference between a tiled world and a quilt.** A tile that faded on every
-     * side would put a band of half-invented ground around itself, so a world made of tiles would
-     * come out cross-hatched with visible seams at every boundary -- and each seam would look like
-     * terrain, because a fade between two similar surfaces is a gentle valley rather than an error.
-     * Where a neighbour is resident the weight stays at one right up to the boundary, so the two
-     * tiles meet exactly.
-     *
-     * @warning All four exposed is the default because a lone field IS a world whose every side faces
-     * nothing -- which keeps a single-tile world behaving exactly as it did before tiling existed.
+     * @brief Whether this field carries anything at all.
      */
-    core::u32 exposedEdges{0xFu};
-
-    /**
-     * Reduction level: zero is full resolution, each step covers four times the ground.
-     *
-     * @warning **Carried so a mosaic can prefer the FINEST tile covering a cell, deterministically.**
-     * Coarse and fine tiles legitimately overlap -- that is what a distance-based budget produces --
-     * and without a level the tile that answers is whichever was streamed in first. Which ground a
-     * world has would then depend on the order tiles happened to arrive, which is not a property of
-     * the world at all, and two targets would disagree the moment their loaders raced.
-     */
-    core::u32 level{0u};
-
-    /// @return Whether this field carries anything at all.
     [[nodiscard]] bool valid() const noexcept { return samples != nullptr && width > 0u && height > 0u; }
 
     /**
      * @brief Height of the real ground at a world cell, in world units.
+     *
+     * A gap is refused rather than answered with a plausible number: the caller then falls back to
+     * invented ground, which is honest, instead of walking onto a measurement nobody made.
      *
      * @param worldX World column.
      * @param worldZ World row.
@@ -433,6 +430,17 @@ struct ReliefField {
      *
      * One at the interior, zero outside, and a linear ramp across @ref blendCells in between.
      *
+     * The ramp is driven by the distance to the nearest EXPOSED edge, in cells. Two things are going
+     * on and both matter: it is the CLOSEST edge, because a corner is near two at once and taking
+     * either alone would leave it at full strength while both its sides had faded; and an edge that
+     * faces a resident neighbour is skipped entirely, because the fade belongs to the border of the
+     * survey and not to the border of a tile. Without the second rule a tiled world is cross-hatched
+     * with gentle valleys at every tile boundary. A tile with no exposed edge at all is surrounded,
+     * so it is entirely real ground.
+     *
+     * The ramp is integer: a Fixed32 divide would round differently on the two sides of the field for
+     * no gain, and the whole point of the band is that both sides agree on where the ground is.
+     *
      * @param worldX World column.
      * @param worldZ World row.
      * @return A weight in [0, 1].
@@ -440,14 +448,18 @@ struct ReliefField {
     [[nodiscard]] Fixed32 weightAt(core::i32 worldX, core::i32 worldZ) const noexcept;
 };
 
-/// @ref ReliefField::exposedEdges bits. West is -x, east is +x, north is -z, south is +z.
-inline constexpr core::u32 kReliefEdgeWest = 1u << 0;
-inline constexpr core::u32 kReliefEdgeEast = 1u << 1;
-inline constexpr core::u32 kReliefEdgeNorth = 1u << 2;
-inline constexpr core::u32 kReliefEdgeSouth = 1u << 3;
+/**
+ * @name The bits of ReliefField::exposedEdges
+ * @{
+ */
+inline constexpr core::u32 kReliefEdgeWest = 1u << 0;  /**< The -x edge. */
+inline constexpr core::u32 kReliefEdgeEast = 1u << 1;  /**< The +x edge. */
+inline constexpr core::u32 kReliefEdgeNorth = 1u << 2; /**< The -z edge. */
+inline constexpr core::u32 kReliefEdgeSouth = 1u << 3; /**< The +z edge. */
+/** @} */
 
 /**
- * Resident tiles a mosaic may hold at once.
+ * @brief Resident tiles a mosaic may hold at once.
  *
  * @warning A fixed array and therefore a bound, because this is read in ring 0 where there is no heap
  * and a survey is streamed rather than owned. Sixty-four thirty-metre tiles of a thousand cells a
@@ -471,10 +483,12 @@ inline constexpr core::u32 kMaxResidentReliefTiles = 64u;
  * did, and gate P21 folding unchanged is what says so.
  */
 struct ReliefMosaic {
-    const ReliefField *tiles[kMaxResidentReliefTiles]{}; ///< Resident tiles, non-owning.
-    core::u32 count{0u};                                 ///< How many.
+    const ReliefField *tiles[kMaxResidentReliefTiles]{}; /**< Resident tiles, non-owning. */
+    core::u32 count{0u};                                 /**< How many. */
 
-    /// @return Whether anything is resident.
+    /**
+     * @brief Whether anything is resident.
+     */
     [[nodiscard]] bool valid() const noexcept { return count > 0u; }
 
     /**
@@ -483,13 +497,7 @@ struct ReliefMosaic {
      * @param tile The tile; must outlive the mosaic.
      * @return false when the mosaic is full, which is a budget being hit rather than an error.
      */
-    [[nodiscard]] bool add(const ReliefField *tile) noexcept
-    {
-        if (tile == nullptr || !tile->valid() || count >= kMaxResidentReliefTiles)
-            return false;
-        tiles[count++] = tile;
-        return true;
-    }
+    [[nodiscard]] bool add(const ReliefField *tile) noexcept;
 
     /**
      * @brief The resident tile covering a world cell.
@@ -525,6 +533,18 @@ struct ReliefMosaic {
     /**
      * @brief Height of the real ground at a world cell.
      *
+     * @warning **A level boundary is a STEP in the ground, and this is what removes it.** A coarse
+     * sample is the mean of the fine ones it replaces, so where a fine tile ends and a coarse one
+     * takes over the surface jumps -- measured at 17 m one level up, 30 m two, 45 m three, which at
+     * any distance a body can see is a visible ledge running along a square. Inside the fine tile's
+     * own border band the two are mixed instead, so the handover is a slope rather than a wall.
+     * Where nothing coarser lies underneath, the fine height is returned as it is, and the caller
+     * blends it against invented ground.
+     *
+     * @warning It uses the fine tile's OWN band -- the one that already exists to fade into invented
+     * ground -- rather than a second setting. A separate LOD band would be a second answer to "how
+     * wide is the transition", and the two would drift.
+     *
      * @param worldX World column.
      * @param worldZ World row.
      * @param out    Receives the height.
@@ -534,6 +554,13 @@ struct ReliefMosaic {
 
     /**
      * @brief How much the real ground counts at a world cell.
+     *
+     * @warning The STRONGEST weight across every covering tile, not the finest tile's own. This
+     * number answers "how much of this cell is measured at all", and a cell deep inside a coarse
+     * tile is entirely measured even when it sits in a fine tile's fading border. Taking the finest
+     * tile's weight instead would fade real ground into invented ground in the middle of a survey,
+     * wherever a fine tile happened to end -- which is exactly the ledge the blend of @ref heightAt
+     * removes, reintroduced one function later.
      *
      * @param worldX World column.
      * @param worldZ World row.
@@ -547,39 +574,36 @@ struct ReliefMosaic {
  * @brief One tile a residency plan asks for.
  */
 struct ReliefTileRequest {
-    core::u32 level{0u}; ///< Zero is full resolution; each step covers four times the ground.
-    core::i32 tileX{0};  ///< Tile column, in THIS level's own lattice.
-    core::i32 tileZ{0};  ///< Tile row, in this level's lattice.
+    core::u32 level{0u}; /**< Zero is full resolution; each step covers four times the ground. */
+    core::i32 tileX{0};  /**< Tile column, in THIS level's own lattice. */
+    core::i32 tileZ{0};  /**< Tile row, in this level's lattice. */
 };
 
 /**
  * @struct ReliefResidencyParams
  * @brief How much ground to keep resident, and at what detail.
+ *
+ * @warning **A level boundary is a STEP in the ground, and the size of it is measured rather than
+ * hoped for.** A coarse sample is the mean of the fine ones under it, so where two levels meet
+ * the surface jumps. On a slope with ridges, against the fine samples it replaces:
+ *
+ * | level | cell   | worst step | mean step |
+ * |-------|--------|-----------|-----------|
+ * | L1    | 60 m   | 17 m      | 4.6 m     |
+ * | L2    | 120 m  | 30 m      | 10.8 m    |
+ * | L3    | 240 m  | 45 m      | 17.2 m    |
+ *
+ * That is what sets the radii: a boundary has to sit far enough away that its step is under a
+ * pixel. At 1080p and a 60-degree field of view a pixel is about 1e-3 radians, so a 30 m step
+ * needs 30 km of distance. A 1024-cell tile at 30 m is 31 km, so the defaults below put the
+ * first boundary around 46 km and the second around 92 km -- comfortably beyond. Shrink
+ * @ref tileCells and that margin goes with it.
  */
 struct ReliefResidencyParams {
-    /**
-     * Cells per tile side, the same at every level.
-     *
-     * @warning **A level boundary is a STEP in the ground, and the size of it is measured rather than
-     * hoped for.** A coarse sample is the mean of the fine ones under it, so where two levels meet
-     * the surface jumps. On a slope with ridges, against the fine samples it replaces:
-     *
-     * | level | cell   | worst step | mean step |
-     * |-------|--------|-----------|-----------|
-     * | L1    | 60 m   | 17 m      | 4.6 m     |
-     * | L2    | 120 m  | 30 m      | 10.8 m    |
-     * | L3    | 240 m  | 45 m      | 17.2 m    |
-     *
-     * That is what sets the radii: a boundary has to sit far enough away that its step is under a
-     * pixel. At 1080p and a 60-degree field of view a pixel is about 1e-3 radians, so a 30 m step
-     * needs 30 km of distance. A 1024-cell tile at 30 m is 31 km, so the defaults below put the
-     * first boundary around 46 km and the second around 92 km -- comfortably beyond. Shrink
-     * @ref tileCells and that margin goes with it.
-     */
-    core::u32 tileCells{1024u};
-    core::u32 fineRadiusTiles{1u}; ///< Tiles of level 0 kept either side of the eye.
-    core::u32 levels{4u};          ///< How many levels to stack, finest first.
-    core::u32 radiusPerLevel{1u};  ///< Tiles either side of the eye at each coarser level.
+    core::u32 tileCells{1024u};    /**< Cells per tile side, the same at every level. */
+    core::u32 fineRadiusTiles{1u}; /**< Tiles of level 0 kept either side of the eye. */
+    core::u32 levels{4u};          /**< How many levels to stack, finest first. */
+    core::u32 radiusPerLevel{1u};  /**< Tiles either side of the eye at each coarser level. */
 };
 
 /**
@@ -601,6 +625,12 @@ struct ReliefResidencyParams {
  *
  * @warning It emits requests and reads nothing: choosing is arithmetic and belongs anywhere, LOADING
  * needs a filesystem and belongs to whoever has one. Same seam as everywhere else here.
+ *
+ * A tile at a level covers `tileCells * reliefLevelScale(level)` level-0 cells, so the eye's tile
+ * index is taken in THAT level's lattice. It is floored, or the two tiles either side of the origin
+ * would both be tile zero and the plan would ask for one tile where it needs two. Each level is
+ * emitted ring by ring, and a ring emits only its own edge: the interior was emitted by a smaller
+ * ring, and asking for a tile twice would spend budget on ground already covered.
  *
  * @param params   The budget.
  * @param eyeCellX Where the eye is, in level-0 cells.
@@ -624,7 +654,7 @@ struct ReliefResidencyParams {
 }
 
 /**
- * Sample value meaning "nobody measured this cell".
+ * @brief Sample value meaning "nobody measured this cell".
  *
  * @warning The same word the source tiles use, carried through rather than translated: a gap in a
  * survey is a fact about the survey, and filling it at bake time would make invented ground
@@ -633,5 +663,7 @@ struct ReliefResidencyParams {
 inline constexpr core::i16 kReliefNoSample = -32768;
 
 } // namespace lpl::math
+
+#    include "Geo.inl"
 
 #endif // LPL_MATH_GEO_HPP

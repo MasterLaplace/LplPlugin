@@ -39,9 +39,36 @@ template <core::Arithmetic T> struct Quat final {
     [[nodiscard]] constexpr Quat normalize() const;
 
     static constexpr Quat identity();
+
+    /**
+     * @brief The rotation of @p angleRad about @p axis, for a floating-point @p T; the identity for any other.
+     *
+     * A fixed-point caller takes the sine and cosine of the half angle from Cordic and builds the
+     * quaternion itself.
+     *
+     * @param axis     Axis of the rotation.
+     * @param angleRad Angle of the rotation, in radians.
+     * @return The rotation.
+     */
     static constexpr Quat fromAxisAngle(Vec3<T> axis, T angleRad);
+
+    /**
+     * @brief Spherical interpolation from @p a to @p b, for a floating-point @p T.
+     *
+     * When the dot product is negative, one end is negated to take the short path; when the two are
+     * very close (a dot product above 0.9995), it falls back to a normalized lerp. For any other @p T
+     * it is the lerp alone: normalize() leaves a non-floating quaternion as it is.
+     *
+     * @param a Start, at @p t = 0.
+     * @param b End, at @p t = 1.
+     * @param t Interpolation parameter.
+     * @return The interpolated rotation.
+     */
     static constexpr Quat slerp(Quat a, Quat b, T t);
 
+    /**
+     * @brief FNV-1a hash over the raw bytes of {w, x, y, z}.
+     */
     [[nodiscard]] constexpr core::u64 hash() const;
 };
 

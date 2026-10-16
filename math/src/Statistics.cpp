@@ -1,12 +1,3 @@
-/**
- * @file Statistics.cpp
- * @brief Implementation of statistical utilities.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
 #include "lpl/math/Statistics.hpp"
 
 #include <lpl/std/cmath.hpp>

@@ -39,14 +39,12 @@ public:
      */
     explicit constexpr Random(core::u32 seed) noexcept : _state(seed == 0u ? 0x9E3779B9u : seed) {}
 
-    /// @return The next 32-bit word.
-    [[nodiscard]] constexpr core::u32 next() noexcept
-    {
-        _state ^= _state << 13;
-        _state ^= _state >> 17;
-        _state ^= _state << 5;
-        return _state;
-    }
+    /**
+     * @brief Advances the stream by one step.
+     *
+     * @return The next 32-bit word.
+     */
+    [[nodiscard]] constexpr core::u32 next() noexcept;
 
     /**
      * @brief Uniform integer in [0, bound).
@@ -58,24 +56,14 @@ public:
      * @param bound Exclusive upper bound; 0 yields 0.
      * @return A value in [0, bound).
      */
-    [[nodiscard]] constexpr core::u32 below(core::u32 bound) noexcept
-    {
-        if (bound == 0u)
-            return 0u;
-        return static_cast<core::u32>((static_cast<core::u64>(next()) * bound) >> 32);
-    }
+    [[nodiscard]] constexpr core::u32 below(core::u32 bound) noexcept;
 
     /**
      * @brief Uniform integer in [low, high].
      * @param low  Inclusive lower bound.
      * @param high Inclusive upper bound; returns @p low when high < low.
      */
-    [[nodiscard]] constexpr core::i32 range(core::i32 low, core::i32 high) noexcept
-    {
-        if (high <= low)
-            return low;
-        return low + static_cast<core::i32>(below(static_cast<core::u32>(high - low + 1)));
-    }
+    [[nodiscard]] constexpr core::i32 range(core::i32 low, core::i32 high) noexcept;
 
     /**
      * @brief A Fixed32 uniformly in [0, 1).
@@ -95,7 +83,9 @@ public:
      */
     [[nodiscard]] constexpr bool chance(Fixed32 probability) noexcept { return unit() < probability; }
 
-    /// @return The raw internal state (for deriving sub-streams).
+    /**
+     * @brief The raw internal state (for deriving sub-streams).
+     */
     [[nodiscard]] constexpr core::u32 state() const noexcept { return _state; }
 
 private:
@@ -114,17 +104,10 @@ private:
  * @param salt Per-pass constant.
  * @return A generator independent of every other salt.
  */
-[[nodiscard]] constexpr Random deriveStream(core::u32 seed, core::u32 salt) noexcept
-{
-    core::u32 mixed = seed ^ (salt * 0x9E3779B9u);
-    mixed ^= mixed >> 16;
-    mixed *= 0x7FEB352Du;
-    mixed ^= mixed >> 15;
-    mixed *= 0x846CA68Bu;
-    mixed ^= mixed >> 16;
-    return Random{mixed};
-}
+[[nodiscard]] constexpr Random deriveStream(core::u32 seed, core::u32 salt) noexcept;
 
 } // namespace lpl::math
+
+#    include "Random.inl"
 
 #endif // LPL_MATH_RANDOM_HPP

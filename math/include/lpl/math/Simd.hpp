@@ -37,17 +37,20 @@ namespace lpl::math::simd {
  * unlike float SIMD, whose FMA/rounding may diverge across targets. This is why
  * integer SIMD is *safe* for authoritative state where float SIMD is not.
  *
- * The SSE path needs SSE4.1 (@c pmuldq). When unavailable, the scalar fallback
- * below is used — still deterministic, just not vectorised. That fallback is
- * defined inline, in Simd.inl: out of line, each lane-wise operation was a call
- * that returned its four words through memory, and on i686 the integration of
- * a block of four bodies made eighteen of them.
+ * On x86_64 the SSE path is pure SSE2, the baseline there, so it is always
+ * active, exactly like SimdFloat4: the signed multiply it would take from SSE4.1
+ * (@c pmuldq) is derived from SSE2's unsigned one. Bit-identical to scalar
+ * FixedPoint<i32,16>, as tests/parity/test_simd_fixed_parity.cpp checks. Every
+ * other target, i686 included, uses the scalar fallback — still deterministic,
+ * just not vectorised. That fallback is defined inline, in Simd.inl: out of line,
+ * each lane-wise operation was a call that returned its four words through memory,
+ * and on i686 the integration of a block of four bodies made eighteen of them.
  */
 struct SimdFixed4 {
 #    if defined(LPL_ARCH_X64)
-    __m128i reg; ///< 4 raw Q16.16 lanes. SSE2 baseline — always active, like SimdFloat4.
+    __m128i reg; /**< 4 raw Q16.16 lanes. SSE2 baseline — always active, like SimdFloat4. */
 #    else
-    core::i32 data[4]; ///< Scalar fallback (ARM64 / generic).
+    core::i32 data[4]; /**< Scalar fallback (ARM64 / generic). */
 #    endif
 
     static SimdFixed4 load(const core::i32 *raw);
@@ -56,6 +59,18 @@ struct SimdFixed4 {
 
     SimdFixed4 operator+(SimdFixed4 rhs) const;
     SimdFixed4 operator-(SimdFixed4 rhs) const;
+
+    /**
+     * @brief The lane-wise Q16.16 product, rounded half up like the scalar operator*.
+     *
+     * On x86_64 the products of the even lanes (0, 2) and of the odd lanes (1, 3) are taken apart,
+     * then rounded and shifted right by 16. Only the low dword of each 64-bit product is kept (the
+     * result fits in an i32; there, a logical and an arithmetic 64-bit shift agree), and the two
+     * halves are interleaved back into lane order.
+     *
+     * @param rhs The other factors.
+     * @return The four products.
+     */
     SimdFixed4 operator*(SimdFixed4 rhs) const;
 };
 

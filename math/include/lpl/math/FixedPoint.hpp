@@ -105,12 +105,15 @@ public:
 private:
     IntType _raw = 0;
 
-    // Multiplication/division need a doubly-wide intermediate. 32-bit fixed
-    // (Q16.16) uses i64; 64-bit fixed (Q32.32) needs a 128-bit intermediate.
-    // __int128 exists on 64-bit targets (host/x86-64) but NOT on i686 — there
-    // the compiler defines no __SIZEOF_INT128__ and `__int128` is not even a
-    // valid type token, so it cannot appear in std::conditional_t (both arms
-    // must name a type). Guard it: on i686 only Fixed32 is available.
+    /**
+     * @brief The doubly-wide intermediate a multiplication or a division needs.
+     *
+     * 32-bit fixed (Q16.16) uses i64; 64-bit fixed (Q32.32) needs a 128-bit intermediate. __int128
+     * exists on 64-bit targets (host/x86-64) but NOT on i686: there the compiler defines no
+     * __SIZEOF_INT128__ and `__int128` is not even a valid type token, so it cannot appear in
+     * std::conditional_t, whose two arms must both name a type. It is guarded: on i686 only Fixed32
+     * is available.
+     */
 #    if defined(__SIZEOF_INT128__)
     using wide_type = std::conditional_t<sizeof(IntType) <= 4, core::i64, __int128>;
 #    else

@@ -1,9 +1,3 @@
-/**
- * @file Quat.inl
- * @brief Inline implementation of quaternion operations.
- * @see   Quat.hpp
- */
-
 #ifndef LPL_MATH_QUAT_INL
 #define LPL_MATH_QUAT_INL
 
@@ -69,11 +63,9 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::fromAxisAngle(Vec3<T> a
     }
     else
     {
-        // For integral/fixed-point types: use raw half-angle
-        // (users can provide CORDIC-computed sin/cos externally)
         T halfAngle = angleRad / T{2};
-        T s = halfAngle; // identity approx — caller should use Cordic
-        T c = T{1};      // identity approx
+        T s = halfAngle;
+        T c = T{1};
         (void) s;
         (void) c;
         return identity();
@@ -86,14 +78,12 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::slerp(Quat a, Quat b, T
     {
         T d = a.dot(b);
 
-        // If the dot product is negative, negate one to take the short path
         if (d < T(0))
         {
             b = {-b.w, -b.x, -b.y, -b.z};
             d = -d;
         }
 
-        // If quaternions are very close, fall back to normalized lerp
         constexpr T kThreshold = T(0.9995);
         if (d > kThreshold)
         {
@@ -111,7 +101,6 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::slerp(Quat a, Quat b, T
     }
     else
     {
-        // For non-floating types: normalized lerp approximation
         Quat result{a.w + (b.w - a.w) * t, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t};
         return result.normalize();
     }
@@ -119,7 +108,6 @@ template <core::Arithmetic T> constexpr Quat<T> Quat<T>::slerp(Quat a, Quat b, T
 
 template <core::Arithmetic T> constexpr core::u64 Quat<T>::hash() const
 {
-    // FNV-1a hash over the raw bytes of {w, x, y, z}
     constexpr core::u64 kFnvBasis = 14695981039346656037ULL;
     constexpr core::u64 kFnvPrime = 1099511628211ULL;
 

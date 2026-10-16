@@ -1,10 +1,5 @@
-/**
- * @file Mat4.inl
- * @brief Inline implementations of Mat4 template methods.
- *
- * @note This file is automatically included at the end of Mat4.hpp.
- *       Do not include it directly.
- */
+#ifndef LPL_MATH_MAT4_INL
+#define LPL_MATH_MAT4_INL
 
 namespace lpl::math {
 
@@ -103,19 +98,6 @@ template <core::Arithmetic T> Mat4<T> Mat4<T>::perspective(T fovRad, T aspect, T
 {
     if constexpr (std::is_floating_point_v<T>)
     {
-        // tan(fov/2) comes from CORDIC, not from libm.
-        //
-        // The determinism contract forbids libm transcendentals in engine code
-        // linked into the kernel, and tan is the one that has no way around it:
-        // sqrt folds to the SSE instruction and is IEEE-exact on both targets,
-        // but tan always becomes a call — resolved to glibc on the host and to
-        // the kernel's own Taylor-series tanf in ring 0. Those two disagree in
-        // the low bits, so every projection matrix, and every image folded
-        // through one, would differ between the oracle and the kernel.
-        //
-        // CORDIC is shifts and adds over Fixed32, identical everywhere. The
-        // divide and the widening below are SSE operations, which are
-        // IEEE-defined and therefore also identical on both targets.
         Fixed32 halfSin{};
         Fixed32 halfCos{};
         Cordic::sincos(Fixed32::fromFloat(static_cast<float>(fovRad) * 0.5f), halfSin, halfCos);
@@ -168,3 +150,5 @@ template <core::Arithmetic T> Mat4<T> Mat4<T>::lookAt(Vec3<T> eye, Vec3<T> targe
 }
 
 } // namespace lpl::math
+
+#endif // LPL_MATH_MAT4_INL

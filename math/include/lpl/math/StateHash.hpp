@@ -47,11 +47,7 @@ public:
      * @param value Value to hash.
      * @return Reference to this hasher (for chaining).
      */
-    template <core::Blittable T> StateHash &combine(const T &value)
-    {
-        const auto *ptr = reinterpret_cast<const core::byte *>(&value);
-        return hashBytes({ptr, sizeof(T)});
-    }
+    template <core::Blittable T> StateHash &combine(const T &value);
 
     /**
      * @brief Finalise and return the current digest.
@@ -74,5 +70,7 @@ private:
 };
 
 } // namespace lpl::math
+
+#    include "StateHash.inl"
 
 #endif // LPL_MATH_STATE_HASH_HPP

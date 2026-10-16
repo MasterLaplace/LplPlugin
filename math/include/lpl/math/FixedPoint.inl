@@ -1,9 +1,3 @@
-/**
- * @file FixedPoint.inl
- * @brief Inline implementation of FixedPoint arithmetic operations.
- * @see   FixedPoint.hpp
- */
-
 #ifndef LPL_MATH_FIXED_POINT_INL
 #define LPL_MATH_FIXED_POINT_INL
 
