@@ -401,30 +401,37 @@ struct Octree::Impl {
      *        caller found @p region to intersect and of its descendants, that intersect @p region:
      *        depth first, children in octant order, each child tested on its reach before the call
      *        that would visit it.
+     *
+     * The node's fields and the entries' address are read once: an append through @p visitor
+     * stores a 32-bit word that the compiler cannot prove misses them, so read through the node they
+     * were read again after every append.
      */
     template <typename Visit>
     void visitRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region, core::u32 firstId,
                       Visit &visitor) const
     {
-        const auto &node = nodes[nodeIdx];
+        const FlatNode &node = nodes[nodeIdx];
+        const EntityEntry *const entries = sortedEntries.data() + node.entityStart;
+        const core::u32 entityCount = node.entityCount;
+        const core::i32 firstChild = node.firstChild;
 
-        for (core::u32 i = 0; i < node.entityCount; ++i)
+        for (core::u32 i = 0; i < entityCount; ++i)
         {
-            const auto &entry = sortedEntries[node.entityStart + i];
-            if (entry.objectId >= firstId && entry.aabb.intersects(region))
+            if (entries[i].objectId >= firstId && entries[i].aabb.intersects(region))
             {
-                visitor(entry.objectId);
+                visitor(entries[i].objectId);
             }
         }
 
-        if (node.firstChild >= 0)
+        if (firstChild < 0)
         {
-            const core::u32 fc = static_cast<core::u32>(node.firstChild);
-            for (core::u32 i = 0; i < 8; ++i)
-            {
-                if (nodes[fc + i].reach.intersects(region))
-                    visitRecurse(fc + i, region, firstId, visitor);
-            }
+            return;
+        }
+        const FlatNode *const children = nodes.data() + firstChild;
+        for (core::u32 i = 0; i < 8u; ++i)
+        {
+            if (children[i].reach.intersects(region))
+                visitRecurse(static_cast<core::u32>(firstChild) + i, region, firstId, visitor);
         }
     }
 
