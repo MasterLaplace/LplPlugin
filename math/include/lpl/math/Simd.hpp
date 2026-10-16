@@ -38,7 +38,10 @@ namespace lpl::math::simd {
  * integer SIMD is *safe* for authoritative state where float SIMD is not.
  *
  * The SSE path needs SSE4.1 (@c pmuldq). When unavailable, the scalar fallback
- * below is used — still deterministic, just not vectorised.
+ * below is used — still deterministic, just not vectorised. That fallback is
+ * defined inline, in Simd.inl: out of line, each lane-wise operation was a call
+ * that returned its four words through memory, and on i686 the integration of
+ * a block of four bodies made eighteen of them.
  */
 struct SimdFixed4 {
 #    if defined(LPL_ARCH_X64)
@@ -130,5 +133,7 @@ struct SimdFloat4 {
 #    endif
 
 } // namespace lpl::math::simd
+
+#    include "Simd.inl"
 
 #endif // LPL_MATH_SIMD_HPP
