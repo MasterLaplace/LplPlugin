@@ -5,10 +5,19 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.8.0] - 2026-10-16
+## [0.8.0] - 2026-10-17
+
+### Fixed
+
+- **physics**: The GPU backend includes the Fixed32 it converts (#447)
 
 ### Performance
 
+- **core**: Publishing an event nobody listens to returns at once (#457)
+- **ecs**: The partition compares an entity's cell before keying it (#454)
+- **physics**: The resolver merges the boxes' span only when it reads it (#455)
+- **physics**: The resolver publishes its contacts out of line (#453)
+- **physics**: The broad-phase keys only the candidates it sorts (#451)
 - **math**: A Fixed32 reciprocal is one division of its word (#443)
 - **physics**: The broad-phase keys every filed box in one call (#442)
 - **math**: The scalar SimdFixed4 is defined inline, in Simd.inl (#441)
@@ -24,6 +33,12 @@ what the history gives.
 - **physics**: Broad-phase leaves hold sixteen bodies, not thirty-two (#430)
 - **physics**: The solver stops at the first iteration in which nothing touches (#429)
 - **physics**: The resolver reads each body's half size and inverse mass once a step (#428)
+
+### Changed
+
+- **core**: Follow the shared C++ rules on comments and headers (#456)
+- **math**: Follow the shared C++ rules on comments and headers (#452)
+- **physics**: Follow the shared C++ rules on comments and namespaces (#450)
 
 ### Documentation
 
