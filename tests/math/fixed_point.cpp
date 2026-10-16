@@ -22,6 +22,10 @@ constexpr lpl::core::i32 kEdgeDividends[] = {0,        1,      -1,    32767,  -3
                                              32769,    -32769, 65536, -65536, 2147483647, -2147483647 - 1, 1000000,
                                              -1000000, 46341,  -46341};
 
+/** @brief Values on both sides of three raw units, around one unit, and at the ends of the word. */
+constexpr lpl::core::i32 kEdgeReciprocals[] = {1,     2,      3,          4,  5,  7,  65535,  65536,
+                                               65537, 131072, 2147483647, -1, -2, -3, -65536, -2147483647 - 1};
+
 /** @brief Divisors from the smallest units to the ends of the word, both signs. */
 constexpr lpl::core::i32 kEdgeDivisors[] = {1,      -1,    2,      -2,     3,     -3,     7,          65536,
                                             -65536, 65537, 123457, -98765, 32768, -32768, 2147483647, -2147483647 - 1};
@@ -109,4 +113,51 @@ LPL_TEST(a_quotient_is_the_double_width_one_on_both_sides_of_the_word)
     test.measure("quotients_divided_in_one_word", narrow);
     test.measure("quotients_divided_in_two_words", wide);
     test.measureHexadecimal("quotient_signature", fold);
+}
+
+/**
+ * @brief A reciprocal is the quotient of one by the value, on both sides of three raw units.
+ *
+ * @details A value of three raw units or more divides 2^32 in one word, any other goes through
+ *          operator/: the edges and a sweep of 20000 values from a linear congruential generator
+ *          are each compared with one() / value, and the reciprocals are folded so the two targets
+ *          can be compared too.
+ */
+LPL_TEST(a_reciprocal_is_the_quotient_of_one_on_both_sides_of_three_units)
+{
+    lpl::core::u32 mismatches = 0u;
+    lpl::core::u32 inOneWord = 0u;
+    lpl::core::u32 byQuotient = 0u;
+    lpl::core::u32 fold = 0x811C9DC5u;
+    const auto invertAndCompare = [&](lpl::core::i32 raw) {
+        const lpl::math::Fixed32 value = lpl::math::Fixed32::fromRaw(raw);
+        const lpl::core::i32 reciprocal = value.reciprocal().raw();
+        if (raw > 2)
+            ++inOneWord;
+        else
+            ++byQuotient;
+        if (reciprocal != (lpl::math::Fixed32::one() / value).raw())
+            ++mismatches;
+        fold = (fold ^ static_cast<lpl::core::u32>(reciprocal)) * 0x01000193u;
+    };
+
+    for (const lpl::core::i32 raw : kEdgeReciprocals)
+        invertAndCompare(raw);
+
+    lpl::core::u32 state = 0x9E3779B9u;
+    for (lpl::core::u32 draw = 0u; draw < 20000u; ++draw)
+    {
+        state = state * 1664525u + 1013904223u;
+        auto raw = static_cast<lpl::core::i32>(state) >> (state & 31u);
+        if (raw == 0)
+            raw = 1;
+        invertAndCompare(raw);
+    }
+
+    test.check(mismatches == 0u, "every reciprocal is the quotient of one by the value");
+    test.check(inOneWord > 1000u && byQuotient > 1000u, "and both sides of three raw units were inverted");
+
+    test.measure("reciprocals_in_one_word", inOneWord);
+    test.measure("reciprocals_by_quotient", byQuotient);
+    test.measureHexadecimal("reciprocal_signature", fold);
 }
