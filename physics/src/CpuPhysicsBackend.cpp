@@ -555,13 +555,10 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
                 const math::AABB<Fixed32> queryRegion = boxOf(i);
 
                 _impl->candidates.clear();
-                octree.collect(queryRegion, _impl->candidates);
+                octree.collect(queryRegion, i + 1u, _impl->candidates);
                 for (const core::u32 j : _impl->candidates)
                 {
-                    if (j > i)
-                    {
-                        resolveCollision(i, j);
-                    }
+                    resolveCollision(i, j);
                 }
             }
         }
