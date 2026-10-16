@@ -5,6 +5,30 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.8.0] - 2026-10-16
+
+### Performance
+
+- **math**: A Fixed32 reciprocal is one division of its word (#443)
+- **physics**: The broad-phase keys every filed box in one call (#442)
+- **math**: The scalar SimdFixed4 is defined inline, in Simd.inl (#441)
+- **ecs**: A body's cell key interleaves its bits by table (#444)
+- **ecs**: A body's cell along an axis is one 32-bit division (#440)
+- **physics**: The broad-phase keeps its neighbour lists from step to step (#438)
+- **physics**: The resolver moves a pair along its normal's axis alone (#439)
+- **math**: A Fixed32 division stays in one word when its dividend fits (#434)
+- **physics**: The broad-phase lists each body's neighbours once a step (#435)
+- **physics**: A broad-phase search walks the tree without recursing (#433)
+- **physics**: A broad-phase key is one 32-bit word (#432)
+- **physics**: A broad-phase search reads a node's fields once (#431)
+- **physics**: Broad-phase leaves hold sixteen bodies, not thirty-two (#430)
+- **physics**: The solver stops at the first iteration in which nothing touches (#429)
+- **physics**: The resolver reads each body's half size and inverse mass once a step (#428)
+
+### Documentation
+
+- Deploy the one-line docs of the broad-phase's functions (#446)
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
