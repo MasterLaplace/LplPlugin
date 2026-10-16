@@ -73,6 +73,14 @@ public:
     void collect(const math::AABB<math::Fixed32> &region, core::u32 firstId, lpl::pmr::vector<core::u32> &out) const;
 
     /**
+     * @brief The key @ref insert files @p aabb under, with the bounds @ref setWorldBounds last set.
+     *
+     * A search reports the boxes it finds in the order of these keys, and boxes of equal keys in
+     * the order they were inserted, so a caller can put boxes it found another way in that order.
+     */
+    [[nodiscard]] core::u32 keyOf(const math::AABB<math::Fixed32> &aabb) const noexcept;
+
+    /**
      * @brief Drops every object but keeps all buffers and their capacity.
      *
      * For the common broad-phase pattern of refilling the index from scratch
