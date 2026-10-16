@@ -410,6 +410,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
 
     const Fixed32 kZero = Fixed32::zero();
     const Fixed32 kOne = Fixed32::one();
+    bool anyOverlap = false;
 
     // Lambda for resolving a single collision pair (ported from legacy, Fixed32)
     auto resolveCollision = [&](core::u32 a, core::u32 b) {
@@ -440,6 +441,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         {
             return; // No collision
         }
+        anyOverlap = true;
 
         // Wake sleeping entities
         _impl->wake(slotA);
@@ -508,6 +510,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
     // 4 solver iterations (legacy uses SOLVER_ITERATIONS = 4)
     for (core::u32 iter = 0; iter < kSolverIterations; ++iter)
     {
+        anyOverlap = false;
         if (count <= kBruteForceThreshold)
         {
             // Brute-force N² for small chunks
@@ -559,6 +562,10 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
                     resolveCollision(i, j);
                 }
             }
+        }
+        if (!anyOverlap)
+        {
+            break;
         }
     }
 }
