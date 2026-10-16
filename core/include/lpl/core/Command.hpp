@@ -30,7 +30,9 @@ class ICommand {
 public:
     virtual ~ICommand() = default;
 
-    /** @brief Executes the command encapsulation. */
+    /**
+     * @brief Executes the command encapsulation.
+     */
     virtual void execute() = 0;
 };
 
@@ -47,38 +49,17 @@ public:
      * @brief Push a new command to the back of the queue.
      * @param command The command to enqueue.
      */
-    void push(std::unique_ptr<ICommand> command)
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        _commands.push_back(std::move(command));
-    }
+    void push(std::unique_ptr<ICommand> command);
 
     /**
      * @brief Flushes the queue, executing all pending commands in order.
      */
-    void flush()
-    {
-        lpl::pmr::vector<std::unique_ptr<ICommand>> pending;
-        {
-            lpl::pmr::lock_guard lock{_mutex};
-            pending.swap(_commands);
-        }
+    void flush();
 
-        for (auto &cmd : pending)
-        {
-            if (cmd)
-            {
-                cmd->execute();
-            }
-        }
-    }
-
-    /** @brief Returns true if the queue has no pending commands. */
-    [[nodiscard]] bool empty() const
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        return _commands.empty();
-    }
+    /**
+     * @brief Returns true if the queue has no pending commands.
+     */
+    [[nodiscard]] bool empty() const;
 
 private:
     mutable lpl::pmr::mutex _mutex;
@@ -86,5 +67,7 @@ private:
 };
 
 } // namespace lpl::core
+
+#    include "Command.inl"
 
 #endif // LPL_CORE_COMMAND_HPP

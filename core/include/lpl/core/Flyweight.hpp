@@ -36,58 +36,25 @@ public:
 
     /**
      * @brief Gets an existing shared instance, or creates a new one.
+     *
+     * An entry whose instance has expired is removed before a new one is created.
+     *
      * @param key Identifies the unique object state.
      * @param creator Callable that returns a `std::shared_ptr<const T>`
      *                if a new instance needs to be created.
      * @return Shared pointer to the cached or newly created instance.
      */
-    template <typename CreatorCallable> std::shared_ptr<const T> getOrCreate(const Key &key, CreatorCallable &&creator)
-    {
-        lpl::pmr::lock_guard lock{_mutex};
+    template <typename CreatorCallable> std::shared_ptr<const T> getOrCreate(const Key &key, CreatorCallable &&creator);
 
-        auto it = _cache.find(key);
-        if (it != _cache.end())
-        {
-            if (auto shared = it->second.lock())
-            {
-                return shared;
-            }
-            // Pointer expired, remove stale entry.
-            _cache.erase(it);
-        }
+    /**
+     * @brief Triggers a cleanup of any expired weak pointers.
+     */
+    void prune();
 
-        // Create new
-        std::shared_ptr<const T> newInstance = creator();
-        if (newInstance)
-        {
-            _cache.emplace(key, newInstance);
-        }
-        return newInstance;
-    }
-
-    /** @brief Triggers a cleanup of any expired weak pointers. */
-    void prune()
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        for (auto it = _cache.begin(); it != _cache.end();)
-        {
-            if (it->second.expired())
-            {
-                it = _cache.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-    }
-
-    /** @brief Current number of cached weak keys. */
-    [[nodiscard]] usize size() const
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        return _cache.size();
-    }
+    /**
+     * @brief Current number of cached weak keys.
+     */
+    [[nodiscard]] usize size() const;
 
 private:
     mutable lpl::pmr::mutex _mutex;
@@ -95,5 +62,7 @@ private:
 };
 
 } // namespace lpl::core
+
+#    include "Flyweight.inl"
 
 #endif // LPL_CORE_FLYWEIGHT_HPP

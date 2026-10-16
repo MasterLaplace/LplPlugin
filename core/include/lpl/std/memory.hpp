@@ -3,7 +3,7 @@
  * @brief Portable smart-pointer umbrella. unique_ptr is in the freestanding
  *        libstdc++ subset on both targets, but std::make_unique is NOT, so the
  *        kernel arm supplies it over the C++ runtime's operator new (defined in
- *        kernel/cxx/cxx_runtime.cpp). Use lpl::pmr::unique_ptr / make_unique at
+ *        LplKernel's libkxx/src/cxx_runtime.cpp). Use lpl::pmr::unique_ptr / make_unique at
  *        call sites instead of std:: so the same source compiles for both.
  *
  * Both the single-object and the unbounded-array forms are provided: the array
@@ -35,7 +35,9 @@ requires(!::std::is_array_v<T>)
     return unique_ptr<T>(new T(static_cast<Args &&>(args)...));
 }
 
-/// Array form: value-initialises the elements, matching std::make_unique<T[]>.
+/**
+ * @brief Array form: value-initialises the elements, matching std::make_unique<T[]>.
+ */
 template <typename T>
 requires ::std::is_unbounded_array_v<T>
 [[nodiscard]] unique_ptr<T> make_unique(::std::size_t count)

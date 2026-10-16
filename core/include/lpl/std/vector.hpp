@@ -17,8 +17,11 @@
 #        include <kstd/allocator.hpp>
 #        include <kstd/vector.hpp>
 namespace lpl::pmr {
-// Allocator-aware alias: a custom allocator (e.g. memory::PinnedAllocator) can
-// be supplied as the second argument; it defaults to the kernel heap allocator.
+/**
+ * @brief Allocator-aware alias, over the kernel heap allocator by default.
+ *
+ * A custom allocator (e.g. memory::PinnedAllocator) can be supplied as the second argument.
+ */
 template <typename T, typename Allocator = ::kstd::KernelAllocator<T>> using vector = ::kstd::vector<T, Allocator>;
 } // namespace lpl::pmr
 #    else

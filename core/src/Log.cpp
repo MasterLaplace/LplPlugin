@@ -1,12 +1,3 @@
-/**
- * @file Log.cpp
- * @brief Default ILogger implementation writing to stderr.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
 #include "lpl/core/Log.hpp"
 
 #include <lpl/core/Platform.hpp>
@@ -20,11 +11,7 @@ namespace lpl::core {
 namespace {
 
 #if !LPL_TARGET_KERNEL
-// Hosted default sink. The freestanding kernel build has no stderr/cstdio, so it
-// starts with no logger and log calls are no-ops until one is installed. The
-// kernel entry point installs platform::kernel::KernelLogger (which writes the
-// same format to the console HAL) before anything else runs; without that the
-// engine is silent in-kernel.
+/** @brief The hosted default sink: writes each message to stderr. */
 class StderrLogger final : public ILogger {
 public:
     void write(LogLevel level, std::string_view tag, std::string_view message) override
@@ -44,14 +31,7 @@ ILogger *gActiveLogger = nullptr;
 
 LogLevel gMinLevel = LogLevel::kInfo;
 
-} // anonymous namespace
-
-#if !LPL_TARGET_KERNEL
-void Log::setLogger(ILogger *logger) { gActiveLogger = logger ? logger : &gDefaultLogger; }
-#else
-void Log::setLogger(ILogger *logger) { gActiveLogger = logger; }
-#endif
-void Log::setMinLevel(LogLevel level) { gMinLevel = level; }
+} // namespace
 
 static void dispatch(LogLevel level, std::string_view tag, std::string_view msg)
 {
@@ -59,6 +39,13 @@ static void dispatch(LogLevel level, std::string_view tag, std::string_view msg)
         return;
     gActiveLogger->write(level, tag, msg);
 }
+
+#if !LPL_TARGET_KERNEL
+void Log::setLogger(ILogger *logger) { gActiveLogger = logger ? logger : &gDefaultLogger; }
+#else
+void Log::setLogger(ILogger *logger) { gActiveLogger = logger; }
+#endif
+void Log::setMinLevel(LogLevel level) { gMinLevel = level; }
 
 void Log::debug(std::string_view tag, std::string_view msg) { dispatch(LogLevel::kDebug, tag, msg); }
 void Log::info(std::string_view tag, std::string_view msg) { dispatch(LogLevel::kInfo, tag, msg); }
