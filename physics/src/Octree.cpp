@@ -531,6 +531,8 @@ void Octree::collect(const math::AABB<math::Fixed32> &region, core::u32 firstId,
     _impl->visit(region, firstId, append);
 }
 
+core::u32 Octree::keyOf(const math::AABB<math::Fixed32> &aabb) const noexcept { return _impl->computeMorton(aabb); }
+
 void Octree::queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
                           const lpl::pmr::function<void(core::u32)> &callback, core::u32 *outNodesVisited,
                           core::u32 *outNodesPruned) const
