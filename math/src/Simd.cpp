@@ -1,26 +1,35 @@
-/**
- * @file Simd.cpp
- * @brief SIMD wrapper implementation — SSE/AVX2, NEON, scalar fallback.
- *
- * On x86_64, SimdFloat4 always uses SSE (baseline).  SimdFloat8 is only
- * available when the translation unit is compiled with -mavx or -mavx2
- * (checked via __AVX__).
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/math/Simd.hpp>
 
 namespace lpl::math::simd {
 
-// ============================================================================
-//  x86_64 — SSE (SimdFloat4)
-// ============================================================================
-
 #if defined(LPL_ARCH_X64)
+
+namespace {
+
+/**
+ * @brief The signed 32x32 -> 64 products of the EVEN 32-bit lanes (0, 2), in SSE2.
+ *
+ * pmuldq, the signed multiply, is SSE4.1. The signed product is derived from the unsigned one
+ * (pmuludq, SSE2) with the standard two-term sign correction:
+ * signed(a*b) = unsigned(a*b) - (a<0 ? b:0)·2^32 - (b<0 ? a:0)·2^32 (mod 2^64). An arithmetic
+ * shift by 31 makes each lane all ones when it is negative, which selects the other factor, and
+ * that factor is shifted into the high dword before it is subtracted.
+ *
+ * @param x The first factors.
+ * @param y The second factors.
+ * @return The two 64-bit products.
+ */
+inline __m128i signedMulEven(__m128i x, __m128i y)
+{
+    const __m128i up = _mm_mul_epu32(x, y);
+    const __m128i sx = _mm_srai_epi32(x, 31);
+    const __m128i sy = _mm_srai_epi32(y, 31);
+    const __m128i cx = _mm_slli_epi64(_mm_and_si128(sx, y), 32);
+    const __m128i cy = _mm_slli_epi64(_mm_and_si128(sy, x), 32);
+    return _mm_sub_epi64(_mm_sub_epi64(up, cx), cy);
+}
+
+} // namespace
 
 SimdFloat4 SimdFloat4::load(const float *ptr) { return {_mm_load_ps(ptr)}; }
 SimdFloat4 SimdFloat4::splat(float val) { return {_mm_set1_ps(val)}; }
@@ -39,27 +48,6 @@ SimdFloat4 SimdFloat4::fma(SimdFloat4 a, SimdFloat4 b, SimdFloat4 c)
 #    endif
 }
 
-// ── SimdFixed4 (SSE2 integer, deterministic Q16.16) ─────────────────────────
-// Pure SSE2 (baseline on x86_64) so it is always active, exactly like
-// SimdFloat4. Bit-identical to scalar FixedPoint<i32,16> — validated by
-// tests/parity/test_simd_fixed_parity.cpp.
-
-namespace {
-// Signed 32x32 -> 64 product of the EVEN 32-bit lanes (0,2), in SSE2.
-// pmuldq is SSE4.1; we derive the signed product from the unsigned one
-// (pmuludq, SSE2) with the standard two-term sign correction:
-//   signed(a*b) = unsigned(a*b) - (a<0 ? b:0)·2^32 - (b<0 ? a:0)·2^32  (mod 2^64)
-inline __m128i signedMulEven(__m128i x, __m128i y)
-{
-    const __m128i up = _mm_mul_epu32(x, y);   // even lanes: unsigned 32x32->64
-    const __m128i sx = _mm_srai_epi32(x, 31); // per-lane 0xFFFFFFFF if x<0
-    const __m128i sy = _mm_srai_epi32(y, 31);
-    const __m128i cx = _mm_slli_epi64(_mm_and_si128(sx, y), 32); // (x<0 ? y:0) into high dword
-    const __m128i cy = _mm_slli_epi64(_mm_and_si128(sy, x), 32); // (y<0 ? x:0) into high dword
-    return _mm_sub_epi64(_mm_sub_epi64(up, cx), cy);
-}
-} // namespace
-
 SimdFixed4 SimdFixed4::load(const core::i32 *raw) { return {_mm_loadu_si128(reinterpret_cast<const __m128i *>(raw))}; }
 SimdFixed4 SimdFixed4::splat(core::i32 raw) { return {_mm_set1_epi32(raw)}; }
 void SimdFixed4::store(core::i32 *raw) const { _mm_storeu_si128(reinterpret_cast<__m128i *>(raw), reg); }
@@ -69,19 +57,14 @@ SimdFixed4 SimdFixed4::operator-(SimdFixed4 rhs) const { return {_mm_sub_epi32(r
 
 SimdFixed4 SimdFixed4::operator*(SimdFixed4 rhs) const
 {
-    const __m128i bias = _mm_set1_epi64x(1LL << 15); // round-half-up, matches scalar operator*
-    // Products for even lanes (0,2) and odd lanes (1,3), then round + >>16.
+    const __m128i bias = _mm_set1_epi64x(1LL << 15);
     __m128i prodE = _mm_srli_epi64(_mm_add_epi64(signedMulEven(reg, rhs.reg), bias), 16);
     __m128i prodO =
         _mm_srli_epi64(_mm_add_epi64(signedMulEven(_mm_srli_si128(reg, 4), _mm_srli_si128(rhs.reg, 4)), bias), 16);
-    // Only the low dword of each qword is kept (result fits in i32; there
-    // logical and arithmetic 64-bit shift agree). Reinterleave to lane order.
-    __m128i e = _mm_shuffle_epi32(prodE, _MM_SHUFFLE(3, 1, 2, 0)); // [E0,E1,..]
-    __m128i o = _mm_shuffle_epi32(prodO, _MM_SHUFFLE(3, 1, 2, 0)); // [O0,O1,..]
-    return {_mm_unpacklo_epi32(e, o)};                             // [E0,O0,E1,O1] = lanes 0..3
+    __m128i e = _mm_shuffle_epi32(prodE, _MM_SHUFFLE(3, 1, 2, 0));
+    __m128i o = _mm_shuffle_epi32(prodO, _MM_SHUFFLE(3, 1, 2, 0));
+    return {_mm_unpacklo_epi32(e, o)};
 }
-
-// ── SimdFloat8 (AVX/AVX2) ───────────────────────────────────────────────────
 
 #    ifdef __AVX__
 
@@ -104,10 +87,6 @@ SimdFloat8 SimdFloat8::fma(SimdFloat8 a, SimdFloat8 b, SimdFloat8 c)
 
 #    endif // __AVX__
 
-// ============================================================================
-//  ARM64 — NEON (SimdFloat4 only)
-// ============================================================================
-
 #elif defined(LPL_ARCH_ARM64)
 
 SimdFloat4 SimdFloat4::load(const float *ptr) { return {vld1q_f32(ptr)}; }
@@ -118,14 +97,7 @@ SimdFloat4 SimdFloat4::operator+(SimdFloat4 rhs) const { return {vaddq_f32(reg, 
 SimdFloat4 SimdFloat4::operator-(SimdFloat4 rhs) const { return {vsubq_f32(reg, rhs.reg)}; }
 SimdFloat4 SimdFloat4::operator*(SimdFloat4 rhs) const { return {vmulq_f32(reg, rhs.reg)}; }
 
-SimdFloat4 SimdFloat4::fma(SimdFloat4 a, SimdFloat4 b, SimdFloat4 c)
-{
-    return {vfmaq_f32(c.reg, a.reg, b.reg)}; // NEON FMA: c + a*b
-}
-
-// ============================================================================
-//  Scalar fallback
-// ============================================================================
+SimdFloat4 SimdFloat4::fma(SimdFloat4 a, SimdFloat4 b, SimdFloat4 c) { return {vfmaq_f32(c.reg, a.reg, b.reg)}; }
 
 #else
 

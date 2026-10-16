@@ -40,7 +40,28 @@ template <core::Arithmetic T> struct Mat4 final {
     static constexpr Mat4 translate(Vec3<T> offset);
     static constexpr Mat4 scale(Vec3<T> s);
     static constexpr Mat4 fromQuat(Quat<T> q);
+
+    /**
+     * @brief A perspective projection, for a floating-point @p T; the identity for any other.
+     *
+     * tan(fov/2) comes from CORDIC, not from libm. The determinism contract forbids libm
+     * transcendentals in engine code linked into the kernel, and tan is the one that has no way around
+     * it: sqrt folds to the SSE instruction and is IEEE-exact on both targets, but tan always becomes a
+     * call — resolved to glibc on the host and to the kernel's own Taylor-series tanf in ring 0. Those
+     * two disagree in the low bits, so every projection matrix, and every image folded through one,
+     * would differ between the oracle and the kernel.
+     *
+     * CORDIC is shifts and adds over Fixed32, identical everywhere. The divide and the widening after
+     * it are SSE operations, which are IEEE-defined and therefore also identical on both targets.
+     *
+     * @param fovRad Vertical field of view, in radians.
+     * @param aspect Width over height.
+     * @param near   Distance to the near plane.
+     * @param far    Distance to the far plane.
+     * @return The projection matrix.
+     */
     static Mat4 perspective(T fovRad, T aspect, T near, T far);
+
     static Mat4 lookAt(Vec3<T> eye, Vec3<T> target, Vec3<T> up);
 };
 

@@ -1,10 +1,5 @@
-/**
- * @file AABB.inl
- * @brief Inline implementations of AABB template methods.
- *
- * @note This file is automatically included at the end of AABB.hpp.
- *       Do not include it directly.
- */
+#ifndef LPL_MATH_AABB_INL
+#define LPL_MATH_AABB_INL
 
 namespace lpl::math {
 
@@ -65,3 +60,5 @@ template <core::Arithmetic T> constexpr T AABB<T>::volume() const
 }
 
 } // namespace lpl::math
+
+#endif // LPL_MATH_AABB_INL

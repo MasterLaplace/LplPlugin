@@ -1,9 +1,3 @@
-/**
- * @file Vec3.inl
- * @brief Inline implementation of Vec3 operations.
- * @see   Vec3.hpp
- */
-
 #ifndef LPL_MATH_VEC3_INL
 #define LPL_MATH_VEC3_INL
 

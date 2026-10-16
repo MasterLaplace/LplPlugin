@@ -1,13 +1,3 @@
-/**
- * @file StateHash.cpp
- * @brief FNV-1a incremental hash for deterministic desync detection.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-22
- * @copyright MIT License
- */
-
 #include <lpl/math/StateHash.hpp>
 
 namespace lpl::math {

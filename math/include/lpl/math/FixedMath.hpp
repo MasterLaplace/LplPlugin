@@ -28,43 +28,24 @@
 
 namespace lpl::math {
 
-/// 1/sqrt(2), the weight a diagonal step carries relative to a cardinal one.
-inline const Fixed32 kInvSqrt2 = Fixed32::fromRaw(46341); // round(65536 / sqrt(2))
+/**
+ * @brief 1/sqrt(2), the weight a diagonal step carries relative to a cardinal one.
+ *
+ * round(65536 / sqrt(2)).
+ */
+inline const Fixed32 kInvSqrt2 = Fixed32::fromRaw(46341);
 
 /**
  * @brief Integer square root: the largest @c r with r*r <= @p value.
  *
- * Restoring shift-and-subtract, one bit per iteration from the top. Exact for
- * every 32-bit input and free of division.
+ * Restoring shift-and-subtract, one bit per iteration from the top, starting at
+ * the highest even power of four that fits a u32. Exact for every 32-bit input
+ * and free of division.
  *
  * @param value Radicand.
  * @return floor(sqrt(value)).
  */
-[[nodiscard]] constexpr core::u32 integerSqrt(core::u32 value) noexcept
-{
-    core::u32 remainder = value;
-    core::u32 root = 0u;
-    // Highest even power of four that fits a u32.
-    core::u32 bit = core::u32{1} << 30;
-
-    while (bit > remainder)
-        bit >>= 2;
-
-    while (bit != 0u)
-    {
-        if (remainder >= root + bit)
-        {
-            remainder -= root + bit;
-            root = (root >> 1) + bit;
-        }
-        else
-        {
-            root >>= 1;
-        }
-        bit >>= 2;
-    }
-    return root;
-}
+[[nodiscard]] constexpr core::u32 integerSqrt(core::u32 value) noexcept;
 
 /**
  * @brief Base-two logarithm of a positive integer, in Fixed32.
@@ -84,29 +65,14 @@ inline const Fixed32 kInvSqrt2 = Fixed32::fromRaw(46341); // round(65536 / sqrt(
  * @param value Argument; 0 yields 0 rather than negative infinity.
  * @return log2(value) in Q16.16, up to 32.
  */
-[[nodiscard]] constexpr Fixed32 fixedLog2(core::u32 value) noexcept
-{
-    if (value == 0u)
-        return Fixed32::zero();
+[[nodiscard]] constexpr Fixed32 fixedLog2(core::u32 value) noexcept;
 
-    core::u32 exponent = 0u;
-    core::u32 rest = value;
-    while (rest > 1u)
-    {
-        rest >>= 1;
-        ++exponent;
-    }
-
-    // Where value sits between 2^exponent and 2^(exponent+1), in Q16.16.
-    const core::u32 floorPower = core::u32{1} << exponent;
-    const core::u32 fraction =
-        exponent == 0u ? 0u : static_cast<core::u32>(((static_cast<core::u64>(value - floorPower)) << 16) >> exponent);
-
-    return Fixed32::fromRaw(static_cast<core::i32>((exponent << 16) + fraction));
-}
-
-/// log2(e), the constant that turns a natural exponential into a base-two one.
-inline constexpr Fixed32 kLog2E = Fixed32::fromRaw(94548); // round(65536 * 1.4426950408889634)
+/**
+ * @brief log2(e), the constant that turns a natural exponential into a base-two one.
+ *
+ * round(65536 * 1.4426950408889634).
+ */
+inline constexpr Fixed32 kLog2E = Fixed32::fromRaw(94548);
 
 /**
  * @brief Two raised to a Fixed32 power, in Fixed32.
@@ -117,9 +83,12 @@ inline constexpr Fixed32 kLog2E = Fixed32::fromRaw(94548); // round(65536 * 1.44
  *
  * Split, then series. @f$2^x = 2^n \cdot 2^f@f$ with @c n the floor and @c f the
  * fraction, so the integer part becomes a shift — exact, whatever its magnitude —
- * and only @f$2^f@f$ on [0, 1) needs approximating. Six Taylor terms of
- * @f$e^{f\ln 2}@f$ evaluated by Horner stay within 6e-5 relative, measured over the
- * whole fractional range: about eight raw units of Q16.16 at the worst point.
+ * and only @f$2^f@f$ on [0, 1) needs approximating. The split takes an arithmetic
+ * shift, which floors for negatives too: -2.25 must give n = -3 and f = 0.75, not
+ * n = -2 and f = -0.25. Six Taylor terms of @f$e^{f\ln 2}@f$, their coefficients
+ * @f$(\ln 2)^k / k!@f$ rounded to Q16.16, evaluated by Horner stay within 6e-5
+ * relative, measured over the whole fractional range: about eight raw units of
+ * Q16.16 at the worst point.
  *
  * Most of that is the Horner evaluation and not the truncated series. Each step
  * discards the low sixteen bits of a product, so six steps lose roughly six units
@@ -130,50 +99,13 @@ inline constexpr Fixed32 kLog2E = Fixed32::fromRaw(94548); // round(65536 * 1.44
  * Saturating at both ends rather than wrapping. This is called on softmax scores,
  * where a large negative argument is the ordinary case and must give zero, and a
  * large positive one means an earlier overflow — a wrapped result there would turn
- * the smallest weight in a distribution into the largest.
+ * the smallest weight in a distribution into the largest. At or below -31 the
+ * result is smaller than one raw unit; at or above 15, out of range.
  *
  * @param value Exponent.
  * @return 2^value, clamped to [0, Fixed32::max()].
  */
-[[nodiscard]] constexpr Fixed32 fixedExp2(Fixed32 value) noexcept
-{
-    // Below this the result is smaller than one raw unit; above it, out of range.
-    if (value.raw() <= -(31 << 16))
-        return Fixed32::zero();
-    if (value.raw() >= (15 << 16))
-        return Fixed32::max();
-
-    // Arithmetic shift floors for negatives too, which is what the split needs:
-    // -2.25 must give n = -3 and f = 0.75, not n = -2 and f = -0.25.
-    const core::i32 integerPart = value.raw() >> 16;
-    const core::u32 fraction = static_cast<core::u32>(value.raw()) & 0xFFFFu;
-
-    // Taylor coefficients of e^(f ln2), rounded to Q16.16.
-    constexpr core::i64 c1 = 45426; // ln2
-    constexpr core::i64 c2 = 15743; // (ln2)^2 / 2
-    constexpr core::i64 c3 = 3638;  // (ln2)^3 / 6
-    constexpr core::i64 c4 = 630;
-    constexpr core::i64 c5 = 87;
-    constexpr core::i64 c6 = 10;
-
-    const core::i64 f = static_cast<core::i64>(fraction);
-    core::i64 series = c6;
-    series = ((series * f) >> 16) + c5;
-    series = ((series * f) >> 16) + c4;
-    series = ((series * f) >> 16) + c3;
-    series = ((series * f) >> 16) + c2;
-    series = ((series * f) >> 16) + c1;
-    series = ((series * f) >> 16) + Fixed32::kOne;
-
-    if (integerPart >= 0)
-    {
-        const core::i64 scaled = series << integerPart;
-        return scaled >= static_cast<core::i64>(Fixed32::max().raw()) ?
-                   Fixed32::max() :
-                   Fixed32::fromRaw(static_cast<core::i32>(scaled));
-    }
-    return Fixed32::fromRaw(static_cast<core::i32>(series >> (-integerPart)));
-}
+[[nodiscard]] constexpr Fixed32 fixedExp2(Fixed32 value) noexcept;
 
 /**
  * @brief The natural exponential of a Fixed32, in Fixed32.
@@ -199,34 +131,10 @@ inline constexpr Fixed32 kLog2E = Fixed32::fromRaw(94548); // round(65536 * 1.44
  * @param value Radicand; negative yields zero.
  * @return floor(sqrt(value)) as Fixed32.
  */
-[[nodiscard]] constexpr Fixed32 fixedSqrt(Fixed32 value) noexcept
-{
-    if (value.raw() <= 0)
-        return Fixed32::zero();
-
-    core::u64 remainder = static_cast<core::u64>(static_cast<core::u32>(value.raw())) << 16;
-    core::u64 root = 0u;
-    core::u64 bit = core::u64{1} << 46;
-
-    while (bit > remainder)
-        bit >>= 2;
-
-    while (bit != 0u)
-    {
-        if (remainder >= root + bit)
-        {
-            remainder -= root + bit;
-            root = (root >> 1) + bit;
-        }
-        else
-        {
-            root >>= 1;
-        }
-        bit >>= 2;
-    }
-    return Fixed32::fromRaw(static_cast<core::i32>(root));
-}
+[[nodiscard]] constexpr Fixed32 fixedSqrt(Fixed32 value) noexcept;
 
 } // namespace lpl::math
+
+#    include "FixedMath.inl"
 
 #endif // LPL_MATH_FIXEDMATH_HPP
