@@ -75,8 +75,9 @@ static constexpr core::u32 kSolverIterations = 4;
 
 struct CpuPhysicsBackend::Impl {
     /**
-     * @brief One physics-relevant entity's pointers into its chunk's SoA
-     *        buffers, valid for the duration of a single step().
+     * @brief One physics-relevant entity for a single step(): pointers into its
+     *        chunk's SoA buffers for what the step moves, and the values the
+     *        resolver derives from what it only reads.
      *
      * Chunks are grouped by archetype and capped at @c ecs::Chunk::kChunkCapacity
      * (256), not by spatial region: two entities can be in different chunks
@@ -89,8 +90,8 @@ struct CpuPhysicsBackend::Impl {
         ecs::EntityId id;
         FVec3 *position;
         FVec3 *velocity;
-        const Fixed32 *mass;
-        const FVec3 *size;
+        FVec3 half;          /**< Half its size: a step changes no size, so it is computed once a step. */
+        Fixed32 inverseMass; /**< One over its mass, or zero for a body too heavy to move: once a step too. */
     };
 
     ecs::Registry &registry;
@@ -250,7 +251,8 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             for (core::u32 i = 0; i < count; ++i)
             {
                 _impl->physicsEntities.push_back(
-                    Impl::PhysicsEntityRef{entities[i], &positions[i], &velocities[i], &masses[i], &aabbs[i]});
+                    Impl::PhysicsEntityRef{entities[i], &positions[i], &velocities[i], aabbs[i] * kHalf,
+                                           masses[i] > kMassEpsilon ? Fixed32::one() / masses[i] : Fixed32::zero()});
             }
         }
     }
@@ -415,10 +417,6 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         FVec3 *positions_b = refs[b].position;
         FVec3 *velocities_a = refs[a].velocity;
         FVec3 *velocities_b = refs[b].velocity;
-        const Fixed32 &mass_a = *refs[a].mass;
-        const Fixed32 &mass_b = *refs[b].mass;
-        const FVec3 &size_a = *refs[a].size;
-        const FVec3 &size_b = *refs[b].size;
 
         const core::u32 slotA = refs[a].id.slot();
         const core::u32 slotB = refs[b].id.slot();
@@ -429,8 +427,8 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
             return;
         }
 
-        FVec3 halfA = size_a * kHalf;
-        FVec3 halfB = size_b * kHalf;
+        const FVec3 &halfA = refs[a].half;
+        const FVec3 &halfB = refs[b].half;
         FVec3 delta = *positions_a - *positions_b;
 
         // Penetration on each axis
@@ -468,8 +466,8 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         }
 
         // Inverse masses
-        Fixed32 invMassA = (mass_a > kMassEpsilon) ? (kOne / mass_a) : kZero;
-        Fixed32 invMassB = (mass_b > kMassEpsilon) ? (kOne / mass_b) : kZero;
+        const Fixed32 invMassA = refs[a].inverseMass;
+        const Fixed32 invMassB = refs[b].inverseMass;
         Fixed32 invMassSum = invMassA + invMassB;
 
         if (invMassSum < kMassEpsilon)
@@ -529,7 +527,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
             // and thereafter only cleared, refilled and re-bounded — no allocation on a warm step.
             const auto boxOf = [&](core::u32 i) {
                 const FVec3 &pos = *refs[i].position;
-                const FVec3 halfSz = *refs[i].size * kHalf;
+                const FVec3 &halfSz = refs[i].half;
                 return math::AABB<Fixed32>{
                     {pos.x - halfSz.x, pos.y - halfSz.y, pos.z - halfSz.z},
                     {pos.x + halfSz.x, pos.y + halfSz.y, pos.z + halfSz.z}
