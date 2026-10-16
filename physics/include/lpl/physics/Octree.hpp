@@ -17,6 +17,7 @@
 #    include <lpl/physics/ISpatialIndex.hpp>
 
 #    include <lpl/std/memory.hpp>
+#    include <lpl/std/vector.hpp>
 
 namespace lpl::physics {
 
@@ -59,6 +60,15 @@ public:
                const lpl::pmr::function<void(core::u32)> &callback) const override;
 
     void rebuild() override;
+
+    /**
+     * @brief Appends to @p out the objects whose box intersects @p region, in the order @ref query
+     *        reports them.
+     *
+     * The broad-phase's form of @ref query: no callback to build per query and to call per object.
+     * An object is reported once at most, so an @p out reserved to the objects held never grows.
+     */
+    void collect(const math::AABB<math::Fixed32> &region, lpl::pmr::vector<core::u32> &out) const;
 
     /**
      * @brief Drops every object but keeps all buffers and their capacity.
