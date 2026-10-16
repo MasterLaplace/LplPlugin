@@ -14,6 +14,7 @@
 
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Registry.hpp>
+#include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
 #include <lpl/physics/GpuPhysicsBackend.hpp>
 
