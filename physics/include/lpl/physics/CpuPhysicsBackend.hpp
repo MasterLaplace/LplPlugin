@@ -67,6 +67,9 @@ private:
      * @brief AABB collision detection + impulse resolution (4 iterations), over
      *        every physics entity in the world (not scoped to one chunk).
      *
+     * An iteration in which no pair overlaps changes nothing, so neither would
+     * the ones after it: the resolver stops there.
+     *
      * Chunks group entities by archetype and cap out at 256 (@ref
      * ecs::Chunk::kChunkCapacity), not by spatial region — two entities that
      * happen to sit in different chunks (different archetype, or the same
