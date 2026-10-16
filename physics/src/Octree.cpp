@@ -16,13 +16,14 @@
 
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
-#include <lpl/math/Morton.hpp>
 #include <lpl/memory/PinnedAllocator.hpp>
 #include <lpl/physics/Octree.hpp>
 #include <lpl/std/memory.hpp>
 #include <lpl/std/vector.hpp>
 
 #include <algorithm>
+#include <array>
+#include <bit>
 
 namespace lpl::physics {
 
@@ -86,10 +87,15 @@ struct Octree::Impl {
      */
     lpl::pmr::vector<core::u32> idToIndex;
     bool dirty{false};
+    std::array<core::u32, 3> keyShifts{};    /**< Per axis, the right shift from an offset to its cell. */
+    std::array<core::u32, 3> keyLastCells{}; /**< Per axis, the last cell; 0 along an axis with no extent. */
 
     static constexpr core::u32 kNoIndex = 0xFFFFFFFFu;
 
-    Impl(const math::AABB<math::Fixed32> &wb, core::u32 leaf) : leafCapacity{leaf == 0u ? 1u : leaf}, worldBounds{wb} {}
+    Impl(const math::AABB<math::Fixed32> &wb, core::u32 leaf) : leafCapacity{leaf == 0u ? 1u : leaf}, worldBounds{wb}
+    {
+        fitKeys();
+    }
 
     void setIndex(core::u32 objectId, core::u32 slot)
     {
@@ -107,59 +113,87 @@ struct Octree::Impl {
     //  Morton computation                                                    //
     // ────────────────────────────────────────────────────────────────────── //
 
-    /** @brief Grid resolution of the key: 21 bits per axis, as part1by2 allows. */
-    static constexpr core::u32 kGridBits = 21u;
-    static constexpr core::u64 kGridSize = 1ull << kGridBits;
+    /** @brief Bits of the key per axis: one per level the build can split, and no more. */
+    static constexpr core::u32 kGridBits = kMaxDepth;
+
+    /** @brief Bits of a whole key, three axes interleaved. */
+    static constexpr core::u32 kKeyBits = 3u * kGridBits;
+
+    /** @brief Passes of the radix sort, eight bits a pass. */
+    static constexpr core::u32 kRadixPasses = (kKeyBits + 7u) / 8u;
+
+    /**
+     * @brief A cell index of kGridBits bits with two zero bits after each: the three axes of a key
+     *        interleave as spread(x) | spread(y) << 1 | spread(z) << 2, three loads instead of the
+     *        64-bit shifts and masks of part1by2, which i686 runs as pairs of 32-bit operations.
+     */
+    static constexpr std::array<core::u32, (1u << kGridBits)> kSpread = [] {
+        std::array<core::u32, (1u << kGridBits)> spread{};
+        for (core::u32 index = 0u; index < spread.size(); ++index)
+            for (core::u32 bit = 0u; bit < kGridBits; ++bit)
+                spread[index] |= ((index >> bit) & 1u) << (3u * bit);
+        return spread;
+    }();
 
     /**
      * @brief The centre of an AABB, as a Morton key over THIS TREE'S bounds.
      *
-     * Two defects lived here, and they compounded. The key was built with
-     * @c encode3D, which adds @c kMortonBias itself, on top of a bias this
-     * function had already added — the sum wrapped the 21-bit field, so the key's
-     * high bits were noise. And even unwrapped, the grid was absolute world units
-     * biased around the origin, whereas @ref recurseBuild reads bit (20 - depth)
-     * as the octant of a node that subdivides @c worldBounds. The two disagreed
-     * unless the world happened to be the 2^21-unit cube centred on the origin,
-     * which no caller's is. An entity therefore landed in a node whose bounds did
-     * not contain it, and a frustum cull that trusted node bounds returned
-     * thirty-one payloads for eighteen visible chunks.
+     * Each axis is cut into cells of a power-of-two width, the smallest that fits the tree's extent
+     * in 2^kGridBits cells, so a cell index is a shift of the offset from the tree's minimum: no
+     * division, which on i686 is a call into libgcc, three of them per body per rebuild before. A key
+     * carries one bit per axis per level @ref recurseBuild can split, which is all it reads, so the
+     * radix sort runs @ref kRadixPasses passes instead of eight.
      *
-     * The key is now the position NORMALISED to the tree's own bounds, so bit
-     * (20 - depth) of the key is, by construction, the octant of the node at that
-     * depth. Integer arithmetic throughout — the ratio is a u64 divide of Q16.16
-     * raws, identical on the host and on i686, so the sorted order (and every
-     * signature that depends on collision order) is reproducible.
+     * Where an entry's key places it is a matter of balance, not of correctness: a search rejects on
+     * a node's reach, which holds every box beneath it whatever cell it was filed under.
      */
     [[nodiscard]] core::u64 computeMorton(const math::AABB<math::Fixed32> &aabb) const
     {
         const auto c = aabb.center();
-        const auto axis = [](math::Fixed32 v, math::Fixed32 lo, math::Fixed32 hi) -> core::u32 {
-            const core::i64 extent = static_cast<core::i64>(hi.raw()) - static_cast<core::i64>(lo.raw());
-            if (extent <= 0)
+        const auto cell = [this](math::Fixed32 v, math::Fixed32 lo, core::u32 axis) -> core::u32 {
+            if (v.raw() <= lo.raw())
                 return 0u;
-            const core::i64 delta = static_cast<core::i64>(v.raw()) - static_cast<core::i64>(lo.raw());
-            if (delta <= 0)
-                return 0u;
-            const core::u64 scaled = (static_cast<core::u64>(delta) * kGridSize) / static_cast<core::u64>(extent);
-            return static_cast<core::u32>(scaled >= kGridSize ? kGridSize - 1u : scaled);
+            const core::u32 offset = static_cast<core::u32>(v.raw()) - static_cast<core::u32>(lo.raw());
+            const core::u32 index = offset >> keyShifts[axis];
+            return index < keyLastCells[axis] ? index : keyLastCells[axis];
         };
-        return math::morton::encode3DGrid(axis(c.x, worldBounds.min.x, worldBounds.max.x),
-                                          axis(c.y, worldBounds.min.y, worldBounds.max.y),
-                                          axis(c.z, worldBounds.min.z, worldBounds.max.z));
+        return kSpread[cell(c.x, worldBounds.min.x, 0u)] | (kSpread[cell(c.y, worldBounds.min.y, 1u)] << 1u) |
+               (kSpread[cell(c.z, worldBounds.min.z, 2u)] << 2u);
+    }
+
+    /**
+     * @brief Derives, for each axis, the shift that turns an offset into a cell and the last cell,
+     *        from the tree's bounds: once when they change, not three times a key.
+     */
+    void fitKeys() noexcept
+    {
+        const math::Fixed32 lows[3] = {worldBounds.min.x, worldBounds.min.y, worldBounds.min.z};
+        const math::Fixed32 highs[3] = {worldBounds.max.x, worldBounds.max.y, worldBounds.max.z};
+
+        for (core::u32 axis = 0u; axis < 3u; ++axis)
+        {
+            const core::i64 extent =
+                static_cast<core::i64>(highs[axis].raw()) - static_cast<core::i64>(lows[axis].raw());
+            const core::u32 width =
+                extent > 0 ? static_cast<core::u32>(std::bit_width(static_cast<core::u64>(extent))) : 0u;
+            keyShifts[axis] = width > kGridBits ? width - kGridBits : 0u;
+            keyLastCells[axis] = extent > 0 ? (1u << kGridBits) - 1u : 0u;
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────── //
-    //  LSD Radix Sort — 4 passes × 16-bit buckets                           //
+    //  LSD Radix Sort — kRadixPasses passes × 8-bit buckets                  //
     // ────────────────────────────────────────────────────────────────────── //
 
     /**
-     * @brief Sorts sortedEntries by morton key using LSD radix sort.
+     * @brief Sorts sortedEntries by morton key using LSD radix sort, stable.
      *
-     * 4 passes over 16-bit digits of the 64-bit Morton key.
-     * Each pass: count → prefix-sum offsets → scatter into temp buffer → swap.
+     * One pass per 8-bit digit of the key: count, prefix-sum offsets, scatter into the other buffer.
+     * An 8-bit digit keeps the histograms at 256 entries, 2 KiB of stack: a 16-bit digit took 512 KiB
+     * and overran the kernel stack. After an odd number of passes the sorted entries sit in the other
+     * buffer, and the two vectors swap, which moves no entry and allocates nothing.
      *
-     * Complexity: O(4 × n) = O(n) linear in entity count.
+     * Complexity: O(kRadixPasses × n).
      */
     void radixSort()
     {
@@ -169,7 +203,6 @@ struct Octree::Impl {
             return;
         }
 
-        // Grown here, once, rather than left to grow during a later tick.
         if (tempEntries.size() < sortedEntries.size())
         {
             tempEntries.resize(sortedEntries.size());
@@ -178,16 +211,8 @@ struct Octree::Impl {
         EntityEntry *src = sortedEntries.data();
         EntityEntry *dst = tempEntries.data();
 
-        // 8-bit radix / 8 passes over the 64-bit Morton key. An 8-bit digit keeps
-        // the histograms at 256 entries (2 KiB of stack total) instead of 65536
-        // (512 KiB) — the wide version blows a freestanding kernel stack, corrupting
-        // adjacent globals, while a hosted stack merely hid the bug. The sorted order
-        // is identical either way (LSD radix is digit-width agnostic), so parity
-        // signatures are unchanged. 8 passes is even, so the result lands back in the
-        // original sortedEntries buffer, as the caller relies on.
-        for (core::u8 pass = 0; pass < 8; ++pass)
+        for (core::u32 pass = 0; pass < kRadixPasses; ++pass)
         {
-            // Histogram: count occurrences per 8-bit bucket
             core::u32 counts[256] = {};
             const core::u64 shift = static_cast<core::u64>(pass) * 8u;
 
@@ -197,7 +222,6 @@ struct Octree::Impl {
                 ++counts[bucket];
             }
 
-            // Prefix sum → offsets
             core::u32 offsets[256];
             offsets[0] = 0;
             for (core::u32 i = 1; i < 256u; ++i)
@@ -205,19 +229,19 @@ struct Octree::Impl {
                 offsets[i] = offsets[i - 1] + counts[i - 1];
             }
 
-            // Scatter into destination
             for (core::u32 i = 0; i < count; ++i)
             {
                 const core::u8 bucket = (src[i].morton >> shift) & 0xFFu;
                 dst[offsets[bucket]++] = src[i];
             }
 
-            // Swap src/dst for next pass
             std::swap(src, dst);
         }
 
-        // After 8 passes (even), result is in the original sortedEntries buffer
-        // (src == sortedEntries.data() after 8 swaps)
+        if constexpr (kRadixPasses % 2u != 0u)
+        {
+            sortedEntries.swap(tempEntries);
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────── //
@@ -265,7 +289,7 @@ struct Octree::Impl {
         const auto mx = parentBound.max;
 
         // Compute child bounds and split entities by octant
-        const core::u64 shift = (20u - depth) * 3u;
+        const core::u64 shift = (kGridBits - 1u - depth) * 3u;
         core::u32 current = start;
 
         for (core::u8 octant = 0; octant < 8; ++octant)
@@ -552,6 +576,7 @@ void Octree::clear() noexcept
 void Octree::setWorldBounds(const math::AABB<math::Fixed32> &worldBounds) noexcept
 {
     _impl->worldBounds = worldBounds;
+    _impl->fitKeys();
     _impl->dirty = true;
 }
 
