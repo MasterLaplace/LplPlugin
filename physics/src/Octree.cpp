@@ -397,48 +397,60 @@ struct Octree::Impl {
         }
     }
 
+    /** @brief Nodes a search can hold pending: up to seven siblings wait at each level, plus the root. */
+    static constexpr core::u32 kPendingNodes = 7u * kMaxDepth + 1u;
+
     /**
-     * @brief Hands @p visitor the entries numbered @p firstId or above, of a node whose reach the
-     *        caller found @p region to intersect and of its descendants, that intersect @p region:
-     *        depth first, children in octant order, each child tested on its reach before the call
-     *        that would visit it.
+     * @brief Hands @p visitor the entries numbered @p firstId or above that intersect @p region, of
+     *        the root and its descendants, the root's reach having been found to intersect it: depth
+     *        first, children in octant order, each child tested on its reach before it is visited.
+     *
+     * A stack of pending nodes stands in for a call per node. Each node's intersecting children go
+     * on it last octant first, so the first comes off first and its subtree is done before the next:
+     * the order of the recursion it replaces, without a frame per node.
      *
      * The node's fields and the entries' address are read once: an append through @p visitor
      * stores a 32-bit word that the compiler cannot prove misses them, so read through the node they
      * were read again after every append.
      */
     template <typename Visit>
-    void visitRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region, core::u32 firstId,
-                      Visit &visitor) const
+    void visitTree(const math::AABB<math::Fixed32> &region, core::u32 firstId, Visit &visitor) const
     {
-        const FlatNode &node = nodes[nodeIdx];
-        const EntityEntry *const entries = sortedEntries.data() + node.entityStart;
-        const core::u32 entityCount = node.entityCount;
-        const core::i32 firstChild = node.firstChild;
+        core::u32 pending[kPendingNodes];
+        core::u32 waiting = 0u;
+        pending[waiting++] = 0u;
 
-        for (core::u32 i = 0; i < entityCount; ++i)
+        while (waiting != 0u)
         {
-            if (entries[i].objectId >= firstId && entries[i].aabb.intersects(region))
+            const FlatNode &node = nodes[pending[--waiting]];
+            const EntityEntry *const entries = sortedEntries.data() + node.entityStart;
+            const core::u32 entityCount = node.entityCount;
+            const core::i32 firstChild = node.firstChild;
+
+            for (core::u32 i = 0; i < entityCount; ++i)
             {
-                visitor(entries[i].objectId);
+                if (entries[i].objectId >= firstId && entries[i].aabb.intersects(region))
+                {
+                    visitor(entries[i].objectId);
+                }
             }
-        }
 
-        if (firstChild < 0)
-        {
-            return;
-        }
-        const FlatNode *const children = nodes.data() + firstChild;
-        for (core::u32 i = 0; i < 8u; ++i)
-        {
-            if (children[i].reach.intersects(region))
-                visitRecurse(static_cast<core::u32>(firstChild) + i, region, firstId, visitor);
+            if (firstChild < 0)
+            {
+                continue;
+            }
+            const FlatNode *const children = nodes.data() + firstChild;
+            for (core::u32 octant = 8u; octant-- != 0u;)
+            {
+                if (children[octant].reach.intersects(region))
+                    pending[waiting++] = static_cast<core::u32>(firstChild) + octant;
+            }
         }
     }
 
     /**
      * @brief Hands @p visitor every entry numbered @p firstId or above that intersects @p region, in
-     *        the order of @ref visitRecurse.
+     *        the order of @ref visitTree.
      */
     template <typename Visit>
     void visit(const math::AABB<math::Fixed32> &region, core::u32 firstId, Visit &visitor) const
@@ -457,7 +469,7 @@ struct Octree::Impl {
 
         if (nodes[0].reach.intersects(region))
         {
-            visitRecurse(0, region, firstId, visitor);
+            visitTree(region, firstId, visitor);
         }
     }
 };
