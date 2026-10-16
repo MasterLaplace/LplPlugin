@@ -58,23 +58,25 @@ static constexpr math::Fixed32 kNeighbourMargin = math::Fixed32::fromRaw(1024);
 static constexpr core::u32 kNeighboursReserved = 32;
 
 /**
- * @brief Sorts @p bodies by the key each is filed under, then by number: the order a broad-phase
- *        search reports them in. An insertion sort, since a body has a handful of neighbours.
+ * @brief Sorts @p bodies by their keys, @p keys holding the key of each in the same order, then by
+ *        number: the order a broad-phase search reports them in. An insertion sort, since a body has
+ *        a handful of neighbours.
  */
-static void sortAsFiled(lpl::pmr::vector<core::u32> &bodies, const lpl::pmr::vector<core::u32> &keys) noexcept
+static void sortAsFiled(lpl::pmr::vector<core::u32> &bodies, lpl::pmr::vector<core::u32> &keys) noexcept
 {
     for (core::u32 placed = 1u; placed < static_cast<core::u32>(bodies.size()); ++placed)
     {
         const core::u32 body = bodies[placed];
-        const core::u32 key = keys[body];
+        const core::u32 key = keys[placed];
         core::u32 slot = placed;
-        while (slot != 0u &&
-               (keys[bodies[slot - 1u]] > key || (keys[bodies[slot - 1u]] == key && bodies[slot - 1u] > body)))
+        while (slot != 0u && (keys[slot - 1u] > key || (keys[slot - 1u] == key && bodies[slot - 1u] > body)))
         {
             bodies[slot] = bodies[slot - 1u];
+            keys[slot] = keys[slot - 1u];
             --slot;
         }
         bodies[slot] = body;
+        keys[slot] = key;
     }
 }
 
@@ -114,6 +116,8 @@ struct CpuPhysicsBackend::Impl {
     lpl::pmr::vector<PhysicsEntityRef> physicsEntities; /**< Every body of the world, gathered again each step. */
     lpl::pmr::unique_ptr<Octree> broadPhase;            /**< Made once, refilled in place each step. */
     lpl::pmr::vector<core::u32> candidates; /**< What one search found, refilled per search; its capacity stays. */
+    lpl::pmr::vector<math::AABB<math::Fixed32>> candidateBoxes; /**< The filed boxes of candidates to sort. */
+    lpl::pmr::vector<core::u32> candidateKeys;                  /**< The key each of those boxes is filed under. */
 
     /**
      * @name Neighbour lists, made when a step finds them stale: see kNeighbourMargin.
@@ -125,7 +129,6 @@ struct CpuPhysicsBackend::Impl {
     lpl::pmr::vector<core::u32> neighbourStarts; /**< Where each body's list starts; one more than the bodies. */
     lpl::pmr::vector<core::u32> neighbours;      /**< The bodies after each one that came within two margins. */
     lpl::pmr::vector<math::AABB<math::Fixed32>> filedBoxes; /**< The boxes as the iteration began: what a tree holds. */
-    lpl::pmr::vector<core::u32> filedKeys;                  /**< The key each of those boxes is filed under. */
     /** @} */
 
     explicit Impl(ecs::Registry &r) : registry{r} {}
@@ -226,6 +229,23 @@ struct CpuPhysicsBackend::Impl {
             octree.collect(filedBoxes[body].expand(kNeighbourMargin + kNeighbourMargin), body + 1u, neighbours);
         }
         neighbourStarts[count] = static_cast<core::u32>(neighbours.size());
+    }
+
+    /**
+     * @brief Puts @c candidates in the order a broad-phase search reports them, keying their filed
+     *        boxes alone over the bounds @p octree was last given.
+     *
+     * Only a list of two or more needs keys, and a body's list seldom holds two bodies its box
+     * meets: over 600 ticks of the cube pile at 144 Hz, 3974 of 2.09 million did, and none held
+     * three. Keying every filed box at each iteration cost 128 million instructions for those.
+     */
+    void sortCandidatesAsFiled(const Octree &octree)
+    {
+        candidateBoxes.clear();
+        for (const core::u32 body : candidates)
+            candidateBoxes.push_back(filedBoxes[body]);
+        octree.keysOf(candidateBoxes, candidateKeys);
+        sortAsFiled(candidates, candidateKeys);
     }
 
     /**
@@ -602,8 +622,9 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
 
             Octree &octree = *_impl->broadPhase;
             octree.setWorldBounds(span);
-            octree.keysOf(_impl->filedBoxes, _impl->filedKeys);
             _impl->candidates.reserve(count);
+            _impl->candidateBoxes.reserve(count);
+            _impl->candidateKeys.reserve(count);
             bool treeBuilt = false;
 
             for (core::u32 i = 0; i < count; ++i)
@@ -619,7 +640,8 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
                         if (_impl->filedBoxes[j].intersects(queryRegion))
                             _impl->candidates.push_back(j);
                     }
-                    sortAsFiled(_impl->candidates, _impl->filedKeys);
+                    if (_impl->candidates.size() > 1u)
+                        _impl->sortCandidatesAsFiled(octree);
                 }
                 else
                 {
