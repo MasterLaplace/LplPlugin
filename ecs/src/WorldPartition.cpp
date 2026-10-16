@@ -15,6 +15,7 @@
 #include <lpl/gpu/IComputeBackend.hpp>
 
 #include <algorithm>
+#include <array>
 #include <lpl/std/cstring.hpp>
 #include <lpl/std/unordered_map.hpp>
 #include <lpl/std/vector.hpp>
@@ -76,7 +77,7 @@ struct WorldPartition::Impl {
  * @param v A coordinate.
  * @param cellSize The side of a cell, positive.
  */
-[[nodiscard]] static core::i32 gridAlong(math::Fixed32 v, math::Fixed32 cellSize) noexcept
+[[nodiscard]] static inline core::i32 gridAlong(math::Fixed32 v, math::Fixed32 cellSize) noexcept
 {
     const core::i32 bias = static_cast<core::i32>(core::kMortonBias);
     if (cellSize.raw() < math::Fixed32::one().raw())
@@ -91,6 +92,37 @@ struct WorldPartition::Impl {
     const core::u32 rest = below % side;
     const core::u32 cells = whole + (rest >= ((side + 0xFFFFu) >> 16u) ? 1u : 0u);
     return bias - static_cast<core::i32>(cells);
+}
+
+/** @brief A 7-bit index with two zero bits after each of its bits: a third of a key's word, per axis. */
+static constexpr std::array<core::u32, 128> kSpreadSeven = [] {
+    std::array<core::u32, 128> spread{};
+    for (core::u32 index = 0u; index < spread.size(); ++index)
+        for (core::u32 bit = 0u; bit < 7u; ++bit)
+            spread[index] |= ((index >> bit) & 1u) << (3u * bit);
+    return spread;
+}();
+
+/**
+ * @brief The key math::morton::encode3D gives grid coordinates @p x, @p y and @p z, from three
+ *        table loads per axis instead of its five rounds of 64-bit shifts and masks.
+ *
+ * encode3D biases each coordinate again and keeps the low 21 bits of the sum, then sends bit i of
+ * x, y and z to bits 3i, 3i + 1 and 3i + 2 of the key. Seven bits of the three axes fill 21 bits
+ * of the key, so the key is three such words, at bits 0, 21 and 42: on i686, 32-bit loads, shifts
+ * and ors, where each round of encode3D is a pair of them per word.
+ */
+[[nodiscard]] static core::u64 cellKey(core::i32 x, core::i32 y, core::i32 z) noexcept
+{
+    const core::u32 bias = static_cast<core::u32>(core::kMortonBias);
+    const core::u32 ux = static_cast<core::u32>(x) + bias;
+    const core::u32 uy = static_cast<core::u32>(y) + bias;
+    const core::u32 uz = static_cast<core::u32>(z) + bias;
+    const auto word = [&](core::u32 shift) noexcept -> core::u64 {
+        return kSpreadSeven[(ux >> shift) & 0x7Fu] | (kSpreadSeven[(uy >> shift) & 0x7Fu] << 1u) |
+               (kSpreadSeven[(uz >> shift) & 0x7Fu] << 2u);
+    };
+    return word(0u) | (word(7u) << 21u) | (word(14u) << 42u);
 }
 
 // ========================================================================== //
@@ -179,7 +211,7 @@ void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::
         {
             for (core::i32 dz = -cellRadius; dz <= cellRadius; ++dz)
             {
-                const core::u64 morton = math::morton::encode3D(cx + dx, cy + dy, cz + dz);
+                const core::u64 morton = cellKey(cx + dx, cy + dy, cz + dz);
 
                 auto *cell = _impl->cells.get(morton);
                 if (!cell)
@@ -198,8 +230,8 @@ void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::
 
 core::u64 WorldPartition::mortonForPosition(const math::Vec3<math::Fixed32> &pos) const noexcept
 {
-    return math::morton::encode3D(gridAlong(pos.x, _impl->cellSize), gridAlong(pos.y, _impl->cellSize),
-                                  gridAlong(pos.z, _impl->cellSize));
+    return cellKey(gridAlong(pos.x, _impl->cellSize), gridAlong(pos.y, _impl->cellSize),
+                   gridAlong(pos.z, _impl->cellSize));
 }
 
 void WorldPartition::setGpuBackend(gpu::IComputeBackend *backend) noexcept
