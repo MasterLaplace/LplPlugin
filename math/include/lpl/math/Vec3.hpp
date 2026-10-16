@@ -36,6 +36,9 @@ template <core::Arithmetic T> struct Vec3 final {
     [[nodiscard]] LPL_HD constexpr Vec3 operator/(T scalar) const;
     [[nodiscard]] LPL_HD constexpr Vec3 operator-() const;
 
+    /** @brief Whether the three components are equal, each as T compares them. */
+    constexpr bool operator==(const Vec3 &rhs) const = default;
+
     constexpr Vec3 &operator+=(Vec3 rhs);
     constexpr Vec3 &operator-=(Vec3 rhs);
     constexpr Vec3 &operator*=(T scalar);

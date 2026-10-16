@@ -117,12 +117,6 @@ static void sortAsFiled(lpl::pmr::vector<core::u32> &bodies, const lpl::pmr::vec
     }
 }
 
-/** @brief Whether @p a and @p b hold the same three values. */
-[[nodiscard]] static bool sameVector(const FVec3 &a, const FVec3 &b) noexcept
-{
-    return a.x == b.x && a.y == b.y && a.z == b.z;
-}
-
 // ========================================================================== //
 //  Impl                                                                      //
 // ========================================================================== //
@@ -219,8 +213,8 @@ struct CpuPhysicsBackend::Impl {
             return false;
         for (core::u32 body = 0u; body < count; ++body)
         {
-            if (!(physicsEntities[body].id == listedIds[body]) ||
-                !sameVector(physicsEntities[body].half, listedHalves[body]) || !stillListed(body))
+            if (physicsEntities[body].id != listedIds[body] || physicsEntities[body].half != listedHalves[body] ||
+                !stillListed(body))
                 return false;
         }
         return true;
