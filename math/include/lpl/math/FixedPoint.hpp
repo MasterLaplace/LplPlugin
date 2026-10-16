@@ -44,7 +44,9 @@ public:
 
     constexpr FixedPoint() = default;
 
-    /** @brief Construct from a raw integer value (direct bit pattern). */
+    /**
+     * @brief Construct from a raw integer value (direct bit pattern).
+     */
     explicit constexpr FixedPoint(IntType rawValue) : _raw{rawValue} {}
 
     static constexpr FixedPoint fromRaw(IntType raw);

@@ -11,7 +11,9 @@ namespace {
     return lhs > rhs ? lhs - rhs : rhs - lhs;
 }
 
-/** @brief The Q16.16 quotient as a double-width division gives it, truncated toward zero. */
+/**
+ * @brief The Q16.16 quotient as a double-width division gives it, truncated toward zero.
+ */
 [[nodiscard]] lpl::core::i32 wideQuotient(lpl::core::i32 dividend, lpl::core::i32 divisor)
 {
     return static_cast<lpl::core::i32>((static_cast<lpl::core::i64>(dividend) << 16) / divisor);
