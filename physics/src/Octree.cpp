@@ -397,19 +397,21 @@ struct Octree::Impl {
     }
 
     /**
-     * @brief Hands @p visitor the entries of a node whose reach the caller found @p region to
-     *        intersect, and of its descendants, that intersect @p region: depth first, children in
-     *        octant order, each child tested on its reach before the call that would visit it.
+     * @brief Hands @p visitor the entries numbered @p firstId or above, of a node whose reach the
+     *        caller found @p region to intersect and of its descendants, that intersect @p region:
+     *        depth first, children in octant order, each child tested on its reach before the call
+     *        that would visit it.
      */
     template <typename Visit>
-    void visitRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region, Visit &visitor) const
+    void visitRecurse(core::u32 nodeIdx, const math::AABB<math::Fixed32> &region, core::u32 firstId,
+                      Visit &visitor) const
     {
         const auto &node = nodes[nodeIdx];
 
         for (core::u32 i = 0; i < node.entityCount; ++i)
         {
             const auto &entry = sortedEntries[node.entityStart + i];
-            if (entry.aabb.intersects(region))
+            if (entry.objectId >= firstId && entry.aabb.intersects(region))
             {
                 visitor(entry.objectId);
             }
@@ -421,19 +423,23 @@ struct Octree::Impl {
             for (core::u32 i = 0; i < 8; ++i)
             {
                 if (nodes[fc + i].reach.intersects(region))
-                    visitRecurse(fc + i, region, visitor);
+                    visitRecurse(fc + i, region, firstId, visitor);
             }
         }
     }
 
-    /** @brief Hands @p visitor every entry that intersects @p region, in the order of @ref visitRecurse. */
-    template <typename Visit> void visit(const math::AABB<math::Fixed32> &region, Visit &visitor) const
+    /**
+     * @brief Hands @p visitor every entry numbered @p firstId or above that intersects @p region, in
+     *        the order of @ref visitRecurse.
+     */
+    template <typename Visit>
+    void visit(const math::AABB<math::Fixed32> &region, core::u32 firstId, Visit &visitor) const
     {
         if (nodes.empty())
         {
             for (const auto &entry : sortedEntries)
             {
-                if (entry.aabb.intersects(region))
+                if (entry.objectId >= firstId && entry.aabb.intersects(region))
                 {
                     visitor(entry.objectId);
                 }
@@ -443,7 +449,7 @@ struct Octree::Impl {
 
         if (nodes[0].reach.intersects(region))
         {
-            visitRecurse(0, region, visitor);
+            visitRecurse(0, region, firstId, visitor);
         }
     }
 };
@@ -496,13 +502,13 @@ void Octree::remove(core::u32 objectId)
 
 void Octree::query(const math::AABB<math::Fixed32> &region, const lpl::pmr::function<void(core::u32)> &callback) const
 {
-    _impl->visit(region, callback);
+    _impl->visit(region, 0u, callback);
 }
 
-void Octree::collect(const math::AABB<math::Fixed32> &region, lpl::pmr::vector<core::u32> &out) const
+void Octree::collect(const math::AABB<math::Fixed32> &region, core::u32 firstId, lpl::pmr::vector<core::u32> &out) const
 {
     auto append = [&out](core::u32 id) { out.push_back(id); };
-    _impl->visit(region, append);
+    _impl->visit(region, firstId, append);
 }
 
 void Octree::queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,

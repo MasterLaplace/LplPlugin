@@ -62,13 +62,15 @@ public:
     void rebuild() override;
 
     /**
-     * @brief Appends to @p out the objects whose box intersects @p region, in the order @ref query
-     *        reports them.
+     * @brief Appends to @p out the objects numbered @p firstId or above whose box intersects
+     *        @p region, in the order @ref query reports them.
      *
-     * The broad-phase's form of @ref query: no callback to build per query and to call per object.
-     * An object is reported once at most, so an @p out reserved to the objects held never grows.
+     * The broad-phase's form of @ref query: no callback to build per query and to call per object,
+     * and an object below @p firstId, whose pair the caller has already resolved, is passed over
+     * before its box is tested. An object is reported once at most, so an @p out reserved to the
+     * objects held never grows.
      */
-    void collect(const math::AABB<math::Fixed32> &region, lpl::pmr::vector<core::u32> &out) const;
+    void collect(const math::AABB<math::Fixed32> &region, core::u32 firstId, lpl::pmr::vector<core::u32> &out) const;
 
     /**
      * @brief Drops every object but keeps all buffers and their capacity.
