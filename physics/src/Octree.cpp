@@ -148,19 +148,44 @@ struct Octree::Impl {
      * Where an entry's key places it is a matter of balance, not of correctness: a search rejects on
      * a node's reach, which holds every box beneath it whatever cell it was filed under.
      */
-    [[nodiscard]] core::u32 computeMorton(const math::AABB<math::Fixed32> &aabb) const
-    {
-        const auto c = aabb.center();
-        const auto cell = [this](math::Fixed32 v, math::Fixed32 lo, core::u32 axis) -> core::u32 {
+    [[nodiscard]] core::u32 computeMorton(const math::AABB<math::Fixed32> &aabb) const { return keyGrid().keyOf(aabb); }
+
+    /**
+     * @brief How a key is taken over the tree's bounds, copied out: a loop over many boxes keeps it
+     *        in registers, where a store into its keys could have been the tree's own fields.
+     */
+    struct KeyGrid {
+        math::Vec3<math::Fixed32> low;      /**< The tree's minimum corner. */
+        std::array<core::u32, 3> shifts;    /**< Per axis, the right shift from an offset to its cell. */
+        std::array<core::u32, 3> lastCells; /**< Per axis, the last cell. */
+
+        /**
+         * @brief The cell along one axis that @p v falls in.
+         */
+        [[nodiscard]] core::u32 cellOf(math::Fixed32 v, math::Fixed32 lo, core::u32 axis) const noexcept
+        {
             if (v.raw() <= lo.raw())
                 return 0u;
             const core::u32 offset = static_cast<core::u32>(v.raw()) - static_cast<core::u32>(lo.raw());
-            const core::u32 index = offset >> keyShifts[axis];
-            return index < keyLastCells[axis] ? index : keyLastCells[axis];
-        };
-        return kSpread[cell(c.x, worldBounds.min.x, 0u)] | (kSpread[cell(c.y, worldBounds.min.y, 1u)] << 1u) |
-               (kSpread[cell(c.z, worldBounds.min.z, 2u)] << 2u);
-    }
+            const core::u32 index = offset >> shifts[axis];
+            return index < lastCells[axis] ? index : lastCells[axis];
+        }
+
+        /**
+         * @brief The key of the centre of @p aabb.
+         */
+        [[nodiscard]] core::u32 keyOf(const math::AABB<math::Fixed32> &aabb) const noexcept
+        {
+            const auto c = aabb.center();
+            return kSpread[cellOf(c.x, low.x, 0u)] | (kSpread[cellOf(c.y, low.y, 1u)] << 1u) |
+                   (kSpread[cellOf(c.z, low.z, 2u)] << 2u);
+        }
+    };
+
+    /**
+     * @brief The grid the keys are taken over now.
+     */
+    [[nodiscard]] KeyGrid keyGrid() const noexcept { return {worldBounds.min, keyShifts, keyLastCells}; }
 
     /**
      * @brief Derives, for each axis, the shift that turns an offset into a cell and the last cell,
@@ -531,7 +556,13 @@ void Octree::collect(const math::AABB<math::Fixed32> &region, core::u32 firstId,
     _impl->visit(region, firstId, append);
 }
 
-core::u32 Octree::keyOf(const math::AABB<math::Fixed32> &aabb) const noexcept { return _impl->computeMorton(aabb); }
+void Octree::keysOf(const lpl::pmr::vector<math::AABB<math::Fixed32>> &boxes, lpl::pmr::vector<core::u32> &keys) const
+{
+    const Impl::KeyGrid grid = _impl->keyGrid();
+    keys.resize(boxes.size());
+    for (std::size_t box = 0u; box < boxes.size(); ++box)
+        keys[box] = grid.keyOf(boxes[box]);
+}
 
 void Octree::queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
                           const lpl::pmr::function<void(core::u32)> &callback, core::u32 *outNodesVisited,
