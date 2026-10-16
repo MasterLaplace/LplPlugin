@@ -79,18 +79,19 @@ static constexpr core::u32 kSolverIterations = 4;
 static constexpr core::u32 kBroadPhaseLeafCapacity = 16;
 
 /**
- * @brief How far a body may move during a step before its neighbour list stops covering it: 1/128.
+ * @brief How far a body may move before the neighbour lists stop covering it: 1/64.
  *
- * A step lists once, from where the bodies stand when it begins, the pairs whose boxes come within
- * twice this distance of each other. While no body has moved further than this on any axis, every
- * pair whose boxes meet is in those lists; a search for a body that has moved further goes to the
- * tree, as it did before there were lists.
+ * The lists hold, from where the bodies stood when they were made, the pairs whose boxes come
+ * within twice this distance of each other. While no body has moved further than this on any axis,
+ * every pair whose boxes meet is in those lists, for as many steps as that lasts. A step that finds
+ * a body further makes them again, and a search for a body that moves further during a step goes
+ * to the tree, as it did before there were lists.
  *
- * Over 600 ticks of the cube pile, 1/16 lists too many pairs and 1/256 executes as much as 1/128,
- * while 1/512 lets so many bodies out of their lists that it executes 70 % more: 1/128 keeps a
- * factor of two from that edge.
+ * Over 600 ticks of the cube pile, 1/128 and 1/32 execute within 1 % of 1/64 and 1/256 5 % more,
+ * while 1/16 lists so many pairs that it executes 17 % more: 1/64 keeps a factor of four from that
+ * edge.
  */
-static constexpr Fixed32 kNeighbourMargin = Fixed32::fromRaw(512);
+static constexpr Fixed32 kNeighbourMargin = Fixed32::fromRaw(1024);
 
 /** @brief Neighbours reserved per body: a packed pile gives a body thirteen after it, at most. */
 static constexpr core::u32 kNeighboursReserved = 32;
@@ -169,8 +170,10 @@ struct CpuPhysicsBackend::Impl {
     /** The objects one broad-phase query found, refilled per query; its capacity survives the step. */
     lpl::pmr::vector<core::u32> candidates;
 
-    /** @name Neighbour lists, made once a step: see kNeighbourMargin. */
+    /** @name Neighbour lists, made when a step finds them stale: see kNeighbourMargin. */
     /** @{ */
+    lpl::pmr::vector<ecs::EntityId> listedIds;        /**< Which entity each listed body was. */
+    lpl::pmr::vector<FVec3> listedHalves;             /**< Each body's half size when the lists were made. */
     lpl::pmr::vector<FVec3> listedPositions;          /**< Where each body stood when the lists were made. */
     lpl::pmr::vector<core::u32> neighbourStarts;      /**< Where each body's list starts; one more than the bodies. */
     lpl::pmr::vector<core::u32> neighbours;           /**< The bodies after each one that came within two margins. */
@@ -197,6 +200,24 @@ struct CpuPhysicsBackend::Impl {
         const FVec3 moved = *physicsEntities[body].position - listedPositions[body];
         return moved.x.abs() <= kNeighbourMargin && moved.y.abs() <= kNeighbourMargin &&
                moved.z.abs() <= kNeighbourMargin;
+    }
+
+    /**
+     * @brief Whether the lists made at an earlier step still cover every body: the same entities in
+     *        the same order, of the same sizes, none further than kNeighbourMargin from where it was.
+     */
+    [[nodiscard]] bool listsStillHold() const noexcept
+    {
+        const core::u32 count = static_cast<core::u32>(physicsEntities.size());
+        if (static_cast<core::u32>(listedIds.size()) != count)
+            return false;
+        for (core::u32 body = 0u; body < count; ++body)
+        {
+            if (physicsEntities[body].id != listedIds[body] || physicsEntities[body].half != listedHalves[body] ||
+                !stillListed(body))
+                return false;
+        }
+        return true;
     }
 
     /** @brief Files every body's box as it is now in @c filedBoxes, and returns the box they span. */
@@ -235,12 +256,16 @@ struct CpuPhysicsBackend::Impl {
     {
         const core::u32 count = static_cast<core::u32>(physicsEntities.size());
         Octree &octree = buildTree(fileBoxes());
+        listedIds.resize(count);
+        listedHalves.resize(count);
         listedPositions.resize(count);
         neighbourStarts.resize(count + 1u);
         neighbours.clear();
         neighbours.reserve(static_cast<std::size_t>(count) * kNeighboursReserved);
         for (core::u32 body = 0u; body < count; ++body)
         {
+            listedIds[body] = physicsEntities[body].id;
+            listedHalves[body] = physicsEntities[body].half;
             listedPositions[body] = *physicsEntities[body].position;
             neighbourStarts[body] = static_cast<core::u32>(neighbours.size());
             octree.collect(filedBoxes[body].expand(kNeighbourMargin + kNeighbourMargin), body + 1u, neighbours);
@@ -633,7 +658,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         }
     };
 
-    if (count > kBruteForceThreshold)
+    if (count > kBruteForceThreshold && !_impl->listsStillHold())
     {
         _impl->listNeighbours();
     }

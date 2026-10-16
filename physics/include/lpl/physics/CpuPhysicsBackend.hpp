@@ -74,10 +74,11 @@ private:
      * An iteration in which no pair overlaps changes nothing, so neither would
      * the ones after it: the resolver stops there.
      *
-     * Past 32 bodies the pairs come from an octree broad-phase. The step lists
-     * each body's neighbours once; a body's search reads its list while every
-     * body is within a margin of where the lists found it, and the tree, built
-     * only then, otherwise. Both give the same bodies in the same order.
+     * Past 32 bodies the pairs come from an octree broad-phase. Each body's
+     * neighbours are listed, and the lists are kept from step to step until a
+     * step finds a body beyond a margin of where they found it. A body's search
+     * reads its list while every body is within that margin, and the tree,
+     * built only then, otherwise. Both give the same bodies in the same order.
      *
      * Chunks group entities by archetype and cap out at 256 (@ref
      * ecs::Chunk::kChunkCapacity), not by spatial region — two entities that
