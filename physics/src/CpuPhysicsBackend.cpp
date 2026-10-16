@@ -69,6 +69,15 @@ static constexpr core::u16 kSleepFramesThreshold = 30;
 static constexpr core::u32 kBruteForceThreshold = 32;
 static constexpr core::u32 kSolverIterations = 4;
 
+/**
+ * @brief Bodies a broad-phase leaf holds before it splits.
+ *
+ * Over 600 ticks of the cube pile, 16 executes 4.6 % fewer instructions than the octree's
+ * default of 32, and both 8 and 24 execute more. A search reports its boxes in the sorted order
+ * of their keys whatever the tree's shape, so this changes no result.
+ */
+static constexpr core::u32 kBroadPhaseLeafCapacity = 16;
+
 // ========================================================================== //
 //  Impl                                                                      //
 // ========================================================================== //
@@ -541,7 +550,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
                 span = span.merge(boxOf(i));
 
             if (!_impl->broadPhase)
-                _impl->broadPhase = lpl::pmr::make_unique<Octree>(span);
+                _impl->broadPhase = lpl::pmr::make_unique<Octree>(span, kBroadPhaseLeafCapacity);
             Octree &octree = *_impl->broadPhase;
             octree.clear();
             octree.setWorldBounds(span);
