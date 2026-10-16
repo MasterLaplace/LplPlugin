@@ -159,7 +159,9 @@ struct Octree::Impl {
         std::array<core::u32, 3> shifts;    /**< Per axis, the right shift from an offset to its cell. */
         std::array<core::u32, 3> lastCells; /**< Per axis, the last cell. */
 
-        /** @brief The cell along one axis that @p v falls in. */
+        /**
+         * @brief The cell along one axis that @p v falls in.
+         */
         [[nodiscard]] core::u32 cellOf(math::Fixed32 v, math::Fixed32 lo, core::u32 axis) const noexcept
         {
             if (v.raw() <= lo.raw())
@@ -169,7 +171,9 @@ struct Octree::Impl {
             return index < lastCells[axis] ? index : lastCells[axis];
         }
 
-        /** @brief The key of the centre of @p aabb. */
+        /**
+         * @brief The key of the centre of @p aabb.
+         */
         [[nodiscard]] core::u32 keyOf(const math::AABB<math::Fixed32> &aabb) const noexcept
         {
             const auto c = aabb.center();
@@ -178,7 +182,9 @@ struct Octree::Impl {
         }
     };
 
-    /** @brief The grid the keys are taken over now. */
+    /**
+     * @brief The grid the keys are taken over now.
+     */
     [[nodiscard]] KeyGrid keyGrid() const noexcept { return {worldBounds.min, keyShifts, keyLastCells}; }
 
     /**
