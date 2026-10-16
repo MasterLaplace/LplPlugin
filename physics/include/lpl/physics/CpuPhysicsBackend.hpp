@@ -67,6 +67,10 @@ private:
      * @brief AABB collision detection + impulse resolution (4 iterations), over
      *        every physics entity in the world (not scoped to one chunk).
      *
+     * A contact's normal is one axis, so the resolver moves the pair and its
+     * velocities along that axis alone: along the other two, the products of
+     * the whole normal are zero and leave every word as it was.
+     *
      * An iteration in which no pair overlaps changes nothing, so neither would
      * the ones after it: the resolver stops there.
      *
