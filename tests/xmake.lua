@@ -418,6 +418,16 @@ target("test-procgen-chunking")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Event bus: it knows whether anyone listens, through subscriptions and clears
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-event-bus")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core")
+    add_files("parity/test_event_bus.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Octree: the hierarchy must agree with its own node bounds (cull invariant)
 -- ─────────────────────────────────────────────────────────────────────────────
 target("test-octree-cull")
