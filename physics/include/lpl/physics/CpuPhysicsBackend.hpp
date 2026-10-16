@@ -31,9 +31,12 @@ namespace lpl::physics {
  * @class CpuPhysicsBackend
  * @brief Full CPU physics backend ported from legacy engine/Partition.hpp.
  *
- * Pipeline (per chunk): integrate → collide (N² or octree) → sleep.
- * Constants: gravity -9.81, damping 0.995, restitution 0.5,
- *            sleep threshold² 0.01, sleep frames 30, solver iterations 4.
+ * A step integrates each chunk, resolves the collisions of every body of the world together, then
+ * puts to sleep the bodies that stopped. Constants: gravity -9.81, damping 0.995, restitution 0.5,
+ * sleep threshold² 0.01, sleep frames 30, solver iterations 4.
+ *
+ * Every authoritative value it reads or writes, position, velocity, box and mass, is a Fixed32, and so
+ * is all its arithmetic: a step gives the same words on the Linux oracle and in the i686 kernel.
  */
 class CpuPhysicsBackend final : public IPhysicsBackend, public core::NonCopyable<CpuPhysicsBackend> {
 public:
@@ -45,13 +48,32 @@ public:
     ~CpuPhysicsBackend() override;
 
     [[nodiscard]] core::Expected<void> init() override;
+
+    /**
+     * @brief Advances every body by @p dt: integration, then collisions, then sleep.
+     *
+     * Integration and sleep walk each chunk on its own, since neither reads another body.
+     * Collisions gather the bodies of every chunk first: see @ref resolveCollisionsWorld.
+     *
+     * @param dt The step, in seconds.
+     * @return Always a success.
+     */
     [[nodiscard]] core::Expected<void> step(core::f32 dt) override;
+
     void shutdown() override;
     [[nodiscard]] const char *name() const noexcept override;
 
 private:
     /**
      * @brief Semi-implicit Euler integration + gravity + damping + ground.
+     *
+     * In this order, the same for every body: gravity on a body with mass, damping of the velocity,
+     * the move by velocity × dt, then, below the ground's half height, the return to it and the
+     * bounce of a downward velocity. Blocks of four awake bodies damp and move through SimdFixed4,
+     * bit-identical to the scalar path (test_simd_fixed_parity), so the result does not depend on the
+     * width; gravity and the bounce, a branch per body, stay scalar. A block that holds a sleeping
+     * body, and the bodies after the last block, go one at a time.
+     *
      * @param entities List of entity IDs.
      * @param positions List of positions.
      * @param velocities List of velocities.
@@ -74,7 +96,14 @@ private:
      * An iteration in which no pair overlaps changes nothing, so neither would
      * the ones after it: the resolver stops there.
      *
-     * Past 32 bodies the pairs come from an octree broad-phase. Each body's
+     * A pair of bodies that both sleep is skipped. A pair that overlaps wakes both and moves apart
+     * along the axis of least penetration by the whole penetration, shared by inverse mass; unless
+     * the two already separate, an impulse with restitution 0.5 then sets their velocities along it.
+     * A pair of bodies both too heavy to move stays as it is. Each impulse publishes a
+     * CollisionEvent: a gameplay signal and not authoritative state, so its normal and its
+     * magnitude are floats.
+     *
+     * Up to 32 bodies, every pair is tested. Past 32 bodies the pairs come from an octree broad-phase. Each body's
      * neighbours are listed, and the lists are kept from step to step until a
      * step finds a body beyond a margin of where they found it. A body's search
      * reads its list while every body is within that margin, and the tree,
@@ -90,6 +119,9 @@ private:
 
     /**
      * @brief Sleeping detection: sleep after 30 frames below threshold.
+     *
+     * The speed counts all three axes: the legacy one left out y, and froze bodies in free fall.
+     *
      * @param entities List of entity IDs.
      * @param velocities List of velocities.
      * @param count Number of entities.

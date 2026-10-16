@@ -38,10 +38,14 @@ public:
      */
     virtual void insert(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) = 0;
 
-    /** @brief Updates the AABB of an already-inserted object. */
+    /**
+     * @brief Updates the AABB of an already-inserted object.
+     */
     virtual void update(core::u32 objectId, const math::AABB<math::Fixed32> &aabb) = 0;
 
-    /** @brief Removes an object from the index. */
+    /**
+     * @brief Removes an object from the index.
+     */
     virtual void remove(core::u32 objectId) = 0;
 
     /**
@@ -52,10 +56,14 @@ public:
     virtual void query(const math::AABB<math::Fixed32> &region,
                        const lpl::pmr::function<void(core::u32)> &callback) const = 0;
 
-    /** @brief Rebuilds the internal structure (e.g. re-sort Morton keys). */
+    /**
+     * @brief Rebuilds the internal structure (e.g. re-sort Morton keys).
+     */
     virtual void rebuild() = 0;
 
-    /** @brief Returns the total number of tracked objects. */
+    /**
+     * @brief Returns the total number of tracked objects.
+     */
     [[nodiscard]] virtual core::u32 count() const noexcept = 0;
 };
 

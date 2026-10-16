@@ -34,7 +34,9 @@ class IPhysicsBackend {
 public:
     virtual ~IPhysicsBackend() = default;
 
-    /** @brief Initializes the backend (allocates buffers, etc.). */
+    /**
+     * @brief Initializes the backend (allocates buffers, etc.).
+     */
     [[nodiscard]] virtual core::Expected<void> init() = 0;
 
     /**
@@ -43,10 +45,14 @@ public:
      */
     [[nodiscard]] virtual core::Expected<void> step(core::f32 dt) = 0;
 
-    /** @brief Tears down the backend. */
+    /**
+     * @brief Tears down the backend.
+     */
     virtual void shutdown() = 0;
 
-    /** @brief Returns a human-readable name for this backend. */
+    /**
+     * @brief Returns a human-readable name for this backend.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

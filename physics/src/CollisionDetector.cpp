@@ -1,13 +1,3 @@
-/**
- * @file CollisionDetector.cpp
- * @brief Narrow-phase collision detection implementations.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <algorithm>
 #include <lpl/core/Assert.hpp>
 #include <lpl/physics/CollisionDetector.hpp>
@@ -87,16 +77,14 @@ CollisionResult CollisionDetector::testSphereVsSphere(const math::Vec3<math::Fix
 
 CollisionResult CollisionDetector::testGJK(const void * /*shapeA*/, const void * /*shapeB*/) noexcept
 {
-    /// @todo Implement GJK (Gilbert-Johnson-Keerthi) convex hull collision
-    ///       detection. Required for non-AABB/sphere convex shapes.
+    // TODO(#154): GJK (Gilbert-Johnson-Keerthi), for convex shapes that are neither boxes nor spheres.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }
 
 CollisionResult CollisionDetector::testSAT(const void * /*obbA*/, const void * /*obbB*/) noexcept
 {
-    /// @todo Implement SAT (Separating Axis Theorem) for OBB vs OBB.
-    ///       Needed for oriented bounding box collisions in physics.
+    // TODO(#154): SAT (Separating Axis Theorem), for oriented boxes.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }

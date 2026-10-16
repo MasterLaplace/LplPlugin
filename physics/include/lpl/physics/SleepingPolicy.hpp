@@ -41,7 +41,9 @@ public:
                                           const math::Vec3<math::Fixed32> &angularVelocity,
                                           core::u32 &sleepCounter) noexcept;
 
-    /** @brief Forces a body awake (resets its counter). */
+    /**
+     * @brief Forces a body awake (resets its counter).
+     */
     static void wake(core::u32 &sleepCounter) noexcept;
 
 private:

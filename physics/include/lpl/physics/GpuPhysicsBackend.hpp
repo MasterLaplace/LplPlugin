@@ -23,8 +23,6 @@ class Registry;
 
 namespace lpl::physics {
 
-using gpu::IComputeBackend;
-
 /**
  * @class GpuPhysicsBackend
  * @brief Drives the @c physics_tick compute kernel over the ECS registry.
@@ -37,8 +35,10 @@ using gpu::IComputeBackend;
  * Scope: integration only (gravity + semi-implicit Euler), matching the legacy
  * CUDA kernel. Collision resolution and sleeping remain CPU/future work — the
  * GPU kernel does not implement them. The kernel consumes SoA (planar) float
- * arrays while the ECS stores AoS @c Vec3<float>, so each step deinterleaves
- * into scratch buffers, dispatches, and reinterleaves the results.
+ * arrays while the ECS stores AoS @c Vec3<Fixed32>, so each step converts to
+ * float and deinterleaves into scratch buffers, dispatches, and reinterleaves
+ * the results back into Fixed32. Those float results replace the bodies'
+ * state, so a step through this backend is not bit-identical across machines.
  *
  * Lives alongside @c CpuPhysicsBackend in @c physics, but is compiled ONLY when
  * the @c cuda config is enabled: @c gpu is CUDA-host and cannot be freestanding,
@@ -46,7 +46,8 @@ using gpu::IComputeBackend;
  * the CPU backend only and stays kernel-clean. There is no dependency cycle —
  * @c gpu depends on neither @c physics nor @c ecs. Only meaningfully active when
  * a real backend (CUDA) is wired; otherwise the compute backend reports
- * @c NotSupported.
+ * @c NotSupported. No CI job turns @c cuda on, so no CI build compiles this
+ * backend either.
  */
 class GpuPhysicsBackend final : public IPhysicsBackend {
 public:
@@ -55,7 +56,7 @@ public:
      * @param registry ECS registry holding Position/Velocity/Mass components.
      * @param compute  Compute backend that services @c "physics_tick".
      */
-    GpuPhysicsBackend(ecs::Registry &registry, IComputeBackend &compute) noexcept;
+    GpuPhysicsBackend(ecs::Registry &registry, gpu::IComputeBackend &compute) noexcept;
     ~GpuPhysicsBackend() override = default;
 
     [[nodiscard]] core::Expected<void> init() override;
@@ -66,9 +67,9 @@ public:
 private:
     /** @brief Planar SoA scratch + device pointers reused across chunks. */
     struct DeviceScratch {
-        lpl::pmr::vector<float> hostX, hostY, hostZ;    // positions (host staging)
-        lpl::pmr::vector<float> hostVX, hostVY, hostVZ; // velocities
-        lpl::pmr::vector<float> hostMass;               // masses
+        lpl::pmr::vector<float> hostX, hostY, hostZ;    /**< Positions, staged on the host. */
+        lpl::pmr::vector<float> hostVX, hostVY, hostVZ; /**< Velocities, staged on the host. */
+        lpl::pmr::vector<float> hostMass;               /**< Masses, staged on the host. */
         void *dPosX = nullptr, *dPosY = nullptr, *dPosZ = nullptr;
         void *dVelX = nullptr, *dVelY = nullptr, *dVelZ = nullptr;
         void *dFrcX = nullptr, *dFrcY = nullptr, *dFrcZ = nullptr;
@@ -76,13 +77,18 @@ private:
         core::u32 capacity = 0;
     };
 
-    /** @brief Grows the device/host scratch to hold at least @p count entities. */
+    /**
+     * @brief Grows the device/host scratch to hold at least @p count entities.
+     */
     [[nodiscard]] core::Expected<void> ensureCapacity(core::u32 count);
-    /** @brief Releases all device allocations. */
+
+    /**
+     * @brief Releases all device allocations.
+     */
     void releaseScratch() noexcept;
 
     ecs::Registry &_registry;
-    IComputeBackend &_compute;
+    gpu::IComputeBackend &_compute;
     DeviceScratch _scratch;
 };
 

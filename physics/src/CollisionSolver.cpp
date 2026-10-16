@@ -1,13 +1,3 @@
-/**
- * @file CollisionSolver.cpp
- * @brief Iterative impulse collision solver implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/physics/CollisionSolver.hpp>
 
 namespace lpl::physics {

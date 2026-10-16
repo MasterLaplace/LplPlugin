@@ -1,13 +1,3 @@
-/**
- * @file SpatialGrid.cpp
- * @brief Uniform spatial hash grid implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/physics/SpatialGrid.hpp>
 
@@ -20,13 +10,8 @@ namespace lpl::physics {
 
 struct SpatialGrid::Impl {
     math::Fixed32 cellSize;
-    /// Sorted map (key = spatial hash) ensures deterministic iteration order.
-    /// Each cell stores entity IDs in a sorted vector (binary-search O(log n)
-    /// insert/erase) to avoid the non-determinism of unordered_set.
-    std::map<core::u64, std::vector<core::u32>> cells;
-    /// Sorted by entity ID so that algorithms operating over all objects
-    /// produce the same sequence every run.
-    std::map<core::u32, math::AABB<math::Fixed32>> objects;
+    std::map<core::u64, std::vector<core::u32>> cells;      /**< Cell hash → the ids filed there, sorted. */
+    std::map<core::u32, math::AABB<math::Fixed32>> objects; /**< Every object's box, by id. */
 
     explicit Impl(math::Fixed32 cs) : cellSize{cs} {}
 
@@ -40,6 +25,12 @@ struct SpatialGrid::Impl {
         return h;
     }
 
+    /**
+     * @brief Files @p objectId in every cell @p aabb covers.
+     *
+     * Each cell keeps its ids sorted and without duplicates, by binary search, so walking the
+     * cells, ordered maps by key, gives the same sequence on every run: an unordered set would not.
+     */
     void insertCells(core::u32 objectId, const math::AABB<math::Fixed32> &aabb)
     {
         const core::i32 minCx = toCell(aabb.min.x);
@@ -56,7 +47,6 @@ struct SpatialGrid::Impl {
                 for (core::i32 cz = minCz; cz <= maxCz; ++cz)
                 {
                     auto &vec = cells[hashCell(cx, cy, cz)];
-                    // Sorted insertion — maintains deterministic order and deduplication.
                     auto pos = std::lower_bound(vec.begin(), vec.end(), objectId);
                     if (pos == vec.end() || *pos != objectId)
                         vec.insert(pos, objectId);
@@ -131,7 +121,6 @@ void SpatialGrid::remove(core::u32 objectId)
 void SpatialGrid::query(const math::AABB<math::Fixed32> &region,
                         const lpl::pmr::function<void(core::u32)> &callback) const
 {
-    // std::set keeps insertion order deterministic (sorted by entity ID).
     std::set<core::u32> visited;
 
     const core::i32 minCx = _impl->toCell(region.min.x);
@@ -169,10 +158,7 @@ void SpatialGrid::query(const math::AABB<math::Fixed32> &region,
     }
 }
 
-void SpatialGrid::rebuild()
-{
-    // no-op for hash grid
-}
+void SpatialGrid::rebuild() {}
 
 core::u32 SpatialGrid::count() const noexcept { return static_cast<core::u32>(_impl->objects.size()); }
 
