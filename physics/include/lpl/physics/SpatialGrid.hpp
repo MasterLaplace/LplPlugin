@@ -43,6 +43,9 @@ public:
     void query(const math::AABB<math::Fixed32> &region,
                const lpl::pmr::function<void(core::u32)> &callback) const override;
 
+    /**
+     * @brief Does nothing: the grid files an object in its cells when it is inserted or updated.
+     */
     void rebuild() override;
 
     [[nodiscard]] core::u32 count() const noexcept override;

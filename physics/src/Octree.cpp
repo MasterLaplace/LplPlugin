@@ -1,19 +1,3 @@
-/**
- * @file Octree.cpp
- * @brief Morton-sorted flat octree with LSD radix sort (4-pass).
- *
- * Ported from legacy FlatDynamicOctree.hpp:
- *   - LSD radix sort: 4 passes × 16-bit buckets = 64-bit Morton keys
- *   - Flat node array: cache-friendly, GPU-transferable POD layout
- *   - Recursive octant build: splits sorted refs by Morton octant bits
- *   - AABB query: recursive tree traversal with early rejection
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/memory/PinnedAllocator.hpp>
@@ -27,10 +11,6 @@
 
 namespace lpl::physics {
 
-// ========================================================================== //
-//  Impl — Flat node tree with LSD radix sort                                 //
-// ========================================================================== //
-
 struct Octree::Impl {
     static constexpr core::u8 kMaxDepth = 8;
     core::u32 leafCapacity{32u};
@@ -42,16 +22,16 @@ struct Octree::Impl {
          math::Fixed32::fromRaw(-0x7FFFFFFF - 1)                                                                             }
     };
 
-    /** @brief Flat node (POD, GPU-transferable). */
+    /**
+     * @brief Flat node (POD, GPU-transferable).
+     *
+     * An entry belongs to the cell its centre falls in, and its box reaches past the cell by up to
+     * half its size, so a region can intersect an entry without intersecting its cell: a search
+     * rejects on the reach, never on the cell.
+     */
     struct FlatNode {
-        math::AABB<math::Fixed32> bound; /**< The cell: the octant of its parent this node splits. */
-        /**
-         * Every box the node and its descendants hold, merged. An entry belongs to the cell its
-         * centre falls in, and its box reaches past the cell by up to half its size, so a region can
-         * intersect an entry without intersecting its cell: a search rejects on the reach, never on
-         * the cell.
-         */
-        math::AABB<math::Fixed32> reach{kNothing};
+        math::AABB<math::Fixed32> bound;           /**< The cell: the octant of its parent this node splits. */
+        math::AABB<math::Fixed32> reach{kNothing}; /**< Every box the node and its descendants hold, merged. */
         core::i32 firstChild{-1};
         core::u32 entityStart{0};
         core::u32 entityCount{0};
@@ -71,21 +51,7 @@ struct Octree::Impl {
     lpl::pmr::vector<FlatNode, PinnedNode> nodes;
     lpl::pmr::vector<EntityEntry, PinnedEntry> sortedEntries;
     lpl::pmr::vector<EntityEntry, PinnedEntry> tempEntries;
-    /**
-     * Object id → entry slot, as a dense array rather than a hash map.
-     *
-     * A node-based map allocates once per insert, and a broad-phase refills the
-     * index every step — that was 1024 allocations per tick on the cube-pile
-     * sample, inside the authoritative step. A flat array indexed by the object
-     * id costs one u32 per id and never touches the allocator once warm, which
-     * is what the real-time contract asks for.
-     *
-     * Trade-off, stated because it is one: the array is sized by the LARGEST
-     * object id, not by the object count, so an index keyed on a sparse id space
-     * spends 4 bytes per unused id. Every caller feeds it dense ids (a chunk's
-     * entity slots), which is the case this structure is built for.
-     */
-    lpl::pmr::vector<core::u32> idToIndex;
+    lpl::pmr::vector<core::u32> idToIndex; /**< Object id → entry slot: see setIndex. */
     bool dirty{false};
     std::array<core::u32, 3> keyShifts{};    /**< Per axis, the right shift from an offset to its cell. */
     std::array<core::u32, 3> keyLastCells{}; /**< Per axis, the last cell; 0 along an axis with no extent. */
@@ -97,6 +63,18 @@ struct Octree::Impl {
         fitKeys();
     }
 
+    /**
+     * @brief Records that object @p objectId sits at @p slot of the sorted entries.
+     *
+     * The index is a dense array over object ids rather than a hash map. A node-based map allocates
+     * once per insert, and a broad-phase refills the index every step: that was 1024 allocations per
+     * tick on the cube-pile sample, inside the authoritative step. The array costs one u32 per id and
+     * never touches the allocator once warm, which is what the real-time contract asks for.
+     *
+     * Trade-off, stated because it is one: the array is sized by the LARGEST object id, not by the
+     * object count, so an index keyed on a sparse id space spends 4 bytes per unused id. Every caller
+     * feeds it dense ids (a chunk's entity slots), which is the case this structure is built for.
+     */
     void setIndex(core::u32 objectId, core::u32 slot)
     {
         if (objectId >= idToIndex.size())
@@ -108,10 +86,6 @@ struct Octree::Impl {
     {
         return (objectId < idToIndex.size()) ? idToIndex[objectId] : kNoIndex;
     }
-
-    // ────────────────────────────────────────────────────────────────────── //
-    //  Morton computation                                                    //
-    // ────────────────────────────────────────────────────────────────────── //
 
     /** @brief Bits of the key per axis: one per level the build can split, and no more. */
     static constexpr core::u32 kGridBits = kMaxDepth;
@@ -207,10 +181,6 @@ struct Octree::Impl {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────── //
-    //  LSD Radix Sort — kRadixPasses passes × 8-bit buckets                  //
-    // ────────────────────────────────────────────────────────────────────── //
-
     /**
      * @brief Sorts sortedEntries by morton key using LSD radix sort, stable.
      *
@@ -270,16 +240,20 @@ struct Octree::Impl {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────── //
-    //  Recursive tree build                                                  //
-    // ────────────────────────────────────────────────────────────────────── //
-
     /**
      * @brief Recursively subdivides sorted entities into octree nodes.
      *
      * Uses the Morton key bits at each depth level to determine which
      * octant each entity belongs to. Since entities are pre-sorted by
-     * Morton key, each octant forms a contiguous range.
+     * Morton key, each octant forms a contiguous range. Bit 0 of an octant
+     * is x, bit 1 y and bit 2 z: a set bit takes the upper half of that axis.
+     *
+     * An interior node holds NOTHING: its objects live in its children. The
+     * root is seeded with the whole set before this walk, and leaving that
+     * count in place made every traversal visit each object twice, once at the
+     * root and once in its leaf. Harmless-looking in a broad-phase, where a
+     * duplicate pair is merely redundant work; fatal to a cull, which returns
+     * the payload to the caller and doubled the visible set.
      */
     void recurseBuild(core::u32 nodeIdx, core::u32 start, core::u32 end, core::u8 depth)
     {
@@ -296,16 +270,9 @@ struct Octree::Impl {
             return;
         }
 
-        // Allocate 8 children
         const core::u32 firstChildIdx = static_cast<core::u32>(nodes.size());
         nodes.resize(firstChildIdx + 8);
         nodes[nodeIdx].firstChild = static_cast<core::i32>(firstChildIdx);
-        // An interior node holds NOTHING: its objects now live in its children. The
-        // root was seeded with the whole set before this walk, and leaving that count
-        // in place made every traversal visit each object twice — once at the root
-        // and once in its leaf. Harmless-looking in a broad-phase, where a duplicate
-        // pair is merely redundant work; fatal to a cull, which returns the payload
-        // to the caller and doubled the visible set.
         nodes[nodeIdx].entityStart = start;
         nodes[nodeIdx].entityCount = 0u;
 
@@ -314,16 +281,13 @@ struct Octree::Impl {
         const auto mn = parentBound.min;
         const auto mx = parentBound.max;
 
-        // Compute child bounds and split entities by octant
         const core::u32 shift = (kGridBits - 1u - depth) * 3u;
         core::u32 current = start;
 
         for (core::u8 octant = 0; octant < 8; ++octant)
         {
-            // Set child bounds based on octant bits
             math::Vec3<math::Fixed32> childMin, childMax;
 
-            // X axis (bit 0)
             if (octant & 1)
             {
                 childMin.x = center.x;
@@ -335,7 +299,6 @@ struct Octree::Impl {
                 childMax.x = center.x;
             }
 
-            // Y axis (bit 1)
             if (octant & 2)
             {
                 childMin.y = center.y;
@@ -347,7 +310,6 @@ struct Octree::Impl {
                 childMax.y = center.y;
             }
 
-            // Z axis (bit 2)
             if (octant & 4)
             {
                 childMin.z = center.z;
@@ -361,7 +323,6 @@ struct Octree::Impl {
 
             nodes[firstChildIdx + octant].bound = {childMin, childMax};
 
-            // Find contiguous range for this octant (sorted by Morton)
             const core::u32 childStart = current;
             while (current < end)
             {
@@ -382,11 +343,10 @@ struct Octree::Impl {
         nodes[nodeIdx].reach = reach;
     }
 
-    // ────────────────────────────────────────────────────────────────────── //
-    //  Recursive AABB query                                                  //
-    // ────────────────────────────────────────────────────────────────────── //
-
-    /// @copydoc Octree::queryVisible
+    /**
+     * @brief Visits node @p nodeIdx and its descendants for @ref Octree::queryVisible, counting in
+     *        @p visited and @p pruned the nodes tested and the subtrees rejected, when they are given.
+     */
     void visibleRecurse(core::u32 nodeIdx,
                         const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
                         const lpl::pmr::function<void(core::u32)> &callback, core::u32 *visited,
@@ -499,10 +459,6 @@ struct Octree::Impl {
     }
 };
 
-// ========================================================================== //
-//  Public API                                                                //
-// ========================================================================== //
-
 Octree::Octree(const math::AABB<math::Fixed32> &worldBounds, core::u32 leafCapacity)
     : _impl{lpl::pmr::make_unique<Impl>(worldBounds, leafCapacity)}
 {
@@ -575,8 +531,6 @@ void Octree::queryVisible(const lpl::pmr::function<bool(const math::AABB<math::F
 
     if (_impl->nodes.empty())
     {
-        // Same fallback as the box query: before the first rebuild there is no
-        // hierarchy to descend, and a linear pass is still a correct answer.
         for (const auto &entry : _impl->sortedEntries)
             if (nodeVisible(entry.aabb))
                 callback(entry.objectId);
@@ -593,27 +547,13 @@ void Octree::rebuild()
         return;
     }
 
-    // Step 1: LSD radix sort by Morton key (O(n))
     _impl->radixSort();
 
-    // Step 2: Rebuild index map after sort
     for (core::u32 i = 0; i < static_cast<core::u32>(_impl->sortedEntries.size()); ++i)
     {
         _impl->setIndex(_impl->sortedEntries[i].objectId, i);
     }
 
-    // Step 3: Build flat node tree.
-    //
-    // clear() keeps the capacity, but the node count of an octree exceeds its
-    // entity count (interior nodes are subdivided 8 at a time), so reserving
-    // only entityCount left resize() growing — and growing means calling the
-    // allocator from inside an authoritative tick, which the freestanding
-    // REAL_TIME mode forbids. Reserve a bound that covers the subdivision so
-    // the growth happens once, here, and never on a later tick.
-    //
-    // Bound: a node either holds entities or splits into 8. With N entities the
-    // tree has at most N leaves, hence at most (N - 1) / 7 interior nodes, so
-    // (N * 9) / 7 + 8 is a safe ceiling; the +8 covers the root's own split.
     _impl->nodes.clear();
     {
         const auto entityCount = _impl->sortedEntries.size();

@@ -31,10 +31,6 @@ class Octree final : public ISpatialIndex, public core::NonCopyable<Octree> {
 public:
     /**
      * @brief Constructs an octree covering the given world-space bounds.
-     * @param worldBounds Total world AABB.
-     */
-    /**
-     * @brief Constructs an octree covering the given world-space bounds.
      *
      * @param worldBounds  Total world AABB.
      * @param leafCapacity Objects a node holds before it splits.
@@ -59,6 +55,16 @@ public:
     void query(const math::AABB<math::Fixed32> &region,
                const lpl::pmr::function<void(core::u32)> &callback) const override;
 
+    /**
+     * @brief Sorts the objects by key and builds the nodes over them.
+     *
+     * A rebuild over no more objects than an earlier one allocates nothing. The nodes are reserved to
+     * a ceiling for a tree over N objects, (N * 9) / 7 + 8: a node either holds objects or splits into
+     * eight, so N leaves have at most (N - 1) / 7 interior nodes above them, and the 8 covers the
+     * root's own split. Reserving N alone left the nodes growing, since they outnumber the objects,
+     * and growing calls the allocator inside an authoritative tick, which the freestanding REAL_TIME
+     * mode forbids.
+     */
     void rebuild() override;
 
     /**
@@ -128,6 +134,8 @@ public:
      *
      * The test is applied to node bounds AND to each object's own bounds, so a
      * caller gets exactly the objects that pass, not the contents of nodes that do.
+     * Before the first @ref rebuild there is no hierarchy to descend, and every
+     * object is tested on its own bounds.
      */
     void queryVisible(const lpl::pmr::function<bool(const math::AABB<math::Fixed32> &)> &nodeVisible,
                       const lpl::pmr::function<void(core::u32)> &callback, core::u32 *outNodesVisited = nullptr,

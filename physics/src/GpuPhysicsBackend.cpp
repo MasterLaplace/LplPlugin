@@ -1,17 +1,3 @@
-/**
- * @file GpuPhysicsBackend.cpp
- * @brief Host-side bridge: drives the physics_tick compute kernel over ECS.
- *
- * Mirrors the CpuPhysicsBackend chunk traversal but delegates integration to an
- * IComputeBackend. Only the integration pass (gravity + semi-implicit Euler) is
- * GPU-accelerated; collision and sleeping remain CPU/future work.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-29
- * @copyright MIT License
- */
-
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/math/FixedPoint.hpp>
@@ -39,7 +25,7 @@ constexpr core::u32 kBlockDim = 256u;
 
 } // namespace
 
-GpuPhysicsBackend::GpuPhysicsBackend(ecs::Registry &registry, IComputeBackend &compute) noexcept
+GpuPhysicsBackend::GpuPhysicsBackend(ecs::Registry &registry, gpu::IComputeBackend &compute) noexcept
     : _registry(registry), _compute(compute)
 {
 }
@@ -123,10 +109,6 @@ core::Expected<void> GpuPhysicsBackend::step(core::f32 dt)
             if (auto sized = ensureCapacity(count); !sized)
                 return sized;
 
-            // Deinterleave AoS Vec3 → planar SoA host staging. The GPU kernel is
-            // float; convert authoritative Fixed32 → float at this staging edge.
-            // NOTE: this backend is compiled only under --cuda and was not built
-            // in the migration sandbox — treat as compile-unverified.
             for (core::u32 i = 0; i < count; ++i)
             {
                 _scratch.hostX[i] = positions[i].x.toFloat();
@@ -183,7 +165,6 @@ core::Expected<void> GpuPhysicsBackend::step(core::f32 dt)
             if (auto r = _compute.synchronize(); !r)
                 return r;
 
-            // Read positions + velocities back; reinterleave SoA → AoS Vec3.
             struct Download {
                 float *dst;
                 const void *src;
