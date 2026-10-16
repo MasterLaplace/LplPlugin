@@ -87,11 +87,14 @@ static void sortAsFiled(lpl::pmr::vector<core::u32> &bodies, lpl::pmr::vector<co
  *
  * Out of line, so that the resolver holds no float. A CollisionEvent is a gameplay signal and not
  * authoritative state, and building its floats inside the resolver made every pair pay for them,
- * though two pairs in three publish nothing.
+ * though two pairs in three publish nothing. Returns at once when nothing is subscribed to the bus,
+ * as on the server, before building an event nobody would receive.
  */
 LPL_NOINLINE static void publishContact(ecs::EntityId a, ecs::EntityId b, math::Fixed32 FVec3::*axis,
                                         math::Fixed32 direction, math::Fixed32 impulse) noexcept
 {
+    if (!core::EventBus::instance().hasSubscribers())
+        return;
     FVec3 normal{math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::zero()};
     normal.*axis = direction;
     const math::Vec3<float> floatNormal{normal.x.toFloat(), normal.y.toFloat(), normal.z.toFloat()};
