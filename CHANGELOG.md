@@ -5,6 +5,24 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.7.0] - 2026-10-16
+
+### Added
+
+- **ecs**: Count the bytes the double buffer copies, and hold the server's tick to a budget (#417)
+
+### Fixed
+
+- **physics**: An octree search no longer misses a box that reaches in from a neighbouring cell (#420)
+
+### Performance
+
+- **physics**: The broad-phase tests only the bodies after the one it queries for (#425)
+- **physics**: The broad-phase collects its candidates instead of calling back per box (#424)
+- **physics**: Key the broad-phase on the depth it splits, on a power-of-two grid (#423)
+- **physics**: Fit the broad-phase octree to the box its bodies span (#421)
+- **ecs**: A swap copies only the components handed out for writing (#418)
+
 ## [0.6.0] - 2026-10-15
 
 ### Added
