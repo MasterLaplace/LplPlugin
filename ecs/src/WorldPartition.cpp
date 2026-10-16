@@ -63,6 +63,36 @@ struct WorldPartition::Impl {
     Impl(math::Fixed32 cs, core::u32 cellCapacity) : cellSize{cs}, cells{cellCapacity} {}
 };
 
+/**
+ * @brief The grid coordinate, bias included, of the cell @p v falls in along one axis: what
+ *        (v / cellSize).toInt() + kMortonBias gives.
+ *
+ * A Fixed32 division shifts its dividend into 64 bits, which i686 hands to libgcc: three calls a
+ * body a tick. For a cell of one unit or more the quotient cannot wrap, and the cell comes from one
+ * 32-bit division of the raw values: floor(a / c) for a non-negative a. For a negative a, the
+ * quotient rounds toward zero before toInt() drops its fraction downwards, so the cell is
+ * -ceil(n / c) when the remainder of n = -a reaches c / 65536, and -floor(n / c) otherwise.
+ *
+ * @param v A coordinate.
+ * @param cellSize The side of a cell, positive.
+ */
+[[nodiscard]] static core::i32 gridAlong(math::Fixed32 v, math::Fixed32 cellSize) noexcept
+{
+    const core::i32 bias = static_cast<core::i32>(core::kMortonBias);
+    if (cellSize.raw() < math::Fixed32::one().raw())
+        return (v / cellSize).toInt() + bias;
+
+    const core::u32 side = static_cast<core::u32>(cellSize.raw());
+    if (v.raw() >= 0)
+        return static_cast<core::i32>(static_cast<core::u32>(v.raw()) / side) + bias;
+
+    const core::u32 below = 0u - static_cast<core::u32>(v.raw());
+    const core::u32 whole = below / side;
+    const core::u32 rest = below % side;
+    const core::u32 cells = whole + (rest >= ((side + 0xFFFFu) >> 16u) ? 1u : 0u);
+    return bias - static_cast<core::i32>(cells);
+}
+
 // ========================================================================== //
 //  Public API                                                                //
 // ========================================================================== //
@@ -135,14 +165,9 @@ void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::
                                  pmr::vector<EntityId> &results) const
 {
     // Compute the grid-space bounding box for the query sphere
-    const auto toGrid = [&](math::Fixed32 v) -> core::i32 {
-        const auto intVal = (v / _impl->cellSize).toInt();
-        return intVal + static_cast<core::i32>(core::kMortonBias);
-    };
-
-    const core::i32 cx = toGrid(center.x);
-    const core::i32 cy = toGrid(center.y);
-    const core::i32 cz = toGrid(center.z);
+    const core::i32 cx = gridAlong(center.x, _impl->cellSize);
+    const core::i32 cy = gridAlong(center.y, _impl->cellSize);
+    const core::i32 cz = gridAlong(center.z, _impl->cellSize);
 
     // Radius in grid cells (ceiling)
     const core::i32 cellRadius = static_cast<core::i32>((radius / _impl->cellSize).toInt()) + 1;
@@ -173,12 +198,8 @@ void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::
 
 core::u64 WorldPartition::mortonForPosition(const math::Vec3<math::Fixed32> &pos) const noexcept
 {
-    const auto toGrid = [&](math::Fixed32 v) -> core::i32 {
-        const auto intVal = (v / _impl->cellSize).toInt();
-        return intVal + static_cast<core::i32>(core::kMortonBias);
-    };
-
-    return math::morton::encode3D(toGrid(pos.x), toGrid(pos.y), toGrid(pos.z));
+    return math::morton::encode3D(gridAlong(pos.x, _impl->cellSize), gridAlong(pos.y, _impl->cellSize),
+                                  gridAlong(pos.z, _impl->cellSize));
 }
 
 void WorldPartition::setGpuBackend(gpu::IComputeBackend *backend) noexcept
