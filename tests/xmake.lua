@@ -57,6 +57,17 @@ target("test-physics-parity")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- The cube pile over 600 ticks: its landing and its settling, which no engine
+-- test reaches
+-- ─────────────────────────────────────────────────────────────────────────────
+target("test-cube-pile-horizon")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-ecs", "lpl-physics", "lpl-render", "lpl-samples")
+    add_files("parity/test_cube_pile_horizon.cpp")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Water: the swell, its gradient, and the foam
 -- ─────────────────────────────────────────────────────────────────────────────
 target("test-water")
