@@ -1,6 +1,7 @@
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/EventBus.hpp>
 #include <lpl/core/Log.hpp>
+#include <lpl/core/Platform.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Registry.hpp>
 #include <lpl/math/AABB.hpp>
@@ -78,6 +79,23 @@ static void sortAsFiled(lpl::pmr::vector<core::u32> &bodies, lpl::pmr::vector<co
         bodies[slot] = body;
         keys[slot] = key;
     }
+}
+
+/**
+ * @brief Publishes the contact of @p a and @p b: its normal, @p direction along @p axis, and the
+ *        magnitude @p impulse of its impulse.
+ *
+ * Out of line, so that the resolver holds no float. A CollisionEvent is a gameplay signal and not
+ * authoritative state, and building its floats inside the resolver made every pair pay for them,
+ * though two pairs in three publish nothing.
+ */
+LPL_NOINLINE static void publishContact(ecs::EntityId a, ecs::EntityId b, math::Fixed32 FVec3::*axis,
+                                        math::Fixed32 direction, math::Fixed32 impulse) noexcept
+{
+    FVec3 normal{math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::zero()};
+    normal.*axis = direction;
+    const math::Vec3<float> floatNormal{normal.x.toFloat(), normal.y.toFloat(), normal.z.toFloat()};
+    core::EventBus::instance().publish(CollisionEvent{a, b, floatNormal, impulse.toFloat()});
 }
 
 /**
@@ -587,12 +605,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         (*velocities_b).*axis = (*velocities_b).*axis - impulse * invMassB;
 
         if (impulseMag > kZero)
-        {
-            FVec3 normal{kZero, kZero, kZero};
-            normal.*axis = direction;
-            math::Vec3<float> fNormal{normal.x.toFloat(), normal.y.toFloat(), normal.z.toFloat()};
-            core::EventBus::instance().publish(CollisionEvent{refs[a].id, refs[b].id, fNormal, impulseMag.toFloat()});
-        }
+            publishContact(refs[a].id, refs[b].id, axis, direction, impulseMag);
     };
 
     if (count > kBruteForceThreshold && !_impl->listsStillHold())
