@@ -16,7 +16,9 @@ constexpr lpl::core::i32 kCellSides[] = {65536, 65537, 655360, 3 * 65536 + 12345
 /** @brief Coordinates, raw: zero, one unit either side of it, and the ends of the word. */
 constexpr lpl::core::i32 kEdgeCoordinates[] = {0, 1, -1, 65535, -65535, 65536, -65536, 2147483647, -2147483647 - 1};
 
-/** @brief The grid coordinate the partition used to take: the Fixed32 quotient, its fraction dropped, biased. */
+/**
+ * @brief The grid coordinate the partition used to take: the Fixed32 quotient, its fraction dropped, biased.
+ */
 [[nodiscard]] lpl::core::i32 quotientCell(lpl::core::i32 coordinate, lpl::core::i32 side)
 {
     return (lpl::math::Fixed32::fromRaw(coordinate) / lpl::math::Fixed32::fromRaw(side)).toInt() +
