@@ -167,11 +167,12 @@ struct CpuPhysicsBackend::Impl {
      * would need one index per worker, not one per backend.
      */
     lpl::pmr::unique_ptr<Octree> broadPhase;
-    /** The objects one broad-phase query found, refilled per query; its capacity survives the step. */
-    lpl::pmr::vector<core::u32> candidates;
+    lpl::pmr::vector<core::u32> candidates; /**< What one search found, refilled per search; its capacity stays. */
 
-    /** @name Neighbour lists, made when a step finds them stale: see kNeighbourMargin. */
-    /** @{ */
+    /**
+     * @name Neighbour lists, made when a step finds them stale: see kNeighbourMargin.
+     * @{
+     */
     lpl::pmr::vector<ecs::EntityId> listedIds;        /**< Which entity each listed body was. */
     lpl::pmr::vector<FVec3> listedHalves;             /**< Each body's half size when the lists were made. */
     lpl::pmr::vector<FVec3> listedPositions;          /**< Where each body stood when the lists were made. */
@@ -183,7 +184,9 @@ struct CpuPhysicsBackend::Impl {
 
     explicit Impl(ecs::Registry &r) : registry{r} {}
 
-    /** @brief The box body @p body covers now, from its position and its half size. */
+    /**
+     * @brief The box body @p body covers now, from its position and its half size.
+     */
     [[nodiscard]] math::AABB<Fixed32> boxOf(core::u32 body) const noexcept
     {
         const FVec3 &pos = *physicsEntities[body].position;
@@ -194,7 +197,9 @@ struct CpuPhysicsBackend::Impl {
         };
     }
 
-    /** @brief Whether body @p body is still within kNeighbourMargin of where the lists found it. */
+    /**
+     * @brief Whether body @p body is still within kNeighbourMargin of where the lists found it.
+     */
     [[nodiscard]] bool stillListed(core::u32 body) const noexcept
     {
         const FVec3 moved = *physicsEntities[body].position - listedPositions[body];
@@ -220,7 +225,9 @@ struct CpuPhysicsBackend::Impl {
         return true;
     }
 
-    /** @brief Files every body's box as it is now in @c filedBoxes, and returns the box they span. */
+    /**
+     * @brief Files every body's box as it is now in @c filedBoxes, and returns the box they span.
+     */
     math::AABB<Fixed32> fileBoxes()
     {
         const core::u32 count = static_cast<core::u32>(physicsEntities.size());
@@ -235,7 +242,9 @@ struct CpuPhysicsBackend::Impl {
         return span;
     }
 
-    /** @brief Builds the broad-phase over @c filedBoxes, bounded by @p span. */
+    /**
+     * @brief Builds the broad-phase over @c filedBoxes, bounded by @p span.
+     */
     Octree &buildTree(const math::AABB<Fixed32> &span)
     {
         if (!broadPhase)
