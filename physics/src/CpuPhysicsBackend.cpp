@@ -148,6 +148,7 @@ struct CpuPhysicsBackend::Impl {
     lpl::pmr::vector<core::u32> neighbours;      /**< The bodies after each one that came within two margins. */
     lpl::pmr::vector<math::AABB<math::Fixed32>> filedBoxes; /**< The boxes as the iteration began: what a tree holds. */
     /** @} */
+    bool boundsFiled{false}; /**< Whether the broad-phase is bounded by the span of the filed boxes. */
 
     explicit Impl(ecs::Registry &r) : registry{r} {}
 
@@ -193,31 +194,54 @@ struct CpuPhysicsBackend::Impl {
     }
 
     /**
-     * @brief Files every body's box as it is now in @c filedBoxes, and returns the box they span.
+     * @brief Files every body's box as it is now in @c filedBoxes.
      */
-    math::AABB<math::Fixed32> fileBoxes()
+    void fileBoxes()
     {
         const core::u32 count = static_cast<core::u32>(physicsEntities.size());
         filedBoxes.resize(count);
-        filedBoxes[0] = boxOf(0);
-        math::AABB<math::Fixed32> span = filedBoxes[0];
-        for (core::u32 body = 1u; body < count; ++body)
-        {
+        for (core::u32 body = 0u; body < count; ++body)
             filedBoxes[body] = boxOf(body);
+        boundsFiled = false;
+    }
+
+    /**
+     * @brief The box the filed boxes span.
+     */
+    [[nodiscard]] math::AABB<math::Fixed32> filedSpan() const noexcept
+    {
+        math::AABB<math::Fixed32> span = filedBoxes[0];
+        for (core::u32 body = 1u; body < static_cast<core::u32>(filedBoxes.size()); ++body)
             span = span.merge(filedBoxes[body]);
-        }
         return span;
     }
 
     /**
-     * @brief Builds the broad-phase over @c filedBoxes, bounded by @p span.
+     * @brief Gives the broad-phase the span of the filed boxes as its bounds, once per filing.
+     *
+     * Only a sort of two candidates or more and a search through the tree read those bounds: over
+     * 600 ticks of the cube pile at 144 Hz, 990 of 2048 iterations did. Merging the boxes at every
+     * filing merged them for nothing in the others.
      */
-    Octree &buildTree(const math::AABB<math::Fixed32> &span)
+    void boundBroadPhase()
     {
+        if (boundsFiled)
+            return;
+        broadPhase->setWorldBounds(filedSpan());
+        boundsFiled = true;
+    }
+
+    /**
+     * @brief Builds the broad-phase over @c filedBoxes, bounded by the box they span.
+     */
+    Octree &buildTree()
+    {
+        const math::AABB<math::Fixed32> span = filedSpan();
         if (!broadPhase)
             broadPhase = lpl::pmr::make_unique<Octree>(span, kBroadPhaseLeafCapacity);
         broadPhase->clear();
         broadPhase->setWorldBounds(span);
+        boundsFiled = true;
         for (core::u32 body = 0u; body < static_cast<core::u32>(filedBoxes.size()); ++body)
             broadPhase->insert(body, filedBoxes[body]);
         broadPhase->rebuild();
@@ -231,7 +255,8 @@ struct CpuPhysicsBackend::Impl {
     void listNeighbours()
     {
         const core::u32 count = static_cast<core::u32>(physicsEntities.size());
-        Octree &octree = buildTree(fileBoxes());
+        fileBoxes();
+        Octree &octree = buildTree();
         listedIds.resize(count);
         listedHalves.resize(count);
         listedPositions.resize(count);
@@ -251,18 +276,19 @@ struct CpuPhysicsBackend::Impl {
 
     /**
      * @brief Puts @c candidates in the order a broad-phase search reports them, keying their filed
-     *        boxes alone over the bounds @p octree was last given.
+     *        boxes alone over the span of the filed boxes.
      *
      * Only a list of two or more needs keys, and a body's list seldom holds two bodies its box
      * meets: over 600 ticks of the cube pile at 144 Hz, 3974 of 2.09 million did, and none held
      * three. Keying every filed box at each iteration cost 128 million instructions for those.
      */
-    void sortCandidatesAsFiled(const Octree &octree)
+    void sortCandidatesAsFiled()
     {
+        boundBroadPhase();
         candidateBoxes.clear();
         for (const core::u32 body : candidates)
             candidateBoxes.push_back(filedBoxes[body]);
-        octree.keysOf(candidateBoxes, candidateKeys);
+        broadPhase->keysOf(candidateBoxes, candidateKeys);
         sortAsFiled(candidates, candidateKeys);
     }
 
@@ -628,13 +654,12 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         }
         else
         {
-            const math::AABB<math::Fixed32> span = _impl->fileBoxes();
+            _impl->fileBoxes();
             bool listsHold = true;
             for (core::u32 j = 0; j < count && listsHold; ++j)
                 listsHold = _impl->stillListed(j);
 
             Octree &octree = *_impl->broadPhase;
-            octree.setWorldBounds(span);
             _impl->candidates.reserve(count);
             _impl->candidateBoxes.reserve(count);
             _impl->candidateKeys.reserve(count);
@@ -654,13 +679,13 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
                             _impl->candidates.push_back(j);
                     }
                     if (_impl->candidates.size() > 1u)
-                        _impl->sortCandidatesAsFiled(octree);
+                        _impl->sortCandidatesAsFiled();
                 }
                 else
                 {
                     if (!treeBuilt)
                     {
-                        _impl->buildTree(span);
+                        _impl->buildTree();
                         treeBuilt = true;
                     }
                     octree.collect(queryRegion, i + 1u, _impl->candidates);
