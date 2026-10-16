@@ -35,9 +35,13 @@ namespace lpl::pmr {
 
 inline void free(void *ptr) noexcept { ::kfree(ptr); }
 
-/* alignment is honoured implicitly: kmalloc returns 8-byte-aligned storage,
-   which covers alignof(max_align_t) on i686. The parameter is accepted for
-   signature parity with the hosted std::aligned_alloc. */
+/**
+ * @brief Allocates @p size bytes from the kernel heap.
+ *
+ * The alignment is honoured implicitly: kmalloc returns 8-byte-aligned storage, which covers
+ * alignof(max_align_t) on i686. The parameter is accepted for signature parity with the hosted
+ * std::aligned_alloc.
+ */
 [[nodiscard]] inline void *aligned_alloc([[maybe_unused]] __SIZE_TYPE__ alignment, __SIZE_TYPE__ size) noexcept
 {
     return ::kmalloc(size);

@@ -27,6 +27,8 @@ namespace lpl::core {
 
 /**
  * @brief Engine-wide error code enumeration.
+ *
+ * The values without the k prefix are aliases of their k-prefixed namesakes, for convenience.
  */
 enum class ErrorCode : u16 {
     kNone = 0,
@@ -73,7 +75,6 @@ enum class ErrorCode : u16 {
     kNotImplemented,
     kInternalError,
 
-    // Aliases (without k prefix) for convenience
     OutOfMemory = kOutOfMemory,
     BufferOverflow = kBufferOverflow,
     BufferUnderflow = kBufferUnderflow,
@@ -121,11 +122,14 @@ private:
 /** @brief Convenience alias for std::unexpected<Error>. */
 using Unexpected = std::unexpected<Error>;
 
-/** @brief Factory function to create an unexpected error. */
-/// @param code Error code.
-/// @param message Human-readable description.
-/// @param loc Source location (auto-filled).
-/// @return std::unexpected<Error>.
+/**
+ * @brief Factory function to create an unexpected error.
+ *
+ * @param code Error code.
+ * @param message Human-readable description.
+ * @param loc Source location (auto-filled).
+ * @return std::unexpected<Error>.
+ */
 [[nodiscard]] inline auto makeError(ErrorCode code, lpl::pmr::string message,
                                     std::source_location loc = std::source_location::current())
 {

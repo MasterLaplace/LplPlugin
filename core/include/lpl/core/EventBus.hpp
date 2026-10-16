@@ -27,18 +27,10 @@
 namespace lpl::core {
 
 namespace detail {
-inline u32 getNextEventId() noexcept
-{
-    static std::atomic<u32> id{0};
-    return id.fetch_add(1, std::memory_order_relaxed);
-}
+inline u32 getNextEventId() noexcept;
 } // namespace detail
 
-template <typename T> inline u32 getEventId() noexcept
-{
-    static const u32 id = detail::getNextEventId();
-    return id;
-}
+template <typename T> inline u32 getEventId() noexcept;
 
 /**
  * @class EventBus
@@ -46,12 +38,10 @@ template <typename T> inline u32 getEventId() noexcept
  */
 class EventBus final : public NonCopyable<EventBus> {
 public:
-    /** @brief Global singleton instance access. */
-    static EventBus &instance()
-    {
-        static EventBus instance;
-        return instance;
-    }
+    /**
+     * @brief Global singleton instance access.
+     */
+    static EventBus &instance();
 
     /**
      * @brief Subscribe to an event type.
@@ -59,77 +49,30 @@ public:
      * @param callback Function to invoke when event occurs.
      * @return Subscription ID, used for unsubscription.
      */
-    template <typename T> u32 subscribe(lpl::pmr::function<void(const T &)> callback)
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        const u32 id = ++_nextId;
-        auto &handlers = _handlers[getEventId<T>()];
-
-        handlers.push_back({id, [cb = std::move(callback)](const void *ev) { cb(*static_cast<const T *>(ev)); }});
-
-        return id;
-    }
+    template <typename T> u32 subscribe(lpl::pmr::function<void(const T &)> callback);
 
     /**
      * @brief Unsubscribe from an event type using subscription ID.
      * @tparam T Event type.
      * @param id Subscription ID.
      */
-    template <typename T> void unsubscribe(u32 id)
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        const auto it = _handlers.find(getEventId<T>());
-        if (it == _handlers.end())
-            return;
-
-        auto &handlers = it->second;
-        for (auto handlerIt = handlers.begin(); handlerIt != handlers.end();)
-        {
-            if (handlerIt->id == id)
-            {
-                handlerIt = handlers.erase(handlerIt);
-            }
-            else
-            {
-                ++handlerIt;
-            }
-        }
-    }
+    template <typename T> void unsubscribe(u32 id);
 
     /**
      * @brief Publish an event to all subscribers.
+     *
+     * The callbacks are copied under the lock and invoked outside it, to prevent deadlocks if a
+     * callback publishes.
+     *
      * @tparam T Event type.
      * @param event The event instance.
      */
-    template <typename T> void publish(const T &event)
-    {
-        lpl::pmr::vector<lpl::pmr::function<void(const void *)>> callbacksToInvoke;
+    template <typename T> void publish(const T &event);
 
-        {
-            lpl::pmr::lock_guard lock{_mutex};
-            const auto it = _handlers.find(getEventId<T>());
-            if (it != _handlers.end())
-            {
-                for (const auto &handler : it->second)
-                {
-                    callbacksToInvoke.push_back(handler.callback);
-                }
-            }
-        }
-
-        // Invoke outside the lock to prevent deadlocks if a callback publishes
-        for (const auto &cb : callbacksToInvoke)
-        {
-            cb(&event);
-        }
-    }
-
-    /** @brief Clears all subscriptions. */
-    void clear()
-    {
-        lpl::pmr::lock_guard lock{_mutex};
-        _handlers.clear();
-    }
+    /**
+     * @brief Clears all subscriptions.
+     */
+    void clear();
 
 private:
     EventBus() = default;
@@ -146,5 +89,7 @@ private:
 };
 
 } // namespace lpl::core
+
+#    include "EventBus.inl"
 
 #endif // LPL_CORE_EVENTBUS_HPP

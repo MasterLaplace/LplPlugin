@@ -62,20 +62,24 @@
 #    endif
 /** @} */
 
-// ---- Target runtime ------------------------------------------------------
-//
-// LPL_TARGET_KERNEL distinguishes the freestanding kernel build (libengine.a,
-// linked into LplKernel) from the hosted Linux/dev build. The libengine build
-// passes -DLPL_TARGET_KERNEL=1; everything else defaults to the hosted target.
-// It selects, via the lpl/std umbrella, whether portable containers/utilities
-// resolve to kstd or the hosted std.
-
+/**
+ * @name Target runtime
+ *
+ * LPL_TARGET_KERNEL distinguishes the freestanding kernel build (libengine.a, linked into LplKernel)
+ * from the hosted Linux/dev build. The libengine build passes -DLPL_TARGET_KERNEL=1; everything else
+ * defaults to the hosted target. It selects, via the lpl/std umbrella, whether portable
+ * containers/utilities resolve to kstd or the hosted std.
+ * @{
+ */
 #    ifndef LPL_TARGET_KERNEL
 #        define LPL_TARGET_KERNEL 0
 #    endif
+/** @} */
 
-// ---- Intrinsics ----------------------------------------------------------
-
+/**
+ * @name Inlining and aliasing hints
+ * @{
+ */
 #    if defined(LPL_COMPILER_GCC) || defined(LPL_COMPILER_CLANG)
 #        define LPL_FORCEINLINE inline __attribute__((always_inline))
 #        define LPL_NOINLINE    __attribute__((noinline))
@@ -89,19 +93,25 @@
 #        define LPL_NOINLINE
 #        define LPL_RESTRICT
 #    endif
+/** @} */
 
-// ---- CUDA Host+Device ----------------------------------------------------
-
+/**
+ * @name CUDA host and device
+ * @{
+ */
 #    ifdef __CUDACC__
 #        define LPL_HD __host__ __device__
 #    else
 #        define LPL_HD
 #    endif
-
-// ---- Cache Line ----------------------------------------------------------
+/** @} */
 
 #    include <cstddef>
 
+/**
+ * @name Cache line
+ * @{
+ */
 inline constexpr std::size_t kCacheLineSize = 64;
 
 /**
@@ -118,20 +128,25 @@ inline constexpr std::size_t kDestructiveInterferenceSize = __GCC_DESTRUCTIVE_SI
 #    else
 inline constexpr std::size_t kDestructiveInterferenceSize = 128u;
 #    endif
+/** @} */
 
-// ---- CPU Pause Hint ------------------------------------------------------
-
+/**
+ * @name CPU pause hint
+ *
+ * LPL_CPU_PAUSE() is PAUSE on x86, YIELD on ARM64 and nothing elsewhere. On x86 it is the compiler
+ * intrinsic rather than <immintrin.h>: that header drags in mm_malloc.h, whose _mm_malloc/_mm_free
+ * reference malloc/free unconditionally (only <errno.h> is __STDC_HOSTED__-guarded), which the
+ * freestanding kernel libc does not provide. __builtin_ia32_pause() emits the same PAUSE with no
+ * header dependency and works on both the hosted and kernel targets.
+ * @{
+ */
 #    if defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)
-// Use the compiler intrinsic rather than <immintrin.h>: that header drags in
-// mm_malloc.h, whose _mm_malloc/_mm_free reference malloc/free unconditionally
-// (only <errno.h> is __STDC_HOSTED__-guarded), which the freestanding kernel
-// libc does not provide. __builtin_ia32_pause() emits the same PAUSE with no
-// header dependency and works on both the hosted and kernel targets.
 #        define LPL_CPU_PAUSE() __builtin_ia32_pause()
 #    elif defined(LPL_ARCH_ARM64)
 #        define LPL_CPU_PAUSE() __asm__ volatile("yield")
 #    else
 #        define LPL_CPU_PAUSE() ((void) 0)
 #    endif
+/** @} */
 
 #endif // LPL_CORE_PLATFORM_HPP

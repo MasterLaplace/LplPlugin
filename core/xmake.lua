@@ -6,6 +6,6 @@
 target("lpl-core")
     set_kind("static")
     set_group("modules")
-    add_headerfiles("include/(lpl/core/*.hpp)")
+    add_headerfiles("include/(lpl/core/*.hpp)", "include/(lpl/core/*.inl)")
     add_includedirs("include", {public = true})
     add_files("src/*.cpp")

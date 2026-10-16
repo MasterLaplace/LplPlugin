@@ -1,9 +1,10 @@
 /**
  * @file Log.hpp
- * @brief Minimal logging façade with compile-time severity filtering.
+ * @brief Minimal logging façade with a severity threshold set at runtime.
  *
  * Provides a static Log class backed by an injectable ILogger interface.
- * The default implementation writes to stderr.  A custom logger can be
+ * On the hosted target the default implementation writes to stderr; the
+ * kernel has none until LplKernel installs its own. A custom logger can be
  * installed via Log::setLogger() at engine startup.
  *
  * @author MasterLaplace
@@ -58,7 +59,19 @@ class Log final {
 public:
     Log() = delete;
 
+    /**
+     * @brief Installs the sink that log messages go to.
+     *
+     * On the hosted target the default sink writes to stderr, and a null @p logger brings it back.
+     * The freestanding kernel build has no stderr: it starts with no sink, a null @p logger removes
+     * the one installed, and log calls are no-ops while there is none. The kernel entry point installs
+     * platform::kernel::KernelLogger, which writes the same format to the console HAL, before anything
+     * else runs; without it the engine is silent in-kernel.
+     *
+     * @param logger The sink, which stays owned by the caller.
+     */
     static void setLogger(ILogger *logger);
+
     static void setMinLevel(LogLevel level);
 
     static void debug(std::string_view tag, std::string_view msg);
