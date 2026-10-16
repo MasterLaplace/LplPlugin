@@ -118,6 +118,8 @@ struct CpuPhysicsBackend::Impl {
      * would need one index per worker, not one per backend.
      */
     lpl::pmr::unique_ptr<Octree> broadPhase;
+    /** The objects one broad-phase query found, refilled per query; its capacity survives the step. */
+    lpl::pmr::vector<core::u32> candidates;
 
     explicit Impl(ecs::Registry &r) : registry{r} {}
 
@@ -546,17 +548,21 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
             for (core::u32 i = 0; i < count; ++i)
                 octree.insert(i, boxOf(i));
             octree.rebuild();
+            _impl->candidates.reserve(count);
 
             for (core::u32 i = 0; i < count; ++i)
             {
                 const math::AABB<Fixed32> queryRegion = boxOf(i);
 
-                octree.query(queryRegion, [&](core::u32 j) {
-                    if (j > i) // avoid duplicate pairs
+                _impl->candidates.clear();
+                octree.collect(queryRegion, _impl->candidates);
+                for (const core::u32 j : _impl->candidates)
+                {
+                    if (j > i)
                     {
                         resolveCollision(i, j);
                     }
-                });
+                }
             }
         }
     }
