@@ -572,24 +572,25 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         _impl->wake(slotB);
 
         // Minimum penetration axis (SAT-like)
-        FVec3 normal;
+        Fixed32 FVec3::*axis;
         Fixed32 penetration;
 
         if (overlapX <= overlapY && overlapX <= overlapZ)
         {
             penetration = overlapX;
-            normal = {delta.x >= kZero ? kOne : -kOne, kZero, kZero};
+            axis = &FVec3::x;
         }
         else if (overlapY <= overlapX && overlapY <= overlapZ)
         {
             penetration = overlapY;
-            normal = {kZero, delta.y >= kZero ? kOne : -kOne, kZero};
+            axis = &FVec3::y;
         }
         else
         {
             penetration = overlapZ;
-            normal = {kZero, kZero, delta.z >= kZero ? kOne : -kOne};
+            axis = &FVec3::z;
         }
+        const Fixed32 direction = delta.*axis >= kZero ? kOne : -kOne;
 
         // Inverse masses
         const Fixed32 invMassA = refs[a].inverseMass;
@@ -603,14 +604,13 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
 
         // Positional correction (100%)
         Fixed32 correctionMag = penetration / invMassSum;
-        FVec3 correction = normal * correctionMag;
+        const Fixed32 correction = direction * correctionMag;
 
-        *positions_a = *positions_a + correction * invMassA;
-        *positions_b = *positions_b - correction * invMassB;
+        (*positions_a).*axis = (*positions_a).*axis + correction * invMassA;
+        (*positions_b).*axis = (*positions_b).*axis - correction * invMassB;
 
         // Impulse (Newton's law of restitution)
-        FVec3 relVel = *velocities_a - *velocities_b;
-        Fixed32 velAlongNormal = relVel.dot(normal);
+        Fixed32 velAlongNormal = ((*velocities_a).*axis - (*velocities_b).*axis) * direction;
 
         if (velAlongNormal > kZero)
         {
@@ -618,14 +618,16 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         }
 
         Fixed32 impulseMag = -(kOne + kRestitution) * velAlongNormal / invMassSum;
-        FVec3 impulse = normal * impulseMag;
+        const Fixed32 impulse = direction * impulseMag;
 
-        *velocities_a = *velocities_a + impulse * invMassA;
-        *velocities_b = *velocities_b - impulse * invMassB;
+        (*velocities_a).*axis = (*velocities_a).*axis + impulse * invMassA;
+        (*velocities_b).*axis = (*velocities_b).*axis - impulse * invMassB;
 
         if (impulseMag > kZero)
         {
             // CollisionEvent is a non-authoritative gameplay signal: float is fine.
+            FVec3 normal{kZero, kZero, kZero};
+            normal.*axis = direction;
             math::Vec3<float> fNormal{normal.x.toFloat(), normal.y.toFloat(), normal.z.toFloat()};
             core::EventBus::instance().publish(CollisionEvent{refs[a].id, refs[b].id, fNormal, impulseMag.toFloat()});
         }
