@@ -60,7 +60,7 @@ struct Octree::Impl {
     /** @brief Entity reference sorted by Morton key. */
     struct EntityEntry {
         core::u32 objectId;
-        core::u64 morton;
+        core::u32 morton; /**< kKeyBits bits: a word, so the sort and the split shift one register. */
         math::AABB<math::Fixed32> aabb;
     };
 
@@ -118,6 +118,7 @@ struct Octree::Impl {
 
     /** @brief Bits of a whole key, three axes interleaved. */
     static constexpr core::u32 kKeyBits = 3u * kGridBits;
+    static_assert(kKeyBits <= 32u, "a key is one 32-bit word");
 
     /** @brief Passes of the radix sort, eight bits a pass. */
     static constexpr core::u32 kRadixPasses = (kKeyBits + 7u) / 8u;
@@ -147,7 +148,7 @@ struct Octree::Impl {
      * Where an entry's key places it is a matter of balance, not of correctness: a search rejects on
      * a node's reach, which holds every box beneath it whatever cell it was filed under.
      */
-    [[nodiscard]] core::u64 computeMorton(const math::AABB<math::Fixed32> &aabb) const
+    [[nodiscard]] core::u32 computeMorton(const math::AABB<math::Fixed32> &aabb) const
     {
         const auto c = aabb.center();
         const auto cell = [this](math::Fixed32 v, math::Fixed32 lo, core::u32 axis) -> core::u32 {
@@ -214,7 +215,7 @@ struct Octree::Impl {
         for (core::u32 pass = 0; pass < kRadixPasses; ++pass)
         {
             core::u32 counts[256] = {};
-            const core::u64 shift = static_cast<core::u64>(pass) * 8u;
+            const core::u32 shift = pass * 8u;
 
             for (core::u32 i = 0; i < count; ++i)
             {
@@ -289,7 +290,7 @@ struct Octree::Impl {
         const auto mx = parentBound.max;
 
         // Compute child bounds and split entities by octant
-        const core::u64 shift = (kGridBits - 1u - depth) * 3u;
+        const core::u32 shift = (kGridBits - 1u - depth) * 3u;
         core::u32 current = start;
 
         for (core::u8 octant = 0; octant < 8; ++octant)
