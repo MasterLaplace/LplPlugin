@@ -23,6 +23,7 @@
 
 #    include <atomic>
 #    include <memory>
+#    include <type_traits>
 
 namespace lpl::core {
 
@@ -45,11 +46,18 @@ public:
 
     /**
      * @brief Subscribe to an event type.
+     *
+     * The callable is stored as it is, wrapped once: in ring 0 a function holds its target in a
+     * fixed inline buffer, which a function wrapping another function overflows.
+     *
      * @tparam T Event type.
-     * @param callback Function to invoke when event occurs.
+     * @tparam Callback Any callable taking a const T &.
+     * @param callback Callable to invoke when the event occurs.
      * @return Subscription ID, used for unsubscription.
      */
-    template <typename T> u32 subscribe(lpl::pmr::function<void(const T &)> callback);
+    template <typename T, typename Callback>
+    requires std::is_invocable_v<const std::decay_t<Callback> &, const T &>
+    u32 subscribe(Callback &&callback);
 
     /**
      * @brief Unsubscribe from an event type using subscription ID.
