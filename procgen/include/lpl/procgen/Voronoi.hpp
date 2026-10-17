@@ -40,10 +40,10 @@
 
 namespace lpl::procgen {
 
-/// Region index per cell.
+/** Region index per cell. */
 using RegionMap = Grid<core::u16>;
 
-/// Marks a cell no region claimed (only when the diagram is empty).
+/** Marks a cell no region claimed (only when the diagram is empty). */
 inline constexpr core::u16 kNoRegion = 0xFFFFu;
 
 /**
@@ -51,9 +51,9 @@ inline constexpr core::u16 kNoRegion = 0xFFFFu;
  * @brief One region's centre, in grid coordinates.
  */
 struct VoronoiSite {
-    math::Fixed32 x{};    ///< Column (fractional).
-    math::Fixed32 z{};    ///< Row (fractional).
-    core::u16 region{0u}; ///< Index this site owns.
+    math::Fixed32 x{};    /**< Column (fractional). */
+    math::Fixed32 z{};    /**< Row (fractional). */
+    core::u16 region{0u}; /**< Index this site owns. */
 };
 
 /**
@@ -64,16 +64,28 @@ struct VoronoiSite {
  * does, and each of the three has a use the others cannot serve.
  */
 enum class DistanceMetric : core::u8 {
-    /// Straight-line distance. Organic, convex, cell-like regions: villages,
-    /// provinces, biome patches, anything grown rather than planned.
+    /**
+     * @brief Straight-line distance.
+     *
+     * Organic, convex, cell-like regions: villages, provinces, biome patches,
+     * anything grown rather than planned.
+     */
     Euclidean = 0,
-    /// Taxicab distance, @f$|dx| + |dz|@f$. Boundaries become rectilinear
-    /// staircases and diamonds, which is what makes this the metric for city
-    /// blocks — and it means the region borders can be used directly as the
-    /// street grid instead of needing roads drawn separately.
+
+    /**
+     * @brief Taxicab distance, @f$|dx| + |dz|@f$.
+     *
+     * Boundaries become rectilinear staircases and diamonds, which is what makes
+     * this the metric for city blocks — and it means the region borders can be
+     * used directly as the street grid instead of needing roads drawn separately.
+     */
     Manhattan,
-    /// Chessboard distance, @f$\max(|dx|, |dz|)@f$. Regions are forced toward
-    /// axis-aligned squares: rigid, regimented layouts.
+
+    /**
+     * @brief Chessboard distance, @f$\max(|dx|, |dz|)@f$.
+     *
+     * Regions are forced toward axis-aligned squares: rigid, regimented layouts.
+     */
     Chebyshev
 };
 
@@ -82,13 +94,13 @@ enum class DistanceMetric : core::u8 {
  * @brief Grid size, region scale, metric and how organic the borders are.
  */
 struct VoronoiParams {
-    core::u32 width{64u};                             ///< Cells along X.
-    core::u32 depth{64u};                             ///< Cells along Z.
-    core::u32 seed{1337u};                            ///< Determinism anchor.
-    core::u32 cellSize{12u};                          ///< Coarse cell edge; larger means bigger regions.
-    core::f32 jitter{0.8f};                           ///< How far a site may stray inside its coarse cell, in [0, 1].
-    DistanceMetric metric{DistanceMetric::Euclidean}; ///< Which distance decides ownership.
-    core::f32 warpStrength{0.0f};                     ///< Domain warp in cells; 0 leaves borders polygonal.
+    core::u32 width{64u};                             /**< Cells along X. */
+    core::u32 depth{64u};                             /**< Cells along Z. */
+    core::u32 seed{1337u};                            /**< Determinism anchor. */
+    core::u32 cellSize{12u};                          /**< Coarse cell edge; larger means bigger regions. */
+    core::f32 jitter{0.8f};                           /**< How far a site may stray in its coarse cell, in [0, 1]. */
+    DistanceMetric metric{DistanceMetric::Euclidean}; /**< Which distance decides ownership. */
+    core::f32 warpStrength{0.0f};                     /**< Domain warp in cells; 0 leaves borders polygonal. */
 };
 
 /**
@@ -96,13 +108,27 @@ struct VoronoiParams {
  * @brief The computed partition.
  */
 struct VoronoiDiagram {
-    RegionMap regions;                   ///< Region index per cell.
-    lpl::pmr::vector<VoronoiSite> sites; ///< Region centres, indexed by region.
-    core::u32 regionCount{0u};           ///< Number of regions.
+    RegionMap regions;                   /**< Region index per cell. */
+    lpl::pmr::vector<VoronoiSite> sites; /**< Region centres, indexed by region. */
+    core::u32 regionCount{0u};           /**< Number of regions. */
 };
 
 /**
  * @brief Builds a Voronoi partition over a grid.
+ *
+ * One region per coarse cell, indexed in scan order so a region id is
+ * reproducible from its coarse coordinates alone.
+ *
+ * A region id is a u16 and 0xFFFF means "no region", so a partition finer than
+ * that would wrap ids into the sentinel and silently mark cells unclaimed.
+ * Refusing outright beats producing a diagram whose region 65535 is invisible.
+ *
+ * Each cell compares only the sites of the coarse cells around its home coarse
+ * cell, a jittered site never leaving its own cell; the block is widened by
+ * however many coarse cells the warp can displace the query point. A site wins
+ * only when strictly nearer: ties go to the first in scan order, so the
+ * partition is the same on every target.
+ *
  * @param params Size, seed and region scale.
  * @return The diagram (empty when the grid or cell size is degenerate).
  */

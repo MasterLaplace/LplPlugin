@@ -47,10 +47,10 @@
 
 namespace lpl::procgen {
 
-/// What a site is for. Each kind reads the same terrain and wants opposite things of it.
+/** What a site is for. Each kind reads the same terrain and wants opposite things of it. */
 enum class LandmarkKind : core::u8 {
-    CaveMouth = 0, ///< An opening in a hillside. Wants a STEEP face.
-    Settlement,    ///< Somewhere people would live. Wants FLAT ground.
+    CaveMouth = 0, /**< An opening in a hillside. Wants a STEEP face. */
+    Settlement,    /**< Somewhere people would live. Wants FLAT ground. */
     Count
 };
 
@@ -68,7 +68,7 @@ struct LandmarkParams {
      */
     core::u32 cellSpan{40u};
 
-    core::u32 oneIn{5u}; ///< One landmark cell in N carries a site.
+    core::u32 oneIn{5u}; /**< One landmark cell in N carries a site. */
 
     /**
      * @brief Cells the site occupies, measured from its centre.
@@ -88,7 +88,7 @@ struct LandmarkParams {
      */
     core::f32 clearanceAboveSea{2.0f};
 
-    core::f32 maxHeight{1.0e9f}; ///< Above this the site is refused (snow, bare rock).
+    core::f32 maxHeight{1.0e9f}; /**< Above this the site is refused (snow, bare rock). */
 
     /**
      * @brief The slope band the site will accept, as a height difference over @ref radius.
@@ -100,77 +100,66 @@ struct LandmarkParams {
     core::f32 maxRelief{1.0e9f};
 };
 
-/// A cave mouth: steep ground, well clear of the water, not up in the snow.
-[[nodiscard]] constexpr LandmarkParams caveMouthDefaults() noexcept
-{
-    LandmarkParams params{};
-    // Measured, over 441 landmark cells of the walked world, at radius 4:
-    //
-    //   | cellSpan | oneIn | minRelief | one mouth per |
-    //   |----------|-------|-----------|---------------|
-    //   |    24    |   2   |    2.2    |   4.9 chunks  |
-    //   |    32    |   2   |    2.2    |  10.1 chunks  |
-    //   |    32    |   3   |    2.2    |  17.4 chunks  |
-    //   |    40    |   3   |    5.0    | 408.0 chunks  |
-    //
-    // The last row is what this used to be, and it is why the world had no caves in it:
-    // one mouth per four hundred chunks is one a walker will never meet. Ten is close
-    // enough to find by walking and far enough apart not to read as a lattice.
-    params.cellSpan = 24u;
-    params.oneIn = 2u;
-    params.radius = 4u;
-    params.clearanceAboveSea = 3.0f;
-    // A face, not a plain — and deliberately a little MORE relief than the shelf is deep,
-    // or the cut is deeper than the hill it is cut into and the mouth is a pit in a field.
-    params.minRelief = 2.2f;
-    params.maxRelief = 1.0e9f;
-    return params;
-}
+/**
+ * @brief A cave mouth: steep ground, well clear of the water, not up in the snow.
+ *
+ * Measured, over 441 landmark cells of the walked world, at radius 4:
+ *
+ * | cellSpan | oneIn | minRelief | one mouth per |
+ * |----------|-------|-----------|---------------|
+ * |    24    |   2   |    2.2    |   4.9 chunks  |
+ * |    32    |   2   |    2.2    |  10.1 chunks  |
+ * |    32    |   3   |    2.2    |  17.4 chunks  |
+ * |    40    |   3   |    5.0    | 408.0 chunks  |
+ *
+ * The last row is what this used to be, and it is why the world had no caves in it:
+ * one mouth per four hundred chunks is one a walker will never meet. Ten is close
+ * enough to find by walking and far enough apart not to read as a lattice.
+ *
+ * The relief floor asks for a face, not a plain — and deliberately a little MORE relief than
+ * the shelf is deep, or the cut is deeper than the hill it is cut into and the mouth is a
+ * pit in a field.
+ */
+[[nodiscard]] constexpr LandmarkParams caveMouthDefaults() noexcept;
 
-/// A village: flat ground, above the flood line, below the tree line.
-[[nodiscard]] constexpr LandmarkParams settlementDefaults() noexcept
-{
-    LandmarkParams params{};
-    // Measured on the coastal walked world, at maxRelief 6 and radius 11, against a
-    // resident set of fifty-six chunks:
-    //
-    //   | cellSpan | oneIn | one village per | resident on average |
-    //   |----------|-------|-----------------|---------------------|
-    //   |    56    |   2   |   49.0 chunks   |        1.14         |
-    //   |    64    |   2   |   59.2 chunks   |        0.95         |
-    //   |    96    |   2   |  108.6 chunks   |        0.52         |
-    //   |    96    |   3   |  156.8 chunks   |        0.36         |
-    //
-    // One resident on average: a village is usually on screen or just over the hill, and
-    // never a suburb. The last row is what this used to be, and half a village resident is
-    // a world where you walk for a quarter of an hour without meeting one.
-    //
-    // The span is also what keeps two of them apart: 56 minus the 34 cells of jitter leaves
-    // 22, which is exactly two radii, so neighbours touch at worst and never overlap.
-    params.cellSpan = 56u;
-    params.oneIn = 2u;
-    params.radius = 11u;
-    params.clearanceAboveSea = 3.0f;
-    params.maxHeight = 34.0f;
-    params.minRelief = 0.0f;
-    // Flat enough to build on. The settlement pass refuses steep CELLS on its own; this
-    // refuses steep SITES, which is the cheaper question and the one asked first.
-    params.maxRelief = 4.0f;
-    return params;
-}
+/**
+ * @brief A village: flat ground, above the flood line, below the tree line.
+ *
+ * Measured on the coastal walked world, at maxRelief 6 and radius 11, against a
+ * resident set of fifty-six chunks:
+ *
+ * | cellSpan | oneIn | one village per | resident on average |
+ * |----------|-------|-----------------|---------------------|
+ * |    56    |   2   |   49.0 chunks   |        1.14         |
+ * |    64    |   2   |   59.2 chunks   |        0.95         |
+ * |    96    |   2   |  108.6 chunks   |        0.52         |
+ * |    96    |   3   |  156.8 chunks   |        0.36         |
+ *
+ * One resident on average: a village is usually on screen or just over the hill, and
+ * never a suburb. The last row is what this used to be, and half a village resident is
+ * a world where you walk for a quarter of an hour without meeting one.
+ *
+ * The span is also what keeps two of them apart: 56 minus the 34 cells of jitter leaves
+ * 22, which is exactly two radii, so neighbours touch at worst and never overlap.
+ *
+ * The relief ceiling keeps a site flat enough to build on. The settlement pass refuses
+ * steep CELLS on its own; this refuses steep SITES, which is the cheaper question and the
+ * one asked first.
+ */
+[[nodiscard]] constexpr LandmarkParams settlementDefaults() noexcept;
 
 /**
  * @struct LandmarkSite
  * @brief One placed landmark, in world cells.
  */
 struct LandmarkSite {
-    core::i32 cellX{0};     ///< World column of its centre.
-    core::i32 cellZ{0};     ///< World row of its centre.
-    core::f32 height{0.0f}; ///< Raw ground height there. The pad and the floor come from it.
-    core::f32 relief{0.0f}; ///< The height difference that qualified it.
-    core::u32 seed{0u};     ///< Derived from its landmark cell; everything else derives from this.
-    core::u32 facing{0u};   ///< kNeighbor8 index of the downhill direction.
-    core::u32 radius{0u};   ///< Copy of the params', so a consumer needs one argument fewer.
+    core::i32 cellX{0};     /**< World column of its centre. */
+    core::i32 cellZ{0};     /**< World row of its centre. */
+    core::f32 height{0.0f}; /**< Raw ground height there. The pad and the floor come from it. */
+    core::f32 relief{0.0f}; /**< The height difference that qualified it. */
+    core::u32 seed{0u};     /**< Derived from its landmark cell; everything else derives from this. */
+    core::u32 facing{0u};   /**< kNeighbor8 index of the downhill direction. */
+    core::u32 radius{0u};   /**< Copy of the params', so a consumer needs one argument fewer. */
     LandmarkKind kind{LandmarkKind::CaveMouth};
 };
 
@@ -182,7 +171,18 @@ struct LandmarkSite {
  *
  * The centre is JITTERED inside its cell rather than placed at the middle of it: sites on
  * a lattice read as a grid the moment two are on screen together, and a grid of villages
- * is more obviously artificial than no villages.
+ * is more obviously artificial than no villages. The jitter is kept clear of the cell's own
+ * edges by the radius so a footprint stays inside the cell it was drawn from — which is
+ * what keeps the search reach equal to the radius rather than to the radius plus the
+ * jitter.
+ *
+ * The draws come from `deriveStream` and not `Random{seed}` directly: consecutive seeds do
+ * not avalanche in three shift-xors, and a landmark lattice walks its coordinates one by
+ * one by construction — measured on the fountain codec, where consecutive seeds produced a
+ * degree distribution with three values in it.
+ *
+ * Relief across the footprint, and the steepest descent out of it, in one pass: the two
+ * are the same eight samples and asking twice would be twice the noise.
  *
  * @param params     World parameters.
  * @param landmarks  How often this kind occurs and what ground it accepts.
@@ -202,6 +202,11 @@ struct LandmarkSite {
  * This is the CARVE list. A site whose centre is next door still lowers ground here, and a
  * chunk that skipped it would disagree with its neighbour along their seam.
  *
+ * The landmark cells to scan come from floor division on both ends: truncation folds the
+ * world about its own axis, so a site at -1 and one at +1 would land in the same landmark
+ * cell. The jitter can push a centre outside the band the cell scan bounded, so the
+ * footprint is tested rather than trusted.
+ *
  * @param params    World parameters.
  * @param landmarks Siting rule.
  * @param kind      Which kind.
@@ -211,42 +216,7 @@ struct LandmarkSite {
  */
 template <typename Emit>
 void forEachLandmarkNear(const ChunkParams &params, const LandmarkParams &landmarks, LandmarkKind kind,
-                         core::f32 seaLevel, ChunkCoord coord, Emit &&emit)
-{
-    if (params.size == 0u || landmarks.cellSpan == 0u)
-        return;
-
-    const core::i32 span = static_cast<core::i32>(landmarks.cellSpan);
-    const core::i32 reach = static_cast<core::i32>(landmarks.radius);
-    const core::i32 chunkCells = static_cast<core::i32>(params.size);
-    const core::i32 minCellX = coord.x * chunkCells - reach;
-    const core::i32 maxCellX = coord.x * chunkCells + chunkCells - 1 + reach;
-    const core::i32 minCellZ = coord.z * chunkCells - reach;
-    const core::i32 maxCellZ = coord.z * chunkCells + chunkCells - 1 + reach;
-
-    // Floor division on both ends: truncation folds the world about its own axis, so a
-    // site at -1 and one at +1 would land in the same landmark cell.
-    const core::i32 fromX = floorDivChunk(minCellX, span);
-    const core::i32 toX = floorDivChunk(maxCellX, span);
-    const core::i32 fromZ = floorDivChunk(minCellZ, span);
-    const core::i32 toZ = floorDivChunk(maxCellZ, span);
-
-    for (core::i32 lz = fromZ; lz <= toZ; ++lz)
-        for (core::i32 lx = fromX; lx <= toX; ++lx)
-        {
-            LandmarkSite site;
-            if (!landmarkAt(params, landmarks, kind, seaLevel, lx, lz, site))
-                continue;
-            // The jitter can push a centre outside the band the cell scan bounded, so the
-            // footprint is tested rather than trusted.
-            if (site.cellX + static_cast<core::i32>(site.radius) < minCellX ||
-                site.cellX - static_cast<core::i32>(site.radius) > maxCellX ||
-                site.cellZ + static_cast<core::i32>(site.radius) < minCellZ ||
-                site.cellZ - static_cast<core::i32>(site.radius) > maxCellZ)
-                continue;
-            emit(site);
-        }
-}
+                         core::f32 seaLevel, ChunkCoord coord, Emit &&emit);
 
 /**
  * @brief Whether a site's centre belongs to a chunk, i.e. whose job it is to DRAW it.
@@ -277,7 +247,12 @@ void forEachLandmarkNear(const ChunkParams &params, const LandmarkParams &landma
  * **Chunk independence is preserved, and it is the whole difficulty.** A quantile over "the
  * world" does not exist: there is no total. The window is therefore a fixed block of
  * landmark cells at the origin — a function of the parameters alone, identical for every
- * chunk that asks, computed ONCE when a plan is built and never per chunk.
+ * chunk that asks, computed ONCE when a plan is built and never per chunk. Twenty-one
+ * landmark cells along each axis, centred on the ORIGIN: a window that followed the walker
+ * would give two chunks two thresholds and a village would appear and vanish at a border.
+ *
+ * Insertion sort: a few dozen entries, once per plan, and it saves this module a
+ * dependency on a sort it does not otherwise need in ring 0.
  *
  * @param params      World parameters.
  * @param landmarks   Siting rule; its own relief band is ignored.
@@ -299,12 +274,12 @@ void forEachLandmarkNear(const ChunkParams &params, const LandmarkParams &landma
  */
 struct VillagePlan {
     LandmarkSite site{};
-    SettlementMap map{};                    ///< Village-local grid of cells.
-    lpl::pmr::vector<BuildingPlot> plots{}; ///< Footprints, in village-local cells.
-    core::i32 originX{0};                   ///< World column of the map's (0, 0).
-    core::i32 originZ{0};                   ///< World row of it.
-    core::f32 padHeight{0.0f};              ///< The one level the ground is flattened to.
-    core::u32 side{0u};                     ///< Cells along each edge of the map.
+    SettlementMap map{};                    /**< Village-local grid of cells. */
+    lpl::pmr::vector<BuildingPlot> plots{}; /**< Footprints, in village-local cells. */
+    core::i32 originX{0};                   /**< World column of the map's (0, 0). */
+    core::i32 originZ{0};                   /**< World row of it. */
+    core::f32 padHeight{0.0f};              /**< The one level the ground is flattened to. */
+    core::u32 side{0u};                     /**< Cells along each edge of the map. */
 };
 
 /**
@@ -319,6 +294,14 @@ struct VillagePlan {
  * a village on a slope has its streets at whatever height each cell happened to be, and
  * a building standing on two levels at once shears. One level per village is the same
  * decision `buildPlotDatum` made for a bounded plot, for the same reason.
+ *
+ * The ground the layout is refused or accepted on is flat by construction — the pad — so
+ * the settlement pass will not refuse a cell for slope; what it still refuses is a cell
+ * below its own minimum height, which is why the pad is passed rather than zero. That
+ * minimum is set below the pad, so the pad itself is never the reason a village has no
+ * houses; the site rule already refused ground too near the water. The settlement numbers
+ * are small, because this whole layout is recomputed by every chunk that touches the
+ * village.
  *
  * @param params World parameters.
  * @param site   The site, from @ref landmarkAt.
@@ -339,42 +322,25 @@ struct LandmarkBuilding {
     core::f32 minZ{0.0f};
     core::f32 maxX{0.0f};
     core::f32 maxZ{0.0f};
-    core::f32 baseY{0.0f};  ///< The pad it stands on.
-    core::f32 height{0.0f}; ///< How far it rises above the pad.
-    core::u32 storeys{1u};  ///< Storeys, from the plot's own footprint area.
-    core::u16 district{0u}; ///< Which district, so a village is not one material.
+    core::f32 baseY{0.0f};  /**< The pad it stands on. */
+    core::f32 height{0.0f}; /**< How far it rises above the pad. */
+    core::u32 storeys{1u};  /**< Storeys, from the plot's own footprint area. */
+    core::u16 district{0u}; /**< Which district, so a village is not one material. */
 };
 
 /**
  * @brief Every building of a plan, in world coordinates.
  *
+ * Storeys from the footprint's area, not from a die roll: a wide plot is a hall and a
+ * narrow one is a tower, which is the relationship a town actually has.
+ *
  * @param plan  The village.
  * @param emit  Called with each building: `emit(const LandmarkBuilding &)`.
  */
-template <typename Emit> void forEachVillageBuilding(const VillagePlan &plan, Emit &&emit)
-{
-    for (core::u32 i = 0u; i < plan.plots.size(); ++i)
-    {
-        const BuildingPlot &plot = plan.plots[i];
-        if (plot.width == 0u || plot.depth == 0u)
-            continue;
-
-        LandmarkBuilding building;
-        building.minX = static_cast<core::f32>(plan.originX + static_cast<core::i32>(plot.x));
-        building.minZ = static_cast<core::f32>(plan.originZ + static_cast<core::i32>(plot.z));
-        building.maxX = building.minX + static_cast<core::f32>(plot.width);
-        building.maxZ = building.minZ + static_cast<core::f32>(plot.depth);
-        building.baseY = plan.padHeight;
-        // Storeys from the footprint's area, not from a die roll: a wide plot is a hall
-        // and a narrow one is a tower, which is the relationship a town actually has.
-        const core::u32 area = plot.width * plot.depth;
-        building.storeys = area >= 12u ? 1u : (area >= 6u ? 2u : 3u);
-        building.height = 2.6f * static_cast<core::f32>(building.storeys);
-        building.district = plot.district;
-        emit(building);
-    }
-}
+template <typename Emit> void forEachVillageBuilding(const VillagePlan &plan, Emit &&emit);
 
 } // namespace lpl::procgen
+
+#    include "Landmark.inl"
 
 #endif // LPL_PROCGEN_LANDMARK_HPP

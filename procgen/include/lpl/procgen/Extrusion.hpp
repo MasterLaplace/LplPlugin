@@ -44,12 +44,15 @@ namespace lpl::procgen {
  * order a mesher, a renderer or a collision builder walks it in.
  */
 struct VoxelVolume {
-    core::u32 width{0u};              ///< Cells along X.
-    core::u32 depth{0u};              ///< Cells along Z.
-    core::u32 levels{0u};             ///< Cells along Y.
-    lpl::pmr::vector<core::u8> cells; ///< Material per voxel; 0 means empty.
+    core::u32 width{0u};              /**< Cells along X. */
+    core::u32 depth{0u};              /**< Cells along Z. */
+    core::u32 levels{0u};             /**< Cells along Y. */
+    lpl::pmr::vector<core::u8> cells; /**< Material per voxel; 0 means empty. */
 
-    /// @return Flat index of (@p x, @p y, @p z).
+    /**
+     * @brief Flattens a coordinate into an index of @c cells.
+     * @return Flat index of (@p x, @p y, @p z).
+     */
     [[nodiscard]] core::u32 index(core::u32 x, core::u32 y, core::u32 z) const noexcept
     {
         return x + z * width + y * width * depth;
@@ -67,10 +70,10 @@ struct VoxelVolume {
  * @brief How a plan gains height.
  */
 struct ExtrusionParams {
-    core::u32 levels{8u};         ///< Vertical extent of the volume.
-    core::u32 baseLevel{0u};      ///< Level the ground starts at.
-    core::f32 heightScale{0.25f}; ///< World units per level, when extruding a heightfield.
-    bool solidBelow{true};        ///< Fill every level under the surface, not just the surface itself.
+    core::u32 levels{8u};         /**< Vertical extent of the volume. */
+    core::u32 baseLevel{0u};      /**< Level the ground starts at. */
+    core::f32 heightScale{0.25f}; /**< World units per level, when extruding a heightfield. */
+    bool solidBelow{true};        /**< Fill every level under the surface, not just the surface itself. */
 };
 
 /**
@@ -86,7 +89,7 @@ struct VoxelWindow {
     core::u32 minX{0u};
     core::u32 minY{0u};
     core::u32 minZ{0u};
-    core::u32 maxX{0xFFFFFFFFu}; ///< Exclusive.
+    core::u32 maxX{0xFFFFFFFFu}; /**< Exclusive. */
     core::u32 maxY{0xFFFFFFFFu};
     core::u32 maxZ{0xFFFFFFFFu};
 };
@@ -115,73 +118,7 @@ struct VoxelWindow {
  *                      one unit and level 0 spans y in [0, 1).
  */
 template <typename SolidOutside, typename Emit>
-void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, SolidOutside &&solidOutside, Emit &&emit)
-{
-    if (volume.empty())
-        return;
-
-    const core::u32 highX = window.maxX < volume.width ? window.maxX : volume.width;
-    const core::u32 highY = window.maxY < volume.levels ? window.maxY : volume.levels;
-    const core::u32 highZ = window.maxZ < volume.depth ? window.maxZ : volume.depth;
-
-    const auto solid = [&volume, &solidOutside](core::i32 x, core::i32 y, core::i32 z) {
-        if (x < 0 || y < 0 || z < 0 || static_cast<core::u32>(x) >= volume.width ||
-            static_cast<core::u32>(y) >= volume.levels || static_cast<core::u32>(z) >= volume.depth)
-            return static_cast<bool>(solidOutside(x, y, z));
-        return volume.at(static_cast<core::u32>(x), static_cast<core::u32>(y), static_cast<core::u32>(z)) != 0u;
-    };
-
-    for (core::u32 y = window.minY; y < highY; ++y)
-        for (core::u32 z = window.minZ; z < highZ; ++z)
-            for (core::u32 x = window.minX; x < highX; ++x)
-            {
-                const core::u8 material = volume.at(x, y, z);
-                if (material == 0u)
-                    continue;
-
-                const core::f32 x0 = static_cast<core::f32>(x);
-                const core::f32 x1 = x0 + 1.0f;
-                const core::f32 y0 = static_cast<core::f32>(y);
-                const core::f32 y1 = y0 + 1.0f;
-                const core::f32 z0 = static_cast<core::f32>(z);
-                const core::f32 z1 = z0 + 1.0f;
-
-                const core::i32 ix = static_cast<core::i32>(x);
-                const core::i32 iy = static_cast<core::i32>(y);
-                const core::i32 iz = static_cast<core::i32>(z);
-
-                if (!solid(ix, iy + 1, iz))
-                {
-                    const core::f32 quad[12] = {x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1};
-                    emit(quad, 0.0f, 1.0f, 0.0f, material, x, y, z);
-                }
-                if (!solid(ix, iy - 1, iz))
-                {
-                    const core::f32 quad[12] = {x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0};
-                    emit(quad, 0.0f, -1.0f, 0.0f, material, x, y, z);
-                }
-                if (!solid(ix + 1, iy, iz))
-                {
-                    const core::f32 quad[12] = {x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1};
-                    emit(quad, 1.0f, 0.0f, 0.0f, material, x, y, z);
-                }
-                if (!solid(ix - 1, iy, iz))
-                {
-                    const core::f32 quad[12] = {x0, y0, z1, x0, y1, z1, x0, y1, z0, x0, y0, z0};
-                    emit(quad, -1.0f, 0.0f, 0.0f, material, x, y, z);
-                }
-                if (!solid(ix, iy, iz + 1))
-                {
-                    const core::f32 quad[12] = {x0, y0, z1, x0, y1, z1, x1, y1, z1, x1, y0, z1};
-                    emit(quad, 0.0f, 0.0f, 1.0f, material, x, y, z);
-                }
-                if (!solid(ix, iy, iz - 1))
-                {
-                    const core::f32 quad[12] = {x1, y0, z0, x1, y1, z0, x0, y1, z0, x0, y0, z0};
-                    emit(quad, 0.0f, 0.0f, -1.0f, material, x, y, z);
-                }
-            }
-}
+void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, SolidOutside &&solidOutside, Emit &&emit);
 
 /**
  * @brief Extrudes a tile plan by a fixed height per tile id.
@@ -190,8 +127,13 @@ void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, Soli
  * empty, and so on. That keeps the plan and the volume in one relationship a
  * caller can read at a glance.
  *
+ * Material carries the tile id (the tile id plus one, since 0 means empty), so the
+ * volume still knows what each column was made of — a mesher can texture from it
+ * without needing the plan alongside.
+ *
  * @param plan       The 2D arrangement.
- * @param tileHeight Level count per tile id; entries beyond its size are 1.
+ * @param tileHeight Level count per tile id; entries beyond its size are 1. A
+ *                   height of 0 makes the tile a hole, not a column.
  * @param params     Volume extent and fill mode.
  * @return The volume.
  */
@@ -200,6 +142,9 @@ void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, Soli
 
 /**
  * @brief Extrudes a heightfield into voxels, quantising to whole levels.
+ *
+ * Neighbouring columns must share exact wall heights or nothing connects.
+ *
  * @param field    Terrain to voxelise.
  * @param material Material id written for solid voxels.
  * @param params   Volume extent, scale and fill mode.
@@ -219,7 +164,9 @@ void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, Soli
  * @brief Counts solid voxels with at least one empty face — the visible shell.
  *
  * What a mesher would actually emit. Useful as a cheap sanity check that an
- * extrusion produced a surface rather than a solid block.
+ * extrusion produced a surface rather than a solid block. Outside the volume
+ * counts as empty, so the outer shell is surface — which is what a mesher emits
+ * too.
  *
  * @param volume Volume to measure.
  * @return Surface voxel count.
@@ -234,5 +181,7 @@ void forEachVoxelFace(const VoxelVolume &volume, const VoxelWindow &window, Soli
 [[nodiscard]] core::u32 foldVolume(const VoxelVolume &volume);
 
 } // namespace lpl::procgen
+
+#    include "Extrusion.inl"
 
 #endif // LPL_PROCGEN_EXTRUSION_HPP

@@ -45,7 +45,7 @@ namespace lpl::procgen {
  * why the shaping terms come with it: a walker needs somewhere flat to walk.
  */
 struct WalkScale {
-    core::f32 reliefScale{2.8f}; ///< Multiplies the recipe's amplitude.
+    core::f32 reliefScale{2.8f}; /**< Multiplies the recipe's amplitude. */
     /**
      * @brief Multiplies the recipe's frequency: fewer, WIDER landforms.
      *
@@ -139,7 +139,7 @@ struct WalkScale {
     core::f32 rockLine{0.90f};
     core::f32 snowLine{1.45f};
 
-    core::u32 erosionIterations{6u}; ///< Thermal passes per chunk; also sets the apron.
+    core::u32 erosionIterations{6u}; /**< Thermal passes per chunk; also sets the apron. */
 
     /**
      * @brief One wooded cell in N grows a plant.
@@ -292,86 +292,41 @@ struct EndlessPlan {
  * chosen here. Where the sea is has to be one answer: a second one classifies a cell
  * as land, draws water over it and refuses to let anything walk on it, all at once.
  *
+ * The rock and snow lines are set against the amplitude the plan actually produces, so a
+ * change of scale carries them. Cooling is a rate PER METRE, so a world whose relief is
+ * nearly three times taller cools nearly three times faster over the same landform — and
+ * comes out as tundra wherever it is not sea. The rock and snow lines are already scaled
+ * for exactly this reason; cooling is the third member of that family and it was left
+ * behind.
+ *
+ * The river parameters belong to the PLAN, and their absence was a live defect: nothing
+ * derived them, so a caller got a default-constructed set whose sea level was -1.0 while
+ * the classifier's was -4.0. Where the sea is has to be one answer — the same argument as
+ * for the sea level above, applied to the half that was left out of it.
+ *
+ * Landmarks, in the walked frame. Every threshold is derived from something the scale
+ * already states rather than restated: a village stays below the bare rock line because
+ * that is where soil stops, and both kinds keep clear of the water the recipe put there.
+ * Calibrated, not chosen. See WalkScale::villageFlattestShare for the two times an
+ * absolute metre value broke this, in opposite directions.
+ *
+ * The cave BEHIND the mouth. Its geometry is derived rather than restated, for the same
+ * reason the river surface is: the shelf depth, the sea and the settlement lattice are
+ * all in the plan already, and a second copy of any of them is a warren that disagrees
+ * with the ground it is under. Its kind comes straight from the document. Nothing else in the
+ * streamed path reads it, which is why a `.lplscene` that named `bsp` used to get
+ * cellular caves everywhere: the recipe's word reached the BOUNDED builder and nothing
+ * else.
+ *
  * @param recipe    The bounded world to walk through.
  * @param chunkSize Cells along each edge of a chunk.
  * @param scale     How much bigger it has to be. Defaults are the measured ones.
  */
 [[nodiscard]] inline EndlessPlan endlessPlanFromRecipe(const WorldRecipe &recipe, core::u32 chunkSize,
-                                                       const WalkScale &scale = WalkScale{})
-{
-    EndlessPlan plan;
-
-    plan.chunk.size = chunkSize;
-    plan.chunk.worldSeed = recipe.seed;
-    plan.chunk.noise = recipe.terrain;
-    plan.chunk.noise.seed = recipe.seed;
-    plan.chunk.noise.amplitude = recipe.terrain.amplitude * scale.reliefScale;
-    plan.chunk.noise.frequency = recipe.terrain.frequency * scale.reliefFrequency;
-    plan.chunk.noise.baseHeight = recipe.terrain.baseHeight + scale.landLift;
-    plan.chunk.noise.plainsFlatten = scale.plainsFlatten;
-    plan.chunk.noise.plainsWidth = scale.plainsWidth;
-    plan.chunk.noise.mountainThreshold = scale.mountainThreshold;
-    plan.chunk.noise.mountainGain = scale.mountainGain;
-
-    plan.rule.erosionIterations = scale.erosionIterations;
-    plan.rule.seaLevel = recipe.biomes.seaLevel;
-    plan.rule.beachBand = recipe.biomes.beachHeight;
-    // Against the amplitude the plan actually produces, so a change of scale carries them.
-    plan.rule.rockLine = plan.chunk.noise.amplitude * scale.rockLine;
-    plan.rule.snowLine = plan.chunk.noise.amplitude * scale.snowLine;
-    plan.rule.vegetationOneIn = scale.vegetationOneIn;
-    // Cooling is a rate PER METRE, so a world whose relief is nearly three times taller
-    // cools nearly three times faster over the same landform — and comes out as tundra
-    // wherever it is not sea. The rock and snow lines are already scaled here for exactly
-    // this reason; this is the third member of that family and it was left behind.
-    plan.rule.altitudeCooling = ChunkTerrainRule{}.altitudeCooling / scale.reliefScale;
-    plan.rule.riverDepth = scale.riverDepth;
-    plan.rule.riverFill = scale.riverFill;
-
-    // The river parameters belong to the PLAN, and their absence was a live defect: nothing
-    // derived them, so a caller got a default-constructed set whose sea level was -1.0 while
-    // the classifier's was -4.0. Where the sea is has to be one answer — the same argument
-    // the rule's own comment makes, applied to the half that was left out of it.
-    plan.rivers.seaLevel = plan.rule.seaLevel;
-    plan.rivers.riverThreshold = calibrateRiverThreshold(plan.chunk, plan.rivers, scale.targetRiverShare);
-
-    plan.riverSurfaceRise = plan.rule.riverDepth * plan.rule.riverFill;
-
-    // Landmarks, in the walked frame. Every threshold is derived from something the scale
-    // already states rather than restated: a village stays below the bare rock line
-    // because that is where soil stops, and both kinds keep clear of the water the recipe
-    // put there.
-    // Calibrated, not chosen. See WalkScale::villageFlattestShare for the two times an
-    // absolute metre value broke this, in opposite directions.
-    plan.rule.carveCaveMouths = scale.caveMouths;
-    plan.rule.caveMouths = caveMouthDefaults();
-    plan.rule.caveMouths.minRelief = calibrateLandmarkRelief(plan.chunk, plan.rule.caveMouths, LandmarkKind::CaveMouth,
-                                                             plan.rule.seaLevel, 1.0f - scale.caveSteepestShare);
-    plan.rule.caveMouthDrop = scale.caveMouthDrop;
-
-    plan.rule.raiseVillages = scale.villages;
-    plan.rule.villages = settlementDefaults();
-    plan.rule.villages.maxHeight = plan.rule.rockLine;
-    plan.rule.villages.maxRelief = calibrateLandmarkRelief(plan.chunk, plan.rule.villages, LandmarkKind::Settlement,
-                                                           plan.rule.seaLevel, scale.villageFlattestShare);
-
-    // The cave BEHIND the mouth. Its geometry is derived rather than restated, for the
-    // same reason the river surface is: the shelf depth, the sea and the settlement
-    // lattice all exist above, and a second copy of any of them is a warren that
-    // disagrees with the ground it is under.
-    plan.rule.buildWarrens = scale.caveMouths && scale.caveWarrens;
-    plan.rule.warren = caveWarrenDefaults();
-    plan.rule.warren.halfSpan = scale.warrenHalfSpan;
-    plan.rule.warren.seaLevel = plan.rule.seaLevel;
-    plan.rule.warren.villages = plan.rule.villages;
-    // Straight from the document. Nothing else in the streamed path reads it, which is
-    // why a `.lplscene` that named `bsp` used to get cellular caves everywhere: the
-    // recipe's word reached the BOUNDED builder and nothing else.
-    plan.rule.warren.kind = recipe.caveKind;
-
-    return plan;
-}
+                                                       const WalkScale &scale = WalkScale{});
 
 } // namespace lpl::procgen
+
+#    include "EndlessPlan.inl"
 
 #endif // LPL_PROCGEN_ENDLESSPLAN_HPP

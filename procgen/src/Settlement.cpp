@@ -1,12 +1,3 @@
-/**
- * @file Settlement.cpp
- * @brief Implementation of district, road and plot generation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Settlement.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -23,7 +14,12 @@ constexpr bool isWalkableCell(SettlementCell cell) noexcept
     return cell == SettlementCell::Road || cell == SettlementCell::Plaza;
 }
 
-/// Paints a road cell unless the ground refuses it.
+/**
+ * @brief Paints a road cell unless the ground refuses it.
+ *
+ * Blocked ground stays blocked: a road must route around a cliff, not pretend it
+ * is not there.
+ */
 void placeRoad(SettlementMap &map, core::i32 x, core::i32 z, core::u32 thickness, core::u32 &outCells)
 {
     const core::i32 r = static_cast<core::i32>(thickness);
@@ -36,8 +32,6 @@ void placeRoad(SettlementMap &map, core::i32 x, core::i32 z, core::u32 thickness
             if (!map.contains(cx, cz))
                 continue;
             SettlementCell &cell = map.at(static_cast<core::u32>(cx), static_cast<core::u32>(cz));
-            // Blocked ground stays blocked: a road must route around a cliff,
-            // not pretend it is not there.
             if (cell == SettlementCell::Blocked || cell == SettlementCell::Road)
                 continue;
             cell = SettlementCell::Road;
@@ -46,7 +40,9 @@ void placeRoad(SettlementMap &map, core::i32 x, core::i32 z, core::u32 thickness
     }
 }
 
-/// Draws an L-shaped street between two points.
+/**
+ * @brief Draws an L-shaped street between two points.
+ */
 void connectWithRoad(SettlementMap &map, core::u32 fromX, core::u32 fromZ, core::u32 toX, core::u32 toZ,
                      core::u32 thickness, core::u32 &outCells)
 {
@@ -61,7 +57,9 @@ void connectWithRoad(SettlementMap &map, core::u32 fromX, core::u32 fromZ, core:
         placeRoad(map, static_cast<core::i32>(toX), static_cast<core::i32>(z), thickness, outCells);
 }
 
-/// Does any 4-neighbour carry a street?
+/**
+ * @brief Does any 4-neighbour carry a street?
+ */
 bool facesRoad(const SettlementMap &map, core::u32 x, core::u32 z)
 {
     for (core::u32 n = 0u; n < 4u; ++n)
@@ -74,7 +72,9 @@ bool facesRoad(const SettlementMap &map, core::u32 x, core::u32 z)
     return false;
 }
 
-/// Can a footprint of this size be placed here?
+/**
+ * @brief Can a footprint of this size be placed here?
+ */
 bool plotFits(const SettlementMap &map, core::u32 x, core::u32 z, core::u32 width, core::u32 depth)
 {
     for (core::u32 cz = z; cz < z + depth; ++cz)
@@ -143,7 +143,24 @@ void linkWalkableComponents(SettlementMap &map, core::u32 thickness, core::u32 &
     }
 }
 
-/// The core layout, shared by the flat and terrain-aware entry points.
+/**
+ * @brief The core layout, shared by the flat and terrain-aware entry points.
+ *
+ * It runs in this order:
+ *
+ * - Districts, from a Voronoi partition.
+ * - Roads along the district borders.
+ * - Plazas, and a spur linking each centre to the border network. A plaza is open
+ *   ground at the heart of the district. The spur walks outward until the border
+ *   network is met, then joins: a district whose centre is enclaved would
+ *   otherwise have buildings nobody can reach.
+ * - Plots facing a street.
+ * - A repair pass that joins every piece of the street network. Roads traced
+ *   along Voronoi borders can meet only diagonally, and a district whose spur
+ *   failed to reach the network is enclaved. Neither is acceptable: this module's
+ *   rule is that a bottom-up layout guarantees nothing until a repair pass has
+ *   said otherwise.
+ */
 SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr::vector<BuildingPlot> *outPlots,
                      SettlementReport *outReport)
 {
@@ -152,7 +169,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
         if (map[i] == SettlementCell::Blocked)
             ++report.blockedCells;
 
-    // ── Districts ───────────────────────────────────────────────────────────
     VoronoiParams voronoi;
     voronoi.width = params.width;
     voronoi.depth = params.depth;
@@ -169,7 +185,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
         return map;
     }
 
-    // ── Roads along the district borders ────────────────────────────────────
     const Grid<core::u8> borders = regionBorders(districts);
     for (core::u32 z = 0u; z < map.depth(); ++z)
         for (core::u32 x = 0u; x < map.width(); ++x)
@@ -177,7 +192,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
                 placeRoad(map, static_cast<core::i32>(x), static_cast<core::i32>(z), params.roadWidth / 2u,
                           report.roadCells);
 
-    // ── Plazas, and a spur linking each centre to the border network ────────
     for (core::u32 region = 0u; region < districts.regionCount; ++region)
     {
         const VoronoiSite &site = districts.sites[region];
@@ -186,7 +200,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
         if (!map.contains(centerX, centerZ))
             continue;
 
-        // Plaza: open ground at the heart of the district.
         const core::i32 r = static_cast<core::i32>(params.plazaRadius);
         for (core::i32 dz = -r; dz <= r; ++dz)
         {
@@ -204,9 +217,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
             }
         }
 
-        // Spur: walk outward until the border network is met, then join. A
-        // district whose centre is enclaved would otherwise have buildings
-        // nobody can reach.
         core::i32 probeX = centerX;
         core::i32 probeZ = centerZ;
         core::u32 guard = 0u;
@@ -223,7 +233,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
                             report.roadCells);
     }
 
-    // ── Plots facing a street ───────────────────────────────────────────────
     math::Random random = math::deriveStream(params.seed, 0xB1D5u);
     const math::Fixed32 density = math::Fixed32::fromFloat(params.plotDensity);
     const core::u32 minPlot = params.minPlot == 0u ? 1u : params.minPlot;
@@ -235,8 +244,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
         {
             if (map.at(x, z) != SettlementCell::Empty)
                 continue;
-            // Facing a street is what makes a plot a plot; without the rule
-            // buildings end up stranded inside blocks.
             if (!facesRoad(map, x, z))
                 continue;
             if (!random.chance(density))
@@ -259,10 +266,6 @@ SettlementMap layout(const SettlementParams &params, SettlementMap map, lpl::pmr
         }
     }
 
-    // Roads traced along Voronoi borders can meet only diagonally, and a
-    // district whose spur failed to reach the network is enclaved. Neither is
-    // acceptable: this module's rule is that a bottom-up layout guarantees
-    // nothing until a repair pass has said otherwise.
     linkWalkableComponents(map, params.roadWidth / 2u, report.roadCells);
 
     report.roadsConnected = areRoadsConnected(map);
@@ -291,8 +294,6 @@ SettlementMap generateSettlementOnTerrain(const SettlementParams &params, const 
 
     SettlementMap map{params.width, params.depth, SettlementCell::Empty};
 
-    // Mark the unbuildable ground BEFORE anything is placed, so roads route
-    // around it instead of being erased afterwards.
     const math::Fixed32 maxSlope = math::Fixed32::fromFloat(params.maxSlope);
     const math::Fixed32 minHeight = math::Fixed32::fromFloat(params.minHeight);
     for (core::u32 z = 0u; z < map.depth(); ++z)
@@ -319,7 +320,7 @@ bool areRoadsConnected(const SettlementMap &map)
         }
 
     if (total == 0u)
-        return true; // nothing to disconnect
+        return true;
 
     queue.push_back(static_cast<core::u32>(start));
     visited[static_cast<core::u32>(start)] = 1u;

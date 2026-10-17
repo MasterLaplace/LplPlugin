@@ -52,11 +52,14 @@ namespace lpl::procgen {
  * Authoritative, therefore Fixed32: this decides where a body may be.
  */
 struct VerticalSpan {
-    math::Fixed32 floor{};            ///< Top of the solid under the body.
-    math::Fixed32 ceiling{openSky()}; ///< Underside of the solid over it.
-    bool enclosed{false};             ///< Whether there is rock overhead at all.
+    math::Fixed32 floor{};            /**< Top of the solid under the body. */
+    math::Fixed32 ceiling{openSky()}; /**< Underside of the solid over it. */
+    bool enclosed{false};             /**< Whether there is rock overhead at all. */
 
-    /// @return How much room there is between the two.
+    /**
+     * @brief The height of the gap.
+     * @return How much room there is between the two.
+     */
     [[nodiscard]] constexpr math::Fixed32 headroom() const noexcept { return ceiling - floor; }
 };
 

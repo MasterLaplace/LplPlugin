@@ -1,12 +1,3 @@
-/**
- * @file CaveSystem.cpp
- * @brief Implementation of the stacked cave system.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/CaveSystem.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -20,7 +11,7 @@ namespace {
 constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
 constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
-/// A cell of the stack, as one index. Layer-major so a layer stays contiguous.
+/** A cell of the stack, as one index. Layer-major so a layer stays contiguous. */
 struct StackIndex {
     core::u32 layer;
     core::u32 cell;
@@ -37,7 +28,9 @@ struct StackIndex {
     return StackIndex{flat / perLayer, flat % perLayer};
 }
 
-/// Is there a shaft joining these two layers at this cell?
+/**
+ * @brief Is there a shaft joining these two layers at this cell?
+ */
 [[nodiscard]] bool hasShaft(const CaveSystem &system, core::u32 upper, core::u32 lower, core::u32 cell)
 {
     const core::u32 width = system.layer[0].width();
@@ -115,7 +108,6 @@ core::u32 floodFromEntrances(const CaveSystem &system, lpl::pmr::vector<core::u3
             queue.push_back(next);
         }
 
-        // Vertical moves, only where a shaft was cut.
         if (here.layer + 1u < system.layerCount && hasShaft(system, here.layer, here.layer + 1u, here.cell) &&
             isWalkable(system.layer[here.layer + 1u][here.cell]))
         {
@@ -153,15 +145,27 @@ void recountReachability(CaveSystem &system)
 }
 
 /**
- * @brief Which generator a layer gets, and why it is a function of the seed alone.
+ * @brief Which generator a layer gets, and why it is a function of the parameters alone.
  *
  * A stack whose layers all came out of one automaton is one cave drawn three times.
- * Drawing the generator per layer is what makes a descent read as going somewhere: a
+ * Choosing the generator per layer is what makes a descent read as going somewhere: a
  * natural mouth over a warren of rooms is a place with a history, and both halves
  * already exist in this module.
  *
- * The draw is over (seed, layer index) and nothing else, so the same stack comes back
- * the same way on any target and in any order — the property the whole module rests on.
+ * The choice is over (parameters, layer index) and nothing else, so the same stack comes
+ * back the same way on any target and in any order — the property the whole module rests
+ * on.
+ *
+ * Without @ref CaveSystemParams::mixLayerKinds, neither of the two non-fillings may reach
+ * a generator. Clamping rather than switching on them is deliberate: a stack inside a
+ * stack has no meaning, and an unresolved Auto is a caller that forgot
+ * @ref chooseCaveKind — both are better as the default cave than as an unhandled case.
+ *
+ * With it, the shallowest floor is always the natural one: it is the floor a mouth opens
+ * into, and a corridor of dressed rooms starting at a hole in a hillside reads as a
+ * mistake rather than as a ruin. Below that, the same evidence @ref chooseCaveKind reads,
+ * applied a floor at a time so a descent can pass through more than one thing. What is
+ * dug sits under what is lived on and over what dissolved long before either.
  *
  * @param params Generator selection.
  * @param layer  Which layer, shallowest first.
@@ -171,24 +175,14 @@ void recountReachability(CaveSystem &system)
 {
     if (!params.mixLayerKinds)
     {
-        // Neither of the two non-fillings may reach a generator. Clamping rather than
-        // switching on them is deliberate: a stack inside a stack has no meaning, and
-        // an unresolved Auto is a caller that forgot @ref chooseCaveKind — both are
-        // better as the default cave than as an unhandled case.
         if (params.layerKind == CaveKind::Layered || params.layerKind == CaveKind::Auto)
             return CaveKind::Cellular;
         return params.layerKind;
     }
 
-    // The shallowest floor is always the natural one: it is the floor a mouth opens
-    // into, and a corridor of dressed rooms starting at a hole in a hillside reads as
-    // a mistake rather than as a ruin.
     if (layer == 0u)
         return CaveKind::Cellular;
 
-    // Below that, the same evidence @ref chooseCaveKind reads, applied a floor at a
-    // time so a descent can pass through more than one thing. What is dug sits under
-    // what is lived on and over what dissolved long before either.
     const bool deepest = layer + 1u >= params.layers;
     if (params.settled && !deepest)
         return CaveKind::Bsp;
@@ -205,6 +199,15 @@ void recountReachability(CaveSystem &system)
  * parameters — a layer of a warren is not a bounded dungeon and has no business
  * carrying one.
  *
+ * Each layer gets its own stream, derived from its index. Reusing one stream across
+ * layers would make layer 2 a continuation of layer 1's sequence, so changing the layer
+ * count would change every layer.
+ *
+ * The aggregation's particle budget is scaled to the floor's AREA. The default is tuned
+ * for the 64-cell map the struct declares, and a particle budget left at that on a
+ * forty-cell warren packs the fractal solid — a branching cave stops branching and
+ * becomes a room with a ragged edge.
+ *
  * @param params Stack parameters.
  * @param layer  Layer index, shallowest first.
  * @param fill   Fill probability for this depth.
@@ -212,9 +215,6 @@ void recountReachability(CaveSystem &system)
  */
 [[nodiscard]] DungeonMap generateLayer(const CaveSystemParams &params, core::u32 layer, core::f32 fill)
 {
-    // Each layer gets its own stream, derived from its index. Reusing one stream
-    // across layers would make layer 2 a continuation of layer 1's sequence, so
-    // changing the layer count would change every layer.
     const core::u32 seed = params.seed ^ (0x1A7E5u * (layer + 1u));
 
     switch (kindForLayer(params, layer))
@@ -231,10 +231,6 @@ void recountReachability(CaveSystem &system)
         aggregation.width = params.width;
         aggregation.depth = params.depth;
         aggregation.seed = seed;
-        // Scaled to the floor's AREA. The default is tuned for the 64-cell map the
-        // struct declares, and a particle budget left at that on a forty-cell warren
-        // packs the fractal solid — a branching cave stops branching and becomes a
-        // room with a ragged edge.
         aggregation.particles = (params.width * params.depth) / 5u;
         return generateDlaCave(aggregation);
     }
@@ -259,10 +255,6 @@ void recountCaveReachability(CaveSystem &system) { recountReachability(system); 
 
 CaveKind chooseCaveKind(const CaveContext &context)
 {
-    // A place with room for several floors has had time to become several things, and
-    // the mixed stack is the only answer that says so. Asked first because it is a
-    // statement about the SHAPE of the underground, and the two below are statements
-    // about one floor's material.
     if (context.layerCount > 1u && context.settled && context.wetness >= kKarstWetness)
         return CaveKind::Layered;
     if (context.settled)
@@ -280,7 +272,6 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
 
     system.layerCount = params.layers > kMaxCaveLayers ? kMaxCaveLayers : params.layers;
 
-    // ── Layers: the same generator, told to open out with depth ─────────────
     for (core::u32 l = 0u; l < system.layerCount; ++l)
     {
         const math::Fixed32 t = system.layerCount <= 1u ?
@@ -296,14 +287,6 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
     math::Random random{params.seed ^ 0x5AF75u};
     const DungeonMap &top = system.layer[0];
 
-    // ── Shafts between layers ───────────────────────────────────────────────
-    //
-    // A shaft is valid only where BOTH layers are hollow at the same (x, z).
-    // That is the whole reason this cannot be done inside a layer generator: it
-    // is the one fact a single plan does not contain. Candidates are gathered
-    // first and drawn from, rather than rejection-sampled, so a stack whose
-    // layers barely overlap still gets its shafts instead of silently getting
-    // none.
     for (core::u32 upper = 0u; upper + 1u < system.layerCount; ++upper)
     {
         lpl::pmr::vector<core::u32> candidates;
@@ -327,11 +310,6 @@ CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield 
         }
     }
 
-    // ── Entrances: shafts that pierce the surface ───────────────────────────
-    //
-    // Without these the system is a sealed void. An entrance needs hollow ground
-    // beneath it AND ground above it a body could stand on — steep rock and the
-    // sea floor are both places a cave mouth does not belong.
     if (!surface.empty() && surface.width() == params.width && surface.depth() == params.depth)
     {
         const math::Fixed32 maxSlope = math::Fixed32::fromFloat(params.entranceMaxSlope);
@@ -390,10 +368,6 @@ LevelQuality evaluateCaveSystem(const CaveSystem &system)
 
     quality.fullyConnected = quality.walkableCells != 0u && quality.reachableCells == quality.walkableCells;
 
-    // Neighbours are counted the way a body moves: four within a layer, plus the
-    // shafts. A cell at the bottom of a shaft with one corridor off it is a junction
-    // of two, not a dead end — which is the whole difference between judging a stack
-    // and judging each of its floors on its own.
     const core::u32 deepest = system.layerCount - 1u;
     for (core::u32 l = 0u; l < system.layerCount; ++l)
     {
@@ -428,9 +402,6 @@ LevelQuality evaluateCaveSystem(const CaveSystem &system)
                 continue;
             if (steps > quality.longestDistance)
                 quality.longestDistance = steps;
-            // The "exit" of a stack is its bottom. A system whose deepest layer cannot
-            // be reached from the surface is the exact failure this judgement exists
-            // to catch, and it is invisible to anything that looks at one plan.
             if (l == deepest)
             {
                 quality.goalReachable = true;
@@ -448,16 +419,13 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
     if (system.layerCount == 0u || system.layer[0].empty())
         return 0u;
     if (system.entranceCount == 0u)
-        return 0u; // Nothing to be reachable FROM; the caller wanted a sealed system.
+        return 0u;
 
     math::Random random{seed};
     core::u32 opened = 0u;
     const core::u32 perLayer = system.layer[0].cellCount();
     const core::u32 width = system.layer[0].width();
 
-    // Bounded: each round joins at least one component, and there are at most as
-    // many components as cells. The bound is what stops a pathological stack from
-    // spinning here forever — which matters because this runs at world build.
     for (core::u32 round = 0u; round < perLayer; ++round)
     {
         lpl::pmr::vector<core::u32> visited;
@@ -465,10 +433,6 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
         if (reached == system.hollowCells)
             break;
 
-        // Find an unreached hollow cell adjacent — horizontally or vertically —
-        // to a reached one, and open the way. Vertically means cutting a shaft,
-        // which is the move a flat repair cannot make and the reason this is not
-        // just forceConnectivity run per layer.
         bool joined = false;
         core::u32 bestFlat = 0u;
         core::u32 bestNeighbour = 0u;
@@ -525,10 +489,6 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
 
         if (candidates == 0u)
         {
-            // No unreached cell touches a reached one on any axis. Nothing short
-            // of tunnelling would join them, and a tunnel through solid rock
-            // between two unrelated chambers reads worse than a sealed pocket —
-            // so fill the orphans in instead, and say how many.
             for (core::u32 l = 0u; l < system.layerCount; ++l)
                 for (core::u32 cell = 0u; cell < perLayer; ++cell)
                     if (visited[flatten(system, l, cell)] == kUnreachable && isWalkable(system.layer[l][cell]))
@@ -552,9 +512,6 @@ core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed)
         }
         else
         {
-            // The two cells are already both hollow and adjacent — being
-            // unreached means the flood had not got here yet on a previous round,
-            // so simply re-running the flood is the whole repair.
             (void) bestNeighbour;
         }
         ++opened;
@@ -582,9 +539,6 @@ VoxelVolume caveVolume(const CaveSystem &system, const CaveSystemParams &params,
 
     for (core::u32 l = 0u; l < system.layerCount; ++l)
     {
-        // Layer 0 at the TOP of the volume: the array is indexed by depth, the
-        // volume by height, and quietly conflating the two puts the deepest
-        // cavern in the sky.
         const core::u32 base = (system.layerCount - 1u - l) * perLayerLevels;
         for (core::u32 z = 0u; z < volume.depth; ++z)
             for (core::u32 x = 0u; x < volume.width; ++x)
@@ -596,9 +550,6 @@ VoxelVolume caveVolume(const CaveSystem &system, const CaveSystemParams &params,
             }
     }
 
-    // Shafts punch through the rock between the layers they join, otherwise the
-    // link exists in the graph and not in the geometry — and a player would walk
-    // into a ceiling the pathfinder swears is a hole.
     for (core::u32 i = 0u; i < system.shafts.size(); ++i)
     {
         const CaveShaft &shaft = system.shafts[i];

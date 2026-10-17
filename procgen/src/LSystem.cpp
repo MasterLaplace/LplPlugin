@@ -1,12 +1,3 @@
-/**
- * @file LSystem.cpp
- * @brief Implementation of L-system rewriting and turtle interpretation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/LSystem.hpp>
 
 #include <lpl/math/FixedPoint.hpp>
@@ -30,7 +21,7 @@ constexpr core::i32 kStepX[kTurtleDirections] = {65536,  60547,  46341,  25080, 
 constexpr core::i32 kStepZ[kTurtleDirections] = {0, 25080,  46341,  60547,  65536,  60547,  46341,  25080,
                                                  0, -25080, -46341, -60547, -65536, -60547, -46341, -25080};
 
-/// Turtle state, saved and restored by brackets.
+/** Turtle state, saved and restored by brackets. */
 struct TurtleState {
     math::Fixed32 x{};
     math::Fixed32 z{};
@@ -39,7 +30,9 @@ struct TurtleState {
     math::Fixed32 step{};
 };
 
-/// Paints a cell and its thickness halo.
+/**
+ * @brief Paints a cell and its thickness halo.
+ */
 void paint(Grid<core::u8> &canvas, core::i32 x, core::i32 z, core::u32 thickness, core::u32 &outDrawn)
 {
     const core::i32 r = static_cast<core::i32>(thickness);
@@ -67,6 +60,9 @@ void paint(Grid<core::u8> &canvas, core::i32 x, core::i32 z, core::u32 thickness
  * Picks by largest dot product against the step table. Sixteen multiply-adds and
  * no arctangent, which is both exact in Fixed32 and free of any transcendental —
  * an atan2 here would have been the one place this file needed libm.
+ *
+ * Strictly greater: ties go to the lowest heading, so the field is the same on
+ * every target.
  */
 core::u32 nearestHeading(math::Fixed32 vx, math::Fixed32 vz)
 {
@@ -78,8 +74,6 @@ core::u32 nearestHeading(math::Fixed32 vx, math::Fixed32 vz)
     for (core::u32 d = 0u; d < kTurtleDirections; ++d)
     {
         const math::Fixed32 dot = vx * math::Fixed32::fromRaw(kStepX[d]) + vz * math::Fixed32::fromRaw(kStepZ[d]);
-        // Strictly greater: ties go to the lowest heading, so the field is the
-        // same on every target.
         if (dot > bestDot)
         {
             bestDot = dot;
@@ -89,7 +83,9 @@ core::u32 nearestHeading(math::Fixed32 vx, math::Fixed32 vz)
     return best;
 }
 
-/// The heading pointing outward from a radial centre, for an offset of (dx, dz).
+/**
+ * @brief The heading pointing outward from a radial centre, for an offset of (dx, dz).
+ */
 core::u32 radialBearing(core::i32 dx, core::i32 dz)
 {
     return nearestHeading(math::Fixed32::fromInt(dx), math::Fixed32::fromInt(dz));
@@ -112,12 +108,15 @@ bool leavesCanvas(const Grid<core::u8> &canvas, math::Fixed32 x, math::Fixed32 z
     return !canvas.contains(x.toInt(), z.toInt());
 }
 
-/// Draws a straight run between two points, painting every cell it crosses.
+/**
+ * @brief Draws a straight run between two points, painting every cell it crosses.
+ *
+ * Step along the longer axis so no cell is skipped — the integer-only equivalent
+ * of a DDA, with the division done once.
+ */
 void drawSegment(Grid<core::u8> &canvas, math::Fixed32 fromX, math::Fixed32 fromZ, math::Fixed32 toX, math::Fixed32 toZ,
                  core::u32 thickness, core::u32 &outDrawn)
 {
-    // Step along the longer axis so no cell is skipped — the integer-only
-    // equivalent of a DDA, with the division done once.
     const math::Fixed32 dx = toX - fromX;
     const math::Fixed32 dz = toZ - fromZ;
     const core::i32 spanX = dx.abs().toInt();
@@ -156,10 +155,6 @@ lpl::pmr::string expandLSystem(const LSystemParams &params)
         {
             const char symbol = current[i];
 
-            // Weighted choice among the rules for this symbol. One pass to total
-            // the weights, one to pick — the alternative, collecting matches into a
-            // vector first, would allocate once per symbol of a string that is
-            // already the largest thing here.
             core::u32 total = 0u;
             for (core::usize r = 0u; r < params.rules.size(); ++r)
                 if (params.rules[r].symbol == symbol)
@@ -182,9 +177,6 @@ lpl::pmr::string expandLSystem(const LSystemParams &params)
                 }
             }
 
-            // Growth is exponential: a harmless-looking rule set reaches
-            // megabytes in a few rounds. Stop at the cap rather than let a
-            // kernel heap decide how this ends.
             if (next.size() + (replacement != nullptr ? replacement->size() : 1u) > params.maxLength)
             {
                 truncated = true;
@@ -214,9 +206,6 @@ HeadingField bakeHeadingField(core::u32 width, core::u32 depth, const lpl::pmr::
     {
         for (core::u32 x = 0u; x < width; ++x)
         {
-            // Blend the influences as vectors, not as headings. Averaging heading
-            // *numbers* is meaningless on a circle: bearing 15 and bearing 1 are
-            // neighbours, and their mean is 8, which points the opposite way.
             math::Fixed32 sumX = math::Fixed32::zero();
             math::Fixed32 sumZ = math::Fixed32::zero();
 
@@ -226,8 +215,6 @@ HeadingField bakeHeadingField(core::u32 width, core::u32 depth, const lpl::pmr::
                 const core::i32 dx = static_cast<core::i32>(x) - static_cast<core::i32>(region.centerX);
                 const core::i32 dz = static_cast<core::i32>(z) - static_cast<core::i32>(region.centerZ);
 
-                // Chebyshev distance: no root needed, and the resulting square
-                // falloff contours are invisible once several regions overlap.
                 const core::u32 adx = static_cast<core::u32>(dx < 0 ? -dx : dx);
                 const core::u32 adz = static_cast<core::u32>(dz < 0 ? -dz : dz);
                 const core::u32 distance = adx > adz ? adx : adz;
@@ -241,10 +228,6 @@ HeadingField bakeHeadingField(core::u32 width, core::u32 depth, const lpl::pmr::
                 core::u32 bearing = region.bearing % kTurtleDirections;
                 if (region.pattern == FieldPattern::Radial)
                 {
-                    // A radial field's lines run along the ray from the centre, so
-                    // the bearing is the octant the offset falls in. Sixteen
-                    // directions and a Chebyshev comparison decide it without any
-                    // arctangent.
                     if (distance == 0u)
                         continue;
                     bearing = radialBearing(dx, dz);
@@ -287,7 +270,7 @@ core::u32 drawTurtle(const lpl::pmr::string &expanded, const TurtleParams &param
             const math::Fixed32 nextX = state.x + stepX;
             const math::Fixed32 nextZ = state.z + stepZ;
             if (leavesCanvas(canvas, nextX, nextZ))
-                break; // refused: stay put and let the next turn redirect us
+                break;
             if (expanded[i] == 'F')
                 drawSegment(canvas, state.x, state.z, nextX, nextZ, params.thickness, drawn);
             state.x = nextX;
@@ -296,15 +279,13 @@ core::u32 drawTurtle(const lpl::pmr::string &expanded, const TurtleParams &param
         }
         case '+': state.direction = (state.direction + params.turnAmount) % kTurtleDirections; break;
         case '-':
-            // Add the complement rather than subtract: the heading is unsigned,
-            // and wrapping through zero the other way would land far away.
             state.direction =
                 (state.direction + kTurtleDirections - (params.turnAmount % kTurtleDirections)) % kTurtleDirections;
             break;
         case '[': {
             TurtleState branch = state;
             ++branch.depth;
-            branch.step = state.step * decay; // branches taper
+            branch.step = state.step * decay;
             saved.push_back(state);
             state = branch;
             break;
@@ -316,7 +297,7 @@ core::u32 drawTurtle(const lpl::pmr::string &expanded, const TurtleParams &param
                 saved.pop_back();
             }
             break;
-        default: break; // inert: a rewrite-only variable
+        default: break;
         }
     }
     return drawn;
@@ -350,18 +331,6 @@ core::u32 drawTurtleInField(const lpl::pmr::string &expanded, const TurtleParams
         {
         case 'F':
         case 'f': {
-            // The grammar says which way to turn; the field says which way the
-            // ground runs. Blend the two as vectors, weighted by conformity, so a
-            // straight run follows the field lines while `+` and `-` still steer.
-            //
-            // "Still steer" has to be literal, and it was not: blending on the
-            // step that FOLLOWS a turn pulls the new bearing straight back onto
-            // the streamline, so at high conformity every branch out of a node
-            // retraces the same line and the network stops growing. Measured, it
-            // stopped dead — 16 cells at conformity 1 whatever the grammar did,
-            // against 106 for the same grammar with the field off. So a turn gets
-            // one unconformed step to establish itself, and the field takes over
-            // from the step after.
             core::u32 heading = state.direction;
             if (justTurned)
                 justTurned = false;
@@ -381,13 +350,11 @@ core::u32 drawTurtleInField(const lpl::pmr::string &expanded, const TurtleParams
             const math::Fixed32 nextX = state.x + stepX;
             const math::Fixed32 nextZ = state.z + stepZ;
             if (leavesCanvas(canvas, nextX, nextZ))
-                break; // refused: stay put and let the next turn redirect us
+                break;
             if (expanded[i] == 'F')
                 drawSegment(canvas, state.x, state.z, nextX, nextZ, params.thickness, drawn);
             state.x = nextX;
             state.z = nextZ;
-            // Adopt the blended heading: otherwise the field would be re-applied
-            // to the original bearing at every step and the run would never curve.
             state.direction = heading;
             break;
         }
@@ -425,8 +392,6 @@ LSystemParams makeBranchingGrammar()
 {
     LSystemParams params;
     params.axiom = "F";
-    // Three alternatives for the same symbol, so a stand of trees grown from one
-    // grammar is a stand of different trees.
     params.rules.push_back(LRule{'F', lpl::pmr::string{"FF+[+F-F-F]-[-F+F+F]"}, 3u});
     params.rules.push_back(LRule{'F', lpl::pmr::string{"FF-[-F+F]+[+F-F+F]"}, 2u});
     params.rules.push_back(LRule{'F', lpl::pmr::string{"F[+F]F[-F]F"}, 2u});
@@ -437,8 +402,6 @@ LSystemParams makeBranchingGrammar()
 LSystemParams makeRoadGrammar()
 {
     LSystemParams params;
-    // A stem that keeps going and throws off perpendicular side streets, which
-    // is what a road network looks like from above.
     params.axiom = "X";
     params.rules.push_back(LRule{'X', lpl::pmr::string{"F[+X]F[-X]FX"}, 3u});
     params.rules.push_back(LRule{'X', lpl::pmr::string{"F[+X]FX"}, 1u});

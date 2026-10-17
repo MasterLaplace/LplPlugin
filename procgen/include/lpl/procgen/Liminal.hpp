@@ -59,14 +59,14 @@ namespace lpl::procgen {
  * different buildings rather than different colours.
  */
 enum class LiminalZone : core::u8 {
-    Corridor = 0, ///< Tight, branching, claustrophobic.
-    Office,       ///< Regular cubicle grid: the uncanny baseline.
-    Hall,         ///< Cavernous open space, few supports.
-    Pool,         ///< Wide tiled rooms with shallow partitions.
-    Count         ///< Number of zones; never a classification.
+    Corridor = 0, /**< Tight, branching, claustrophobic. */
+    Office,       /**< Regular cubicle grid: the uncanny baseline. */
+    Hall,         /**< Cavernous open space, few supports. */
+    Pool,         /**< Wide tiled rooms with shallow partitions. */
+    Count         /**< Number of zones; never a classification. */
 };
 
-/// Per-cell zone assignment.
+/** Per-cell zone assignment. */
 using LiminalZoneMap = Grid<LiminalZone>;
 
 /**
@@ -74,21 +74,21 @@ using LiminalZoneMap = Grid<LiminalZone>;
  * @brief Size, seed, and how hard each stage bites.
  */
 struct LiminalParams {
-    core::u32 width{64u};  ///< Cells along X.
-    core::u32 depth{64u};  ///< Cells along Z.
-    core::u32 seed{1337u}; ///< Determinism anchor.
+    core::u32 width{64u};  /**< Cells along X. */
+    core::u32 depth{64u};  /**< Cells along Z. */
+    core::u32 seed{1337u}; /**< Determinism anchor. */
 
-    core::f32 zoneBelts{2.5f};   ///< Zone features across the map's longer axis.
-    core::u32 zoneOctaves{2u};   ///< fBm octaves of the zoning field.
-    core::u32 zoneSeed{0x5AFEu}; ///< Seed of the zoning field.
+    core::f32 zoneBelts{2.5f};   /**< Zone features across the map's longer axis. */
+    core::u32 zoneOctaves{2u};   /**< fBm octaves of the zoning field. */
+    core::u32 zoneSeed{0x5AFEu}; /**< Seed of the zoning field. */
 
-    core::u32 bspDepth{4u};           ///< Partition recursion depth.
-    core::f32 erosionStrength{0.18f}; ///< Share of boundary cells the automata flip.
-    core::f32 mergeStrength{0.22f};   ///< Share of party walls dissolved.
-    core::f32 pillarDensity{0.02f};   ///< Share of open cells that become a stray pillar.
+    core::u32 bspDepth{4u};           /**< Partition recursion depth. */
+    core::f32 erosionStrength{0.18f}; /**< Share of boundary cells the automata flip. */
+    core::f32 mergeStrength{0.22f};   /**< Share of party walls dissolved. */
+    core::f32 pillarDensity{0.02f};   /**< Share of open cells that become a stray pillar. */
 
-    core::u32 hotPathEvents{8u}; ///< Event sites to place along the critical path.
-    core::u32 secretSites{3u};   ///< Reward sites to place in the deepest dead ends.
+    core::u32 hotPathEvents{8u}; /**< Event sites to place along the critical path. */
+    core::u32 secretSites{3u};   /**< Reward sites to place in the deepest dead ends. */
 };
 
 /**
@@ -96,18 +96,16 @@ struct LiminalParams {
  * @brief Everything one liminal sector is.
  */
 struct LiminalSpace {
-    DungeonMap map;               ///< Walls and floor.
-    LiminalZoneMap zones;         ///< What kind of space each cell belongs to.
-    core::u32 openCells{0u};      ///< Walkable cells.
-    core::u32 wallsBroken{0u};    ///< Cells the connectivity repair had to open.
-    core::u32 wallsDissolved{0u}; ///< Cells the asymmetric merge opened.
-    core::u32 pillars{0u};        ///< Stray pillars placed.
-    bool connected{false};        ///< Whether every open cell is reachable.
+    DungeonMap map;               /**< Walls and floor. */
+    LiminalZoneMap zones;         /**< What kind of space each cell belongs to. */
+    core::u32 openCells{0u};      /**< Walkable cells. */
+    core::u32 wallsBroken{0u};    /**< Cells the connectivity repair had to open. */
+    core::u32 wallsDissolved{0u}; /**< Cells the asymmetric merge opened. */
+    core::u32 pillars{0u};        /**< Stray pillars placed. */
+    bool connected{false};        /**< Whether every open cell is reachable. */
 
-    /// Cells the critical path runs through: where events belong.
-    lpl::pmr::vector<core::u32> eventSites;
-    /// Cells furthest from the critical path: where a reward belongs.
-    lpl::pmr::vector<core::u32> secretSites;
+    lpl::pmr::vector<core::u32> eventSites;  /**< Cells the critical path runs through: where events belong. */
+    lpl::pmr::vector<core::u32> secretSites; /**< Cells furthest from the critical path: where a reward belongs. */
 };
 
 /**
@@ -117,6 +115,10 @@ struct LiminalSpace {
  * other field in this module is: a zone is meant to be a region a player walks
  * across, and a frequency in cells would keep the zone's *width* constant so a
  * bigger map would just have more of them.
+ *
+ * The field's [-1, 1] goes into one of four bands, by quarters. Even bands rather
+ * than tuned ones: a zone that covers a tenth of every map is a zone a player will
+ * never knowingly visit.
  *
  * @param params Sizes and the zoning field's shape.
  * @return The zone map.
@@ -136,6 +138,9 @@ struct LiminalSpace {
  * Everything derives from the world seed and the chunk's coordinates, so a sector
  * can be generated, discarded and regenerated identically, in any order, on any
  * machine.
+ *
+ * The zoning field is sampled at ABSOLUTE world coordinates, so a zone that
+ * straddles two sectors is one zone rather than two that happen to touch.
  *
  * @param params World parameters (its @c width is the chunk edge).
  * @param coord  Which sector.
@@ -158,10 +163,14 @@ struct LiminalSpace {
  */
 [[nodiscard]] TileGrid presetFromMask(const Grid<core::u8> &mask, core::u8 pinnedTile);
 
-/// @brief Human-readable zone name, for debugging and reports.
+/**
+ * @brief Human-readable zone name, for debugging and reports.
+ */
 [[nodiscard]] const char *liminalZoneName(LiminalZone zone) noexcept;
 
-/// @brief FNV-1a fold of the map and its zones, for determinism checks.
+/**
+ * @brief FNV-1a fold of the map and its zones, for determinism checks.
+ */
 [[nodiscard]] core::u32 foldLiminal(const LiminalSpace &space);
 
 } // namespace lpl::procgen

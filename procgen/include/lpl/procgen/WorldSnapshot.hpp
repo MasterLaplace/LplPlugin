@@ -43,8 +43,8 @@ namespace lpl::procgen {
  * @brief What makes a cell impassable.
  */
 struct WalkabilityRule {
-    core::f32 seaLevel{-1.0f}; ///< Below this, a cell is drowned.
-    core::f32 maxSlope{2.4f};  ///< Above this, a cell is too steep to stand on.
+    core::f32 seaLevel{-1.0f}; /**< Below this, a cell is drowned. */
+    core::f32 maxSlope{2.4f};  /**< Above this, a cell is too steep to stand on. */
 };
 
 /**
@@ -58,7 +58,7 @@ struct WorldSnapshot {
     Grid<core::u8> rivers{};
     SettlementMap settlement{};
     Grid<core::u8> roads{};
-    Grid<core::u8> blocked{}; ///< The one walkability mask; see the file comment.
+    Grid<core::u8> blocked{}; /**< The one walkability mask; see the file comment. */
 
     core::u32 width{0u};
     core::u32 depth{0u};
@@ -85,31 +85,7 @@ struct WorldSnapshot {
  * @param rule    What counts as impassable.
  * @param out     Destination.
  */
-inline void captureSnapshot(const WorldBuilder &builder, const WalkabilityRule &rule, WorldSnapshot &out)
-{
-    out.gatePassed = builder.gatePassed();
-
-    out.height = builder.heightfield();
-    out.biomes = builder.biomeMap();
-    out.moisture = builder.moisture();
-    out.rivers = riverMask(builder.drainage(), 0.02f);
-    out.settlement = builder.settlementMap();
-    out.roads = builder.roadMap();
-
-    out.width = out.height.width();
-    out.depth = out.height.depth();
-    (void) heightRange(out.height, out.lowest, out.highest);
-    countBiomes(out.biomes, out.biomeCounts);
-
-    out.blocked = Grid<core::u8>{out.width, out.depth, 0u};
-    for (core::u32 z = 0u; z < out.depth; ++z)
-        for (core::u32 x = 0u; x < out.width; ++x)
-        {
-            const bool drowned = out.height.at(x, z).toFloat() < rule.seaLevel;
-            const bool steep = slopeAt(out.height, x, z).toFloat() > rule.maxSlope;
-            out.blocked.at(x, z) = (drowned || steep) ? 1u : 0u;
-        }
-}
+inline void captureSnapshot(const WorldBuilder &builder, const WalkabilityRule &rule, WorldSnapshot &out);
 
 /**
  * @brief Bakes @p recipe and copies out what a game reads.
@@ -125,27 +101,7 @@ inline void captureSnapshot(const WorldBuilder &builder, const WalkabilityRule &
 [[nodiscard]] inline WorldSnapshot buildSnapshot(WorldRecipe recipe, ecs::Registry *registry,
                                                  lpl::pmr::vector<ecs::EntityId> *outPropIds,
                                                  const WalkabilityRule &rule = WalkabilityRule{},
-                                                 const ReliefBlend *relief = nullptr)
-{
-    WorldSnapshot out;
-
-    // The builder is a local on purpose: it holds every pass's intermediate
-    // grid, and those are freed as it goes out of scope.
-    WorldBuilder builder{recipe.seed};
-    // The rule reads ABSOLUTE heights, and a recipe with a ground clearance moves the
-    // world after its own thresholds were written. Shifting the rule by the applied
-    // lift is what stops "below sea level" from meaning a different altitude than the
-    // classifier used — the failure looks like walkable water, and it is silent.
-    const core::f32 lift = applyRecipe(builder, recipe, relief);
-    WalkabilityRule lifted = rule;
-    lifted.seaLevel += lift;
-
-    if (registry != nullptr)
-        out.stats = builder.materializeProps(*registry, outPropIds);
-
-    captureSnapshot(builder, lifted, out);
-    return out;
-}
+                                                 const ReliefBlend *relief = nullptr);
 
 /**
  * @brief Cells where vegetation grows, thinned deterministically.
@@ -160,24 +116,10 @@ inline void captureSnapshot(const WorldBuilder &builder, const WalkabilityRule &
  */
 template <typename IsWooded, typename Emit>
 core::u32 scatterVegetation(const WorldSnapshot &snapshot, core::u32 seed, core::u32 oneIn, IsWooded &&isWooded,
-                            Emit &&emit)
-{
-    math::Random thin{seed};
-    core::u32 planted = 0u;
-    const core::u32 divisor = oneIn == 0u ? 1u : oneIn;
-    for (core::u32 z = 0u; z < snapshot.depth; ++z)
-        for (core::u32 x = 0u; x < snapshot.width; ++x)
-        {
-            if (!isWooded(snapshot.biomes.at(x, z)) || snapshot.blocked.at(x, z) != 0u)
-                continue;
-            if (divisor > 1u && thin.below(divisor) != 0u)
-                continue;
-            emit(static_cast<core::i32>(x), static_cast<core::i32>(z));
-            ++planted;
-        }
-    return planted;
-}
+                            Emit &&emit);
 
 } // namespace lpl::procgen
+
+#    include "WorldSnapshot.inl"
 
 #endif // LPL_PROCGEN_WORLD_SNAPSHOT_HPP

@@ -1,12 +1,3 @@
-/**
- * @file Chunking.cpp
- * @brief Implementation of coordinate-driven chunk generation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Chunking.hpp>
 
 #include <lpl/procgen/Erosion.hpp>
@@ -16,116 +7,28 @@
 
 namespace lpl::procgen {
 
-core::u32 chunkSeed(const ChunkParams &params, ChunkCoord coord)
-{
-    // Hash the coordinates rather than combine them arithmetically: chunk
-    // (1, 0) and (0, 1) must not share a seed, and a simple sum or xor would
-    // give them one.
-    const core::u32 mixed = ValueNoise2D::hash2(coord.x, coord.z, params.worldSeed);
-    return math::deriveStream(mixed, 0xC804Bu).state();
-}
-
-math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ, math::Fixed32 invented)
-{
-    // No survey behind this world: exactly the path it always took, so nothing already folded moves
-    // because this branch exists.
-    if (blend.mosaic == nullptr || !blend.mosaic->valid())
-        return invented;
-
-    math::Fixed32 measured{};
-    if (!blend.mosaic->heightAt(worldX, worldZ, measured))
-        return invented;
-
-    // The weight is asked for AFTER the sample, because a cell can be inside the field and still be
-    // a gap in the survey -- and a gap must fall back to invented ground at full strength rather
-    // than to a fade towards nothing.
-    const math::Fixed32 weight = blend.mosaic->weightAt(worldX, worldZ);
-    if (weight.raw() <= 0)
-        return invented;
-
-    // Real ground is the lowest frequency; the detail layer is what thirty-metre samples cannot
-    // carry. Added only where the real ground counts, so the border band does not gain roughness
-    // the invented side does not have.
-    NoiseParams detail = blend.detail;
-    detail.seed = blend.seed ^ 0x5E1F1Eu;
-    const math::Fixed32 roughness =
-        detail.amplitude > 0.0f ? sampleNoiseAt(worldX, worldZ, detail) : math::Fixed32::zero();
-
-    const math::Fixed32 real = measured + roughness;
-    if (weight.raw() >= math::Fixed32::one().raw())
-        return real;
-    // Linear across the band. A body walking out of the survey must not meet a cliff made of
-    // whatever the two surfaces happened to differ by.
-    return real * weight + invented * (math::Fixed32::one() - weight);
-}
-
-math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
-{
-    // First, before anything reads the coordinate: on a closed world the cell past the last column
-    // IS the first column, so the survey lookup and the noise lattice both land on the same cell and
-    // the seam does not exist rather than being hidden. Costless when the world has real edges.
-    math::wrapCell(params.globe, worldX, worldZ);
-
-    // World coordinates, not chunk-local ones. This single choice is what makes the whole scheme
-    // seamless: the shared edge of two chunks is the same world position, so it evaluates to the
-    // same height in both.
-    NoiseParams layer = params.noise;
-    layer.seed = params.worldSeed;
-    const math::Fixed32 invented = sampleNoiseAt(worldX, worldZ, layer);
-
-    // One blend, shared with the bounded builder: see ReliefBlend for why it is not written twice.
-    ReliefBlend blend{};
-    blend.mosaic = params.relief;
-    blend.detail = params.reliefDetail;
-    blend.seed = params.worldSeed;
-    return applyRelief(blend, worldX, worldZ, invented);
-}
-
-math::Fixed32 sampleWorldMoisture(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
-{
-    NoiseParams moisture{};
-    moisture.amplitude = 1.0f;
-    moisture.octaves = 3u;
-    moisture.seed = params.worldSeed ^ 0x3A15E7u;
-    moisture.frequency = params.noise.frequency * 0.6f;
-
-    const core::f32 wet = 0.5f + sampleNoiseAt(worldX, worldZ, moisture).toFloat() * 0.5f;
-    return math::Fixed32::fromFloat(wet < 0.0f ? 0.0f : (wet > 1.0f ? 1.0f : wet));
-}
-
-Heightfield generateChunkTerrain(const ChunkParams &params, ChunkCoord coord)
-{
-    if (params.size == 0u)
-        return Heightfield{};
-
-    Heightfield field{params.size, params.size, math::Fixed32::zero()};
-    const core::i32 originX = coord.x * static_cast<core::i32>(params.size);
-    const core::i32 originZ = coord.z * static_cast<core::i32>(params.size);
-
-    for (core::u32 z = 0u; z < params.size; ++z)
-        for (core::u32 x = 0u; x < params.size; ++x)
-            field.at(x, z) =
-                sampleWorldHeight(params, originX + static_cast<core::i32>(x), originZ + static_cast<core::i32>(z));
-
-    return field;
-}
-
 namespace {
 
-/// Floor division, so a macro index stays monotonic across the origin. Truncating
-/// division folds the world about its own axis: -1 and +1 land in the same cell.
+/**
+ * @brief Floor division, so a macro index stays monotonic across the origin.
+ *
+ * Truncating division folds the world about its own axis: -1 and +1 land in the same cell.
+ */
 [[nodiscard]] core::i32 floorDivide(core::i32 value, core::i32 divisor)
 {
     const core::i32 quotient = value / divisor;
     return (value % divisor != 0 && ((value < 0) != (divisor < 0))) ? quotient - 1 : quotient;
 }
 
-/// Height at a macro cell's centre: one sample, at absolute coordinates.
+/**
+ * @brief Height at a macro cell's centre: one sample, at absolute coordinates.
+ *
+ * The smoothed field, not the detailed one read sparsely. See @ref EndlessRiverParams::trunkOctaves.
+ */
 [[nodiscard]] math::Fixed32 macroHeight(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 macroX,
                                         core::i32 macroZ)
 {
     const core::i32 span = static_cast<core::i32>(rivers.trunkCells * rivers.coarseCells);
-    // The smoothed field, not the detailed one read sparsely. See trunkOctaves.
     NoiseParams layer = params.noise;
     layer.seed = params.worldSeed;
     layer.octaves = rivers.trunkOctaves == 0u ? 1u : rivers.trunkOctaves;
@@ -136,17 +39,14 @@ namespace {
 /**
  * @brief Fills a window of macro heights centred on (@p centreX, @p centreZ).
  *
- * One place rather than three: the trunk verdict, its direction and the batched
- * chunk pass all need the same window, and three copies of a sampling loop is
- * three chances for them to disagree about where a macro cell's centre is.
+ * clear() then resize(), never assign(): kstd::vector — the freestanding
+ * vector this compiles against in ring 0 — does not have assign(), and the
+ * host's std::vector does. A call that only the host can compile is a build
+ * that only fails on the target, three build paths later.
  */
 void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 centreX, core::i32 centreZ,
                      core::i32 radius, lpl::pmr::vector<math::Fixed32> &out)
 {
-    // clear() then resize(), never assign(): kstd::vector — the freestanding
-    // vector this compiles against in ring 0 — does not have assign(), and the
-    // host's std::vector does. A call that only the host can compile is a build
-    // that only fails on the target, three build paths later.
     const core::i32 side = 2 * radius + 1;
     out.clear();
     out.resize(static_cast<core::usize>(side) * side, math::Fixed32::zero());
@@ -156,8 +56,11 @@ void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers
                 macroHeight(params, rivers, centreX - radius + x, centreZ - radius + z);
 }
 
-/// Steepest-descent neighbour within a square window; ties break on the lowest
-/// neighbour index so a flat shelf routes identically everywhere.
+/**
+ * @brief Steepest-descent neighbour within a square window.
+ *
+ * Ties break on the lowest neighbour index so a flat shelf routes identically everywhere.
+ */
 [[nodiscard]] bool steepestStep(const lpl::pmr::vector<math::Fixed32> &window, core::i32 side, core::i32 &x,
                                 core::i32 &z)
 {
@@ -197,6 +100,9 @@ void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers
  * cannot mark the cell: that would be a river as wide as the macro grid. What the
  * coarse level draws is the SEGMENT from a trunk cell's centre to its downstream
  * neighbour's, thickened by trunkWidth.
+ *
+ * It looks one macro cell either side: a segment starting next door still crosses
+ * this one, and dropping those breaks every trunk at a macro boundary.
  */
 [[nodiscard]] bool trunkCoversCoarseCell(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 coarseX,
                                          core::i32 coarseZ)
@@ -209,8 +115,6 @@ void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers
     const core::i32 homeZ = floorDivide(coarseZ, macroSpan);
     const core::i32 width = static_cast<core::i32>(rivers.trunkWidth);
 
-    // One macro cell either side: a segment starting next door still crosses this
-    // one, and dropping those breaks every trunk at a macro boundary.
     for (core::i32 mz = homeZ - 1; mz <= homeZ + 1; ++mz)
         for (core::i32 mx = homeX - 1; mx <= homeX + 1; ++mx)
         {
@@ -238,7 +142,100 @@ void fillMacroWindow(const ChunkParams &params, const EndlessRiverParams &rivers
     return false;
 }
 
+/** Chunks sampled along each edge of the calibration window. */
+constexpr core::i32 kCalibrationSide = 3;
+
+/**
+ * @brief Chunks between one sampled chunk and the next.
+ *
+ * @warning The window used to be nine ADJACENT chunks, and that stopped being enough the moment
+ * the walked world's landforms were widened: at a relief frequency of 0.06 a landform spans
+ * about a hundred and ten cells, while three chunks of twenty-four span seventy-two. The
+ * calibration was measuring less than one landform — sampling a corner and generalising to
+ * the world, which is the mistake calibration exists to prevent, one level up. Measured: a
+ * two per cent target produced fourteen per cent of the world in river.
+ *
+ * Spreading the same nine samples over a stride instead of widening the window keeps the
+ * cost identical — a bisection already pays nine `markChunkRivers`, and each of those is the
+ * expensive part — while covering ground several landforms across.
+ */
+constexpr core::i32 kCalibrationStride = 7;
+
 } // namespace
+
+core::u32 chunkSeed(const ChunkParams &params, ChunkCoord coord)
+{
+    const core::u32 mixed = ValueNoise2D::hash2(coord.x, coord.z, params.worldSeed);
+    return math::deriveStream(mixed, 0xC804Bu).state();
+}
+
+math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ, math::Fixed32 invented)
+{
+    if (blend.mosaic == nullptr || !blend.mosaic->valid())
+        return invented;
+
+    math::Fixed32 measured{};
+    if (!blend.mosaic->heightAt(worldX, worldZ, measured))
+        return invented;
+
+    const math::Fixed32 weight = blend.mosaic->weightAt(worldX, worldZ);
+    if (weight.raw() <= 0)
+        return invented;
+
+    NoiseParams detail = blend.detail;
+    detail.seed = blend.seed ^ 0x5E1F1Eu;
+    const math::Fixed32 roughness =
+        detail.amplitude > 0.0f ? sampleNoiseAt(worldX, worldZ, detail) : math::Fixed32::zero();
+
+    const math::Fixed32 real = measured + roughness;
+    if (weight.raw() >= math::Fixed32::one().raw())
+        return real;
+    return real * weight + invented * (math::Fixed32::one() - weight);
+}
+
+math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
+{
+    math::wrapCell(params.globe, worldX, worldZ);
+
+    NoiseParams layer = params.noise;
+    layer.seed = params.worldSeed;
+    const math::Fixed32 invented = sampleNoiseAt(worldX, worldZ, layer);
+
+    ReliefBlend blend{};
+    blend.mosaic = params.relief;
+    blend.detail = params.reliefDetail;
+    blend.seed = params.worldSeed;
+    return applyRelief(blend, worldX, worldZ, invented);
+}
+
+math::Fixed32 sampleWorldMoisture(const ChunkParams &params, core::i32 worldX, core::i32 worldZ)
+{
+    NoiseParams moisture{};
+    moisture.amplitude = 1.0f;
+    moisture.octaves = 3u;
+    moisture.seed = params.worldSeed ^ 0x3A15E7u;
+    moisture.frequency = params.noise.frequency * 0.6f;
+
+    const core::f32 wet = 0.5f + sampleNoiseAt(worldX, worldZ, moisture).toFloat() * 0.5f;
+    return math::Fixed32::fromFloat(wet < 0.0f ? 0.0f : (wet > 1.0f ? 1.0f : wet));
+}
+
+Heightfield generateChunkTerrain(const ChunkParams &params, ChunkCoord coord)
+{
+    if (params.size == 0u)
+        return Heightfield{};
+
+    Heightfield field{params.size, params.size, math::Fixed32::zero()};
+    const core::i32 originX = coord.x * static_cast<core::i32>(params.size);
+    const core::i32 originZ = coord.z * static_cast<core::i32>(params.size);
+
+    for (core::u32 z = 0u; z < params.size; ++z)
+        for (core::u32 x = 0u; x < params.size; ++x)
+            field.at(x, z) =
+                sampleWorldHeight(params, originX + static_cast<core::i32>(x), originZ + static_cast<core::i32>(z));
+
+    return field;
+}
 
 bool isTrunkMacroCell(const ChunkParams &params, const EndlessRiverParams &rivers, core::i32 macroX, core::i32 macroZ)
 {
@@ -364,16 +361,10 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
 
     const core::u32 coarsePerChunk = (params.size + rivers.coarseCells - 1u) / rivers.coarseCells;
     const core::i32 radius = static_cast<core::i32>(rivers.basinRadius);
-    // The window has to hold every cell that could drain into a cell of THIS
-    // chunk, or a coarse cell near the border would be judged on a truncated
-    // basin and the two chunks sharing it would disagree.
     const core::i32 windowSide = static_cast<core::i32>(coarsePerChunk) + 2 * radius;
     const core::i32 originCoarseX = coord.x * static_cast<core::i32>(coarsePerChunk) - radius;
     const core::i32 originCoarseZ = coord.z * static_cast<core::i32>(coarsePerChunk) - radius;
 
-    // Heights first, once. A walk is a handful of comparisons; a height is an
-    // fBm with octaves, and sampling one per step of every walk costs a basin of
-    // noise per cell instead of a window per chunk.
     lpl::pmr::vector<math::Fixed32> heights(static_cast<core::usize>(windowSide) * windowSide, math::Fixed32::zero());
     const core::i32 half = static_cast<core::i32>(rivers.coarseCells / 2u);
     for (core::i32 z = 0; z < windowSide; ++z)
@@ -390,8 +381,6 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
         return heights[static_cast<core::usize>(z) * windowSide + x];
     };
 
-    // Steepest descent, D8. Ties break on the lowest neighbour index, so a flat
-    // shelf routes the same way on every machine and in every chunk that asks.
     const auto flowStep = [&](core::i32 &x, core::i32 &z) {
         const math::Fixed32 here = heightAt(x, z);
         core::i32 bestX = x;
@@ -417,8 +406,6 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
         return moved;
     };
 
-    // Upstream count per coarse cell of the chunk: how many cells of its basin
-    // send their water through it.
     lpl::pmr::vector<core::u32> upstream(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, 0u);
     const core::i32 maxSteps = 2 * radius + 2;
 
@@ -429,14 +416,6 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
             core::i32 walkZ = z;
             for (core::i32 step = 0; step < maxSteps; ++step)
             {
-                // Credit the cell ONLY if this walk started within the basin
-                // radius OF THAT CELL.
-                //
-                // Without the test the count is "walks starting anywhere in the
-                // window", and the window belongs to the chunk — so the same
-                // world cell scores differently depending on which chunk asked,
-                // and a river changes its mind at every border. The bound has to
-                // be centred on the cell being credited, not on the caller.
                 const core::i32 spanX = walkX - x < 0 ? x - walkX : walkX - x;
                 const core::i32 spanZ = walkZ - z < 0 ? z - walkZ : walkZ - z;
                 const core::i32 localX = walkX - radius;
@@ -445,11 +424,10 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
                     localX < static_cast<core::i32>(coarsePerChunk) && localZ < static_cast<core::i32>(coarsePerChunk))
                     ++upstream[static_cast<core::usize>(localZ) * coarsePerChunk + static_cast<core::usize>(localX)];
                 if (!flowStep(walkX, walkZ))
-                    break; // a pit: the water stops here, and so does the walk
+                    break;
             }
         }
 
-    // The trunk, from the coarse level down. Same helper the reference uses.
     lpl::pmr::vector<core::u8> trunkCoarse(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, 0u);
     for (core::u32 z = 0u; z < coarsePerChunk; ++z)
         for (core::u32 x = 0u; x < coarsePerChunk; ++x)
@@ -473,8 +451,6 @@ Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverPara
             const core::u32 count = upstream[slot];
             if (count < rivers.riverThreshold && trunkCoarse[slot] == 0u)
                 continue;
-            // Already the sea is not a river. Without this every coastal cell
-            // qualifies, since the whole basin drains through it.
             if (heightAt(static_cast<core::i32>(coarseX) + radius, static_cast<core::i32>(coarseZ) + radius) <= sea)
                 continue;
             mask.at(x, z) = 1u;
@@ -499,8 +475,6 @@ core::u32 coarseFlowDirection(const ChunkParams &params, const EndlessRiverParam
     math::Fixed32 bestDrop = math::Fixed32::zero();
     for (core::u32 n = 0u; n < 8u; ++n)
     {
-        // Strictly greater, so ties break on the lowest neighbour index: a flat reach
-        // has to route the same way on every machine and in every chunk that asks.
         const math::Fixed32 drop = here - centreHeight(coarseX + kNeighbor8X[n], coarseZ + kNeighbor8Z[n]);
         if (drop > bestDrop)
         {
@@ -518,9 +492,6 @@ FlowDirection markChunkRiverFlow(const ChunkParams &params, const EndlessRiverPa
         return FlowDirection{};
 
     const core::u32 coarsePerChunk = (params.size + rivers.coarseCells - 1u) / rivers.coarseCells;
-    // One verdict per coarse cell, memoised: nine noise samples each, and every fine
-    // cell of a coarse cell shares its answer. Asking per fine cell would cost the
-    // square of the coarse ratio for the same result.
     lpl::pmr::vector<core::u8> coarse(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, kNoFlow);
     lpl::pmr::vector<core::u8> known(static_cast<core::usize>(coarsePerChunk) * coarsePerChunk, 0u);
 
@@ -547,29 +518,6 @@ FlowDirection markChunkRiverFlow(const ChunkParams &params, const EndlessRiverPa
         }
     return flow;
 }
-
-namespace {
-
-/// Chunks sampled along each edge of the calibration window.
-constexpr core::i32 kCalibrationSide = 3;
-
-/**
- * @brief Chunks between one sampled chunk and the next.
- *
- * @warning The window used to be nine ADJACENT chunks, and that stopped being enough the moment
- * the walked world's landforms were widened: at a relief frequency of 0.06 a landform spans
- * about a hundred and ten cells, while three chunks of twenty-four span seventy-two. The
- * calibration was measuring less than one landform — sampling a corner and generalising to
- * the world, which is the mistake calibration exists to prevent, one level up. Measured: a
- * two per cent target produced fourteen per cent of the world in river.
- *
- * Spreading the same nine samples over a stride instead of widening the window keeps the
- * cost identical — a bisection already pays nine `markChunkRivers`, and each of those is the
- * expensive part — while covering ground several landforms across.
- */
-constexpr core::i32 kCalibrationStride = 7;
-
-} // namespace
 
 core::f32 measureRiverShare(const ChunkParams &params, const EndlessRiverParams &rivers)
 {
@@ -600,10 +548,6 @@ core::u32 calibrateRiverThreshold(const ChunkParams &params, const EndlessRiverP
     if (params.size == 0u || targetShare <= 0.0f)
         return 1u;
 
-    // Raising the threshold can only mark fewer cells, so the share is monotonically
-    // non-increasing in it and a bisection is exact rather than approximate. The upper bound
-    // is the largest basin a bounded radius can hold — beyond it every candidate is rejected
-    // and the share is zero, which the loop finds on its own.
     EndlessRiverParams probe = rivers;
     core::u32 low = 1u;
     core::u32 high = (2u * rivers.basinRadius + 1u) * (2u * rivers.basinRadius + 1u);
@@ -615,7 +559,7 @@ core::u32 calibrateRiverThreshold(const ChunkParams &params, const EndlessRiverP
         const core::u32 middle = low + (high - low) / 2u;
         probe.riverThreshold = middle;
         if (measureRiverShare(params, probe) > targetShare)
-            low = middle + 1u; // still too wet: the threshold has to rise
+            low = middle + 1u;
         else
             high = middle;
     }
@@ -630,12 +574,6 @@ Heightfield generateErodedChunkTerrain(const ChunkParams &params, ChunkCoord coo
     if (iterations == 0u)
         return generateChunkTerrain(params, coord);
 
-    // Iterations PLUS ONE, and the extra cell is not caution — it is the
-    // measurement. Thermal erosion moves material one cell per pass, so N passes
-    // reach N cells; but the apron's own outer ring is itself wrong (it has no
-    // neighbours beyond), and that error marches inward one cell per pass too.
-    // An apron of exactly N left 9 cells of 5184 disagreeing with the unchunked
-    // computation — the corners, where the two fronts meet. N+1 leaves none.
     const core::u32 apron = iterations + 1u;
     const core::u32 side = params.size + 2u * apron;
     const core::i32 originX = coord.x * static_cast<core::i32>(params.size) - static_cast<core::i32>(apron);
@@ -666,7 +604,6 @@ core::u32 countSeamMismatches(const ChunkParams &params, ChunkCoord a, ChunkCoor
 
     const core::i32 dx = b.x - a.x;
     const core::i32 dz = b.z - a.z;
-    // Only 4-adjacent chunks share an edge; anything else has no seam to check.
     if ((dx != 0 && dz != 0) || (dx == 0 && dz == 0))
         return 0u;
     if (dx > 1 || dx < -1 || dz > 1 || dz < -1)
@@ -684,12 +621,6 @@ core::u32 countSeamMismatches(const ChunkParams &params, ChunkCoord a, ChunkCoor
     core::u32 mismatches = 0u;
     for (core::u32 i = 0u; i < params.size; ++i)
     {
-        // The two edge cells are one world cell apart, never the same one, so
-        // there is nothing to compare them to each other. What has to hold is that
-        // EACH chunk's edge cell equals what the world function says at that
-        // chunk's own world position — checked on both sides, because a chunk that
-        // agreed with the world function only on the side it was queried from
-        // would still leave a step at the seam.
         math::Fixed32 valueA{};
         math::Fixed32 valueB{};
         core::i32 worldAX = 0;
@@ -751,14 +682,12 @@ TileGrid borderConstraintsFrom(core::u32 size, const TileGrid &neighbour, core::
     const core::u32 last = size - 1u;
     for (core::u32 i = 0u; i < size; ++i)
     {
-        // Pin the new chunk's edge to the neighbour's touching edge. Direction
-        // order is kNeighbor4 {E, W, S, N}, read as "where the neighbour lies".
         switch (neighbourSide)
         {
-        case 0u: preset.at(last, i) = neighbour.at(0u, i); break; // neighbour to the east
-        case 1u: preset.at(0u, i) = neighbour.at(last, i); break; // to the west
-        case 2u: preset.at(i, last) = neighbour.at(i, 0u); break; // to the south
-        default: preset.at(i, 0u) = neighbour.at(i, last); break; // to the north
+        case 0u: preset.at(last, i) = neighbour.at(0u, i); break;
+        case 1u: preset.at(0u, i) = neighbour.at(last, i); break;
+        case 2u: preset.at(i, last) = neighbour.at(i, 0u); break;
+        default: preset.at(i, 0u) = neighbour.at(i, last); break;
         }
     }
     return preset;

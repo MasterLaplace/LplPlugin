@@ -22,7 +22,7 @@
 
 namespace lpl::procgen {
 
-/// Terrain elevation per cell, in world units.
+/** Terrain elevation per cell, in world units. */
 using Heightfield = Grid<math::Fixed32>;
 
 /**
@@ -30,9 +30,9 @@ using Heightfield = Grid<math::Fixed32>;
  * @brief Which fractal construction shapes a layer.
  */
 enum class NoiseKind : core::u8 {
-    Fbm = 0, ///< Symmetric fractal sum: rolling hills.
-    Ridged,  ///< Crests along the noise's zero set: mountain ranges.
-    Billow   ///< Rectified: rounded bulges with creases, for dunes and clouds.
+    Fbm = 0, /**< Symmetric fractal sum: rolling hills. */
+    Ridged,  /**< Crests along the noise's zero set: mountain ranges. */
+    Billow   /**< Rectified: rounded bulges with creases, for dunes and clouds. */
 };
 
 /**
@@ -40,15 +40,15 @@ enum class NoiseKind : core::u8 {
  * @brief How the base terrain is sampled before any pass reshapes it.
  */
 struct NoiseParams {
-    core::u32 seed{1337u};          ///< Determinism anchor.
-    core::f32 frequency{0.05f};     ///< Cells-to-noise scale; smaller is smoother.
-    core::f32 amplitude{16.0f};     ///< Peak-to-trough height.
-    core::u32 octaves{5u};          ///< Octaves summed.
-    core::f32 baseHeight{0.0f};     ///< Constant added to every cell (sea level offset).
-    core::f32 lacunarity{2.0f};     ///< Frequency multiplier per octave.
-    core::f32 persistence{0.5f};    ///< Amplitude multiplier per octave.
-    core::f32 warpStrength{0.0f};   ///< Domain warp, in cells; 0 leaves the lattice unwarped.
-    NoiseKind kind{NoiseKind::Fbm}; ///< Fractal construction.
+    core::u32 seed{1337u};          /**< Determinism anchor. */
+    core::f32 frequency{0.05f};     /**< Cells-to-noise scale; smaller is smoother. */
+    core::f32 amplitude{16.0f};     /**< Peak-to-trough height. */
+    core::u32 octaves{5u};          /**< Octaves summed. */
+    core::f32 baseHeight{0.0f};     /**< Constant added to every cell (sea level offset). */
+    core::f32 lacunarity{2.0f};     /**< Frequency multiplier per octave. */
+    core::f32 persistence{0.5f};    /**< Amplitude multiplier per octave. */
+    core::f32 warpStrength{0.0f};   /**< Domain warp, in cells; 0 leaves the lattice unwarped. */
+    NoiseKind kind{NoiseKind::Fbm}; /**< Fractal construction. */
 
     /**
      * @brief Flattens the middle of the range into plains. 0 leaves noise as noise.
@@ -105,9 +105,25 @@ struct NoiseParams {
  * Input and output are both roughly [-1, 1]; what changes is how the range is SPENT.
  * Three bands, and the boundaries are continuous so no seam appears where one ends:
  *
- *  - below the plains band: ocean, left proportional so a coast still shelves.
- *  - the plains band: compressed towards its own middle by @c plainsFlatten.
- *  - above the mountain threshold: expanded by @c mountainGain.
+ *  - below the plains band: ocean, left proportional so a coast still shelves. The
+ *    sea floor continues at the noise's own slope from where the lowland ended:
+ *    shelving rather than dropping, so a coast reads as a beach.
+ *  - the plains band: compressed towards its own middle by @c plainsFlatten, so the
+ *    majority of the range becomes ground that can be walked across.
+ *  - above the mountain threshold: expanded by @c mountainGain, from where the
+ *    lowland ended.
+ *
+ * EVERY join is continuous, and that is not tidiness: a curve that stepped at a
+ * band boundary would draw a terrace at exactly that height right around the
+ * world, on every coast and every hillside at once. The first version of this
+ * function did precisely that on the ocean side — it returned the raw value below
+ * the lowland band while the band itself was compressed, so every shoreline in the
+ * world got the same cliff. Each band therefore starts from where the previous one
+ * ENDED rather than from the raw value.
+ *
+ * Off by default: a @c plainsFlatten of zero returns @p value unchanged, so it
+ * leaves every existing world, every parity signature and every baked cartridge
+ * exactly as they were.
  *
  * Pure Fixed32, no transcendentals, and a function of the value alone — so it is
  * seamless by construction, and a chunk boundary cannot see it.
@@ -129,6 +145,15 @@ struct NoiseParams {
  *
  * Coordinates are absolute world cells, not offsets into a grid: that is what
  * makes two chunks agree about the ground they share.
+ *
+ * The domain is warped in cell space, before the frequency scaling, so
+ * @c warpStrength reads in cells rather than in whatever units the frequency
+ * happens to imply. The value is shaped by @ref shapeTerrainValue BEFORE the
+ * amplitude is applied, on the normalised value. Reshaping metres instead would
+ * make every parameter depend on how tall the world happens to be, and a recipe
+ * tuned at one amplitude would be wrong at another. Ridged and billow both return
+ * [0, 1); they are recentred so a layer's mean stays near zero and layering one
+ * over another does not drift upward.
  *
  * @param worldX Absolute cell abscissa.
  * @param worldZ Absolute cell ordinate.
@@ -173,6 +198,9 @@ bool heightRange(const Heightfield &field, math::Fixed32 &outMin, math::Fixed32 
  * afterwards is what lets later passes use absolute thresholds — "below 0.3 is
  * ocean" only means something once the range is known.
  *
+ * A flat field has no range to stretch; it is put at the target floor rather than
+ * dividing by zero.
+ *
  * @param field Field to rescale in place.
  * @param low   Target minimum.
  * @param high  Target maximum.
@@ -188,6 +216,12 @@ void clampToSeaLevel(Heightfield &field, math::Fixed32 level);
 
 /**
  * @brief Applies a terracing (stepped plateau) effect.
+ *
+ * `steps` bands means `steps` distinct heights, so the top band is steps - 1 and
+ * the mapping back divides by steps - 1. Dividing by `steps` instead leaves an
+ * extra level that only the single highest cell can reach — a one-cell plateau
+ * perched above the terrace below it.
+ *
  * @param field Field to modify.
  * @param steps Number of terraces; 0 or 1 leaves the field untouched.
  */
@@ -195,6 +229,10 @@ void terrace(Heightfield &field, core::u32 steps);
 
 /**
  * @brief Averages each cell with its 8 neighbours, @p iterations times.
+ *
+ * Double-buffered: smoothing in place would feed already-smoothed cells back into
+ * the average, which is a different (and direction-dependent) filter.
+ *
  * @param field      Field to smooth in place.
  * @param iterations Passes to run.
  */

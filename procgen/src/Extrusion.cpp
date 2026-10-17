@@ -1,12 +1,3 @@
-/**
- * @file Extrusion.cpp
- * @brief Implementation of 2.5D extrusion from plans and heightfields.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Extrusion.hpp>
 
 namespace lpl::procgen {
@@ -16,7 +7,9 @@ namespace {
 constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
 constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
-/// Allocates an empty volume of the requested extent.
+/**
+ * @brief Allocates an empty volume of the requested extent.
+ */
 VoxelVolume makeVolume(core::u32 width, core::u32 depth, core::u32 levels)
 {
     VoxelVolume volume;
@@ -29,7 +22,13 @@ VoxelVolume makeVolume(core::u32 width, core::u32 depth, core::u32 levels)
     return volume;
 }
 
-/// Writes a column from @p base up to (but excluding) @p top.
+/**
+ * @brief Writes a column from @p base up to (but excluding) @p top.
+ *
+ * Without @p solidBelow, only the surface is written: one voxel at the top of the
+ * column. A hollow world is far cheaper to mesh, and nothing under the surface is
+ * ever seen.
+ */
 void fillColumn(VoxelVolume &volume, core::u32 x, core::u32 z, core::u32 base, core::u32 top, core::u8 material,
                 bool solidBelow)
 {
@@ -44,8 +43,6 @@ void fillColumn(VoxelVolume &volume, core::u32 x, core::u32 z, core::u32 base, c
         return;
     }
 
-    // Surface only: one voxel at the top of the column. A hollow world is far
-    // cheaper to mesh, and nothing under the surface is ever seen.
     if (ceiling > base)
         volume.at(x, ceiling - 1u, z) = material;
 }
@@ -66,11 +63,8 @@ VoxelVolume extrudeTilePlan(const Grid<core::u8> &plan, const lpl::pmr::vector<c
             const core::u8 tile = plan.at(x, z);
             const core::u32 height = tile < tileHeight.size() ? static_cast<core::u32>(tileHeight[tile]) : 1u;
             if (height == 0u)
-                continue; // this tile is a hole, not a column
+                continue;
 
-            // Material carries the tile id, so the volume still knows what each
-            // column was made of — a mesher can texture from it without needing
-            // the plan alongside.
             fillColumn(volume, x, z, params.baseLevel, params.baseLevel + height, static_cast<core::u8>(tile + 1u),
                        params.solidBelow);
         }
@@ -90,8 +84,6 @@ VoxelVolume extrudeHeightfield(const Heightfield &field, core::u8 material, cons
     {
         for (core::u32 x = 0u; x < field.width(); ++x)
         {
-            // Quantise to whole levels: neighbouring columns must share exact
-            // wall heights or nothing connects.
             const core::i32 levels = (field.at(x, z) / scale).toInt();
             if (levels <= 0)
                 continue;
@@ -127,8 +119,6 @@ core::u32 countSurfaceVoxels(const VoxelVolume &volume)
                 if (volume.at(x, y, z) == 0u)
                     continue;
 
-                // Outside the volume counts as empty, so the outer shell is
-                // surface — which is what a mesher emits too.
                 bool exposed = x == 0u || z == 0u || y == 0u || x + 1u == volume.width || z + 1u == volume.depth ||
                                y + 1u == volume.levels;
                 if (!exposed)

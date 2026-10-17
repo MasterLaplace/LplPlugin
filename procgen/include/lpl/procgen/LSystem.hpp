@@ -36,7 +36,7 @@
 
 namespace lpl::procgen {
 
-/// Compass directions the turtle can face; a full turn is 16 steps.
+/** Compass directions the turtle can face; a full turn is 16 steps. */
 inline constexpr core::u32 kTurtleDirections = 16u;
 
 /**
@@ -51,9 +51,9 @@ inline constexpr core::u32 kTurtleDirections = 16u;
  * in four of an intact wall, one each of the two broken ones.
  */
 struct LRule {
-    char symbol{'F'};             ///< Symbol to replace.
-    lpl::pmr::string replacement; ///< What it becomes.
-    core::u32 weight{1u};         ///< Relative chance among alternatives for this symbol.
+    char symbol{'F'};             /**< Symbol to replace. */
+    lpl::pmr::string replacement; /**< What it becomes. */
+    core::u32 weight{1u};         /**< Relative chance among alternatives for this symbol. */
 };
 
 /**
@@ -68,11 +68,11 @@ struct LRule {
  *  - any other symbol is inert (useful as a rewrite-only variable)
  */
 struct LSystemParams {
-    lpl::pmr::string axiom{"F"};   ///< Starting string.
-    lpl::pmr::vector<LRule> rules; ///< Rewrite rules.
-    core::u32 iterations{4u};      ///< Rewrite rounds.
-    core::u32 maxLength{16384u};   ///< Cap on the expanded string.
-    core::u32 seed{0x15A5u};       ///< Determinism anchor for weighted alternatives.
+    lpl::pmr::string axiom{"F"};   /**< Starting string. */
+    lpl::pmr::vector<LRule> rules; /**< Rewrite rules. */
+    core::u32 iterations{4u};      /**< Rewrite rounds. */
+    core::u32 maxLength{16384u};   /**< Cap on the expanded string. */
+    core::u32 seed{0x15A5u};       /**< Determinism anchor for weighted alternatives. */
 };
 
 /**
@@ -80,19 +80,19 @@ struct LSystemParams {
  * @brief How the expanded string is drawn.
  */
 struct TurtleParams {
-    core::u32 startX{32u};        ///< Starting column.
-    core::u32 startZ{60u};        ///< Starting row.
-    core::u32 startDirection{4u}; ///< Starting heading, in 1/16 turns (4 = north).
-    core::u32 stepLength{4u};     ///< Cells drawn per `F`.
-    core::u32 turnAmount{2u};     ///< Heading steps per `+` or `-`.
-    core::u32 thickness{0u};      ///< Extra radius around each drawn cell.
-    core::f32 stepDecay{1.0f};    ///< Step length multiplier per branch depth, in (0, 1].
+    core::u32 startX{32u};        /**< Starting column. */
+    core::u32 startZ{60u};        /**< Starting row. */
+    core::u32 startDirection{4u}; /**< Starting heading, in 1/16 turns (4 = north). */
+    core::u32 stepLength{4u};     /**< Cells drawn per `F`. */
+    core::u32 turnAmount{2u};     /**< Heading steps per `+` or `-`. */
+    core::u32 thickness{0u};      /**< Extra radius around each drawn cell. */
+    core::f32 stepDecay{1.0f};    /**< Step length multiplier per branch depth, in (0, 1]. */
 };
 
-/// Which family of field lines a region of a tensor field carries.
+/** Which family of field lines a region of a tensor field carries. */
 enum class FieldPattern : core::u8 {
-    Grid = 0, ///< Parallel field lines at a fixed bearing: an orthogonal street plan.
-    Radial    ///< Field lines converging on a centre: a hub-and-spoke old town.
+    Grid = 0, /**< Parallel field lines at a fixed bearing: an orthogonal street plan. */
+    Radial    /**< Field lines converging on a centre: a hub-and-spoke old town. */
 };
 
 /**
@@ -100,12 +100,12 @@ enum class FieldPattern : core::u8 {
  * @brief One influence in a tensor field.
  */
 struct FieldRegion {
-    FieldPattern pattern{FieldPattern::Grid}; ///< Grid or radial.
-    core::u32 centerX{0u};                    ///< Where this influence is anchored.
-    core::u32 centerZ{0u};                    ///< Where this influence is anchored.
-    core::u32 bearing{0u};                    ///< For Grid: the heading its lines follow, in 1/16 turns.
-    core::f32 strength{1.0f};                 ///< Weight at the centre.
-    core::f32 falloff{0.04f};                 ///< Weight lost per cell of distance from the centre.
+    FieldPattern pattern{FieldPattern::Grid}; /**< Grid or radial. */
+    core::u32 centerX{0u};                    /**< Where this influence is anchored. */
+    core::u32 centerZ{0u};                    /**< Where this influence is anchored. */
+    core::u32 bearing{0u};                    /**< For Grid: the heading its lines follow, in 1/16 turns. */
+    core::f32 strength{1.0f};                 /**< Weight at the centre. */
+    core::f32 falloff{0.04f};                 /**< Weight lost per cell of distance from the centre. */
 };
 
 /**
@@ -135,6 +135,15 @@ using HeadingField = Grid<core::u8>;
  * the literature specifically calls for: the turtle then reads a cell instead of
  * summing every influence at every step.
  *
+ * The influences are blended as vectors, not as headings. Averaging heading
+ * *numbers* is meaningless on a circle: bearing 15 and bearing 1 are neighbours,
+ * and their mean is 8, which points the opposite way. A region's weight falls off
+ * with the Chebyshev distance from its centre: no root needed, and the resulting
+ * square falloff contours are invisible once several regions overlap. A radial
+ * field's lines run along the ray from the centre, so its bearing at a cell is the
+ * heading that ray points closest to, found by dot products against the sixteen
+ * directions without any arctangent.
+ *
  * @param width   Cells along X.
  * @param depth   Cells along Z.
  * @param regions Influences to blend.
@@ -150,6 +159,19 @@ using HeadingField = Grid<core::u8>;
  * an absolute bearing: `+` and `-` still turn it, but a straight run curves along
  * the field lines. That is what makes one grammar produce a web downtown and a grid
  * in the suburbs.
+ *
+ * The grammar says which way to turn; the field says which way the ground runs.
+ * The two are blended as vectors, weighted by conformity, so a straight run follows
+ * the field lines while `+` and `-` still steer.
+ *
+ * "Still steer" has to be literal, and it was not: blending on the step that
+ * FOLLOWS a turn pulls the new bearing straight back onto the streamline, so at
+ * high conformity every branch out of a node retraces the same line and the network
+ * stops growing. Measured, it stopped dead — 16 cells at conformity 1 whatever the
+ * grammar did, against 106 for the same grammar with the field off. So a turn gets
+ * one unconformed step to establish itself, and the field takes over from the step
+ * after. Each step adopts the blended heading: otherwise the field would be
+ * re-applied to the original bearing at every step and the run would never curve.
  *
  * @param expanded The string from @ref expandLSystem.
  * @param params   Start position, step size and turn angle.
@@ -168,6 +190,11 @@ core::u32 drawTurtleInField(const lpl::pmr::string &expanded, const TurtleParams
  * exponential, and a rule set that looks harmless can produce megabytes in eight
  * rounds. Truncating is what keeps this usable in a kernel with a 4 MiB heap.
  *
+ * The weighted choice among the rules for a symbol takes one pass to total the
+ * weights and one to pick — the alternative, collecting matches into a vector
+ * first, would allocate once per symbol of a string that is already the largest
+ * thing here.
+ *
  * @param params Grammar and iteration count.
  * @return The expanded string.
  */
@@ -184,12 +211,20 @@ core::u32 drawTurtle(const lpl::pmr::string &expanded, const TurtleParams &param
 
 /**
  * @brief A ready-made branching grammar, suitable for trees or river deltas.
+ *
+ * Three alternatives for the same symbol, so a stand of trees grown from one
+ * grammar is a stand of different trees.
+ *
  * @return `F -> FF+[+F-F-F]-[-F+F+F]`, the classic bushy rule.
  */
 [[nodiscard]] LSystemParams makeBranchingGrammar();
 
 /**
  * @brief A ready-made grammar for road networks: mostly straight, forking.
+ *
+ * A stem that keeps going and throws off side streets — perpendicular when the
+ * turtle's @c turnAmount is 4 — which is what a road network looks like from above.
+ *
  * @return A grammar whose segments run long and branch at right angles.
  */
 [[nodiscard]] LSystemParams makeRoadGrammar();

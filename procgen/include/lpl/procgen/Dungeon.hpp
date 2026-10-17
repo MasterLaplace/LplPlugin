@@ -15,7 +15,8 @@
  * sealed pockets, and a level with an unreachable room is worse than a boring
  * one. So every generator here ends with the same post-process:
  * @ref connectRegions floods the grid, discards pockets below a threshold, and
- * digs straight links between whatever survives.
+ * tunnels every survivor to the largest region by the shortest way through the
+ * rock.
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -33,14 +34,14 @@
 
 namespace lpl::procgen {
 
-/// Cell states of a dungeon map.
+/** Cell states of a dungeon map. */
 enum class DungeonCell : core::u8 {
-    Wall = 0, ///< Solid rock.
-    Floor,    ///< Walkable.
-    Door      ///< Walkable, and marks a room boundary.
+    Wall = 0, /**< Solid rock. */
+    Floor,    /**< Walkable. */
+    Door      /**< Walkable, and marks a room boundary. */
 };
 
-/// A dungeon map.
+/** A dungeon map. */
 using DungeonMap = Grid<DungeonCell>;
 
 /**
@@ -69,9 +70,9 @@ using DungeonMap = Grid<DungeonCell>;
  * what every existing document therefore means.
  */
 enum class CaveKind : core::u32 {
-    Cellular = 0u, ///< Automaton smoothing with connectivity repair. The default.
-    Bsp = 1u,      ///< Recursive partition into rooms joined by corridors.
-    Dla = 2u,      ///< Diffusion-limited aggregation: thin, branching, organic.
+    Cellular = 0u, /**< Automaton smoothing with connectivity repair. The default. */
+    Bsp = 1u,      /**< Recursive partition into rooms joined by corridors. */
+    Dla = 2u,      /**< Diffusion-limited aggregation: thin, branching, organic. */
 
     /**
      * @brief A stack of plans joined by shafts, at least one reaching the surface.
@@ -113,14 +114,20 @@ enum class CaveKind : core::u32 {
  * @brief An axis-aligned rectangle carved out of the rock.
  */
 struct Room {
-    core::u32 x{0u};     ///< Left edge.
-    core::u32 z{0u};     ///< Top edge.
-    core::u32 width{0u}; ///< Extent along X.
-    core::u32 depth{0u}; ///< Extent along Z.
+    core::u32 x{0u};     /**< Left edge. */
+    core::u32 z{0u};     /**< Top edge. */
+    core::u32 width{0u}; /**< Extent along X. */
+    core::u32 depth{0u}; /**< Extent along Z. */
 
-    /// @return Centre column (rounded down).
+    /**
+     * @brief Centre of the room along X.
+     * @return Centre column (rounded down).
+     */
     [[nodiscard]] core::u32 centerX() const noexcept { return x + width / 2u; }
-    /// @return Centre row (rounded down).
+    /**
+     * @brief Centre of the room along Z.
+     * @return Centre row (rounded down).
+     */
     [[nodiscard]] core::u32 centerZ() const noexcept { return z + depth / 2u; }
 };
 
@@ -129,13 +136,13 @@ struct Room {
  * @brief Recursive partitioning into rooms joined by corridors.
  */
 struct BspDungeonParams {
-    core::u32 width{64u};        ///< Map width.
-    core::u32 depth{64u};        ///< Map depth.
-    core::u32 seed{1337u};       ///< Determinism anchor.
-    core::u32 maxDepth{5u};      ///< Recursion levels.
-    core::u32 minLeafSize{8u};   ///< A node smaller than this is not split.
-    core::u32 roomPadding{1u};   ///< Rock kept between a room and its leaf edge.
-    core::u32 corridorWidth{1u}; ///< Corridor thickness.
+    core::u32 width{64u};        /**< Map width. */
+    core::u32 depth{64u};        /**< Map depth. */
+    core::u32 seed{1337u};       /**< Determinism anchor. */
+    core::u32 maxDepth{5u};      /**< Recursion levels. */
+    core::u32 minLeafSize{8u};   /**< A node smaller than this is not split. */
+    core::u32 roomPadding{1u};   /**< Rock kept between a room and its leaf edge. */
+    core::u32 corridorWidth{1u}; /**< Corridor thickness. */
 };
 
 /**
@@ -143,14 +150,14 @@ struct BspDungeonParams {
  * @brief Cellular-automaton cave carving (the 4-5 rule).
  */
 struct CaveParams {
-    core::u32 width{64u};             ///< Map width.
-    core::u32 depth{64u};             ///< Map depth.
-    core::u32 seed{1337u};            ///< Determinism anchor.
-    core::f32 fillProbability{0.45f}; ///< Chance a cell starts as rock.
-    core::u32 steps{5u};              ///< Automaton iterations.
-    core::u32 birthLimit{5u};         ///< Rock neighbours that turn floor to rock.
-    core::u32 survivalLimit{4u};      ///< Rock neighbours a rock cell needs to stay rock.
-    core::u32 minRegionSize{24u};     ///< Pockets smaller than this are filled in.
+    core::u32 width{64u};             /**< Map width. */
+    core::u32 depth{64u};             /**< Map depth. */
+    core::u32 seed{1337u};            /**< Determinism anchor. */
+    core::f32 fillProbability{0.45f}; /**< Chance a cell starts as rock. */
+    core::u32 steps{5u};              /**< Automaton iterations. */
+    core::u32 birthLimit{5u};         /**< Rock neighbours that turn floor to rock. */
+    core::u32 survivalLimit{4u};      /**< Rock neighbours a rock cell needs to stay rock. */
+    core::u32 minRegionSize{24u};     /**< Pockets smaller than this are filled in. */
 };
 
 /**
@@ -158,13 +165,13 @@ struct CaveParams {
  * @brief A digger on a confined random walk.
  */
 struct DrunkardParams {
-    core::u32 width{64u};           ///< Map width.
-    core::u32 depth{64u};           ///< Map depth.
-    core::u32 seed{1337u};          ///< Determinism anchor.
-    core::u32 diggers{4u};          ///< Independent walks.
-    core::u32 stepsPerDigger{400u}; ///< Steps each walk takes.
-    core::f32 targetFill{0.4f};     ///< Stop early once this share is floor.
-    core::u32 margin{2u};           ///< Rock border the walk may not cross.
+    core::u32 width{64u};           /**< Map width. */
+    core::u32 depth{64u};           /**< Map depth. */
+    core::u32 seed{1337u};          /**< Determinism anchor. */
+    core::u32 diggers{4u};          /**< Independent walks. */
+    core::u32 stepsPerDigger{400u}; /**< Steps each walk takes. */
+    core::f32 targetFill{0.4f};     /**< Stop early once this share is floor. */
+    core::u32 margin{2u};           /**< Rock border the walk may not cross. */
 };
 
 /**
@@ -172,11 +179,11 @@ struct DrunkardParams {
  * @brief What a generator produced, and whether it is playable.
  */
 struct DungeonReport {
-    core::u32 floorCells{0u};    ///< Walkable cells.
-    core::u32 regions{0u};       ///< Disconnected areas found before linking.
-    core::u32 pocketsFilled{0u}; ///< Sub-threshold areas turned back to rock.
-    core::u32 linksDug{0u};      ///< Corridors added to join surviving areas.
-    bool connected{false};       ///< Is every floor cell reachable from every other?
+    core::u32 floorCells{0u};    /**< Walkable cells. */
+    core::u32 regions{0u};       /**< Disconnected areas found before linking. */
+    core::u32 pocketsFilled{0u}; /**< Sub-threshold areas turned back to rock. */
+    core::u32 linksDug{0u};      /**< Corridors added to join surviving areas. */
+    bool connected{false};       /**< Is every floor cell reachable from every other? */
 };
 
 /**
@@ -189,6 +196,11 @@ struct DungeonReport {
 
 /**
  * @brief Grows caves from noise with the 4-5 rule.
+ *
+ * The map is seeded with noise, keeping a solid border. The 4-5 rule is then applied
+ * synchronously: the next state depends only on the frozen previous one, so a scratch
+ * buffer is not an optimisation, it is what makes the automaton an automaton.
+ *
  * @param params Size, seed, fill and iteration counts.
  * @return The map (already connected; see @ref connectRegions).
  */
@@ -196,6 +208,12 @@ struct DungeonReport {
 
 /**
  * @brief Digs winding galleries with confined random walkers.
+ *
+ * Every digger starts mid-map so the galleries meet near the centre rather than
+ * fragmenting into disjoint burrows at the edges. Confinement: a step that would leave
+ * the margin is refused rather than clamped, so the walk bounces inward instead of
+ * hugging the border (which is where an unconstrained walk spends its time).
+ *
  * @param params Size, seed, digger count and budget.
  * @return The map.
  */
@@ -206,8 +224,8 @@ struct DungeonReport {
  *
  * The guarantee the bottom-up generators cannot make for themselves. Regions are
  * found by flood fill, anything under @p minRegionSize becomes rock again, and
- * the survivors are joined by digging straight L-corridors between their nearest
- * representative cells.
+ * every survivor is joined to the largest one by the shortest tunnel through the
+ * rock.
  *
  * @param map            Map to repair in place.
  * @param minRegionSize  Smallest area worth keeping.
@@ -229,6 +247,11 @@ DungeonReport connectRegions(DungeonMap &map, core::u32 minRegionSize);
  * the rectangles stop being rectangles, without touching the connectivity the
  * partitioning guaranteed.
  *
+ * Only cells on a boundary are eligible: eroding the middle of a room would punch
+ * holes, and eroding deep rock would do nothing visible while risking a new pocket.
+ * Erosion can still seal a corridor or open a pocket, so the guarantee is
+ * re-established afterwards with @ref connectRegions.
+ *
  * @param map      Map to erode in place.
  * @param seed     Determinism anchor.
  * @param strength Chance an eligible edge cell flips, in [0, 1].
@@ -249,6 +272,18 @@ void erodeEdges(DungeonMap &map, core::u32 seed, core::f32 strength);
  * rather than nearest, because a one-cell breach reads as a doorway while a long
  * gouge reads as a mistake.
  *
+ * The largest component wins the title of "the level"; everything else is an orphan
+ * to be let in. Ties go to the lower label so the choice does not depend on the
+ * labelling's traversal order.
+ *
+ * A wall cell whose opposite neighbours, horizontally or vertically, belong to two
+ * different components is a one-cell breach. The choice among equally thin walls is a
+ * reservoir draw, so a level with a dozen candidate doorways does not always use the
+ * top-left one. When no one-cell breach exists, the repair falls back on the
+ * tunneller, which digs a corridor rather than a doorway — uglier, but it always
+ * succeeds, and an ugly connection beats an unreachable room. When even the tunneller
+ * finds nothing left that can be joined, the repair stops rather than spin.
+ *
  * @param map  Map to repair in place.
  * @param seed Stream for tie-breaking between equally thin walls.
  * @return Number of wall cells broken (0 when it was already connected).
@@ -263,6 +298,9 @@ core::u32 forceConnectivity(DungeonMap &map, core::u32 seed);
  * produces asymmetric spaces no single split could have made — the "erosion of
  * perfect partitions" a liminal generator needs.
  *
+ * A party wall is a wall cell open on both sides along one axis. Dissolving it merges
+ * two rooms; dissolving anything else would punch a hole in the outer shell.
+ *
  * @param map      Map to modify in place.
  * @param seed     Stream for which walls go.
  * @param strength Share of interior wall cells to dissolve, in [0, 1].
@@ -276,6 +314,9 @@ core::u32 mergeRoomsAsymmetric(DungeonMap &map, core::u32 seed, core::f32 streng
  * Aligned pillars give a corridor a vanishing point, and a vanishing point is
  * what tells a player where they are. Misaligning them is the cheapest way to
  * take that away, which is the entire architectural trick of a liminal space.
+ *
+ * Never in a spot whose four neighbours are not all open: a pillar in a corridor is a
+ * plug, and a plug is a softlock waiting for the connectivity pass to notice.
  *
  * @param map     Map to modify in place.
  * @param seed    Stream for placement.

@@ -47,23 +47,23 @@ namespace lpl::procgen {
  * maps the id to a colour ramp already reads sensibly.
  */
 enum class BiomeId : core::u8 {
-    Ocean = 0,  ///< Below sea level.
-    Beach,      ///< Just above sea level.
-    Snow,       ///< High and cold.
-    Tundra,     ///< High, cold, dry.
-    Taiga,      ///< Cold, wet: conifer forest.
-    Rock,       ///< High and bare.
-    Desert,     ///< Hot and dry.
-    Savanna,    ///< Hot, moderately dry.
-    Grassland,  ///< Temperate, moderate moisture.
-    Forest,     ///< Temperate and wet.
-    Rainforest, ///< Hot and very wet.
-    Marsh,      ///< Low and saturated.
-    Lake,       ///< Standing fresh water: a basin the drainage could not empty.
-    Count       ///< Number of biomes; never a classification result.
+    Ocean = 0,  /**< Below sea level. */
+    Beach,      /**< Just above sea level. */
+    Snow,       /**< High and cold. */
+    Tundra,     /**< High, cold, dry. */
+    Taiga,      /**< Cold, wet: conifer forest. */
+    Rock,       /**< High and bare. */
+    Desert,     /**< Hot and dry. */
+    Savanna,    /**< Hot, moderately dry. */
+    Grassland,  /**< Temperate, moderate moisture. */
+    Forest,     /**< Temperate and wet. */
+    Rainforest, /**< Hot and very wet. */
+    Marsh,      /**< Low and saturated. */
+    Lake,       /**< Standing fresh water: a basin the drainage could not empty. */
+    Count       /**< Number of biomes; never a classification result. */
 };
 
-/// Per-cell biome classification.
+/** Per-cell biome classification. */
 using BiomeMap = Grid<BiomeId>;
 
 /**
@@ -75,11 +75,11 @@ using BiomeMap = Grid<BiomeId>;
  * thresholds mean nothing.
  */
 struct BiomeParams {
-    core::f32 seaLevel{-4.0f};      ///< At or below: Ocean.
-    core::f32 beachHeight{0.8f};    ///< Up to seaLevel + this: Beach.
-    core::f32 mountainHeight{9.0f}; ///< Above: Rock or Snow rather than vegetation.
-    core::f32 snowHeight{13.0f};    ///< Above: Snow.
-    core::f32 snowlineWarmth{0.3f}; ///< High ground colder than this holds snow rather than bare rock.
+    core::f32 seaLevel{-4.0f};      /**< At or below: Ocean. */
+    core::f32 beachHeight{0.8f};    /**< Up to seaLevel + this: Beach. */
+    core::f32 mountainHeight{9.0f}; /**< Above: Rock or Snow rather than vegetation. */
+    core::f32 snowHeight{13.0f};    /**< Above: Snow. */
+    core::f32 snowlineWarmth{0.3f}; /**< High ground colder than this holds snow rather than bare rock. */
 };
 
 /**
@@ -97,9 +97,9 @@ struct BiomeParams {
  * weight narrows the biome's reach along that axis, a small one stretches it.
  */
 struct BiomeProfile {
-    BiomeId id;           ///< Biome this profile selects.
-    ClimateVector center; ///< Ideal climate.
-    ClimateVector weight; ///< Per-axis importance; 0 means "indifferent".
+    BiomeId id;           /**< Biome this profile selects. */
+    ClimateVector center; /**< Ideal climate. */
+    ClimateVector weight; /**< Per-axis importance; 0 means "indifferent". */
 };
 
 /**
@@ -124,6 +124,13 @@ struct BiomeProfile {
  * the drainage could not empty. No amount of temperature and rainfall can tell a
  * lake from a wet meadow — only the flow routing knows the basin had no outlet.
  *
+ * Not out of laziness: these three are facts the climate axes cannot represent. Sea
+ * level is a hard boundary, a shore is a metre-wide band, and a lake is a basin the
+ * flow routing proved had no outlet. A nearest-profile lookup asked to reproduce
+ * them would need a biome centred on "below sea level", which is a height, not a
+ * climate. The lake test comes after the altitude tests, not before: a basin below
+ * sea level is ocean, and calling it a lake would put fresh water under the sea.
+ *
  * Everything else is a weighted squared distance and an argmin.
  *
  * @param field   Terrain (absolute heights).
@@ -141,6 +148,11 @@ struct BiomeProfile {
  * Exposed because it is the honest way to answer "why is this cell a desert?" —
  * a debug view can show the runner-up and the margin, which a whole-map call
  * cannot.
+ *
+ * Strictly less, so a tie goes to the earlier row of @ref biomeProfiles. The
+ * table's order is therefore part of the result and must not be shuffled
+ * casually — which is exactly why it is one static table and not a runtime
+ * registry.
  *
  * @param climate      The cell's climate.
  * @param outDistance  Receives the winning weighted squared distance.
@@ -161,6 +173,9 @@ struct BiomeProfile {
  * A `.lplscene` says "forest", not 9: a scatter rule keyed by a raw enum value
  * silently changes meaning the day a biome is inserted into the enumeration,
  * and a document is meant to outlive the build that wrote it.
+ *
+ * Names are compared against biomeName's own output, so the two can never disagree
+ * about a spelling — there is one table, read in both directions.
  *
  * @param name Lowercase biome name.
  * @return The biome, or @c BiomeId::Count when the name is not one.

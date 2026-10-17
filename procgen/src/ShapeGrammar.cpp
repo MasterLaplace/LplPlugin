@@ -1,12 +1,3 @@
-/**
- * @file ShapeGrammar.cpp
- * @brief Implementation of the split grammar and its string form.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/ShapeGrammar.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -15,7 +6,9 @@ namespace lpl::procgen {
 
 namespace {
 
-/// Skips spaces. Everything else is significant.
+/**
+ * @brief Skips spaces. Everything else is significant.
+ */
 void skipSpace(const char *text, core::u32 &i)
 {
     while (text[i] == ' ' || text[i] == '\t')
@@ -27,7 +20,8 @@ void skipSpace(const char *text, core::u32 &i)
  *
  * A module may name several symbols (`[A,P]` is a panel plus its post); the first
  * decides the material and the count decides the height, which is the smallest
- * reading of the notation that does not throw information away.
+ * reading of the notation that does not throw information away. An empty or
+ * non-alphabetic symbol is a typo, not a module.
  */
 bool parseModule(const char *text, core::u32 &i, GrammarModule &out)
 {
@@ -43,11 +37,10 @@ bool parseModule(const char *text, core::u32 &i, GrammarModule &out)
         skipSpace(text, i);
         const char letter = text[i];
         if (materialForSymbol(letter) == 0u)
-            return false; // An empty or non-alphabetic symbol is a typo, not a module.
+            return false;
         if (symbols == 0u)
             material = materialForSymbol(letter);
 
-        // Consume the rest of a multi-letter symbol (BL, BS...).
         while (materialForSymbol(text[i]) != 0u)
             ++i;
         ++symbols;
@@ -80,9 +73,6 @@ bool parseSequenceGrammar(const char *text, SequenceGrammar &out)
     if (text == nullptr)
         return false;
 
-    // Bounded up front: a grammar arriving from a document is untrusted input,
-    // and a parser that walks until NUL is a parser that walks off the end of a
-    // truncated file.
     core::u32 length = 0u;
     while (text[length] != '\0')
     {
@@ -122,7 +112,7 @@ bool parseSequenceGrammar(const char *text, SequenceGrammar &out)
                     return false;
             }
             if (digits == 0u || weight == 0u)
-                return false; // ":0" and ":" are both meaningless.
+                return false;
             module.weight = static_cast<core::u16>(weight);
         }
 
@@ -159,9 +149,6 @@ bool parseSequenceGrammar(const char *text, SequenceGrammar &out)
     }
 
     skipSpace(text, i);
-    // The whole string must be consumed. Trailing garbage means the author meant
-    // something the parser did not understand, and quietly ignoring it is how a
-    // typo becomes a shipped world.
     return text[i] == '\0' && out.alternativeCount > 0u && out.totalWeight > 0u;
 }
 
@@ -178,9 +165,6 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
     const core::u32 body = grammar.hasTerminator && length > 0u ? length - 1u : length;
     for (core::u32 slot = 0u; slot < body; ++slot)
     {
-        // Roulette selection over the declared weights: `:2` really is twice as
-        // likely as `:1`, which is the only reading of the notation that makes
-        // the numbers mean anything.
         core::u32 pick = random.below(grammar.totalWeight);
         core::u32 chosen = 0u;
         for (core::u32 a = 0u; a < grammar.alternativeCount; ++a)
@@ -224,8 +208,6 @@ VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams
         return VoxelVolume{};
     volume.cells.resize(static_cast<core::usize>(volume.width) * volume.depth * volume.levels, core::u8{0});
 
-    // Inset is clamped so a narrow plot does not produce a building of negative
-    // width — which, unsigned, is a building the size of the world.
     const core::u32 maxInset = (plot.width < plot.depth ? plot.width : plot.depth) / 2u;
     const core::u32 inset = params.inset > maxInset ? maxInset : params.inset;
 
@@ -246,17 +228,13 @@ VoxelVolume buildingVolume(const BuildingPlot &plot, const BuildingGrammarParams
             }
     };
 
-    // ── Split Y: base | floors* | roof ──────────────────────────────────────
     core::u32 level = 0u;
     for (core::u32 b = 0u; b < baseLevels; ++b, ++level)
-        fillLevel(level, 0u, params.baseMaterial, false); // The base is solid: it is the floor.
+        fillLevel(level, 0u, params.baseMaterial, false);
 
     for (core::u32 f = 0u; f < bodyLevels; ++f, ++level)
         fillLevel(level, 0u, params.wallMaterial, params.hollow);
 
-    // The roof steps inward as it rises, by the requested share. A flat cap is
-    // what `roofTaper = 0` asks for and it is a legitimate answer, so it is not
-    // treated as a degenerate case.
     for (core::u32 r = 0u; r < roofLevels; ++r, ++level)
     {
         const core::u32 shrink = roofLevels <= 1u ?
@@ -286,9 +264,6 @@ VoxelVolume buildTown(const SettlementMap &settlement, const lpl::pmr::vector<Bu
     {
         const BuildingPlot &plot = plots[p];
 
-        // Keyed by the plot's POSITION, not by its index in the list. A plot
-        // inserted earlier in the vector must not re-roll every building after
-        // it, or adding one house redraws the town.
         const core::u32 seed = params.seed != 0u ? params.seed ^ (plot.x * 73856093u) ^ (plot.z * 19349663u) :
                                                    worldSeed ^ (plot.x * 73856093u) ^ (plot.z * 19349663u);
 
@@ -305,10 +280,6 @@ VoxelVolume buildTown(const SettlementMap &settlement, const lpl::pmr::vector<Bu
                 if (wx >= town.width || wz >= town.depth)
                     continue;
 
-                // The rule that stops buildings standing in their own street. A
-                // plot is a rectangle proposed before the roads were cut; by now
-                // part of it is road, and only what the map still calls Plot may
-                // be raised.
                 if (settlement.at(wx, wz) != SettlementCell::Plot)
                     continue;
 
@@ -337,8 +308,6 @@ VoxelVolume decoratePath(const Grid<core::u8> &path, const SequenceGrammar &gram
     volume.levels = levels;
     volume.cells.resize(static_cast<core::usize>(volume.width) * volume.depth * volume.levels, core::u8{0});
 
-    // Scan order, so the sequence does not depend on how the path was traced —
-    // two callers that produce the same marked cells get the same fence.
     lpl::pmr::vector<core::u32> cells;
     for (core::u32 i = 0u; i < path.cellCount(); ++i)
         if (path[i] != 0u)
