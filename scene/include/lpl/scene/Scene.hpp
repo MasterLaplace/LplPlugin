@@ -39,7 +39,9 @@ struct Node {
  */
 class Scene {
 public:
-    /** @brief Create a node under @p parent (kInvalidNode for a root). */
+    /**
+     * @brief Create a node under @p parent (kInvalidNode for a root).
+     */
     [[nodiscard]] NodeId createNode(NodeId parent = kInvalidNode);
 
     [[nodiscard]] core::u32 nodeCount() const noexcept { return static_cast<core::u32>(_nodes.size()); }
@@ -48,30 +50,46 @@ public:
     [[nodiscard]] NodeId parentOf(NodeId id) const noexcept { return _nodes[id].parent; }
     [[nodiscard]] const Transform2D &localTransform(NodeId id) const noexcept { return _nodes[id].local; }
 
-    /** @brief Compose the world transform by walking from the root to @p id. */
+    /**
+     * @brief Compose the world transform by walking from the root to @p id.
+     */
     [[nodiscard]] Transform2D worldTransform(NodeId id) const;
 
-    // --- Editing (undo/redo recorded) -------------------------------------
-
-    /** @brief Set a node's local transform, recording it for undo. */
+    /**
+     * @name Editing (undo/redo recorded)
+     * @{
+     */
+    /**
+     * @brief Set a node's local transform, recording it for undo.
+     *
+     * A fresh edit invalidates the redo history.
+     */
     void setLocalTransform(NodeId id, const Transform2D &transform);
 
-    /** @brief Undo the last transform edit; false if nothing to undo. */
+    /**
+     * @brief Undo the last transform edit; false if nothing to undo.
+     */
     bool undo();
 
-    /** @brief Redo the last undone edit; false if nothing to redo. */
+    /**
+     * @brief Redo the last undone edit; false if nothing to redo.
+     */
     bool redo();
 
     [[nodiscard]] core::u32 undoDepth() const noexcept { return static_cast<core::u32>(_undo.size()); }
     [[nodiscard]] core::u32 redoDepth() const noexcept { return static_cast<core::u32>(_redo.size()); }
+    /** @} */
 
-    // --- Multi-selection --------------------------------------------------
-
+    /**
+     * @name Multi-selection
+     * @{
+     */
     void select(NodeId id);
     void deselect(NodeId id);
     void clearSelection() noexcept { _selection.clear(); }
     [[nodiscard]] bool isSelected(NodeId id) const noexcept;
     [[nodiscard]] core::u32 selectionCount() const noexcept { return static_cast<core::u32>(_selection.size()); }
+    /** @} */
 
 private:
     struct TransformEdit {

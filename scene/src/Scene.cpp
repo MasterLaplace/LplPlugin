@@ -1,12 +1,3 @@
-/**
- * @file Scene.cpp
- * @brief Scene-graph world composition, undo/redo and selection.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-28
- * @copyright MIT License
- */
 #include <lpl/scene/Scene.hpp>
 
 namespace lpl::scene {
@@ -25,7 +16,6 @@ Transform2D Scene::worldTransform(NodeId id) const
     if (!isValid(id))
         return Transform2D::identity();
 
-    // Collect the chain root..id (parents first), then compose downward.
     pmr::vector<NodeId> chain;
     for (NodeId cur = id; cur != kInvalidNode; cur = _nodes[cur].parent)
         chain.push_back(cur);
@@ -44,7 +34,7 @@ void Scene::setLocalTransform(NodeId id, const Transform2D &transform)
     TransformEdit edit{id, _nodes[id].local, transform};
     _nodes[id].local = transform;
     _undo.push_back(edit);
-    _redo.clear(); // a fresh edit invalidates the redo history
+    _redo.clear();
 }
 
 bool Scene::undo()
