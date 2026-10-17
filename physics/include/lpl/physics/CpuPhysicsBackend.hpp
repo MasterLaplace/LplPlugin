@@ -108,6 +108,8 @@ private:
      * step finds a body beyond a margin of where they found it. A body's search
      * reads its list while every body is within that margin, and the tree,
      * built only then, otherwise. Both give the same bodies in the same order.
+     * The first iteration of a step does not check the margin again: the step
+     * has just checked it, or made the lists, and nothing has moved since.
      *
      * Chunks group entities by archetype and cap out at 256 (@ref
      * ecs::Chunk::kChunkCapacity), not by spatial region — two entities that
