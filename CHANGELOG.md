@@ -5,7 +5,38 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.8.0] - 2026-10-17
+## [0.9.0] - 2026-10-17
+
+### Fixed
+
+- **core**: The kernel's event bus takes a subscriber (#463)
+
+### Performance
+
+- **physics**: The broad-phase spans the boxes one corner at a time (#479)
+- **physics**: The broad-phase lists neighbours through a grid (#474)
+- **physics**: The resolver trusts the lists it has just checked (#472)
+- **physics**: The resolver builds a contact only when something listens (#464)
+
+### Changed
+
+- **codec**: Follow the shared C++ rules on comments and headers (#493)
+- **rosetta**: Follow the shared C++ rules on comments and headers (#492)
+- **pack**: Follow the shared C++ rules on comments and headers (#490)
+- **history**: Follow the shared C++ rules on comments and headers (#489)
+- **image**: Follow the shared C++ rules on comments and headers (#487)
+- **net**: Follow the shared C++ rules on comments and headers (#486)
+- **gpu**: Follow the shared C++ rules on comments and headers (#483)
+- **input**: Follow the shared C++ rules on comments and headers (#482)
+- **scene**: Follow the shared C++ rules on comments and headers (#476)
+- **platform**: Follow the shared C++ rules on comments and headers (#475)
+- **ecs**: Follow the shared C++ rules on comments and headers (#471)
+- **concurrency**: Follow the shared C++ rules on comments and headers (#470)
+- **container**: Follow the shared C++ rules on comments and headers (#469)
+- **memory**: Follow the shared C++ rules on comments and headers (#462)
+- **testing**: Follow the shared C++ rules on function docs (#461)
+
+## [0.8.0] - 2026-10-16
 
 ### Fixed
 
