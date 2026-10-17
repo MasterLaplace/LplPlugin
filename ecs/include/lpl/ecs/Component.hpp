@@ -40,52 +40,56 @@ enum class ComponentId : core::u16 {
     PlayerTag = 9,
     SleepState = 10,
     BciInput = 11,
-    /// Heritable traits: 5x Fixed32 (speed, vision, strength, absorption, size).
-    Genome = 12,
-    /// What KIND of creature this is: a trophic role, and a stable identity.
-    Creature = 13,
-    /// Unit facing on the ground plane: 2x Fixed32 (x, z).
-    ///
-    /// AUTHORITATIVE, and that is the whole reason it is a component: a walker
-    /// advances along its facing at a pace its genome fixes, so the facing is an
-    /// input to the next position. It used to be two fields inside
-    /// ecology::HerdMember, which meant the state that decides where a body goes
-    /// lived outside the registry the body lives in.
+    Genome = 12,   /**< Heritable traits: 5x Fixed32 (speed, vision, strength, absorption, size). */
+    Creature = 13, /**< What KIND of creature this is: a trophic role, and a stable identity. */
+    /**
+     * @brief Unit facing on the ground plane: 2x Fixed32 (x, z).
+     *
+     * AUTHORITATIVE, and that is the whole reason it is a component: a walker
+     * advances along its facing at a pace its genome fixes, so the facing is an
+     * input to the next position. It used to be two fields inside
+     * ecology::HerdMember, which meant the state that decides where a body goes
+     * lived outside the registry the body lives in.
+     */
     Heading = 14,
-    /// Who this entity IS, in a corpus: 1x u32 identifier + 2x i32 years.
-    ///
-    /// @warning The component that lets a historical claim and a walking body be the
-    /// same thing. Until it existed, a `history::Fact` had a subject and a body
-    /// had an `EntityId` and NOTHING mapped one to the other -- so a corpus could
-    /// say Herodotus was born at Halicarnassus and no entity could be him.
-    ///
-    /// AUTHORITATIVE, and not because of arithmetic: the identifier decides which
-    /// constraints apply to this body and the years decide whether it is alive to
-    /// act at all, so two targets disagreeing here would run two different lives.
-    /// The years are stored rather than derived because a source DATES a birth;
-    /// deriving them from a tick would make the gearing part of the biography.
+    /**
+     * @brief Who this entity IS, in a corpus: 1x u32 identifier + 2x i32 years.
+     *
+     * @warning The component that lets a historical claim and a walking body be the
+     * same thing. Until it existed, a `history::Fact` had a subject and a body
+     * had an `EntityId` and NOTHING mapped one to the other -- so a corpus could
+     * say Herodotus was born at Halicarnassus and no entity could be him.
+     *
+     * AUTHORITATIVE, and not because of arithmetic: the identifier decides which
+     * constraints apply to this body and the years decide whether it is alive to
+     * act at all, so two targets disagreeing here would run two different lives.
+     * The years are stored rather than derived because a source DATES a birth;
+     * deriving them from a tick would make the gearing part of the biography.
+     */
     Historical = 15,
 
-    /// Which chunk this entity's Position is relative to: 2x i32.
-    ///
-    /// @warning The component that lets a world be bigger than 32 kilometres. Q16.16
-    /// spans +-32768 units, so a flat world position cannot address a planet --
-    /// and widening the type is the wrong fix twice over: it doubles every
-    /// position in the game, and a float or a wider fixed word still loses
-    /// precision far from the origin, which is the "jitter at the edge of the
-    /// map" every large world has.
-    ///
-    /// `procgen/Chunking.hpp` already argues this for terrain, in as many words:
-    /// coordinates stay integral because far from the origin a float cannot
-    /// distinguish adjacent cells. This is the same decision for BODIES.
-    ///
-    /// The convention: an entity carrying this has a Position LOCAL to its
-    /// chunk; one without keeps the old meaning. Precision is then constant
-    /// everywhere -- 1/65536 of a unit at the origin and a billion kilometres
-    /// out -- and no product of two world-scale quantities can occur, because
-    /// a local coordinate is bounded by the chunk.
-    ///
-    /// AUTHORITATIVE: it is half of where a body IS.
+    /**
+     * @brief Which chunk this entity's Position is relative to: 2x i32.
+     *
+     * @warning The component that lets a world be bigger than 32 kilometres. Q16.16
+     * spans +-32768 units, so a flat world position cannot address a planet --
+     * and widening the type is the wrong fix twice over: it doubles every
+     * position in the game, and a float or a wider fixed word still loses
+     * precision far from the origin, which is the "jitter at the edge of the
+     * map" every large world has.
+     *
+     * `procgen/Chunking.hpp` already argues this for terrain, in as many words:
+     * coordinates stay integral because far from the origin a float cannot
+     * distinguish adjacent cells. This is the same decision for BODIES.
+     *
+     * The convention: an entity carrying this has a Position LOCAL to its
+     * chunk; one without keeps the old meaning. Precision is then constant
+     * everywhere -- 1/65536 of a unit at the origin and a billion kilometres
+     * out -- and no product of two world-scale quantities can occur, because
+     * a local coordinate is bounded by the chunk.
+     *
+     * AUTHORITATIVE: it is half of where a body IS.
+     */
     WorldCell = 16,
 
     Count
@@ -142,31 +146,10 @@ struct ComponentLayout {
  *                      is its facing times its pace, so a float facing would let
  *                      two machines walk the same animal to different cells
  */
-[[nodiscard]] constexpr ComponentLayout defaultLayout(ComponentId id) noexcept
-{
-    switch (id)
-    {
-    case ComponentId::Position: return {id, 12, 4};
-    case ComponentId::Velocity: return {id, 12, 4};
-    case ComponentId::Rotation: return {id, 16, 4};
-    case ComponentId::AngularVelocity: return {id, 12, 4};
-    case ComponentId::Mass: return {id, 4, 4};
-    case ComponentId::AABB: return {id, 12, 4};
-    case ComponentId::Health: return {id, 4, 4};
-    case ComponentId::NetworkSync: return {id, 4, 4};
-    case ComponentId::InputSnapshot: return {id, 4, 4};
-    case ComponentId::PlayerTag: return {id, 1, 1};
-    case ComponentId::SleepState: return {id, 1, 1};
-    case ComponentId::BciInput: return {id, 12, 4};
-    case ComponentId::Genome: return {id, 20, 4};
-    case ComponentId::Creature: return {id, 8, 4};
-    case ComponentId::Heading: return {id, 8, 4};
-    case ComponentId::Historical: return {id, 12, 4};
-    case ComponentId::WorldCell: return {id, 8, 4};
-    default: return {id, 4, 4};
-    }
-}
+[[nodiscard]] constexpr ComponentLayout defaultLayout(ComponentId id) noexcept;
 
 } // namespace lpl::ecs
+
+#    include "Component.inl"
 
 #endif // LPL_ECS_COMPONENT_HPP

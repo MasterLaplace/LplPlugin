@@ -1,17 +1,5 @@
-/**
- * @file Archetype.inl
- * @brief Inline implementations for Archetype.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_ECS_ARCHETYPE_INL
-#    define LPL_ECS_ARCHETYPE_INL
+#define LPL_ECS_ARCHETYPE_INL
 
 namespace lpl::ecs {
 

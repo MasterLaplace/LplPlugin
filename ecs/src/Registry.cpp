@@ -1,16 +1,3 @@
-/**
- * @file Registry.cpp
- * @brief Entity registry with atomic lock-free free-list.
- *
- * Ported from legacy EntityRegistry: atomic free-list using a
- * Treiber stack (lock-free, ABA-safe via generation counter).
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Constants.hpp>
 #include <lpl/ecs/Registry.hpp>
@@ -21,16 +8,10 @@
 
 namespace lpl::ecs {
 
-// ========================================================================== //
-//  Impl — Atomic free-list (Treiber stack with separate arrays)              //
-// ========================================================================== //
-
 struct Registry::Impl {
-    /// Optional arena backing chunk storage (see Registry::setAllocator).
-    memory::IAllocator *allocator = nullptr;
+    memory::IAllocator *allocator = nullptr; /**< Optional arena backing chunk storage (see Registry::setAllocator). */
 
-    /// Bytes the swaps have copied, per component, since construction.
-    ComponentBytes swappedBytes{};
+    ComponentBytes swappedBytes{}; /**< Bytes the swaps have copied, per component, since construction. */
 
     /** @brief Sentinel value meaning "no next slot". */
     static constexpr core::u32 kNoNext = ~core::u32{0};
@@ -39,14 +20,14 @@ struct Registry::Impl {
     /** @brief Non-atomic slot metadata (not stored in vector of atomics). */
     struct SlotInfo {
         core::u32 generation{0};
-        core::u32 partitionIndex{0};
+        core::u32 partitionIndex{0}; /**< Which partition holds the entity, so destroyEntity finds the correct one. */
         EntityRef ref{};
         bool alive{false};
     };
 
     lpl::pmr::vector<SlotInfo> slots;
-    lpl::pmr::vector<core::u32> freeNext;     ///< Per-slot intrusive free-list link
-    std::atomic<core::u32> freeHead{kNoNext}; ///< Head of Treiber stack
+    lpl::pmr::vector<core::u32> freeNext;     /**< Per-slot intrusive free-list link */
+    std::atomic<core::u32> freeHead{kNoNext}; /**< Head of Treiber stack */
     lpl::pmr::vector<lpl::pmr::unique_ptr<Partition>> partitions;
     std::atomic<core::u32> liveCount{0};
     std::atomic<core::u32> highWater{0};
@@ -59,21 +40,20 @@ struct Registry::Impl {
 
     /**
      * @brief Allocates a slot from the lock-free free-list (Treiber stack pop).
+     *
+     * freeNext is only written by the thread that owns the slot; the CAS on freeHead provides
+     * ordering. A slot on the free-list may since have been reserved by createEntityWithId (which
+     * does not unlink it): it is dropped and popping goes on, so a network-adopted id is never handed
+     * out locally. When the free-list is empty, a new slot is allocated.
      */
     core::u32 allocateSlot()
     {
-        // Try to pop from the Treiber stack
-        // Note: freeNext is only written by the thread that owns the slot,
-        // so we can use relaxed load. The CAS on freeHead provides ordering.
         core::u32 head = freeHead.load(std::memory_order_acquire);
         while (head != kNoNext)
         {
             const core::u32 nextVal = freeNext[head];
             if (freeHead.compare_exchange_weak(head, nextVal, std::memory_order_release, std::memory_order_acquire))
             {
-                // A slot on the free-list may since have been reserved by
-                // createEntityWithId (which does not unlink it); drop it and keep
-                // popping so a network-adopted id is never handed out locally.
                 if (slots[head].alive)
                 {
                     head = freeHead.load(std::memory_order_acquire);
@@ -83,7 +63,6 @@ struct Registry::Impl {
             }
         }
 
-        // Free-list empty — allocate a new slot
         const core::u32 slot = highWater.fetch_add(1, std::memory_order_relaxed);
         if (slot >= static_cast<core::u32>(slots.size()))
         {
@@ -119,10 +98,6 @@ struct Registry::Impl {
     }
 };
 
-// ========================================================================== //
-//  Registry                                                                  //
-// ========================================================================== //
-
 Registry::Registry() : _impl{lpl::pmr::make_unique<Impl>()} {}
 
 void Registry::setAllocator(memory::IAllocator *allocator) noexcept { _impl->allocator = allocator; }
@@ -153,7 +128,6 @@ core::Expected<EntityId> Registry::createEntity(const Archetype &archetype)
 
     info.ref = refResult.value();
 
-    // Assign partitionIndex so destroyEntity finds the correct partition
     for (core::u32 pi = 0; pi < static_cast<core::u32>(_impl->partitions.size()); ++pi)
     {
         if (_impl->partitions[pi].get() == &partition)
@@ -176,10 +150,6 @@ core::Expected<EntityId> Registry::createEntityWithId(EntityId id, const Archety
         return core::makeError(core::ErrorCode::OutOfMemory, "Entity slot pool exhausted");
     }
 
-    // Grow the slot table to cover this slot, and advance the high-water mark past
-    // it so the local free-list allocator (allocateSlot) starts beyond it. Any
-    // slots skipped over become genuinely free — hand them to the free-list rather
-    // than leaking them.
     if (slot >= static_cast<core::u32>(_impl->slots.size()))
     {
         const core::u32 newCap = slot + 256;
@@ -200,8 +170,6 @@ core::Expected<EntityId> Registry::createEntityWithId(EntityId id, const Archety
     auto &info = _impl->slots[slot];
     if (info.alive)
     {
-        // The slot is already occupied. Same identity → idempotent success (a
-        // re-sent snapshot); a different generation is a real conflict.
         const EntityId existing{info.generation, slot};
         if (existing == id)
             return id;
@@ -258,7 +226,6 @@ core::Expected<void> Registry::destroyEntity(EntityId id)
         _impl->slots[swappedId.slot()].ref.localIndex = info.ref.localIndex;
     }
 
-    // Bump generation (prevents stale EntityId from matching after recycle)
     info.generation = (info.generation + 1) & EntityId::kGenerationMask;
     _impl->freeSlot(id.slot());
     _impl->liveCount.fetch_sub(1, std::memory_order_relaxed);
@@ -304,10 +271,6 @@ Chunk *Registry::chunkOf(EntityId id, core::u32 &outRow) const noexcept
         Chunk *chunk = chunks[chunkIndex].get();
         if (row >= chunk->count())
             continue;
-        // The verification that makes this correct: every partition has a chunk at
-        // this index, and only one of them holds this entity. Without the identity
-        // check the first partition with a deep enough chunk answers, and a caller
-        // then writes over an unrelated archetype's row.
         const std::span<const EntityId> entities = chunk->entities();
         if (row < entities.size() && entities[row] == id)
         {

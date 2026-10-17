@@ -1,13 +1,3 @@
-/**
- * @file Partition.cpp
- * @brief Chunk and Partition implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/container/SparseSet.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/ecs/Partition.hpp>
@@ -22,10 +12,6 @@ namespace lpl::ecs {
 
 static_assert(static_cast<core::usize>(ComponentId::Count) <= 32u, "a chunk marks its written components in one u32");
 
-// ========================================================================== //
-//  Chunk::Impl                                                               //
-// ========================================================================== //
-
 struct Chunk::Impl {
     using Alloc = memory::PinnedAllocator<core::byte>;
 
@@ -33,12 +19,9 @@ struct Chunk::Impl {
     lpl::pmr::vector<ComponentLayout> layouts;
     std::array<std::pair<void *, void *>, static_cast<core::usize>(ComponentId::Count)> buffers{};
     lpl::pmr::vector<EntityId> entities;
-    /// Sparse set for O(1) slot → localIndex lookup.
-    /// Capacity = 2^kSlotBits (16 384) to cover all valid entity slots.
-    container::SparseSet<core::u32> slotToLocal{1u << EntityId::kSlotBits};
+    container::SparseSet<core::u32> slotToLocal{1u << EntityId::kSlotBits}; /**< O(1) slot → localIndex, all slots. */
     core::u32 count{0};
-    /// One bit per ComponentId: handed out for writing since the last swap.
-    core::u32 written{0};
+    core::u32 written{0}; /**< One bit per ComponentId: handed out for writing since the last swap. */
     Alloc alloc{};
 
     Impl(const Archetype &arch, std::span<const ComponentLayout> lyts, memory::IAllocator *external)
@@ -77,28 +60,31 @@ struct Chunk::Impl {
         }
     }
 
-    /// Chunk storage comes from the World's arena when one was injected, and
-    /// from the heap otherwise. Same bytes either way — only the source differs.
+    /**
+     * @brief Chunk storage comes from the World's arena when one was injected, and
+     *        from the heap otherwise.
+     *
+     * Same bytes either way — only the source differs.
+     */
     [[nodiscard]] void *allocateBytes(core::usize bytes)
     {
         return externalAllocator ? externalAllocator->allocate(bytes) : alloc.allocate(bytes);
     }
 
+    /**
+     * @brief Releases a block @ref allocateBytes returned, unless an arena holds it: an arena
+     *        reclaims in bulk on reset, never per block.
+     */
     void releaseBytes(void *pointer)
     {
         if (pointer == nullptr)
             return;
-        // An arena reclaims in bulk on reset, never per block.
         if (externalAllocator == nullptr)
             alloc.deallocate(static_cast<core::byte *>(pointer), 0);
     }
 
     memory::IAllocator *externalAllocator = nullptr;
 };
-
-// ========================================================================== //
-//  Chunk                                                                     //
-// ========================================================================== //
 
 Chunk::Chunk(const Archetype &archetype, std::span<const ComponentLayout> layouts, memory::IAllocator *allocator)
     : _impl{lpl::pmr::make_unique<Impl>(archetype, layouts, allocator)}
@@ -132,16 +118,14 @@ core::Expected<EntityId> Chunk::remove(core::u32 localIndex)
     }
 
     const core::u32 last = _impl->count - 1;
-    EntityId removed = _impl->entities[localIndex]; // entity being evicted
-    EntityId swapped = _impl->entities[last];       // entity moved into the gap
+    EntityId removed = _impl->entities[localIndex];
+    EntityId swapped = _impl->entities[last];
 
-    // Remove the evicted entity from the sparse set first.
     _impl->slotToLocal.remove(removed.slot());
 
     if (localIndex != last)
     {
         _impl->entities[localIndex] = _impl->entities[last];
-        // Update the moved entity's mapping to its new local index.
         _impl->slotToLocal.insert(swapped.slot(), localIndex);
 
         for (const auto &layout : _impl->layouts)
@@ -172,8 +156,6 @@ std::optional<core::u32> Chunk::findLocalIndex(EntityId id) const noexcept
     const core::u32 *p = _impl->slotToLocal.find(id.slot());
     if (!p)
         return std::nullopt;
-    // Guard: confirm the entity at that index still carries the same generation
-    // (handles the case where the slot was recycled but the chunk still lives).
     const core::u32 local = *p;
     if (local >= _impl->count || _impl->entities[local] != id)
         return std::nullopt;
@@ -213,8 +195,6 @@ const void *Chunk::latestComponent(ComponentId id) const noexcept
 
 void Chunk::swapBuffers(ComponentBytes &outBytes) noexcept
 {
-    // Copy back (write) → front (read) so the new write buffer starts
-    // with up-to-date data after the swap (prevents 2-frame-stale reads).
     for (const auto &layout : _impl->layouts)
     {
         const core::usize cid = static_cast<core::usize>(layout.id);
@@ -233,8 +213,6 @@ void Chunk::swapBuffers(ComponentBytes &outBytes) noexcept
 const Archetype &Chunk::archetype() const noexcept { return _impl->archetype; }
 
 std::span<const EntityId> Chunk::entities() const noexcept { return {_impl->entities.data(), _impl->count}; }
-
-// ========================================================================== //
 
 Partition::Partition(Archetype archetype, lpl::pmr::vector<ComponentLayout> layouts, memory::IAllocator *allocator)
     : _archetype{std::move(archetype)}, _layouts{std::move(layouts)}, _allocator{allocator}

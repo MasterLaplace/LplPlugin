@@ -59,31 +59,7 @@ struct WorldPosition {
  * @param position  The position to normalise, in place.
  * @param chunkSize Width of a chunk in world units. Must be positive.
  */
-constexpr void normaliseWorldPosition(WorldPosition &position, math::Fixed32 chunkSize) noexcept
-{
-    if (chunkSize <= math::Fixed32{})
-        return;
-    while (position.localX >= chunkSize)
-    {
-        position.localX = position.localX - chunkSize;
-        ++position.chunkX;
-    }
-    while (position.localX < math::Fixed32{})
-    {
-        position.localX = position.localX + chunkSize;
-        --position.chunkX;
-    }
-    while (position.localZ >= chunkSize)
-    {
-        position.localZ = position.localZ - chunkSize;
-        ++position.chunkZ;
-    }
-    while (position.localZ < math::Fixed32{})
-    {
-        position.localZ = position.localZ + chunkSize;
-        --position.chunkZ;
-    }
-}
+constexpr void normaliseWorldPosition(WorldPosition &position, math::Fixed32 chunkSize) noexcept;
 
 /**
  * @brief The offset from one world position to another.
@@ -104,14 +80,7 @@ constexpr void normaliseWorldPosition(WorldPosition &position, math::Fixed32 chu
  */
 constexpr void worldDelta(const WorldPosition &from, const WorldPosition &to, math::Fixed32 chunkSize,
                           core::i32 &outChunkX, core::i32 &outChunkZ, math::Fixed32 &outLocalX,
-                          math::Fixed32 &outLocalZ) noexcept
-{
-    (void) chunkSize;
-    outChunkX = to.chunkX - from.chunkX;
-    outChunkZ = to.chunkZ - from.chunkZ;
-    outLocalX = to.localX - from.localX;
-    outLocalZ = to.localZ - from.localZ;
-}
+                          math::Fixed32 &outLocalZ) noexcept;
 
 /**
  * @brief Whether two world positions are the same place.
@@ -126,5 +95,7 @@ constexpr void worldDelta(const WorldPosition &from, const WorldPosition &to, ma
 }
 
 } // namespace lpl::ecs
+
+#    include "WorldPosition.inl"
 
 #endif // LPL_ECS_WORLDPOSITION_HPP

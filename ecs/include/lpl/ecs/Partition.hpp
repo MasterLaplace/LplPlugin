@@ -31,7 +31,9 @@
 
 namespace lpl::ecs {
 
-/** @brief Bytes per component, indexed by ComponentId: what the double buffer moved of each. */
+/**
+ * @brief Bytes per component, indexed by ComponentId: what the double buffer moved of each.
+ */
 using ComponentBytes = std::array<core::u64, static_cast<core::usize>(ComponentId::Count)>;
 
 /**
@@ -62,10 +64,14 @@ public:
 
     ~Chunk();
 
-    /** @brief Number of live entities in this chunk. */
+    /**
+     * @brief Number of live entities in this chunk.
+     */
     [[nodiscard]] core::u32 count() const noexcept;
 
-    /** @brief Tests whether the chunk is full. */
+    /**
+     * @brief Tests whether the chunk is full.
+     */
     [[nodiscard]] bool isFull() const noexcept;
 
     /**
@@ -78,7 +84,8 @@ public:
     /**
      * @brief Removes an entity by local index (swap-and-pop).
      * @param localIndex Index to remove.
-     * @return The EntityId that was swapped into @p localIndex (or null).
+     * @return The EntityId moved into @p localIndex: the chunk's last, which is the removed entity
+     *         itself when @p localIndex was the last.
      */
     [[nodiscard]] core::Expected<EntityId> remove(core::u32 localIndex);
 
@@ -109,6 +116,9 @@ public:
      * @brief Publishes the back buffers at a tick boundary: copies each one written since the last
      *        swap onto its front buffer, then swaps the two.
      *
+     * Copying back (write) onto front (read) before the swap makes the new write buffer start
+     * with up-to-date data (prevents 2-frame-stale reads).
+     *
      * A component nothing asked to write since the last swap is left as it is: its two buffers
      * already hold the same bytes, since a swap leaves them equal and only @ref writeComponent
      * hands out a way to change one.
@@ -117,16 +127,22 @@ public:
      */
     void swapBuffers(ComponentBytes &outBytes) noexcept;
 
-    /** @brief Returns the archetype of this chunk. */
+    /**
+     * @brief Returns the archetype of this chunk.
+     */
     [[nodiscard]] const Archetype &archetype() const noexcept;
 
-    /** @brief Returns a span of entity IDs in this chunk (count() elements). */
+    /**
+     * @brief Returns a span of entity IDs in this chunk (count() elements).
+     */
     [[nodiscard]] std::span<const EntityId> entities() const noexcept;
 
     /**
      * @brief Finds the local index of an entity by its ID in O(1).
      *
-     * Uses the internal sparse set: no linear scan of the dense array.
+     * Uses the internal sparse set: no linear scan of the dense array. The entity at
+     * the index found must still carry the same generation, which handles the case
+     * where the slot was recycled but the chunk still lives.
      *
      * @param id Entity to look up.
      * @return Local index within [0, count()), or std::nullopt if not found.
@@ -170,10 +186,14 @@ public:
      */
     [[nodiscard]] core::Expected<EntityId> erase(const EntityRef &ref);
 
-    /** @brief Returns the total number of live entities across all chunks. */
+    /**
+     * @brief Returns the total number of live entities across all chunks.
+     */
     [[nodiscard]] core::u32 entityCount() const noexcept;
 
-    /** @brief Returns a read-only view of all chunks. */
+    /**
+     * @brief Returns a read-only view of all chunks.
+     */
     [[nodiscard]] std::span<const lpl::pmr::unique_ptr<Chunk>> chunks() const noexcept;
 
     /**
@@ -182,14 +202,16 @@ public:
      */
     void swapAllBuffers(ComponentBytes &outBytes) noexcept;
 
-    /** @brief Returns the archetype. */
+    /**
+     * @brief Returns the archetype.
+     */
     [[nodiscard]] const Archetype &archetype() const noexcept;
 
 private:
     Archetype _archetype;
     lpl::pmr::vector<ComponentLayout> _layouts;
     lpl::pmr::vector<lpl::pmr::unique_ptr<Chunk>> _chunks;
-    memory::IAllocator *_allocator = nullptr; ///< Optional arena for chunk storage.
+    memory::IAllocator *_allocator = nullptr; /**< Optional arena for chunk storage. */
 };
 
 } // namespace lpl::ecs

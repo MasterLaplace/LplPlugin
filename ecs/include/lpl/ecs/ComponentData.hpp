@@ -10,6 +10,10 @@
  * first -- which is where `HistoricalBody` was, in a header the ECS could not include without
  * depending on the module that owned it.
  *
+ * @warning Each struct must be exactly what the layout declares, which the assertions at the end of this
+ * file check. Nothing else ties the two together: a field added to one and not the other is a component
+ * that serialises to what no system wrote.
+ *
  * @author MasterLaplace
  * @version 0.1.0
  * @copyright MIT License
@@ -30,9 +34,9 @@ namespace lpl::ecs {
  * @brief The `ComponentId::Historical` payload: who this entity is, in a corpus.
  */
 struct HistoricalBody {
-    core::u32 subject{0u}; ///< Identifier the corpus knows them by.
-    core::i32 bornDay{0};  ///< As a source dates it; zero when none does.
-    core::i32 diedDay{0};  ///< Zero when no source says.
+    core::u32 subject{0u}; /**< Identifier the corpus knows them by. */
+    core::i32 bornDay{0};  /**< As a source dates it; zero when none does. */
+    core::i32 diedDay{0};  /**< Zero when no source says. */
 };
 
 /**
@@ -44,8 +48,6 @@ struct WorldCellData {
     core::i32 chunkZ{0};
 };
 
-// @warning The struct must be exactly what the layout declares. Nothing else ties the two together:
-// a field added to one and not the other is a component that serialises to what no system wrote.
 static_assert(sizeof(HistoricalBody) == defaultLayout(ComponentId::Historical).size,
               "HistoricalBody does not match the layout ComponentId::Historical declares");
 static_assert(sizeof(WorldCellData) == defaultLayout(ComponentId::WorldCell).size,

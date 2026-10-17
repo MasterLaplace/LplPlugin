@@ -52,14 +52,10 @@ enum class SchedulePhase : core::u8 {
  * may stand (read) and what is standing there to eat (written when eaten).
  */
 enum class ResourceId : core::u8 {
-    /// Pheromone / scent field: deposited into, evaporated, read as a gradient.
-    ScentField = 0,
-    /// The heightfield and its walkability — whatever a World generated.
-    Terrain = 1,
-    /// Standing plants: eaten by grazers, regrown by the vegetation tick.
-    Vegetation = 2,
-    /// The spatial broad-phase index, when a world enables one.
-    SpatialIndex = 3,
+    ScentField = 0,   /**< Pheromone / scent field: deposited into, evaporated, read as a gradient. */
+    Terrain = 1,      /**< The heightfield and its walkability — whatever a World generated. */
+    Vegetation = 2,   /**< Standing plants: eaten by grazers, regrown by the vegetation tick. */
+    SpatialIndex = 3, /**< The spatial broad-phase index, when a world enables one. */
 
     Count
 };
@@ -86,8 +82,7 @@ struct SystemDescriptor {
     std::string_view name;
     SchedulePhase phase;
     std::span<const ComponentAccess> accesses;
-    /// Empty for a system that only touches components.
-    std::span<const ResourceAccess> resources{};
+    std::span<const ResourceAccess> resources{}; /**< Empty for a system that only touches components. */
 };
 
 /**
@@ -101,7 +96,9 @@ class ISystem {
 public:
     virtual ~ISystem() = default;
 
-    /** @brief Returns the static descriptor for this system. */
+    /**
+     * @brief Returns the static descriptor for this system.
+     */
     [[nodiscard]] virtual const SystemDescriptor &descriptor() const noexcept = 0;
 
     /**

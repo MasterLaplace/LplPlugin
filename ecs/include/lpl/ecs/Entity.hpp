@@ -42,7 +42,9 @@ public:
     /** @brief Null sentinel. */
     static constexpr core::u32 kNull = std::numeric_limits<core::u32>::max();
 
-    /** @brief Default-constructs a null entity. */
+    /**
+     * @brief Default-constructs a null entity.
+     */
     constexpr EntityId() noexcept = default;
 
     /**
@@ -61,22 +63,34 @@ public:
     {
     }
 
-    /** @brief Returns the slot index. */
+    /**
+     * @brief Returns the slot index.
+     */
     [[nodiscard]] constexpr core::u32 slot() const noexcept { return _raw & kSlotMask; }
 
-    /** @brief Returns the generation counter. */
+    /**
+     * @brief Returns the generation counter.
+     */
     [[nodiscard]] constexpr core::u32 generation() const noexcept { return (_raw >> kSlotBits) & kGenerationMask; }
 
-    /** @brief Returns the raw packed value. */
+    /**
+     * @brief Returns the raw packed value.
+     */
     [[nodiscard]] constexpr core::u32 raw() const noexcept { return _raw; }
 
-    /** @brief Tests whether the entity is valid (non-null). */
+    /**
+     * @brief Tests whether the entity is valid (non-null).
+     */
     [[nodiscard]] constexpr bool isValid() const noexcept { return _raw != kNull; }
 
-    /** @brief Equality comparison. */
+    /**
+     * @brief Equality comparison.
+     */
     [[nodiscard]] constexpr bool operator==(EntityId other) const noexcept { return _raw == other._raw; }
 
-    /** @brief Ordering comparison. */
+    /**
+     * @brief Ordering comparison.
+     */
     [[nodiscard]] constexpr auto operator<=>(EntityId other) const noexcept { return _raw <=> other._raw; }
 
 private:
@@ -97,9 +111,6 @@ struct EntityRef {
 
 } // namespace lpl::ecs
 
-// -------------------------------------------------------------------------- //
-//  std::hash specialisation                                                  //
-// -------------------------------------------------------------------------- //
 template <> struct std::hash<lpl::ecs::EntityId> {
     [[nodiscard]] std::size_t operator()(lpl::ecs::EntityId id) const noexcept
     {
