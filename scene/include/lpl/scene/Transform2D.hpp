@@ -26,27 +26,21 @@
 
 namespace lpl::scene {
 
-using math::Fixed32;
-
 /** @brief A 2x3 affine transform with Fixed32 components. */
 struct Transform2D {
-    Fixed32 a{Fixed32::fromInt(1)};
-    Fixed32 b{Fixed32::fromInt(0)};
-    Fixed32 c{Fixed32::fromInt(0)};
-    Fixed32 d{Fixed32::fromInt(1)};
-    Fixed32 tx{Fixed32::fromInt(0)};
-    Fixed32 ty{Fixed32::fromInt(0)};
+    math::Fixed32 a{math::Fixed32::fromInt(1)};
+    math::Fixed32 b{math::Fixed32::fromInt(0)};
+    math::Fixed32 c{math::Fixed32::fromInt(0)};
+    math::Fixed32 d{math::Fixed32::fromInt(1)};
+    math::Fixed32 tx{math::Fixed32::fromInt(0)};
+    math::Fixed32 ty{math::Fixed32::fromInt(0)};
 
     [[nodiscard]] static constexpr Transform2D identity() noexcept { return Transform2D{}; }
 
-    /** @brief Pure translation. */
-    [[nodiscard]] static Transform2D translation(Fixed32 x, Fixed32 y) noexcept
-    {
-        Transform2D t;
-        t.tx = x;
-        t.ty = y;
-        return t;
-    }
+    /**
+     * @brief Pure translation.
+     */
+    [[nodiscard]] static Transform2D translation(math::Fixed32 x, math::Fixed32 y) noexcept;
 
     /**
      * @brief Translation + rotation + non-uniform scale (T * R * S).
@@ -54,42 +48,22 @@ struct Transform2D {
      * @param angle Rotation in Fixed32 radians (via CORDIC).
      * @param sx,sy Scale factors.
      */
-    [[nodiscard]] static Transform2D fromTRS(Fixed32 x, Fixed32 y, Fixed32 angle, Fixed32 sx, Fixed32 sy) noexcept
-    {
-        Fixed32 s{Fixed32::fromInt(0)};
-        Fixed32 co{Fixed32::fromInt(0)};
-        math::Cordic::sincos(angle, s, co);
-        Transform2D t;
-        t.a = co * sx;
-        t.b = s * sx;
-        t.c = -(s * sy);
-        t.d = co * sy;
-        t.tx = x;
-        t.ty = y;
-        return t;
-    }
+    [[nodiscard]] static Transform2D fromTRS(math::Fixed32 x, math::Fixed32 y, math::Fixed32 angle, math::Fixed32 sx,
+                                             math::Fixed32 sy) noexcept;
 
-    /** @brief Compose: returns (*this) applied after @p inner (this * inner). */
-    [[nodiscard]] Transform2D operator*(const Transform2D &inner) const noexcept
-    {
-        Transform2D r;
-        r.a = a * inner.a + c * inner.b;
-        r.b = b * inner.a + d * inner.b;
-        r.c = a * inner.c + c * inner.d;
-        r.d = b * inner.c + d * inner.d;
-        r.tx = a * inner.tx + c * inner.ty + tx;
-        r.ty = b * inner.tx + d * inner.ty + ty;
-        return r;
-    }
+    /**
+     * @brief Compose: returns (*this) applied after @p inner (this * inner).
+     */
+    [[nodiscard]] Transform2D operator*(const Transform2D &inner) const noexcept;
 
-    /** @brief Map a point through the transform. */
-    void apply(Fixed32 x, Fixed32 y, Fixed32 &outX, Fixed32 &outY) const noexcept
-    {
-        outX = a * x + c * y + tx;
-        outY = b * x + d * y + ty;
-    }
+    /**
+     * @brief Map a point through the transform.
+     */
+    void apply(math::Fixed32 x, math::Fixed32 y, math::Fixed32 &outX, math::Fixed32 &outY) const noexcept;
 };
 
 } // namespace lpl::scene
+
+#    include "Transform2D.inl"
 
 #endif // LPL_SCENE_TRANSFORM2D_HPP

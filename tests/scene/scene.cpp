@@ -5,11 +5,11 @@ LPL_TEST_SUITE(scene);
 
 namespace {
 
-[[nodiscard]] lpl::core::i32 raw(lpl::core::i32 units) { return lpl::scene::Fixed32::fromInt(units).raw(); }
+[[nodiscard]] lpl::core::i32 raw(lpl::core::i32 units) { return lpl::math::Fixed32::fromInt(units).raw(); }
 
 [[nodiscard]] lpl::scene::Transform2D translation(lpl::core::i32 x, lpl::core::i32 y)
 {
-    return lpl::scene::Transform2D::translation(lpl::scene::Fixed32::fromInt(x), lpl::scene::Fixed32::fromInt(y));
+    return lpl::scene::Transform2D::translation(lpl::math::Fixed32::fromInt(x), lpl::math::Fixed32::fromInt(y));
 }
 
 } // namespace
@@ -27,10 +27,10 @@ LPL_TEST(children_compose_their_parents_transform)
     scene.setLocalTransform(child, translation(5, 0));
 
     const lpl::scene::Transform2D world = scene.worldTransform(child);
-    lpl::scene::Fixed32 x{lpl::scene::Fixed32::fromInt(0)};
-    lpl::scene::Fixed32 y{lpl::scene::Fixed32::fromInt(0)};
+    lpl::math::Fixed32 x{lpl::math::Fixed32::fromInt(0)};
+    lpl::math::Fixed32 y{lpl::math::Fixed32::fromInt(0)};
 
-    world.apply(lpl::scene::Fixed32::fromInt(0), lpl::scene::Fixed32::fromInt(0), x, y);
+    world.apply(lpl::math::Fixed32::fromInt(0), lpl::math::Fixed32::fromInt(0), x, y);
     test.check(world.tx.raw() == raw(15) && world.ty.raw() == raw(20), "the child's world translation is (15, 20)");
     test.check(x.raw() == raw(15) && y.raw() == raw(20), "and it carries the origin there");
 }
@@ -81,14 +81,13 @@ LPL_TEST(selection_ignores_a_duplicate)
  */
 LPL_TEST(quarter_turn_carries_x_onto_y)
 {
-    const lpl::scene::Transform2D turn =
-        lpl::scene::Transform2D::fromTRS(lpl::scene::Fixed32::fromInt(0), lpl::scene::Fixed32::fromInt(0),
-                                         lpl::scene::Fixed32::fromFloat(1.57079632679f),
-                                         lpl::scene::Fixed32::fromInt(1), lpl::scene::Fixed32::fromInt(1));
-    lpl::scene::Fixed32 x{lpl::scene::Fixed32::fromInt(0)};
-    lpl::scene::Fixed32 y{lpl::scene::Fixed32::fromInt(0)};
+    const lpl::scene::Transform2D turn = lpl::scene::Transform2D::fromTRS(
+        lpl::math::Fixed32::fromInt(0), lpl::math::Fixed32::fromInt(0), lpl::math::Fixed32::fromFloat(1.57079632679f),
+        lpl::math::Fixed32::fromInt(1), lpl::math::Fixed32::fromInt(1));
+    lpl::math::Fixed32 x{lpl::math::Fixed32::fromInt(0)};
+    lpl::math::Fixed32 y{lpl::math::Fixed32::fromInt(0)};
 
-    turn.apply(lpl::scene::Fixed32::fromInt(1), lpl::scene::Fixed32::fromInt(0), x, y);
+    turn.apply(lpl::math::Fixed32::fromInt(1), lpl::math::Fixed32::fromInt(0), x, y);
     test.check(x.raw() > -512 && x.raw() < 512, "x lands within 1/128 of 0");
     test.check(y.raw() > 65024 && y.raw() < 66048, "and y within 1/128 of 1");
 
