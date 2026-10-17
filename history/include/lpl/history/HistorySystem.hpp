@@ -105,6 +105,29 @@ public:
 
     /**
      * @brief Advances one tick, applying whatever this year carries.
+     *
+     * A constraint fires on the tick whose span contains the START of its window, exactly once.
+     *
+     * @warning Both halves of that sentence are load-bearing, and they used to be enforced by a
+     * "year boundary" test that only worked at one gearing:
+     *  - ONCE, because a claim applied on every tick its window overlaps would be applied 365
+     *    times at a daily gearing and once at a yearly one, so the same corpus would fold
+     *    differently depending on how fast the era was crossed -- the gearing would become part
+     *    of the history. A window has exactly one start, so keying on the start gives one firing
+     *    at any rate, with no per-constraint state to remember.
+     *  - NEVER SKIPPED, because consecutive spans are contiguous. The old test asked whether the
+     *    current year EQUALLED the fact's year, so an era geared to cross a silent century in a
+     *    step would pass over every constraint inside it in silence, and produce a chronicle that
+     *    looked complete.
+     *
+     * A scored claim is measured against, never applied.
+     *
+     * @warning A Seed positions a body only on the tick that makes it, and lets go; a Force puts the
+     * body at its place whenever it fires, even a body an earlier constraint made. A Seed that
+     * re-placed an existing body would be a Force wearing the other name. A first version re-placed a
+     * seeded body at every year boundary, which put the traveller back at his birthplace four times
+     * a year for ever: the measurement showed a body that walked every tick and never got anywhere.
+     *
      * @param dt Ignored: an era's clock is ticks, not seconds.
      */
     void execute(core::f32 dt) override;
@@ -130,6 +153,11 @@ public:
 private:
     /**
      * @brief Makes or finds the body standing for a subject.
+     *
+     * A body it makes learns WHO it is and WHEN it lived.
+     *
+     * @warning The dates come from the claim rather than from the tick: a source dates a birth, and
+     * deriving it from the clock would make the gearing part of the biography.
      *
      * @param subject The corpus identifier.
      * @param fact    The claim being applied, for its dates.

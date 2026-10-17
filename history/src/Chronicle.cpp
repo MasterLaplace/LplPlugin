@@ -1,12 +1,3 @@
-/**
- * @file Chronicle.cpp
- * @brief The run's account, in emission order.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/history/Chronicle.hpp>
 #include <lpl/history/Fold.hpp>
 
@@ -37,10 +28,6 @@ core::u32 Chronicle::countByCause(Cause cause) const noexcept
 core::u32 Chronicle::fold(core::u32 seed) const noexcept
 {
     core::u32 hash = seed;
-    // @warning Through the shared fold, not a local copy of the constant: a signature exists to
-    // be the same number on two machines, so the function producing it is the last thing
-    // that should exist in several versions. This file and Chronicle.cpp each carried
-    // their own until a third consumer was about to make it three.
     const auto absorb = [&hash](core::u32 word) { hash = foldWord(hash, word); };
 
     for (core::usize i = 0u; i < _events.size(); ++i)

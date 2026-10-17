@@ -65,28 +65,20 @@ enum class ConstraintKind : core::u32 {
  * @param kind The kind.
  * @return Its name.
  */
-[[nodiscard]] constexpr const char *constraintKindName(ConstraintKind kind) noexcept
-{
-    switch (kind)
-    {
-    case ConstraintKind::Seed: return "seed";
-    case ConstraintKind::Force: return "force";
-    case ConstraintKind::Score: return "score";
-    case ConstraintKind::Count: break;
-    }
-    return "score";
-}
+[[nodiscard]] constexpr const char *constraintKindName(ConstraintKind kind) noexcept;
 
 /**
  * @struct Constraint
  * @brief A fact, plus what the run must do about it.
  */
 struct Constraint {
-    Fact fact{};                                ///< What is claimed.
-    ConstraintKind kind{ConstraintKind::Score}; ///< What to do about it.
-    math::Fixed32 confidence{};                 ///< After fusion; may exceed the fact's own sigma.
+    Fact fact{};                                /**< What is claimed. */
+    ConstraintKind kind{ConstraintKind::Score}; /**< What to do about it. */
+    math::Fixed32 confidence{};                 /**< After fusion; may exceed the fact's own sigma. */
 };
 
 } // namespace lpl::history
+
+#    include "Constraint.inl"
 
 #endif // LPL_LPL_HISTORY_CONSTRAINT_HPP

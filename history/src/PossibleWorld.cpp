@@ -1,12 +1,3 @@
-/**
- * @file PossibleWorld.cpp
- * @brief Corpus to timeline: admission, fusion, contradiction.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/history/PossibleWorld.hpp>
 
 namespace lpl::history {
@@ -37,11 +28,6 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
         return false;
     };
 
-    // ── 1. Admission, and the weight this world puts on each claim ────────────
-    //
-    // A claim's weight is its own sigma tempered by how much its source is worth
-    // believing. A confident assertion in a panegyric is a confident assertion in a
-    // panegyric.
     lpl::pmr::vector<core::u32> index;
     lpl::pmr::vector<math::Fixed32> weight;
     for (core::usize i = 0u; i < corpus.facts.size(); ++i)
@@ -54,11 +40,6 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
         }
 
         SourceProfile profile{};
-        // @warning Scored against THIS claim's date, not the source as a whole. A source that states
-        // a composition window is ten years from one of its claims and eight hundred from
-        // another, and one number for both is right about at most one. Where no window is stated
-        // the overload falls back on whatever distance the profile declares, so a corpus that
-        // knows nothing new folds exactly as before.
         const math::Fixed32 trust = corpus.sourceProfile(fact.source, profile) ?
                                         trustworthiness(profile, fact.fromDay, view.weights) :
                                         math::Fixed32::half();
@@ -67,20 +48,15 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
         ++outReport.admitted;
     }
 
-    // ── 2. Fusion of independent agreement ────────────────────────────────────
     for (core::usize a = 0u; a < index.size(); ++a)
         for (core::usize b = a + 1u; b < index.size(); ++b)
         {
             const Fact &left = corpus.facts[index[a]];
             const Fact &right = corpus.facts[index[b]];
             if (left.source == right.source)
-                continue; // the same source agreeing with itself is not evidence
+                continue;
             if (left.subject != right.subject || left.predicate != right.predicate || left.object != right.object)
                 continue;
-            // The windows have to OVERLAP. Two sources saying a settlement existed —
-            // one in 1200 and one in 1900 — are not agreeing with each other, they are
-            // describing two different states of the world, and fusing them would
-            // manufacture confidence out of the mere reuse of a name.
             if (left.fromDay > right.toDay || right.fromDay > left.toDay)
                 continue;
 
@@ -90,7 +66,6 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
             ++outReport.fused;
         }
 
-    // ── 3. Contradiction: demote, never delete ────────────────────────────────
     for (core::usize a = 0u; a < index.size(); ++a)
         for (core::usize b = a + 1u; b < index.size(); ++b)
         {
@@ -98,14 +73,10 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
                 continue;
             ++outReport.contradictions;
 
-            // The less supported claim loses ground in proportion to how far ahead the
-            // other is. It keeps a floor: a demoted claim that reached zero would be
-            // indistinguishable from one nobody ever made, and the point is precisely
-            // that the myth stays traceable.
             const core::usize loser = weight[a] < weight[b] ? a : b;
             const core::usize winner = loser == a ? b : a;
             const math::Fixed32 gap = weight[winner] - weight[loser];
-            const math::Fixed32 floorValue = math::Fixed32::fromRaw(3277); // 0.05
+            const math::Fixed32 floorValue = math::Fixed32::fromRaw(3277);
 
             math::Fixed32 demoted = weight[loser] * (math::Fixed32::one() - gap);
             if (demoted < floorValue)
@@ -117,7 +88,6 @@ Timeline buildTimeline(const Corpus &corpus, const WorldView &view, FusionReport
             }
         }
 
-    // ── The verdict: what the run must do about each ──────────────────────────
     for (core::usize i = 0u; i < index.size(); ++i)
     {
         Constraint constraint{};

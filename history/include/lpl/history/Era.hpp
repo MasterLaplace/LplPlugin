@@ -39,9 +39,9 @@ namespace lpl::history {
  * @brief A span of days, and the rate the simulation crosses it at.
  */
 struct Era {
-    core::i32 startDay{0};     ///< First day simulated, inclusive.
-    core::i32 endDay{0};       ///< Last day simulated, inclusive.
-    core::u32 daysPerTick{1u}; ///< Days one scheduler step advances. 1 is day by day.
+    core::i32 startDay{0};     /**< First day simulated, inclusive. */
+    core::i32 endDay{0};       /**< Last day simulated, inclusive. */
+    core::u32 daysPerTick{1u}; /**< Days one scheduler step advances. 1 is day by day. */
 
     /**
      * @brief Builds an era from whole years, at a rate given in ticks per year.
@@ -50,22 +50,17 @@ struct Era {
      * second representation: it converts once and stores days like everything else. Writing the
      * old fields alongside the new ones would be two answers to "when does this era start".
      *
+     * A year counts 365 days here rather than 365.2425: an era's gearing is a rate, not a date, so it
+     * may be approximate -- and it must be an integer, because a fractional step would make the day
+     * a tick lands on depend on how the division rounded on that target.
+     *
      * @param firstYear   First year simulated, inclusive.
      * @param lastYear    Last year simulated, inclusive.
      * @param ticksPerYear Steps per year; zero is treated as one.
      * @return The era.
      */
-    [[nodiscard]] static constexpr Era ofYears(core::i32 firstYear, core::i32 lastYear, core::u32 ticksPerYear) noexcept
-    {
-        Era era;
-        era.startDay = firstDayOfYear(firstYear);
-        era.endDay = lastDayOfYear(lastYear);
-        // 365 rather than 365.2425: an era's gearing is a rate, not a date, so it may be
-        // approximate -- and it must be an integer, because a fractional step would make the day
-        // a tick lands on depend on how the division rounded on that target.
-        era.daysPerTick = ticksPerYear == 0u ? 365u : (365u / ticksPerYear == 0u ? 1u : 365u / ticksPerYear);
-        return era;
-    }
+    [[nodiscard]] static constexpr Era ofYears(core::i32 firstYear, core::i32 lastYear,
+                                               core::u32 ticksPerYear) noexcept;
 
     /**
      * @brief Days the era covers.
@@ -86,11 +81,7 @@ struct Era {
      *
      * @return The count.
      */
-    [[nodiscard]] constexpr core::u32 totalTicks() const noexcept
-    {
-        const core::u32 step = daysPerTick == 0u ? 1u : daysPerTick;
-        return (days() + step - 1u) / step;
-    }
+    [[nodiscard]] constexpr core::u32 totalTicks() const noexcept;
 
     /**
      * @brief Which day a tick starts on.
@@ -98,12 +89,7 @@ struct Era {
      * @param tick Index from the start of the era.
      * @return The day; clamped to the era when the tick is past its end.
      */
-    [[nodiscard]] constexpr core::i32 dayOfTick(core::u32 tick) const noexcept
-    {
-        const core::u32 step = daysPerTick == 0u ? 1u : daysPerTick;
-        const core::i64 day = static_cast<core::i64>(startDay) + static_cast<core::i64>(tick) * step;
-        return day > endDay ? endDay : static_cast<core::i32>(day);
-    }
+    [[nodiscard]] constexpr core::i32 dayOfTick(core::u32 tick) const noexcept;
 
     /**
      * @brief The span of days a tick covers.
@@ -117,14 +103,7 @@ struct Era {
      * @param outFrom Receives the first day covered.
      * @param outTo   Receives the last day covered, inclusive.
      */
-    constexpr void spanOfTick(core::u32 tick, core::i32 &outFrom, core::i32 &outTo) const noexcept
-    {
-        const core::u32 step = daysPerTick == 0u ? 1u : daysPerTick;
-        const core::i64 from = static_cast<core::i64>(startDay) + static_cast<core::i64>(tick) * step;
-        const core::i64 to = from + static_cast<core::i64>(step) - 1;
-        outFrom = from > endDay ? endDay : static_cast<core::i32>(from);
-        outTo = to > endDay ? endDay : static_cast<core::i32>(to);
-    }
+    constexpr void spanOfTick(core::u32 tick, core::i32 &outFrom, core::i32 &outTo) const noexcept;
 
     /**
      * @brief The first tick whose span contains a day.
@@ -132,12 +111,7 @@ struct Era {
      * @param day A day, clamped to the era.
      * @return The tick index.
      */
-    [[nodiscard]] constexpr core::u32 firstTickOfDay(core::i32 day) const noexcept
-    {
-        const core::u32 step = daysPerTick == 0u ? 1u : daysPerTick;
-        const core::i32 clamped = day < startDay ? startDay : (day > endDay ? endDay : day);
-        return static_cast<core::u32>(clamped - startDay) / step;
-    }
+    [[nodiscard]] constexpr core::u32 firstTickOfDay(core::i32 day) const noexcept;
 
     /**
      * @brief Which year a tick falls in.
@@ -152,5 +126,7 @@ struct Era {
 };
 
 } // namespace lpl::history
+
+#    include "Era.inl"
 
 #endif // LPL_LPL_HISTORY_ERA_HPP

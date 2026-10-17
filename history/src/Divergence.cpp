@@ -1,12 +1,3 @@
-/**
- * @file Divergence.cpp
- * @brief Scoring a reconstruction, with the self-fulfilment rule.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/history/Divergence.hpp>
 
 namespace lpl::history {
@@ -35,7 +26,7 @@ Divergence measureDivergence(const Chronicle &chronicle, const Timeline &timelin
     {
         const Constraint &claim = timeline.at(c);
         if (claim.kind != ConstraintKind::Score)
-            continue; // seeded and forced claims were given to the run, not asked of it
+            continue;
         ++out.scoredClaims;
 
         bool earned = false;
@@ -45,10 +36,6 @@ Divergence measureDivergence(const Chronicle &chronicle, const Timeline &timelin
             const Event &event = chronicle.at(e);
             if (!agrees(event.fact, claim.fact))
                 continue;
-            // THE rule. An event the timeline caused cannot be evidence for the
-            // timeline. Counted separately rather than ignored, because a run whose
-            // matches are all self-fulfilled looks identical to one that reconstructed
-            // nothing, and the two deserve different reports.
             if (event.attestation.cause == Cause::Constraint)
             {
                 refused = true;

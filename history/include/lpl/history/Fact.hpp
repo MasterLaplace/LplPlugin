@@ -32,9 +32,9 @@ namespace lpl::history {
  * @brief One assertion, by one source, over one window.
  */
 struct Fact {
-    core::u32 subject{0u};   ///< Who or what the claim is about.
-    core::u32 predicate{0u}; ///< What is claimed of it.
-    core::u32 object{0u};    ///< The value claimed.
+    core::u32 subject{0u};   /**< Who or what the claim is about. */
+    core::u32 predicate{0u}; /**< What is claimed of it. */
+    core::u32 object{0u};    /**< The value claimed. */
     /**
      * First day the claim covers. See @ref Calendar.hpp for the epoch.
      *
@@ -55,7 +55,7 @@ struct Fact {
      */
     core::i32 toDay{0};
 
-    core::u32 source{0u}; ///< Which source asserted it.
+    core::u32 source{0u}; /**< Which source asserted it. */
 
     /**
      * @brief Confidence in [0, 1].
@@ -77,11 +77,11 @@ struct Fact {
  * flatter someone alive at the time.
  */
 enum class SourceKind : core::u32 {
-    Notarial = 0u,       ///< Contracts, registers, acts. Written to be checked.
-    Archaeology = 1u,    ///< Material evidence. Silent about motive, hard to forge.
-    Administrative = 2u, ///< Censuses, tax rolls. Accurate about what was taxed.
-    Chronicle = 3u,      ///< A contemporary account. Honest and partial.
-    Panegyric = 4u,      ///< Written to praise. Accurate only by accident.
+    Notarial = 0u,       /**< Contracts, registers, acts. Written to be checked. */
+    Archaeology = 1u,    /**< Material evidence. Silent about motive, hard to forge. */
+    Administrative = 2u, /**< Censuses, tax rolls. Accurate about what was taxed. */
+    Chronicle = 3u,      /**< A contemporary account. Honest and partial. */
+    Panegyric = 4u,      /**< Written to praise. Accurate only by accident. */
     Count = 5u
 };
 
@@ -104,7 +104,7 @@ inline constexpr core::u32 kUnknownYearsAfterEvent = 0xFFFFFFFFu;
  * @brief What is known about a source, as the trust score needs it.
  */
 struct SourceProfile {
-    core::u32 id{0u}; ///< Matches Fact::source.
+    core::u32 id{0u}; /**< Matches Fact::source. */
     SourceKind kind{SourceKind::Chronicle};
 
     /**
@@ -127,10 +127,9 @@ struct SourceProfile {
      */
     core::i32 composedFrom{0};
 
-    /// Last day it could have been written; 0 when unknown.
-    core::i32 composedTo{0};
+    core::i32 composedTo{0}; /**< Last day it could have been written; 0 when unknown. */
 
-    core::u32 independentAgreements{0u}; ///< Other sources that say the same thing.
+    core::u32 independentAgreements{0u}; /**< Other sources that say the same thing. */
 };
 
 /**
@@ -148,6 +147,12 @@ struct SourceProfile {
  * when a text was written to within fifty years is a reason to trust it less about a particular
  * year, and a precisely dated source keeps its full credit.
  *
+ * A first version took the nearest edge alone: widening a window from [1195,1205] to [1150,1205]
+ * put an event in 1190 inside it, so the gap dropped from five years to zero and the source was
+ * scored as an EYEWITNESS, while this documentation already said widening must never improve a
+ * score -- caught by an assertion written from it. A vague source now pays for its vagueness, and
+ * can never pay less by becoming vaguer.
+ *
  * @param profile  The source.
  * @param eventDay The day the claimed event happened.
  * @return The distance in years, or @ref kUnknownYearsAfterEvent.
@@ -163,9 +168,9 @@ struct SourceProfile {
  * that position without saying so.
  */
 struct TrustWeights {
-    math::Fixed32 temporalProximity{math::Fixed32::fromRaw(19661)}; ///< ~0.30
-    math::Fixed32 sourceType{math::Fixed32::fromRaw(29491)};        ///< ~0.45
-    math::Fixed32 peerConsensus{math::Fixed32::fromRaw(16384)};     ///< ~0.25
+    math::Fixed32 temporalProximity{math::Fixed32::fromRaw(19661)}; /**< ~0.30 */
+    math::Fixed32 sourceType{math::Fixed32::fromRaw(29491)};        /**< ~0.45 */
+    math::Fixed32 peerConsensus{math::Fixed32::fromRaw(16384)};     /**< ~0.25 */
 };
 
 /**
@@ -176,6 +181,10 @@ struct TrustWeights {
  * Temporal proximity decays with distance rather than falling off a cliff: an account
  * written five years after an event is worth much more than one written fifty, and one
  * written five hundred is not worth appreciably less than one written five thousand.
+ *
+ * Agreement saturates: the second independent source that says the same thing is worth far more
+ * than the tenth, and a term that grew without bound would let a crowd of weak sources outweigh a
+ * notarial act.
  *
  * @param profile What is known about the source.
  * @param weights What each term is worth.
@@ -191,6 +200,10 @@ struct TrustWeights {
  * compiled in 1200 recounting both 1190 and 400 is ten years from one claim and eight hundred
  * from the other; scoring it once, for the source as a whole, is right about at most one of them.
  * Prefer this wherever a fact is in hand -- which is everywhere the score is actually used.
+ *
+ * Derived per claim, then scored by the same arithmetic: one formula, two ways of learning its one
+ * uncertain input. A second scoring function would be a second historiographical position nobody
+ * stated.
  *
  * @param profile  What is known about the source.
  * @param eventDay The day the claimed event happened.
@@ -219,6 +232,9 @@ struct TrustWeights {
  *
  * The mutual-exclusion rule: same subject, same predicate, overlapping windows,
  * different objects. A person is not in two places in the same year.
+ *
+ * Touching endpoints count as overlapping: a claim covering [1200,1204] and one covering
+ * [1204,1210] both assert something about 1204.
  *
  * @param a First fact.
  * @param b Second fact.

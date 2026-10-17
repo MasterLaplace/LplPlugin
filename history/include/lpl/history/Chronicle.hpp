@@ -28,8 +28,8 @@ namespace lpl::history {
  * @brief One thing the run says happened, and why.
  */
 struct Event {
-    Fact fact{};               ///< The same shape as a record's claim, deliberately.
-    Attestation attestation{}; ///< Why it is here.
+    Fact fact{};               /**< The same shape as a record's claim, deliberately. */
+    Attestation attestation{}; /**< Why it is here. */
 };
 
 /**
