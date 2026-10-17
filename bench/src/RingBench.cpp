@@ -1,9 +1,3 @@
-/**
- * @file RingBench.cpp
- * @brief The ring section of lpl-benchmark.
- * @see   RingBench.hpp
- */
-
 #include <lpl/bench/RingBench.hpp>
 
 #include <lpl/bench/Harness.hpp>
@@ -271,7 +265,9 @@ template <typename Ring> void sendRoundTrips(Echo<Ring> &echo) noexcept
     return siblings;
 }
 
-/** @brief The first core this process may run on, and the first other one that is not its SMT sibling. */
+/**
+ * @brief The first core this process may run on, and the first other one that is not its SMT sibling.
+ */
 [[nodiscard]] std::optional<std::pair<int, int>> pickTwoPhysicalCores()
 {
     cpu_set_t allowed;
