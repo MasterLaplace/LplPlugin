@@ -1,13 +1,3 @@
-/**
- * @file StateSnapshot.cpp
- * @brief StateSnapshot implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
 #include <lpl/serial/StateSnapshot.hpp>
@@ -64,11 +54,9 @@ void StateSnapshot::rehash()
 
 core::Expected<void> StateSnapshot::serialize(net::protocol::Bitstream &stream) const
 {
-    // Write 64-bit _tick
     stream.writeU32(static_cast<core::u32>(_tick >> 32));
     stream.writeU32(static_cast<core::u32>(_tick & 0xFFFFFFFF));
 
-    // Write 64-bit _hash
     stream.writeU32(static_cast<core::u32>(_hash >> 32));
     stream.writeU32(static_cast<core::u32>(_hash & 0xFFFFFFFF));
 

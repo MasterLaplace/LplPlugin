@@ -36,26 +36,38 @@ struct ReplayFrame {
  */
 class ReplayRecorder {
 public:
-    /// @param snapshotInterval Ticks between automatic snapshots.
+    /**
+     * @param snapshotInterval Ticks between automatic snapshots.
+     */
     explicit ReplayRecorder(core::u32 snapshotInterval = 144);
     ~ReplayRecorder();
 
     ReplayRecorder(const ReplayRecorder &) = delete;
     ReplayRecorder &operator=(const ReplayRecorder &) = delete;
 
-    /** @brief Record one tick's input. */
+    /**
+     * @brief Record one tick's input.
+     */
     void recordFrame(const ReplayFrame &frame);
 
-    /** @brief Record a full state snapshot. */
+    /**
+     * @brief Record a full state snapshot.
+     */
     void recordSnapshot(StateSnapshot snapshot);
 
-    /** @brief Total recorded frames. */
+    /**
+     * @brief Total recorded frames.
+     */
     [[nodiscard]] core::usize frameCount() const noexcept;
 
-    /** @brief Total recorded snapshots. */
+    /**
+     * @brief Total recorded snapshots.
+     */
     [[nodiscard]] core::usize snapshotCount() const noexcept;
 
-    /** @brief Access a recorded frame by index. */
+    /**
+     * @brief Access a recorded frame by index.
+     */
     [[nodiscard]] const ReplayFrame &frame(core::usize index) const;
 
     /**
@@ -65,7 +77,9 @@ public:
      */
     [[nodiscard]] core::Expected<void> saveToDisk(std::string_view path) const;
 
-    /** @brief Clear all recorded data. */
+    /**
+     * @brief Clear all recorded data.
+     */
     void clear() noexcept;
 
 private:
