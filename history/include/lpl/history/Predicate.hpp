@@ -47,23 +47,31 @@ namespace lpl::history {
 enum class Predicate : core::u32 {
     None = 0u,
 
-    // ── Attributes: what a source asserts, and no agent performs ─────────────
-    DiedOf = 10u, ///< What killed him. Frozen: folded into gate P13.
-    Exists = 11u, ///< Whether a settlement is there. Frozen: folded into gate P13.
-    BornIn = 12u, ///< The year of a birth, as a source dates it.
-    DiedIn = 13u, ///< The year of a death.
-    Ruled = 14u,  ///< Held authority over a place, across the fact's window.
-    Wrote = 15u,  ///< Authored a work. The object is the work.
+    /**
+     * @name Attributes: what a source asserts, and no agent performs
+     * @{
+     */
+    DiedOf = 10u, /**< What killed him. Frozen: folded into gate P13. */
+    Exists = 11u, /**< Whether a settlement is there. Frozen: folded into gate P13. */
+    BornIn = 12u, /**< The year of a birth, as a source dates it. */
+    DiedIn = 13u, /**< The year of a death. */
+    Ruled = 14u,  /**< Held authority over a place, across the fact's window. */
+    Wrote = 15u,  /**< Authored a work. The object is the work. */
+    /** @} */
 
-    // ── Deeds: what an agent can be seen to do, and therefore EARN ───────────
-    BornAt = 40u,      ///< Came into the world at a place.
-    DweltAt = 41u,     ///< Was living at a place, across the fact's window.
-    TravelledTo = 42u, ///< Went somewhere. The deed a walking entity produces.
-    DiedAt = 43u,      ///< Ended at a place.
-    Founded = 44u,     ///< Made a settlement exist that did not.
-    Abandoned = 45u,   ///< Left a settlement with nobody in it.
+    /**
+     * @name Deeds: what an agent can be seen to do, and therefore EARN
+     * @{
+     */
+    BornAt = 40u,      /**< Came into the world at a place. */
+    DweltAt = 41u,     /**< Was living at a place, across the fact's window. */
+    TravelledTo = 42u, /**< Went somewhere. The deed a walking entity produces. */
+    DiedAt = 43u,      /**< Ended at a place. */
+    Founded = 44u,     /**< Made a settlement exist that did not. */
+    Abandoned = 45u,   /**< Left a settlement with nobody in it. */
+    /** @} */
 
-    Count = 46u, ///< One past the highest, for bounds checks. NOT a count of entries.
+    Count = 46u, /**< One past the highest, for bounds checks. NOT a count of entries. */
 };
 
 /**
@@ -76,11 +84,7 @@ enum class Predicate : core::u32 {
  * @param predicate The predicate.
  * @return true when an agent may emit it.
  */
-[[nodiscard]] constexpr bool isDeed(Predicate predicate) noexcept
-{
-    return predicate == Predicate::BornAt || predicate == Predicate::DweltAt || predicate == Predicate::TravelledTo ||
-           predicate == Predicate::DiedAt || predicate == Predicate::Founded || predicate == Predicate::Abandoned;
-}
+[[nodiscard]] constexpr bool isDeed(Predicate predicate) noexcept;
 
 /**
  * @brief Whether a predicate's object is a PLACE rather than a value.
@@ -91,12 +95,7 @@ enum class Predicate : core::u32 {
  * @param predicate The predicate.
  * @return true when the object names a place.
  */
-[[nodiscard]] constexpr bool objectIsPlace(Predicate predicate) noexcept
-{
-    return predicate == Predicate::BornAt || predicate == Predicate::DweltAt || predicate == Predicate::TravelledTo ||
-           predicate == Predicate::DiedAt || predicate == Predicate::Founded || predicate == Predicate::Abandoned ||
-           predicate == Predicate::Ruled;
-}
+[[nodiscard]] constexpr bool objectIsPlace(Predicate predicate) noexcept;
 
 /**
  * @brief What a predicate reads as.
@@ -108,27 +107,7 @@ enum class Predicate : core::u32 {
  * @param predicate The predicate.
  * @return Its name, or "unknown".
  */
-[[nodiscard]] constexpr const char *predicateName(Predicate predicate) noexcept
-{
-    switch (predicate)
-    {
-    case Predicate::DiedOf: return "died-of";
-    case Predicate::Exists: return "exists";
-    case Predicate::BornIn: return "born-in";
-    case Predicate::DiedIn: return "died-in";
-    case Predicate::Ruled: return "ruled";
-    case Predicate::Wrote: return "wrote";
-    case Predicate::BornAt: return "born-at";
-    case Predicate::DweltAt: return "dwelt-at";
-    case Predicate::TravelledTo: return "travelled-to";
-    case Predicate::DiedAt: return "died-at";
-    case Predicate::Founded: return "founded";
-    case Predicate::Abandoned: return "abandoned";
-    case Predicate::None:
-    case Predicate::Count:
-    default: return "unknown";
-    }
-}
+[[nodiscard]] constexpr const char *predicateName(Predicate predicate) noexcept;
 
 /**
  * @brief Reads a predicate back from its word.
@@ -142,26 +121,10 @@ enum class Predicate : core::u32 {
  * @param out   Receives the predicate.
  * @return false when the word names no predicate.
  */
-[[nodiscard]] constexpr bool predicateByName(const char *text, core::u32 bytes, Predicate &out) noexcept
-{
-    constexpr Predicate kAll[] = {Predicate::DiedOf,      Predicate::Exists, Predicate::BornIn,  Predicate::DiedIn,
-                                  Predicate::Ruled,       Predicate::Wrote,  Predicate::BornAt,  Predicate::DweltAt,
-                                  Predicate::TravelledTo, Predicate::DiedAt, Predicate::Founded, Predicate::Abandoned};
-    for (const Predicate candidate : kAll)
-    {
-        const char *name = predicateName(candidate);
-        core::u32 i = 0u;
-        while (i < bytes && name[i] != '\0' && name[i] == text[i])
-            ++i;
-        if (i == bytes && name[i] == '\0')
-        {
-            out = candidate;
-            return true;
-        }
-    }
-    return false;
-}
+[[nodiscard]] constexpr bool predicateByName(const char *text, core::u32 bytes, Predicate &out) noexcept;
 
 } // namespace lpl::history
+
+#    include "Predicate.inl"
 
 #endif // LPL_LPL_HISTORY_PREDICATE_HPP

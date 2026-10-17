@@ -25,10 +25,10 @@
 
 namespace lpl::history {
 
-/// FNV-1a offset basis. Every fold in this project starts here.
+/** FNV-1a offset basis. Every fold in this project starts here. */
 inline constexpr core::u32 kFoldOffsetBasis = 0x811C9DC5u;
 
-/// FNV-1a prime.
+/** FNV-1a prime. */
 inline constexpr core::u32 kFoldPrime = 0x01000193u;
 
 /**

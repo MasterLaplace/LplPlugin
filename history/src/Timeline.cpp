@@ -1,12 +1,3 @@
-/**
- * @file Timeline.cpp
- * @brief The canonical order, and the fold that depends on it.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/history/Fold.hpp>
 #include <lpl/history/Timeline.hpp>
 
@@ -44,8 +35,6 @@ void Timeline::add(const Constraint &constraint) { _constraints.push_back(constr
 
 void Timeline::finalise()
 {
-    // Insertion sort: a timeline is hundreds of constraints, not millions, and this is
-    // stable and obvious. A faster sort here would be a faster sort nobody measured.
     for (core::usize i = 1u; i < _constraints.size(); ++i)
     {
         const Constraint held = _constraints[i];
@@ -74,15 +63,10 @@ bool Timeline::constraintsStartingIn(core::i32 fromDay, core::i32 toDay, core::u
     for (core::usize i = 0u; i < _constraints.size(); ++i)
     {
         const core::i32 start = _constraints[i].fact.fromDay;
-        // @warning A RANGE, not an equality, and that is the whole repair. Asking for the constraints
-        // of one exact day is correct only while the clock advances one day at a time; the moment
-        // an era is geared to cross a silent century in a step -- which is what a gearing is FOR --
-        // every constraint inside the step is silently never applied, and the chronicle looks
-        // complete. A tick covers a span, and this returns what starts inside it.
         if (start < fromDay)
             continue;
         if (start > toDay)
-            break; // sorted by start, so nothing later can qualify
+            break;
         if (outCount == 0u)
             outFirst = static_cast<core::u32>(i);
         ++outCount;
@@ -93,10 +77,6 @@ bool Timeline::constraintsStartingIn(core::i32 fromDay, core::i32 toDay, core::u
 core::u32 Timeline::fold(core::u32 seed) const noexcept
 {
     core::u32 hash = seed;
-    // @warning Through the shared fold, not a local copy of the constant: a signature exists to
-    // be the same number on two machines, so the function producing it is the last thing
-    // that should exist in several versions. This file and Chronicle.cpp each carried
-    // their own until a third consumer was about to make it three.
     const auto absorb = [&hash](core::u32 word) { hash = foldWord(hash, word); };
 
     for (core::usize i = 0u; i < _constraints.size(); ++i)

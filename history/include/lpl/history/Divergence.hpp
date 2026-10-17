@@ -34,11 +34,11 @@ namespace lpl::history {
  * @brief How far the run's account is from the record.
  */
 struct Divergence {
-    core::u32 scoredClaims{0u};  ///< Claims the run had to earn: kind Score.
-    core::u32 earned{0u};        ///< Of those, the ones an emergent event matched.
-    core::u32 missed{0u};        ///< Of those, the ones nothing matched.
-    core::u32 unattested{0u};    ///< Emergent events the record says nothing about.
-    core::u32 selfFulfilled{0u}; ///< Matches refused because the run was told to make them.
+    core::u32 scoredClaims{0u};  /**< Claims the run had to earn: kind Score. */
+    core::u32 earned{0u};        /**< Of those, the ones an emergent event matched. */
+    core::u32 missed{0u};        /**< Of those, the ones nothing matched. */
+    core::u32 unattested{0u};    /**< Emergent events the record says nothing about. */
+    core::u32 selfFulfilled{0u}; /**< Matches refused because the run was told to make them. */
 
     /**
      * @brief Share of the scored claims the run reconstructed, in [0, 1].
@@ -62,6 +62,14 @@ struct Divergence {
 
 /**
  * @brief Scores a chronicle against the record it was supposed to reconstruct.
+ *
+ * Only the claims of kind Score are measured: seeded and forced claims were given to the run, not
+ * asked of it.
+ *
+ * THE rule: an event the timeline caused cannot be evidence for the timeline. A claim matched only
+ * by such events is counted in @c selfFulfilled rather than ignored, because a run whose matches
+ * are all self-fulfilled looks identical to one that reconstructed nothing, and the two deserve
+ * different reports.
  *
  * @param chronicle What the run says happened.
  * @param timeline  What the record says happened.

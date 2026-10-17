@@ -33,12 +33,12 @@ namespace lpl::history {
  * @brief A named place, positioned and dated.
  */
 struct Place {
-    core::u32 id{0u};     ///< The gazetteer's own identifier. Never a hash of a name.
-    math::Fixed32 x{};    ///< World position. What the corpus calls a longitude, projected.
-    math::Fixed32 z{};    ///< World position.
-    core::i32 minYear{0}; ///< First year attested.
-    core::i32 maxYear{0}; ///< Last year attested.
-    bool located{false};  ///< Whether the coordinates mean anything. See below.
+    core::u32 id{0u};     /**< The gazetteer's own identifier. Never a hash of a name. */
+    math::Fixed32 x{};    /**< World position. What the corpus calls a longitude, projected. */
+    math::Fixed32 z{};    /**< World position. */
+    core::i32 minYear{0}; /**< First year attested. */
+    core::i32 maxYear{0}; /**< Last year attested. */
+    bool located{false};  /**< Whether the coordinates mean anything. See below. */
 };
 
 /**
@@ -82,13 +82,7 @@ public:
      * @param capacity Room in @p out.
      * @return How many were written.
      */
-    [[nodiscard]] virtual core::u32 linkedPlaces(core::u32 id, core::u32 *out, core::u32 capacity) const
-    {
-        (void) id;
-        (void) out;
-        (void) capacity;
-        return 0u;
-    }
+    [[nodiscard]] inline virtual core::u32 linkedPlaces(core::u32 id, core::u32 *out, core::u32 capacity) const;
 };
 
 /**
@@ -102,12 +96,7 @@ public:
  * @param year  The year.
  * @return true when the place may be used in that year.
  */
-[[nodiscard]] constexpr bool existsInYear(const Place &place, core::i32 year) noexcept
-{
-    if (place.minYear == 0 && place.maxYear == 0)
-        return true;
-    return year >= place.minYear && year <= place.maxYear;
-}
+[[nodiscard]] constexpr bool existsInYear(const Place &place, core::i32 year) noexcept;
 
 /**
  * @struct RouteLeg
@@ -155,17 +144,12 @@ public:
      * @param capacity  Room in @p out.
      * @return How many waypoints were written; zero means "go straight".
      */
-    [[nodiscard]] virtual core::u32 route(core::u32 fromPlace, core::u32 toPlace, RouteLeg *out,
-                                          core::u32 capacity) const
-    {
-        (void) fromPlace;
-        (void) toPlace;
-        (void) out;
-        (void) capacity;
-        return 0u;
-    }
+    [[nodiscard]] inline virtual core::u32 route(core::u32 fromPlace, core::u32 toPlace, RouteLeg *out,
+                                                 core::u32 capacity) const;
 };
 
 } // namespace lpl::history
+
+#    include "Place.inl"
 
 #endif // LPL_LPL_HISTORY_PLACE_HPP

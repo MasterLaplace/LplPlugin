@@ -62,27 +62,19 @@ enum class Cause : core::u32 {
  * @param cause The cause.
  * @return Its name.
  */
-[[nodiscard]] constexpr const char *causeName(Cause cause) noexcept
-{
-    switch (cause)
-    {
-    case Cause::Constraint: return "constraint";
-    case Cause::Emergent: return "emergent";
-    case Cause::Sovereign: return "sovereign";
-    case Cause::Count: break;
-    }
-    return "?";
-}
+[[nodiscard]] constexpr const char *causeName(Cause cause) noexcept;
 
 /**
  * @struct Attestation
  * @brief Why one event happened, and by what.
  */
 struct Attestation {
-    Cause cause{Cause::Emergent}; ///< Which of the three.
-    core::u32 agent{0u};          ///< Source id, system id, or director id, per @c cause.
+    Cause cause{Cause::Emergent}; /**< Which of the three. */
+    core::u32 agent{0u};          /**< Source id, system id, or director id, per @c cause. */
 };
 
 } // namespace lpl::history
+
+#    include "Attestation.inl"
 
 #endif // LPL_LPL_HISTORY_ATTESTATION_HPP

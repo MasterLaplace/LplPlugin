@@ -46,6 +46,9 @@ public:
      * Must be called before a run. An unsorted timeline still contains the same
      * facts and folds differently, which is the class of bug this project spends the
      * most effort refusing.
+     *
+     * Insertion sort: a timeline is hundreds of constraints, not millions, and this is
+     * stable and obvious. A faster sort here would be a faster sort nobody measured.
      */
     void finalise();
 
@@ -63,15 +66,22 @@ public:
     [[nodiscard]] const Constraint &at(core::u32 index) const noexcept;
 
     /**
-     * @brief Constraints dated to a year.
+     * @brief Constraints whose window starts in a span of days.
      *
-     * The timeline is sorted, so a year is a contiguous run and this is a pair of
-     * bounds rather than a scan.
+     * The timeline is sorted by start, so a span is a contiguous run, and the scan stops at
+     * the first constraint that starts after it.
      *
-     * @param year      The year.
+     * @warning A RANGE, not an equality, and that is the whole repair. Asking for the constraints
+     * of one exact day is correct only while the clock advances one day at a time; the moment
+     * an era is geared to cross a silent century in a step -- which is what a gearing is FOR --
+     * every constraint inside the step is silently never applied, and the chronicle looks
+     * complete. A tick covers a span, and this returns what starts inside it.
+     *
+     * @param fromDay   First day of the span.
+     * @param toDay     Last day of the span, inclusive.
      * @param outFirst  Receives the first index.
      * @param outCount  Receives how many.
-     * @return false when the year carries nothing.
+     * @return false when the span carries nothing.
      */
     [[nodiscard]] bool constraintsStartingIn(core::i32 fromDay, core::i32 toDay, core::u32 &outFirst,
                                              core::u32 &outCount) const noexcept;
