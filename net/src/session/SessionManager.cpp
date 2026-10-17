@@ -1,13 +1,3 @@
-/**
- * @file SessionManager.cpp
- * @brief SessionManager implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/net/session/SessionManager.hpp>
 
@@ -20,9 +10,7 @@ namespace lpl::net::session {
 struct SessionManager::Impl {
     std::unordered_map<core::u32, std::unique_ptr<Session>> sessions;
 
-    /// Scratch for broadcastState, kept across ticks so a broadcast does not
-    /// allocate every frame (clear() retains the capacity).
-    std::vector<transport::Datagram> broadcastBatch;
+    std::vector<transport::Datagram> broadcastBatch; /**< Reused by broadcastState, so a broadcast does not allocate. */
 };
 
 SessionManager::SessionManager() : _impl{std::make_unique<Impl>()} {}
@@ -92,8 +80,6 @@ core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs, const std::function<
         if (elapsed > timeoutMs)
         {
             it->second->setState(SessionState::Disconnected);
-            // Let the caller tear down the entity/input/spatial the session owned
-            // while it is still valid, then erase it.
             if (onReap)
                 onReap(*it->second);
             it = _impl->sessions.erase(it);
@@ -112,13 +98,6 @@ core::u32 SessionManager::activeCount() const noexcept { return static_cast<core
 
 void SessionManager::broadcastState(transport::ITransport &transport, std::span<const core::byte> data)
 {
-    // Fragmentation: split data into kMaxPayloadSize chunks.
-    //
-    // Every fragment for every client is ready at this instant, so the whole
-    // burst is handed to the transport at once instead of one packet at a time:
-    // fragments × clients syscalls collapse into one sendmmsg (sockets) or one
-    // ring kick (kernel module). The datagrams borrow their bytes from `data`
-    // and their addresses from the sessions, both of which outlive the call.
     const core::u32 totalSize = static_cast<core::u32>(data.size());
 
     _impl->broadcastBatch.clear();

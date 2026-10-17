@@ -1,17 +1,20 @@
-/**
- * @file Bitstream.cpp
- * @brief Bitstream implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
 
 namespace lpl::net::protocol {
+
+namespace {
+
+/**
+ * @brief Largest integer representable in @p bits (the quantization ceiling).
+ *
+ * @p bits is 1..32; (1u << 32) is UB, so the full width is special-cased.
+ */
+[[nodiscard]] core::u32 quantMax(core::u32 bits) noexcept { return (bits >= 32) ? 0xFFFFFFFFu : ((1u << bits) - 1u); }
+
+constexpr float kTwoPi = 6.28318530717958647692f;
+
+} // namespace
 
 Bitstream::Bitstream() noexcept = default;
 
@@ -21,10 +24,6 @@ Bitstream::Bitstream(std::span<const core::byte> data, core::u32 bitCount) noexc
 }
 
 Bitstream::~Bitstream() = default;
-
-// -------------------------------------------------------------------------- //
-//  Write                                                                     //
-// -------------------------------------------------------------------------- //
 
 void Bitstream::writeBits(core::u32 value, core::u32 bitCount)
 {
@@ -78,23 +77,6 @@ void Bitstream::writeBytes(std::span<const core::byte> bytes)
     }
 }
 
-// -------------------------------------------------------------------------- //
-//  Bit-packing / quantization (book §6.3.3)                                  //
-// -------------------------------------------------------------------------- //
-
-namespace {
-
-/// Largest integer representable in @p bits (the quantization ceiling).
-[[nodiscard]] core::u32 quantMax(core::u32 bits) noexcept
-{
-    // bits is 1..32; (1u << 32) is UB, so special-case the full width.
-    return (bits >= 32) ? 0xFFFFFFFFu : ((1u << bits) - 1u);
-}
-
-constexpr float kTwoPi = 6.28318530717958647692f;
-
-} // namespace
-
 void Bitstream::writeQuantizedFloat(float value, float min, float max, core::u32 bits)
 {
     LPL_ASSERT(bits > 0 && bits <= 32);
@@ -104,8 +86,6 @@ void Bitstream::writeQuantizedFloat(float value, float min, float max, core::u32
     const float range = max - min;
     const core::u32 maxQ = quantMax(bits);
 
-    // Round-to-nearest, then guard the top edge against float error pushing it
-    // one past the ceiling.
     const float t = (clamped - min) / range;
     core::u32 q = static_cast<core::u32>(t * static_cast<float>(maxQ) + 0.5f);
     if (q > maxQ)
@@ -127,7 +107,6 @@ core::Expected<float> Bitstream::readQuantizedFloat(float min, float max, core::
 
 void Bitstream::writeAngle(float radians, core::u32 bits)
 {
-    // Wrap into [0, 2*pi) so any real angle encodes.
     float wrapped = radians - kTwoPi * static_cast<float>(static_cast<core::i32>(radians / kTwoPi));
     if (wrapped < 0.0f)
         wrapped += kTwoPi;
@@ -138,7 +117,6 @@ core::Expected<float> Bitstream::readAngle(core::u32 bits) { return readQuantize
 
 void Bitstream::writeVarint(core::u32 value)
 {
-    // LEB128: 7 payload bits per byte, high bit = "more bytes follow".
     do
     {
         core::u8 septet = static_cast<core::u8>(value & 0x7Fu);
@@ -165,10 +143,6 @@ core::Expected<core::u32> Bitstream::readVarint()
     }
     return core::makeError(core::ErrorCode::CorruptedData, "Varint too long");
 }
-
-// -------------------------------------------------------------------------- //
-//  Read                                                                      //
-// -------------------------------------------------------------------------- //
 
 core::Expected<core::u32> Bitstream::readBits(core::u32 bitCount)
 {
@@ -253,10 +227,6 @@ core::Expected<std::vector<core::byte>> Bitstream::readBytes(core::u32 count)
     }
     return out;
 }
-
-// -------------------------------------------------------------------------- //
-//  Query                                                                     //
-// -------------------------------------------------------------------------- //
 
 core::u32 Bitstream::bitsWritten() const noexcept { return _writeBit; }
 

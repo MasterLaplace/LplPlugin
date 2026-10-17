@@ -1,13 +1,3 @@
-/**
- * @file SocketTransport.cpp
- * @brief POSIX UDP socket transport implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/net/transport/SocketTransport.hpp>
@@ -24,9 +14,12 @@ namespace lpl::net::transport {
 
 namespace {
 
-/// Endpoint (host byte order) → sockaddr_in (network byte order). This file is
-/// the single translation point between the engine's platform-neutral Endpoint
-/// and the BSD sockets representation.
+/**
+ * @brief Endpoint (host byte order) → sockaddr_in (network byte order).
+ *
+ * This file is the single translation point between the engine's platform-neutral
+ * Endpoint and the BSD sockets representation.
+ */
 [[nodiscard]] sockaddr_in toSockaddr(const Endpoint &endpoint) noexcept
 {
     sockaddr_in addr{};
@@ -46,7 +39,7 @@ namespace {
 struct SocketTransport::Impl {
     core::u16 port;
     int fd{-1};
-    Endpoint defaultDest{}; ///< Used when send() is called with nullptr address.
+    Endpoint defaultDest{}; /**< Used when send() is called with nullptr address. */
 
     explicit Impl(core::u16 p) : port{p} {}
 };
@@ -98,8 +91,6 @@ core::Expected<core::u32> SocketTransport::send(std::span<const core::byte> data
         return core::makeError(core::ErrorCode::InvalidState, "Socket not open");
     }
 
-    // Fall back to the pre-set default destination when no address is provided
-    // (e.g. InputSendSystem calling sendInputs(..., nullptr, ...)).
     const Endpoint &target = (address != nullptr && address->valid()) ? *address : _impl->defaultDest;
     const sockaddr_in addr = toSockaddr(target);
 
@@ -127,12 +118,6 @@ core::Expected<core::u32> SocketTransport::sendBatch(std::span<const Datagram> d
     }
 
 #ifdef __linux__
-    // sendmmsg hands the whole burst to the kernel in ONE syscall. A broadcast
-    // is fragments × clients packets, so this turns N syscalls into 1.
-    //
-    // Linux only, deliberately: Windows and macOS have no equivalent, and this
-    // transport is precisely the portable path for them. They fall through to
-    // the base implementation's loop, which is correct, just not batched.
     constexpr core::usize kMaxBurst = 64;
 
     core::u32 totalSent = 0;
@@ -142,7 +127,6 @@ core::Expected<core::u32> SocketTransport::sendBatch(std::span<const Datagram> d
     {
         const core::usize burst = std::min(kMaxBurst, datagrams.size() - offset);
 
-        // These three arrays must outlive the syscall: mmsghdr points into them.
         sockaddr_in addresses[kMaxBurst]{};
         iovec iovecs[kMaxBurst]{};
         mmsghdr messages[kMaxBurst]{};
@@ -166,14 +150,12 @@ core::Expected<core::u32> SocketTransport::sendBatch(std::span<const Datagram> d
         const int sent = ::sendmmsg(_impl->fd, messages, static_cast<unsigned int>(burst), 0);
         if (sent < 0)
         {
-            // Report what did get out rather than losing the count entirely.
             return totalSent > 0 ? core::Expected<core::u32>{totalSent} :
                                    core::makeError(core::ErrorCode::IoError, "sendmmsg() failed");
         }
 
         totalSent += static_cast<core::u32>(sent);
 
-        // A short send means the socket buffer filled: stop, do not spin.
         if (static_cast<core::usize>(sent) < burst)
             break;
 
@@ -229,9 +211,6 @@ core::Expected<core::u32> SocketTransport::receiveBatch(std::span<ReceiveSlot> s
     }
 
 #ifdef __linux__
-    // recvmmsg drains up to kMaxBurst waiting packets in ONE syscall — the
-    // receive-side symmetry of sendmmsg. Linux only, on purpose: the base
-    // implementation's loop covers Windows and macOS, which lack recvmmsg.
     constexpr core::usize kMaxBurst = 64;
     const core::usize burst = std::min(kMaxBurst, slots.size());
 
@@ -250,8 +229,6 @@ core::Expected<core::u32> SocketTransport::receiveBatch(std::span<ReceiveSlot> s
         messages[i].msg_hdr.msg_iovlen = 1;
     }
 
-    // Non-blocking (no MSG_WAITFORONE): returns what is already queued, or -1 /
-    // EAGAIN when nothing is.
     const int count = ::recvmmsg(_impl->fd, messages, static_cast<unsigned int>(burst), 0, nullptr);
     if (count < 0)
     {

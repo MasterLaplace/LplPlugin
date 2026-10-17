@@ -1,13 +1,3 @@
-/**
- * @file ServerMesh.cpp
- * @brief ServerMesh implementation stub.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/net/Endpoint.hpp>
@@ -22,14 +12,16 @@ namespace lpl::net {
 struct ServerMesh::Impl {
     transport::ITransport &transport;
     std::vector<MeshNode> nodes;
-    std::vector<core::u32> missedBeats; ///< Index-aligned with @c nodes.
-    std::vector<core::byte> scratch;    ///< Reused outbound packet buffer.
+    std::vector<core::u32> missedBeats; /**< Index-aligned with @c nodes. */
+    std::vector<core::byte> scratch;    /**< Reused outbound packet buffer. */
     core::u64 heartbeatsSent{0};
     core::u64 migrationsSent{0};
 
     explicit Impl(transport::ITransport &t) : transport{t} {}
 
-    /// Index of @p nodeId in @c nodes, or -1.
+    /**
+     * @brief Index of @p nodeId in @c nodes, or -1.
+     */
     [[nodiscard]] core::isize indexOf(core::u32 nodeId) const
     {
         for (core::usize i = 0; i < nodes.size(); ++i)
@@ -38,7 +30,9 @@ struct ServerMesh::Impl {
         return -1;
     }
 
-    /// Builds header + payload into @c scratch and sends it to @p node.
+    /**
+     * @brief Builds header + payload into @c scratch and sends it to @p node.
+     */
     [[nodiscard]] core::Expected<void> sendTo(const MeshNode &node, protocol::PacketType type,
                                               std::span<const core::byte> payload)
     {
@@ -95,8 +89,6 @@ core::Expected<void> ServerMesh::removeNode(core::u32 nodeId)
 
 core::Expected<void> ServerMesh::migrateEntity(core::u32 targetNodeId, std::span<const core::byte> entityData)
 {
-    // Server meshing hand-off: the entity's serialised state is shipped to the
-    // node that now owns its region, over the same transport as everything else.
     const auto idx = _impl->indexOf(targetNodeId);
     if (idx < 0)
         return core::makeError(core::ErrorCode::NotFound, "Migration target is not a known node");
@@ -110,8 +102,6 @@ core::Expected<void> ServerMesh::migrateEntity(core::u32 targetNodeId, std::span
 
 void ServerMesh::heartbeat()
 {
-    // One beat to each node; a node that has now missed too many in a row without
-    // an ack is declared dead so its regions can be reassigned.
     static constexpr core::byte kBeat[1]{core::byte{0}};
     for (core::usize i = 0; i < _impl->nodes.size(); ++i)
     {

@@ -50,31 +50,49 @@ public:
     explicit Session(core::u32 playerId);
     ~Session();
 
-    /** @brief Returns the player ID. */
+    /**
+     * @brief Returns the player ID.
+     */
     [[nodiscard]] core::u32 playerId() const noexcept;
 
-    /** @brief Returns the current session state. */
+    /**
+     * @brief Returns the current session state.
+     */
     [[nodiscard]] SessionState state() const noexcept;
 
-    /** @brief Sets the session state. */
+    /**
+     * @brief Sets the session state.
+     */
     void setState(SessionState newState) noexcept;
 
-    /** @brief Binds an entity to this session (the player's avatar). */
+    /**
+     * @brief Binds an entity to this session (the player's avatar).
+     */
     void bindEntity(ecs::EntityId entity) noexcept;
 
-    /** @brief Returns the bound entity (may be null). */
+    /**
+     * @brief Returns the bound entity (may be null).
+     */
     [[nodiscard]] ecs::EntityId boundEntity() const noexcept;
 
-    /** @brief Records a ping measurement. */
+    /**
+     * @brief Records a ping measurement.
+     */
     void recordRtt(core::f32 rttMs) noexcept;
 
-    /** @brief Returns the smoothed round-trip time (ms). */
+    /**
+     * @brief Returns the smoothed round-trip time (ms).
+     */
     [[nodiscard]] core::f32 smoothedRtt() const noexcept;
 
-    /** @brief Returns the last input sequence received from this client. */
+    /**
+     * @brief Returns the last input sequence received from this client.
+     */
     [[nodiscard]] core::u32 lastInputSequence() const noexcept;
 
-    /** @brief Updates the last input sequence. */
+    /**
+     * @brief Updates the last input sequence.
+     */
     void setLastInputSequence(core::u32 seq) noexcept;
 
     /**
@@ -86,23 +104,29 @@ public:
      */
     [[nodiscard]] core::u64 ackedSnapshotSeq() const noexcept { return _ackedSnapshotSeq; }
 
-    /** @brief Advances the acked snapshot sequence (monotonic; ignores regressions). */
-    void setAckedSnapshotSeq(core::u64 seq) noexcept
-    {
-        if (seq > _ackedSnapshotSeq)
-            _ackedSnapshotSeq = seq;
-    }
+    /**
+     * @brief Advances the acked snapshot sequence (monotonic; ignores regressions).
+     */
+    void setAckedSnapshotSeq(core::u64 seq) noexcept;
 
-    /** @brief Returns time of last packet received. */
+    /**
+     * @brief Returns time of last packet received.
+     */
     [[nodiscard]] TimePoint lastActivity() const noexcept;
 
-    /** @brief Marks activity (heartbeat). */
+    /**
+     * @brief Marks activity (heartbeat).
+     */
     void touch() noexcept;
 
-    /** @brief Stores the client's network address. */
+    /**
+     * @brief Stores the client's network address.
+     */
     void setAddress(const Endpoint &endpoint) noexcept { _address = endpoint; }
 
-    /** @brief Returns a pointer to the stored address (or nullptr if none). */
+    /**
+     * @brief Returns a pointer to the stored address (or nullptr if none).
+     */
     [[nodiscard]] const Endpoint *address() const noexcept { return _address.valid() ? &_address : nullptr; }
 
 private:
@@ -117,5 +141,7 @@ private:
 };
 
 } // namespace lpl::net::session
+
+#    include "Session.inl"
 
 #endif // LPL_NET_SESSION_SESSION_HPP

@@ -41,14 +41,11 @@ public:
      */
     constexpr Endpoint(core::u32 address, core::u16 port) noexcept : _address{address}, _port{port} {}
 
-    /** @brief Builds an endpoint from dotted-quad octets. */
+    /**
+     * @brief Builds an endpoint from dotted-quad octets.
+     */
     [[nodiscard]] static constexpr Endpoint fromOctets(core::u8 a, core::u8 b, core::u8 c, core::u8 d,
-                                                       core::u16 port) noexcept
-    {
-        return Endpoint{(static_cast<core::u32>(a) << 24) | (static_cast<core::u32>(b) << 16) |
-                            (static_cast<core::u32>(c) << 8) | static_cast<core::u32>(d),
-                        port};
-    }
+                                                       core::u16 port) noexcept;
 
     /**
      * @brief Parses a dotted-quad string ("127.0.0.1").
@@ -61,60 +58,21 @@ public:
      * @param[out] outEndpoint Filled on success, untouched on failure.
      * @return true if @p text is a well-formed dotted quad.
      */
-    [[nodiscard]] static constexpr bool parse(const char *text, core::u16 port, Endpoint &outEndpoint) noexcept
-    {
-        if (text == nullptr)
-            return false;
+    [[nodiscard]] static constexpr bool parse(const char *text, core::u16 port, Endpoint &outEndpoint) noexcept;
 
-        core::u32 address = 0;
-        core::u32 octet = 0;
-        core::u32 digits = 0;
-        core::u32 octetsSeen = 0;
-
-        for (const char *cursor = text;; ++cursor)
-        {
-            const char character = *cursor;
-
-            if (character >= '0' && character <= '9')
-            {
-                if (++digits > 3)
-                    return false;
-                octet = octet * 10 + static_cast<core::u32>(character - '0');
-                if (octet > 255)
-                    return false;
-                continue;
-            }
-
-            if (character != '.' && character != '\0')
-                return false;
-            if (digits == 0)
-                return false;
-
-            address = (address << 8) | octet;
-            ++octetsSeen;
-            octet = 0;
-            digits = 0;
-
-            if (character == '\0')
-                break;
-            if (octetsSeen == 4)
-                return false; // trailing dot
-        }
-
-        if (octetsSeen != 4)
-            return false;
-
-        outEndpoint = Endpoint{address, port};
-        return true;
-    }
-
-    /** @brief IPv4 address, host byte order. */
+    /**
+     * @brief IPv4 address, host byte order.
+     */
     [[nodiscard]] constexpr core::u32 address() const noexcept { return _address; }
 
-    /** @brief UDP port, host byte order. */
+    /**
+     * @brief UDP port, host byte order.
+     */
     [[nodiscard]] constexpr core::u16 port() const noexcept { return _port; }
 
-    /** @brief A zero port means "unset"; port 0 is not a routable destination. */
+    /**
+     * @brief A zero port means "unset"; port 0 is not a routable destination.
+     */
     [[nodiscard]] constexpr bool valid() const noexcept { return _port != 0; }
 
     [[nodiscard]] friend constexpr bool operator==(const Endpoint &lhs, const Endpoint &rhs) noexcept
@@ -128,5 +86,7 @@ private:
 };
 
 } // namespace lpl::net
+
+#    include "Endpoint.inl"
 
 #endif // LPL_NET_ENDPOINT_HPP

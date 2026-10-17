@@ -20,7 +20,7 @@
 
 namespace lpl::net {
 
-// TODO(lot 3): declarations only — no implementation yet.
+// TODO(#239): declarations only — no implementation yet.
 
 } // namespace lpl::net
 

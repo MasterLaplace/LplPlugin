@@ -34,7 +34,9 @@ namespace lpl::net::protocol {
  */
 class Bitstream final : public core::NonCopyable<Bitstream> {
 public:
-    /** @brief Constructs an empty writable bitstream. */
+    /**
+     * @brief Constructs an empty writable bitstream.
+     */
     Bitstream() noexcept;
 
     /**
@@ -46,10 +48,10 @@ public:
 
     ~Bitstream();
 
-    // --------------------------------------------------------------------- //
-    //  Write                                                                 //
-    // --------------------------------------------------------------------- //
-
+    /**
+     * @name Write
+     * @{
+     */
     /**
      * @brief Writes @p bitCount bits from @p value.
      * @param value    Value to write (only lower @p bitCount bits are used).
@@ -57,39 +59,56 @@ public:
      */
     void writeBits(core::u32 value, core::u32 bitCount);
 
-    /** @brief Writes a boolean (1 bit). */
+    /**
+     * @brief Writes a boolean (1 bit).
+     */
     void writeBool(bool value);
 
-    /** @brief Writes an unsigned 8-bit value. */
+    /**
+     * @brief Writes an unsigned 8-bit value.
+     */
     void writeU8(core::u8 value);
 
-    /** @brief Writes an unsigned 16-bit value. */
+    /**
+     * @brief Writes an unsigned 16-bit value.
+     */
     void writeU16(core::u16 value);
 
-    /** @brief Writes an unsigned 32-bit value. */
+    /**
+     * @brief Writes an unsigned 32-bit value.
+     */
     void writeU32(core::u32 value);
 
-    /** @brief Writes a signed 32-bit value (bit-cast to u32). */
+    /**
+     * @brief Writes a signed 32-bit value (bit-cast to u32).
+     */
     void writeI32(core::i32 value);
 
-    /** @brief Writes a 32-bit float (bit-cast to u32). */
+    /**
+     * @brief Writes a 32-bit float (bit-cast to u32).
+     */
     void writeFloat(float value);
 
-    /** @brief Writes raw bytes (byte-aligned). */
+    /**
+     * @brief Writes raw bytes (byte-aligned).
+     */
     void writeBytes(std::span<const core::byte> bytes);
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Bit-packing / quantization (book §6.3.3)                              //
-    // --------------------------------------------------------------------- //
-
+    /**
+     * @name Bit-packing / quantization (book §6.3.3)
+     * @{
+     */
     /**
      * @brief Writes @p value quantized into @p bits over the range [min, max].
      *
      * The value is clamped to the range, mapped to an integer in
-     * [0, 2^bits - 1] and written with @p bits bits. A position in a 1000 m
-     * world quantized on 16 bits keeps a resolution of ~15 mm for a fraction of
-     * the 32-bit cost. Non-authoritative wire data only: the quantization is
-     * lossy, so a quantized value never flows back into authoritative Fixed32.
+     * [0, 2^bits - 1] (rounded to nearest, then held at the top edge when float
+     * error would push it one past) and written with @p bits bits. A position
+     * in a 1000 m world quantized on 16 bits keeps a resolution of ~15 mm for a
+     * fraction of the 32-bit cost. Non-authoritative wire data only: the
+     * quantization is lossy, so a quantized value never flows back into
+     * authoritative Fixed32.
      *
      * @param value Value to encode.
      * @param min   Lower bound of the range.
@@ -98,7 +117,9 @@ public:
      */
     void writeQuantizedFloat(float value, float min, float max, core::u32 bits);
 
-    /** @brief Reads a value written by @ref writeQuantizedFloat with the same params. */
+    /**
+     * @brief Reads a value written by @ref writeQuantizedFloat with the same params.
+     */
     [[nodiscard]] core::Expected<float> readQuantizedFloat(float min, float max, core::u32 bits);
 
     /**
@@ -110,7 +131,9 @@ public:
      */
     void writeAngle(float radians, core::u32 bits);
 
-    /** @brief Reads an angle written by @ref writeAngle, in [0, 2*pi). */
+    /**
+     * @brief Reads an angle written by @ref writeAngle, in [0, 2*pi).
+     */
     [[nodiscard]] core::Expected<float> readAngle(core::u32 bits);
 
     /**
@@ -122,52 +145,81 @@ public:
      */
     void writeVarint(core::u32 value);
 
-    /** @brief Reads a LEB128 varint written by @ref writeVarint. */
+    /**
+     * @brief Reads a LEB128 varint written by @ref writeVarint.
+     */
     [[nodiscard]] core::Expected<core::u32> readVarint();
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Read                                                                  //
-    // --------------------------------------------------------------------- //
-
-    /** @brief Reads @p bitCount bits as an unsigned value. */
+    /**
+     * @name Read
+     * @{
+     */
+    /**
+     * @brief Reads @p bitCount bits as an unsigned value.
+     */
     [[nodiscard]] core::Expected<core::u32> readBits(core::u32 bitCount);
 
-    /** @brief Reads a boolean. */
+    /**
+     * @brief Reads a boolean.
+     */
     [[nodiscard]] core::Expected<bool> readBool();
 
-    /** @brief Reads an unsigned 8-bit value. */
+    /**
+     * @brief Reads an unsigned 8-bit value.
+     */
     [[nodiscard]] core::Expected<core::u8> readU8();
 
-    /** @brief Reads an unsigned 16-bit value. */
+    /**
+     * @brief Reads an unsigned 16-bit value.
+     */
     [[nodiscard]] core::Expected<core::u16> readU16();
 
-    /** @brief Reads an unsigned 32-bit value. */
+    /**
+     * @brief Reads an unsigned 32-bit value.
+     */
     [[nodiscard]] core::Expected<core::u32> readU32();
 
-    /** @brief Reads a signed 32-bit value. */
+    /**
+     * @brief Reads a signed 32-bit value.
+     */
     [[nodiscard]] core::Expected<core::i32> readI32();
 
-    /** @brief Reads a 32-bit float. */
+    /**
+     * @brief Reads a 32-bit float.
+     */
     [[nodiscard]] core::Expected<float> readFloat();
 
-    /** @brief Reads @p count raw bytes. */
+    /**
+     * @brief Reads @p count raw bytes.
+     */
     [[nodiscard]] core::Expected<std::vector<core::byte>> readBytes(core::u32 count);
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Query                                                                 //
-    // --------------------------------------------------------------------- //
-
-    /** @brief Returns the total number of written bits. */
+    /**
+     * @name Query
+     * @{
+     */
+    /**
+     * @brief Returns the total number of written bits.
+     */
     [[nodiscard]] core::u32 bitsWritten() const noexcept;
 
-    /** @brief Returns the number of bits remaining for reading. */
+    /**
+     * @brief Returns the number of bits remaining for reading.
+     */
     [[nodiscard]] core::u32 bitsRemaining() const noexcept;
 
-    /** @brief Returns the underlying byte buffer. */
+    /**
+     * @brief Returns the underlying byte buffer.
+     */
     [[nodiscard]] std::span<const core::byte> data() const noexcept;
 
-    /** @brief Resets read/write cursors to the beginning. */
+    /**
+     * @brief Resets read/write cursors to the beginning.
+     */
     void reset() noexcept;
+    /** @} */
 
 private:
     std::vector<core::byte> _buffer;

@@ -1,13 +1,3 @@
-/**
- * @file KernelTransport.cpp
- * @brief Kernel module transport implementation (Zero-copy IPC).
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/net/transport/KernelTransport.hpp>
@@ -25,6 +15,16 @@
 
 namespace lpl::net::transport {
 
+namespace {
+
+[[nodiscard]] bool speaksThisProtocol(const LplSharedMemory &shm) noexcept
+{
+    return shm.header.magic == LPL_MAGIC && shm.header.version == LPL_PROTOCOL_VERSION &&
+           shm.header.slots == LPL_RING_SLOTS && shm.header.size == sizeof(LplSharedMemory);
+}
+
+} // namespace
+
 struct KernelTransport::Impl {
     const char *devicePath;
     int fd{-1};
@@ -39,16 +39,6 @@ struct KernelTransport::Impl {
     explicit Impl(const char *path) : devicePath{path} {}
 };
 
-namespace {
-
-[[nodiscard]] bool speaksThisProtocol(const LplSharedMemory &shm) noexcept
-{
-    return shm.header.magic == LPL_MAGIC && shm.header.version == LPL_PROTOCOL_VERSION &&
-           shm.header.slots == LPL_RING_SLOTS && shm.header.size == sizeof(LplSharedMemory);
-}
-
-} // namespace
-
 KernelTransport::KernelTransport(const char *devicePath) : _impl{std::make_unique<Impl>(devicePath)} {}
 
 KernelTransport::~KernelTransport() { close(); }
@@ -57,7 +47,7 @@ core::Expected<void> KernelTransport::open()
 {
     if (_impl->fd >= 0)
     {
-        return {}; // already open
+        return {};
     }
 
     _impl->fd = ::open(_impl->devicePath, O_RDWR);
@@ -196,16 +186,11 @@ core::Expected<core::u32> KernelTransport::sendBatch(std::span<const Datagram> d
         return core::u32{0};
     }
 
-    // The whole point of the ring: fill every slot first, then wake the module's
-    // kthread ONCE. Its ioctl is a plain wake_up_interruptible and the thread
-    // drains the entire ring, so one kick flushes N packets — this is the "kick"
-    // the book describes. Kicking per packet, as this used to (and as the legacy
-    // driver path did too), pays a syscall per datagram and throws that away.
     core::u32 accepted = 0;
     for (const auto &datagram : datagrams)
     {
         if (!pushSlot(datagram.data, datagram.address))
-            break; // ring full or packet oversized: flush what we have
+            break;
         ++accepted;
     }
 

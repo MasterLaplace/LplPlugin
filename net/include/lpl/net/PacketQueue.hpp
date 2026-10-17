@@ -44,7 +44,9 @@ public:
     PacketQueue() = default;
     ~PacketQueue() = default;
 
-    /** @brief Pushes a packet into the queue. */
+    /**
+     * @brief Pushes a packet into the queue.
+     */
     void push(QueuedPacket packet);
 
     /**
@@ -54,13 +56,19 @@ public:
      */
     bool pop(QueuedPacket &out);
 
-    /** @brief Returns @c true if the queue is empty. */
+    /**
+     * @brief Returns @c true if the queue is empty.
+     */
     [[nodiscard]] bool empty() const noexcept;
 
-    /** @brief Returns the number of queued packets. */
+    /**
+     * @brief Returns the number of queued packets.
+     */
     [[nodiscard]] core::u32 size() const noexcept;
 
-    /** @brief Discards all queued packets. */
+    /**
+     * @brief Discards all queued packets.
+     */
     void clear();
 
 private:

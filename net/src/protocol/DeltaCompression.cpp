@@ -1,13 +1,3 @@
-/**
- * @file DeltaCompression.cpp
- * @brief XOR delta compression implementation with zero-run-length encoding.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/net/protocol/DeltaCompression.hpp>
 

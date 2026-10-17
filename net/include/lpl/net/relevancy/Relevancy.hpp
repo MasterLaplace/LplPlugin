@@ -29,13 +29,19 @@
 
 namespace lpl::net::relevancy {
 
-/// Weight of the proximity term relative to one tick of staleness. A close entity
-/// (proximity ~1) can jump ahead of another that has waited up to this many ticks;
-/// beyond that, staleness wins and nothing starves.
+/**
+ * @brief Weight of the proximity term relative to one tick of staleness.
+ *
+ * A close entity (proximity ~1) can jump ahead of another that has waited up to
+ * this many ticks; beyond that, staleness wins and nothing starves.
+ */
 inline constexpr float kProximityWeight = 8.0f;
 
 /**
  * @brief Replication priority of one entity for one client, higher = send sooner.
+ *
+ * The proximity term, 1 / (1 + distanceSq), lies in (0, 1] and is 1 at the
+ * avatar.
  *
  * @param distanceSq         Squared distance from the client's avatar to the
  *                           entity, in world units². Only the ordering matters,
@@ -46,12 +52,7 @@ inline constexpr float kProximityWeight = 8.0f;
  * @return A monotonic score: strictly increasing in staleness, and (for equal
  *         staleness) strictly decreasing in distance.
  */
-[[nodiscard]] inline float priority(float distanceSq, core::u32 ticksSinceLastSent) noexcept
-{
-    const float proximity = 1.0f / (1.0f + distanceSq);             // (0, 1], 1 at the avatar
-    const float staleness = static_cast<float>(ticksSinceLastSent); // unbounded, anti-starvation
-    return kProximityWeight * proximity + staleness;
-}
+[[nodiscard]] inline float priority(float distanceSq, core::u32 ticksSinceLastSent) noexcept;
 
 /**
  * @brief Whether an entity is due for a network update this tick.
@@ -84,13 +85,10 @@ inline constexpr float kProximityWeight = 8.0f;
  * @param farInterval  Update interval (ticks) for the far ring; clamped to >= 1.
  * @return 1 for the near ring, else @p farInterval.
  */
-[[nodiscard]] inline core::u32 lodUpdateInterval(float distanceSq, float nearRadiusSq, core::u32 farInterval) noexcept
-{
-    if (nearRadiusSq <= 0.0f || distanceSq <= nearRadiusSq)
-        return 1;
-    return farInterval < 1 ? 1 : farInterval;
-}
+[[nodiscard]] inline core::u32 lodUpdateInterval(float distanceSq, float nearRadiusSq, core::u32 farInterval) noexcept;
 
 } // namespace lpl::net::relevancy
+
+#    include "Relevancy.inl"
 
 #endif // LPL_NET_RELEVANCY_RELEVANCY_HPP
