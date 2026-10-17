@@ -94,11 +94,10 @@ template <typename I, core::u32 F>
 requires std::is_signed_v<I>
 constexpr FixedPoint<I, F> FixedPoint<I, F>::operator/(FixedPoint rhs) const
 {
-    const auto wide = static_cast<wide_type>(_raw) << F;
-    constexpr auto kNarrowMax = static_cast<wide_type>(std::numeric_limits<I>::max());
-    if (wide >= -kNarrowMax && wide <= kNarrowMax)
-        return fromRaw(static_cast<I>(static_cast<I>(wide) / rhs._raw));
-    return fromRaw(static_cast<I>(wide / static_cast<wide_type>(rhs._raw)));
+    constexpr I kNarrowRaw = std::numeric_limits<I>::max() >> F;
+    if (_raw >= -kNarrowRaw && _raw <= kNarrowRaw)
+        return fromRaw(static_cast<I>(static_cast<I>(_raw << F) / rhs._raw));
+    return fromRaw(static_cast<I>((static_cast<wide_type>(_raw) << F) / static_cast<wide_type>(rhs._raw)));
 }
 
 template <typename I, core::u32 F>
