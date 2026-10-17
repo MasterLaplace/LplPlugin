@@ -44,16 +44,14 @@ public:
     /**
      * @brief Creates the pool with @p threadCount worker threads.
      * @param threadCount Number of worker threads.  Zero means
+     *        @c std::thread::hardware_concurrency().
      */
-    ///        @c std::thread::hardware_concurrency().
     explicit ThreadPool(core::u32 threadCount = 0);
 
-    /** @brief Drains pending tasks and joins all workers. */
+    /**
+     * @brief Drains pending tasks and joins all workers.
+     */
     ~ThreadPool();
-
-    // --------------------------------------------------------------------- //
-    //  Task submission                                                       //
-    // --------------------------------------------------------------------- //
 
     /**
      * @brief Enqueues a callable and returns its future.
@@ -73,63 +71,32 @@ public:
      */
     template <typename F> void enqueueDetached(F &&func);
 
-    // --------------------------------------------------------------------- //
-    //  Lifecycle                                                             //
-    // --------------------------------------------------------------------- //
-
     /**
      * @brief Signals workers to finish and blocks until all pending tasks
      *        are processed.
      */
     void shutdown();
 
-    /** @brief Returns the number of worker threads. */
+    /**
+     * @brief Returns the number of worker threads.
+     */
     [[nodiscard]] core::u32 threadCount() const noexcept;
 
 private:
-    /** @brief Worker loop — waits on the CV and processes tasks. */
+    /**
+     * @brief Worker loop — waits on the CV and processes tasks.
+     */
     void workerLoop();
 
     std::vector<std::thread> _workers;
     std::deque<std::function<void()>> _tasks;
     std::mutex _mutex;
     std::condition_variable _cv;
-    bool _stopping = false; /**< Set by @ref shutdown, read and written under @c _mutex only, so that a worker
-                                 between its check of the flag and its wait cannot miss the wake-up. */
+    bool _stopping = false; /**< Set by @ref shutdown, read and written under @c _mutex only: no wake-up is missed. */
 };
 
-// /////////////////////////////////////////////////////////////////////////////
-//  Template implementations                                                  //
-// /////////////////////////////////////////////////////////////////////////////
-
-template <typename F, typename... Args>
-auto ThreadPool::enqueue(F &&func, Args &&...args) -> std::future<std::invoke_result_t<F, Args...>>
-{
-    using ReturnType = std::invoke_result_t<F, Args...>;
-
-    auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-        std::bind(std::forward<F>(func), std::forward<Args>(args)...));
-
-    std::future<ReturnType> future = task->get_future();
-
-    {
-        std::lock_guard<std::mutex> lock{_mutex};
-        _tasks.emplace_back([task]() { (*task)(); });
-    }
-    _cv.notify_one();
-
-    return future;
-}
-
-template <typename F> void ThreadPool::enqueueDetached(F &&func)
-{
-    {
-        std::lock_guard<std::mutex> lock{_mutex};
-        _tasks.emplace_back(std::forward<F>(func));
-    }
-    _cv.notify_one();
-}
-
 } // namespace lpl::concurrency
+
+#    include "ThreadPool.inl"
 
 #endif // LPL_CONCURRENCY_THREADPOOL_HPP

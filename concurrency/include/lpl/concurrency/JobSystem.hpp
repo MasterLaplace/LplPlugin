@@ -37,8 +37,9 @@ struct JobHandle {
  * @class JobSystem
  * @brief Lock-free (per-deque) work-stealing scheduler.
  *
- * Each worker thread owns a local deque. Jobs are pushed to the issuing
- * thread's deque and stolen from the back by idle workers.
+ * Each worker thread owns a local deque. Jobs are submitted to a shared
+ * queue, which the workers drain into their deques, and an idle worker
+ * steals from the top of the other workers' deques.
  *
  * @par Usage
  * @code{.cpp}
@@ -57,15 +58,17 @@ public:
      */
     explicit JobSystem(core::u32 workerCount = 0);
 
-    /** @brief Shuts down all workers after draining pending jobs. */
+    /**
+     * @brief Stops the workers and joins them, without draining the jobs still pending.
+     */
     ~JobSystem();
-
-    // --------------------------------------------------------------------- //
-    //  Job submission                                                        //
-    // --------------------------------------------------------------------- //
 
     /**
      * @brief Submits a job and increments the handle counter.
+     *
+     * The job goes to the shared submission queue, under its mutex, so any thread may submit;
+     * the workers drain that queue into their local deques.
+     *
      * @param job Callable to execute.
      * @param handle Associated handle whose counter is decremented on
      *        completion.
@@ -73,14 +76,15 @@ public:
     void kickJob(std::function<void()> job, JobHandle &handle);
 
     /**
-     * @brief Spins (assisting with work) until @p handle.counter reaches
-     *        @p targetValue.
+     * @brief Spins until @p handle.counter reaches @p targetValue.
      * @param handle Handle to wait on.
      * @param targetValue Target counter value (typically 0).
      */
     void waitForCounter(const JobHandle &handle, core::i32 targetValue) const;
 
-    /** @brief Returns the worker thread count. */
+    /**
+     * @brief Returns the worker thread count.
+     */
     [[nodiscard]] core::u32 workerCount() const noexcept;
 
 private:
@@ -93,17 +97,33 @@ private:
         ChaseLevDeque<Job *> localQueue;
     };
 
+    /**
+     * @brief Runs jobs until the system stops.
+     *
+     * Each turn moves one job, if any, from the shared submission queue into the worker's local
+     * deque, then runs the job its deque pops or, when the deque is empty, one stolen from another
+     * worker.
+     *
+     * @param workerIndex The worker this thread is.
+     */
     void workerLoop(core::u32 workerIndex);
 
+    /**
+     * @brief Steals a job from the other workers' deques, trying each in turn from the one after
+     *        @p thiefIndex.
+     *
+     * @param thiefIndex The worker that steals.
+     * @param[out] outJob Receives the stolen job.
+     * @return True when a job was stolen.
+     */
     bool trySteal(core::u32 thiefIndex, Job *&outJob);
 
     std::vector<std::thread> _workers;
     std::vector<std::unique_ptr<WorkerData>> _workerData;
     std::atomic<bool> _stopping{false};
 
-    /** @brief Shared MPSC queue for external job submissions (thread-safe). */
-    std::mutex _submissionMutex;
-    std::vector<Job *> _submissionQueue;
+    std::mutex _submissionMutex;         /**< Guards _submissionQueue. */
+    std::vector<Job *> _submissionQueue; /**< Jobs submitted from any thread, waiting for a worker. */
 };
 
 } // namespace lpl::concurrency
