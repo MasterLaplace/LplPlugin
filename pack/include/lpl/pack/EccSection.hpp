@@ -39,11 +39,11 @@ namespace lpl::pack {
  * @brief Header of the parity section; the parity bytes follow it.
  */
 struct EccV1 {
-    core::u32 protectedOffset; ///< First protected byte, from the start of the pack.
-    core::u32 protectedBytes;  ///< How many bytes are protected.
-    core::u32 rowBytes;        ///< Bytes per row; also the number of codewords.
-    core::u32 dataShards;      ///< Rows the protected span is cut into.
-    core::u32 parityShards;    ///< Parity symbols per codeword; follows as rowBytes each.
+    core::u32 protectedOffset; /**< First protected byte, from the start of the pack. */
+    core::u32 protectedBytes;  /**< How many bytes are protected. */
+    core::u32 rowBytes;        /**< Bytes per row; also the number of codewords. */
+    core::u32 dataShards;      /**< Rows the protected span is cut into. */
+    core::u32 parityShards;    /**< Parity symbols per codeword; follows as rowBytes each. */
 };
 static_assert(sizeof(EccV1) == 20u, "GamePack ecc layout is wire format");
 
@@ -52,11 +52,11 @@ static_assert(sizeof(EccV1) == 20u, "GamePack ecc layout is wire format");
  * @brief What a repair attempt found.
  */
 struct EccRepairReport {
-    bool present{false};            ///< The pack carried a parity section.
-    bool repaired{false};           ///< Every damaged codeword was corrected.
-    core::u32 codewords{0u};        ///< Codewords examined.
-    core::u32 damagedCodewords{0u}; ///< Codewords that were not already clean.
-    core::u32 correctedBytes{0u};   ///< Symbols actually changed.
+    bool present{false};            /**< The pack carried a parity section. */
+    bool repaired{false};           /**< Every damaged codeword was corrected. */
+    core::u32 codewords{0u};        /**< Codewords examined. */
+    core::u32 damagedCodewords{0u}; /**< Codewords that were not already clean. */
+    core::u32 correctedBytes{0u};   /**< Symbols actually changed. */
 };
 
 /**
@@ -65,6 +65,11 @@ struct EccRepairReport {
  * Takes a MUTABLE buffer, which is the whole point: a reader that can only look at
  * the bytes can report damage and nothing more. The kernel copies a GRUB module into
  * memory it owns before calling this.
+ *
+ * The transversal engine lives in codec/, not here. Writing the column walk a second
+ * time for the Rosetta plate would have been the third copy of "cut a span into rows and
+ * code down the columns", and the first two would then have been free to disagree about
+ * how the tail is padded.
  *
  * @param bytes     The pack image; modified where it was wrong.
  * @param size      Bytes available.

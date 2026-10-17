@@ -1,12 +1,3 @@
-/**
- * @file EccSection.cpp
- * @brief Transversal Reed-Solomon repair of a pack image.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/pack/EccSection.hpp>
 
 #include <lpl/codec/ReedSolomon.hpp>
@@ -21,9 +12,10 @@ namespace {
  * @brief Locates the parity section without going through View.
  *
  * View::open verifies the content hash, and on a damaged image that check is exactly
- * what fails — so the repair path cannot use it. It walks the section table itself,
- * bounds-checking every step, because the table it is walking is the thing that might
- * be corrupt.
+ * what fails — so the repair path cannot use it. It bounds-checks every step itself, and
+ * finds the parity through the header, not the section table: the table is inside the
+ * span the parity protects, so on the one burst that matters most — the one that lands
+ * on it — the table is precisely what is unreadable. See Header::eccOffset.
  *
  * @param bytes        The image.
  * @param size         Bytes available.
@@ -45,9 +37,6 @@ namespace {
     if (sizeof(Header) + tableBytes > header.totalSize)
         return false;
 
-    // The header, not the section table. The table is inside the span the parity
-    // protects, so on the one burst that matters most — the one that lands on it —
-    // the table is precisely what is unreadable. See Header::eccOffset.
     const core::u32 offset = header.eccOffset;
     const core::u32 sectionSize = header.eccSize;
     {
@@ -88,10 +77,6 @@ bool repairPack(core::u8 *bytes, core::u32 size, EccRepairReport &outReport) noe
 
     outReport.present = true;
 
-    // The transversal engine lives in codec/, not here. Writing the column walk a
-    // second time for the Rosetta plate would have been the third copy of "cut a span
-    // into rows and code down the columns", and the first two would then have been
-    // free to disagree about how the tail is padded.
     codec::TransversalReport columns{};
     if (!codec::transversalRepair(bytes + ecc.protectedOffset, ecc.protectedBytes, parity, ecc.dataShards,
                                   ecc.parityShards, ecc.rowBytes, columns))

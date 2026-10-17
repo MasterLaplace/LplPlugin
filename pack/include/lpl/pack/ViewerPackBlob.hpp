@@ -43,7 +43,7 @@
 
 namespace lpl::pack {
 
-/// The viewer cartridge: a WorldRecipe section and a LivingRecipe section.
+/** The viewer cartridge: a WorldRecipe section and a LivingRecipe section. */
 inline constexpr core::u8 kViewerPackBytes[] = {
     0x4Cu, 0x50u, 0x4Cu, 0x50u, 0x41u, 0x4Bu, 0x00u, 0x00u, 0x01u, 0x00u, 0x00u, 0x00u, 0x60u, 0x06u, 0x00u, 0x00u,
     0x03u, 0x00u, 0x00u, 0x00u, 0x06u, 0x17u, 0x8Bu, 0xA4u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -150,7 +150,7 @@ inline constexpr core::u8 kViewerPackBytes[] = {
 
 };
 
-/// Bytes in @ref kViewerPackBytes.
+/** Bytes in @ref kViewerPackBytes. */
 inline constexpr core::u32 kViewerPackSize = static_cast<core::u32>(sizeof(kViewerPackBytes));
 
 } // namespace lpl::pack

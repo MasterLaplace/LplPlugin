@@ -1,17 +1,3 @@
-/**
- * @file GamePack.cpp
- * @brief Implementation of the bounds-checked game package reader.
- *
- * Freestanding by construction: no allocation, no libc string handling, no
- * exceptions. Everything is arithmetic on offsets that is checked against the
- * image length before any dereference — a cartridge is untrusted input, and the
- * kernel is the target least able to survive a read past the end.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/pack/GamePack.hpp>
 
 #include <lpl/std/cstring.hpp>
@@ -25,13 +11,16 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
 constexpr char kMagic[kMagicSize] = {'L', 'P', 'L', 'P', 'A', 'K', '\0', '\0'};
 
-/// True when [offset, offset+length) fits inside [0, size), overflow included.
+/**
+ * @brief Whether [offset, offset+length) fits inside [0, size), overflow included.
+ *
+ * Compares against the remaining room rather than computing offset + length, which could
+ * wrap on a hostile or corrupt image.
+ */
 constexpr bool fitsWithin(core::u32 offset, core::u32 length, core::u32 size) noexcept
 {
     if (offset > size)
         return false;
-    // Compare against the remaining room rather than computing offset + length,
-    // which could wrap on a hostile or corrupt image.
     return length <= (size - offset);
 }
 
@@ -65,15 +54,12 @@ bool View::open(const core::u8 *bytes, core::u32 size) noexcept
     if (header.formatVersion != kFormatVersion)
         return false;
 
-    // The image must be exactly as long as it claims: a short buffer means a
-    // truncated transfer, a long one means we were handed something else.
     if (header.totalSize < sizeof(Header) || header.totalSize > size)
         return false;
 
-    // The section table must fit before any section does.
     const core::u32 tableBytes = header.sectionCount * static_cast<core::u32>(sizeof(SectionEntry));
     if (header.sectionCount != 0u && tableBytes / header.sectionCount != sizeof(SectionEntry))
-        return false; // multiplication overflowed
+        return false;
     if (!fitsWithin(static_cast<core::u32>(sizeof(Header)), tableBytes, header.totalSize))
         return false;
 
@@ -107,7 +93,7 @@ bool View::findSection(SectionType type, const core::u8 *&outBytes, core::u32 &o
         lpl::pmr::memcpy(&entry, _bytes + sizeof(Header) + i * sizeof(SectionEntry), sizeof(SectionEntry));
 
         if (entry.type != static_cast<core::u32>(type))
-            continue; // includes section types this build does not know about
+            continue;
         if (!fitsWithin(entry.offset, entry.size, _size))
             return false;
 

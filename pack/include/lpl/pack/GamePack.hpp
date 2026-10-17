@@ -42,10 +42,10 @@
 
 namespace lpl::pack {
 
-/// Bytes of the magic identifier at the head of every pack.
+/** Bytes of the magic identifier at the head of every pack. */
 inline constexpr core::u32 kMagicSize = 8u;
 
-/// Current wire format version. Bump on ANY layout change below.
+/** Current wire format version. Bump on ANY layout change below. */
 inline constexpr core::u32 kFormatVersion = 1u;
 
 /**
@@ -54,14 +54,15 @@ inline constexpr core::u32 kFormatVersion = 1u;
  *        a client may ignore server-only sections and vice versa, and an older
  *        reader must survive a newer pack that carries sections it never heard
  *        of. Only the sections a target actually needs have to be understood.
+ *
+ * 4 is reserved for a baked entity export (#181).
  */
 enum class SectionType : core::u32 {
     Unknown = 0u,
-    WorldRecipe = 1u,  ///< A procgen recipe: seed + passes (see RecipeV1).
-    LivingRecipe = 2u, ///< What lives on it: food web, herd, stigmergy (see LivingV1).
-    ViewProfile = 3u,  ///< What it LOOKS like: sky, water, palette (see ViewV1).
-    /// 4 is reserved for a baked entity export; see docs/PLAN_caine.md phase 4.2.
-    Ecc = 5u, ///< Transversal Reed-Solomon parity over the rest of the pack (see EccV1).
+    WorldRecipe = 1u,  /**< A procgen recipe: seed + passes (see RecipeV1). */
+    LivingRecipe = 2u, /**< What lives on it: food web, herd, stigmergy (see LivingV1). */
+    ViewProfile = 3u,  /**< What it LOOKS like: sky, water, palette (see ViewV1). */
+    Ecc = 5u,          /**< Transversal Reed-Solomon parity over the rest of the pack (see EccV1). */
 };
 
 /**
@@ -69,11 +70,11 @@ enum class SectionType : core::u32 {
  * @brief Fixed 32-byte prologue of every pack.
  */
 struct Header {
-    char magic[kMagicSize];  ///< "LPLPAK\0\0", never NUL-terminated as a string.
-    core::u32 formatVersion; ///< @ref kFormatVersion when written.
-    core::u32 totalSize;     ///< Size of the whole image, header included.
-    core::u32 sectionCount;  ///< Entries in the section table that follows.
-    core::u32 contentHash;   ///< FNV-1a over every byte after this header.
+    char magic[kMagicSize];  /**< "LPLPAK\0\0", never NUL-terminated as a string. */
+    core::u32 formatVersion; /**< @ref kFormatVersion when written. */
+    core::u32 totalSize;     /**< Size of the whole image, header included. */
+    core::u32 sectionCount;  /**< Entries in the section table that follows. */
+    core::u32 contentHash;   /**< FNV-1a over every byte after this header. */
 
     /**
      * Offset and size of the parity section, or 0 when there is none.
@@ -99,14 +100,18 @@ static_assert(sizeof(Header) == 32u, "GamePack header layout is wire format");
  * @brief One row of the section table, immediately after the header.
  */
 struct SectionEntry {
-    core::u32 type;     ///< A @ref SectionType value.
-    core::u32 offset;   ///< Byte offset from the start of the pack.
-    core::u32 size;     ///< Byte length of the section payload.
-    core::u32 reserved; ///< Must be 0.
+    core::u32 type;     /**< A @ref SectionType value. */
+    core::u32 offset;   /**< Byte offset from the start of the pack. */
+    core::u32 size;     /**< Byte length of the section payload. */
+    core::u32 reserved; /**< Must be 0. */
 };
 static_assert(sizeof(SectionEntry) == 16u, "GamePack section entry is wire format");
 
-/// Bits of RecipeV1::flags — which passes the recipe asks for.
+/**
+ * @name Bits of RecipeV1::flags
+ * @brief Which passes the recipe asks for.
+ * @{
+ */
 inline constexpr core::u32 kRecipeFlagNormalizeTerrain = 1u << 0;
 inline constexpr core::u32 kRecipeFlagErodeTerrain = 1u << 1;
 inline constexpr core::u32 kRecipeFlagCarveRivers = 1u << 2;
@@ -122,12 +127,17 @@ inline constexpr core::u32 kRecipeFlagRoadArterials = 1u << 11;
 inline constexpr core::u32 kRecipeFlagPartitionRegions = 1u << 12;
 inline constexpr core::u32 kRecipeFlagRaiseBuildings = 1u << 13;
 inline constexpr core::u32 kRecipeFlagBuildingsHollow = 1u << 14;
+/** @} */
 
-/// Longest roadside grammar a cartridge carries, NUL included. Must match the engine.
+/** Longest roadside grammar a cartridge carries, NUL included. Must match the engine. */
 inline constexpr core::u32 kWireRoadsidePattern = 64u;
 
-/// Bits of ScatterV1::flags.
+/**
+ * @name Bits of ScatterV1::flags
+ * @{
+ */
 inline constexpr core::u32 kScatterFlagCollidable = 1u << 0;
+/** @} */
 
 /**
  * @brief Scatter rules a wire recipe carries; mirrors procgen::kMaxScatterRules.
@@ -145,19 +155,19 @@ inline constexpr core::u32 kWireScatterRules = 8u;
  * @brief Wire form of one prop-placement rule.
  */
 struct ScatterV1 {
-    core::u32 biome;            ///< procgen::BiomeId value.
-    core::f32 density;          ///< Share of the biome's area to cover.
-    core::f32 halfExtent;       ///< Prop AABB half-size.
-    core::f32 maxSlope;         ///< Steepest ground it stands on.
-    core::f32 minMoisture;      ///< Driest ground it tolerates.
-    core::f32 maxMoisture;      ///< Wettest ground it tolerates.
-    core::f32 moistureAffinity; ///< How much wetter ground packs it closer.
-    core::u32 tag;              ///< Caller-defined kind.
-    core::f32 treeLine;         ///< Share of the height range above which it thins.
-    core::f32 altitudeFalloff;  ///< How sharply it thins past the tree line.
-    core::u32 maxRiverDistance; ///< Cells from running water; 0 disables the test.
-    core::f32 endemicShare;     ///< Share of regions this species inhabits.
-    core::u32 flags;            ///< kScatterFlag* bits.
+    core::u32 biome;            /**< procgen::BiomeId value. */
+    core::f32 density;          /**< Share of the biome's area to cover. */
+    core::f32 halfExtent;       /**< Prop AABB half-size. */
+    core::f32 maxSlope;         /**< Steepest ground it stands on. */
+    core::f32 minMoisture;      /**< Driest ground it tolerates. */
+    core::f32 maxMoisture;      /**< Wettest ground it tolerates. */
+    core::f32 moistureAffinity; /**< How much wetter ground packs it closer. */
+    core::u32 tag;              /**< Caller-defined kind. */
+    core::f32 treeLine;         /**< Share of the height range above which it thins. */
+    core::f32 altitudeFalloff;  /**< How sharply it thins past the tree line. */
+    core::u32 maxRiverDistance; /**< Cells from running water; 0 disables the test. */
+    core::f32 endemicShare;     /**< Share of regions this species inhabits. */
+    core::u32 flags;            /**< kScatterFlag* bits. */
 };
 static_assert(sizeof(ScatterV1) == 52u, "GamePack scatter rule is wire format");
 
@@ -191,13 +201,20 @@ static_assert(sizeof(ScatterV1) == 52u, "GamePack scatter rule is wire format");
  * author intended.
  */
 struct RecipeV1 {
-    // ── World ───────────────────────────────────────────────────────────────
+    /**
+     * @name World
+     * @{
+     */
     core::u32 seed;
     core::u32 width;
     core::u32 depth;
     core::f32 cellSize;
+    /** @} */
 
-    // ── Terrain noise ───────────────────────────────────────────────────────
+    /**
+     * @name Terrain noise
+     * @{
+     */
     core::u32 noiseSeed;
     core::f32 noiseFrequency;
     core::f32 noiseAmplitude;
@@ -206,18 +223,26 @@ struct RecipeV1 {
     core::f32 noiseLacunarity;
     core::f32 noisePersistence;
     core::f32 noiseWarpStrength;
-    core::u32 noiseKind; ///< procgen::NoiseKind value.
+    core::u32 noiseKind; /**< procgen::NoiseKind value. */
     core::f32 heightLow;
     core::f32 heightHigh;
-    core::f32 groundClearance; ///< Lowest the finished ground may sit; 0 leaves it where it fell.
-    core::u32 terraceSteps;    ///< 0 leaves the field smooth.
+    core::f32 groundClearance; /**< Lowest the finished ground may sit; 0 leaves it where it fell. */
+    core::u32 terraceSteps;    /**< 0 leaves the field smooth. */
+    /** @} */
 
-    // ── Thermal erosion ─────────────────────────────────────────────────────
+    /**
+     * @name Thermal erosion
+     * @{
+     */
     core::u32 thermalIterations;
     core::f32 thermalTalus;
     core::f32 thermalCarryFraction;
+    /** @} */
 
-    // ── Hydraulic erosion ───────────────────────────────────────────────────
+    /**
+     * @name Hydraulic erosion
+     * @{
+     */
     core::u32 hydraulicIterations;
     core::f32 hydraulicRainAmount;
     core::f32 hydraulicSolubility;
@@ -225,13 +250,21 @@ struct RecipeV1 {
     core::f32 hydraulicSedimentCapacity;
     core::f32 hydraulicDeposition;
     core::f32 hydraulicMinSlope;
+    /** @} */
 
-    // ── Rivers ──────────────────────────────────────────────────────────────
+    /**
+     * @name Rivers
+     * @{
+     */
     core::f32 riverDensity;
     core::f32 riverCarveDepth;
     core::u32 riverSmoothing;
+    /** @} */
 
-    // ── Climate ─────────────────────────────────────────────────────────────
+    /**
+     * @name Climate
+     * @{
+     */
     core::f32 climateRainfallWeight;
     core::f32 climateFlowWeight;
     core::f32 climateAltitudeWeight;
@@ -244,21 +277,29 @@ struct RecipeV1 {
     core::u32 climateRainfallSeed;
     core::f32 climateRainfallBelts;
     core::u32 climateRainfallOctaves;
+    /** @} */
 
-    // ── Biomes ──────────────────────────────────────────────────────────────
+    /**
+     * @name Biomes
+     * @{
+     */
     core::f32 biomeSeaLevel;
     core::f32 biomeBeachHeight;
     core::f32 biomeMountainHeight;
     core::f32 biomeSnowHeight;
     core::f32 biomeSnowlineWarmth;
+    /** @} */
 
-    // ── Climate axes ────────────────────────────────────────────────────────
-    //
-    // These seven words used to carry the Whittaker thresholds (dry, wet, marsh,
-    // polar, temperate...). Those thresholds no longer exist: the classification
-    // is a nearest-profile lookup, and a profile table is code, not content. The
-    // words are reused rather than appended because the format was never
-    // published — there is no reader in the wild to keep happy.
+    /**
+     * @name Climate axes
+     *
+     * These seven words used to carry the Whittaker thresholds (dry, wet, marsh,
+     * polar, temperate...). Those thresholds no longer exist: the classification
+     * is a nearest-profile lookup, and a profile table is code, not content. The
+     * words are reused rather than appended because the format was never
+     * published — there is no reader in the wild to keep happy.
+     * @{
+     */
     core::f32 axisColdLatitude;
     core::f32 axisLapseRate;
     core::f32 axisCoastReach;
@@ -266,24 +307,36 @@ struct RecipeV1 {
     core::f32 axisWeirdnessBelts;
     core::u32 axisWeirdnessOctaves;
     core::f32 axisSurfaceDepth;
+    /** @} */
 
-    // ── Provinces ───────────────────────────────────────────────────────────
+    /**
+     * @name Provinces
+     * @{
+     */
     core::u32 provinceWidth;
     core::u32 provinceDepth;
     core::u32 provinceSeed;
     core::u32 provinceCellSize;
     core::f32 provinceJitter;
     core::f32 provinceWarpStrength;
-    core::u32 provinceMetric; ///< procgen::DistanceMetric value.
+    core::u32 provinceMetric; /**< procgen::DistanceMetric value. */
+    /** @} */
 
-    // ── Underground ─────────────────────────────────────────────────────────
-    //
-    // Four generators, and the recipe names which one runs. Carrying all four sets of
-    // parameters rather than a union is what lets a document switch generator without
-    // losing the settings of the one it is leaving.
-    core::u32 caveKind; ///< procgen::CaveKind value.
+    /**
+     * @name Underground
+     *
+     * Four generators, and the recipe names which one runs. Carrying all four sets of
+     * parameters rather than a union is what lets a document switch generator without
+     * losing the settings of the one it is leaving.
+     * @{
+     */
+    core::u32 caveKind; /**< procgen::CaveKind value. */
+    /** @} */
 
-    // Cellular.
+    /**
+     * @name Underground: cellular
+     * @{
+     */
     core::u32 caveWidth;
     core::u32 caveDepth;
     core::u32 caveSeed;
@@ -292,8 +345,12 @@ struct RecipeV1 {
     core::u32 caveBirthLimit;
     core::u32 caveSurvivalLimit;
     core::u32 caveMinRegionSize;
+    /** @} */
 
-    // BSP rooms.
+    /**
+     * @name Underground: BSP rooms
+     * @{
+     */
     core::u32 roomsWidth;
     core::u32 roomsDepth;
     core::u32 roomsSeed;
@@ -301,8 +358,12 @@ struct RecipeV1 {
     core::u32 roomsMinLeafSize;
     core::u32 roomsPadding;
     core::u32 roomsCorridorWidth;
+    /** @} */
 
-    // Diffusion-limited aggregation.
+    /**
+     * @name Underground: diffusion-limited aggregation
+     * @{
+     */
     core::u32 dlaWidth;
     core::u32 dlaDepth;
     core::u32 dlaSeed;
@@ -310,10 +371,16 @@ struct RecipeV1 {
     core::u32 dlaMaxStepsPerParticle;
     core::u32 dlaSpawnMargin;
     core::u32 dlaThickness;
+    /** @} */
 
-    // The layered system. Every knob, not a chosen five: a document that can name
-    // only half a generator sends its author back to hand-written builder calls for
-    // the other half, which is the thing this format exists to stop.
+    /**
+     * @name Underground: the layered system
+     *
+     * Every knob, not a chosen five: a document that can name only half a generator
+     * sends its author back to hand-written builder calls for the other half, which is
+     * the thing this format exists to stop.
+     * @{
+     */
     core::u32 systemWidth;
     core::u32 systemDepth;
     core::u32 systemSeed;
@@ -326,8 +393,12 @@ struct RecipeV1 {
     core::u32 systemShaftsPerPair;
     core::u32 systemEntrances;
     core::f32 systemEntranceMaxSlope;
+    /** @} */
 
-    // ── Settlement ──────────────────────────────────────────────────────────
+    /**
+     * @name Settlement
+     * @{
+     */
     core::u32 settlementSeed;
     core::u32 settlementDistrictSize;
     core::u32 settlementRoadWidth;
@@ -337,8 +408,12 @@ struct RecipeV1 {
     core::f32 settlementPlotDensity;
     core::f32 settlementMaxSlope;
     core::f32 settlementMinHeight;
+    /** @} */
 
-    // ── Roads ───────────────────────────────────────────────────────────────
+    /**
+     * @name Roads
+     * @{
+     */
     core::u32 roadSeed;
     core::u32 roadIterations;
     core::u32 roadStepLength;
@@ -346,8 +421,12 @@ struct RecipeV1 {
     core::f32 roadMaxSlope;
     core::f32 roadMinHeight;
     core::u32 roadGridDistricts;
+    /** @} */
 
-    // ── The shape grammar ───────────────────────────────────────────────────
+    /**
+     * @name The shape grammar
+     * @{
+     */
     core::u32 buildingSeed;
     core::u32 buildingMinFloors;
     core::u32 buildingMaxFloors;
@@ -360,19 +439,28 @@ struct RecipeV1 {
     core::u32 buildingWallMaterial;
     core::u32 buildingRoofMaterial;
 
-    core::u32 roadsideLevels;                   ///< 0 leaves the verges bare.
-    char roadsidePattern[kWireRoadsidePattern]; ///< NUL-terminated L-system.
+    core::u32 roadsideLevels;                   /**< 0 leaves the verges bare. */
+    char roadsidePattern[kWireRoadsidePattern]; /**< NUL-terminated L-system. */
+    /** @} */
 
-    // ── Playability gate ────────────────────────────────────────────────────
+    /**
+     * @name Playability gate
+     * @{
+     */
     core::u32 gateMinPathLength;
     core::u32 gateMinWalkableCells;
     core::u32 gateMaxDeadEndRatio;
+    /** @} */
 
-    // ── Population ──────────────────────────────────────────────────────────
+    /**
+     * @name Population
+     * @{
+     */
     ScatterV1 scatter[kWireScatterRules];
     core::u32 scatterCount;
+    /** @} */
 
-    core::u32 flags; ///< kRecipeFlag* bits.
+    core::u32 flags; /**< kRecipeFlag* bits. */
 };
 static_assert(sizeof(RecipeV1) == 996u, "GamePack recipe layout is wire format");
 
@@ -385,15 +473,15 @@ static_assert(sizeof(RecipeV1) == 996u, "GamePack recipe layout is wire format")
  * of the gate.
  */
 struct LivingSpeciesV1 {
-    core::u32 level;      ///< ecology::TrophicLevel value.
-    core::i32 growth;     ///< Raw Q16.16.
-    core::i32 mortality;  ///< Raw Q16.16.
-    core::i32 predation;  ///< Raw Q16.16.
-    core::i32 conversion; ///< Raw Q16.16.
-    core::i32 capacity;   ///< Raw Q16.16.
-    core::i32 refuge;     ///< Raw Q16.16.
-    core::i32 initial;    ///< Raw Q16.16 head count at tick 0.
-    core::u32 preyIndex;  ///< Index into the table; 0xFFFFFFFF for a producer.
+    core::u32 level;      /**< ecology::TrophicLevel value. */
+    core::i32 growth;     /**< Raw Q16.16. */
+    core::i32 mortality;  /**< Raw Q16.16. */
+    core::i32 predation;  /**< Raw Q16.16. */
+    core::i32 conversion; /**< Raw Q16.16. */
+    core::i32 capacity;   /**< Raw Q16.16. */
+    core::i32 refuge;     /**< Raw Q16.16. */
+    core::i32 initial;    /**< Raw Q16.16 head count at tick 0. */
+    core::u32 preyIndex;  /**< Index into the table; 0xFFFFFFFF for a producer. */
 };
 static_assert(sizeof(LivingSpeciesV1) == 36u, "GamePack living species layout is wire format");
 
@@ -412,17 +500,28 @@ static_assert(sizeof(LivingSpeciesV1) == 36u, "GamePack living species layout is
  * had no way to say what grazed in it. This closes that.
  */
 struct LivingV1 {
-    // ── Run ─────────────────────────────────────────────────────────────────
+    /**
+     * @name Run
+     * @{
+     */
     core::u32 seed;
     core::u32 ticks;
-    core::i32 stepSeconds; ///< Raw Q16.16 seconds per step.
+    core::i32 stepSeconds; /**< Raw Q16.16 seconds per step. */
+    /** @} */
 
-    // ── Field ───────────────────────────────────────────────────────────────
+    /**
+     * @name Field
+     * @{
+     */
     core::u32 width;
     core::u32 depth;
     core::u32 channels;
+    /** @} */
 
-    // ── Populations ─────────────────────────────────────────────────────────
+    /**
+     * @name Populations
+     * @{
+     */
     core::u32 rooms;
     core::u32 creatures;
     core::u32 ants;
@@ -431,58 +530,91 @@ struct LivingV1 {
     core::u32 packMembers;
     core::u32 regrowthTicks;
     core::u32 headPerBody;
+    /** @} */
 
-    // ── Stigmergy ───────────────────────────────────────────────────────────
+    /**
+     * @name Stigmergy
+     * @{
+     */
     core::f32 evaporation;
     core::f32 diffusion;
     core::f32 maximum;
     core::f32 floorValue;
+    /** @} */
 
-    // ── Foraging ────────────────────────────────────────────────────────────
+    /**
+     * @name Foraging
+     * @{
+     */
     core::u32 explore16;
-    core::i32 depositQuality; ///< Raw Q16.16.
+    core::i32 depositQuality; /**< Raw Q16.16. */
     core::u32 trailChannel;
+    /** @} */
 
-    // ── Flock ───────────────────────────────────────────────────────────────
-    core::i32 separationRadius; ///< Raw Q16.16.
-    core::i32 neighbourRadius;  ///< Raw Q16.16.
+    /**
+     * @name Flock
+     * @{
+     */
+    core::i32 separationRadius; /**< Raw Q16.16. */
+    core::i32 neighbourRadius;  /**< Raw Q16.16. */
     core::f32 separationWeight;
     core::f32 alignmentWeight;
     core::f32 cohesionWeight;
     core::f32 maxSpeed;
+    /** @} */
 
-    // ── Realisation budget ──────────────────────────────────────────────────
+    /**
+     * @name Realisation budget
+     * @{
+     */
     core::u32 maxRealisedRooms;
     core::u32 changeWeight;
     core::u32 adjacentBonus;
     core::u32 predictedBonus;
     core::u32 unlikelyPenalty;
+    /** @} */
 
-    // ── Heredity ────────────────────────────────────────────────────────────
+    /**
+     * @name Heredity
+     * @{
+     */
     core::u32 mutationChance16;
     core::f32 mutationAmplitude;
     core::u32 collapseShare16;
     core::u32 meltdownChance16;
     core::f32 meltdownAmplitude;
     core::f32 anomalySigma;
+    /** @} */
 
-    // ── Packs ───────────────────────────────────────────────────────────────
+    /**
+     * @name Packs
+     * @{
+     */
     core::u32 packMaxSize;
     core::u32 packMinSize;
     core::u32 dissolutionChance16;
-    core::u32 adoptStrays; ///< 0 or 1.
+    core::u32 adoptStrays; /**< 0 or 1. */
+    /** @} */
 
-    // ── The food web ────────────────────────────────────────────────────────
+    /**
+     * @name The food web
+     * @{
+     */
     LivingSpeciesV1 species[4];
     core::u32 speciesCount;
+    /** @} */
 };
 static_assert(sizeof(LivingV1) == 316u, "GamePack living layout is wire format");
 
-/// Biome colours a wire view profile carries; covers procgen::BiomeId's range.
+/** Biome colours a wire view profile carries; covers procgen::BiomeId's range. */
 inline constexpr core::u32 kWireBiomeColours = 16u;
 
-/// Bits of ViewV1::flags.
-inline constexpr core::u32 kViewFlagOverridePalette = 1u << 0; ///< Use the table below.
+/**
+ * @name Bits of ViewV1::flags
+ * @{
+ */
+inline constexpr core::u32 kViewFlagOverridePalette = 1u << 0; /**< Use the table below. */
+/** @} */
 
 /**
  * @struct ViewV1
@@ -506,7 +638,10 @@ inline constexpr core::u32 kViewFlagOverridePalette = 1u << 0; ///< Use the tabl
  * pixel is a budget. engine::HostProfile keeps the budgets.
  */
 struct ViewV1 {
-    // ── Sky ─────────────────────────────────────────────────────────────────
+    /**
+     * @name Sky
+     * @{
+     */
     core::f32 zenithR;
     core::f32 zenithG;
     core::f32 zenithB;
@@ -524,33 +659,47 @@ struct ViewV1 {
     core::f32 mieSharpness;
     core::f32 nightFloor;
 
-    /// Time of day at load, in [0, 1). Not a sun VECTOR: the vector is derived,
-    /// and storing both invites a pack whose two halves disagree.
+    /**
+     * Time of day at load, in [0, 1). Not a sun VECTOR: the vector is derived,
+     * and storing both invites a pack whose two halves disagree.
+     */
     core::f32 dayFraction;
+    /** @} */
 
-    // ── Surface ─────────────────────────────────────────────────────────────
+    /**
+     * @name Surface
+     * @{
+     */
     core::f32 seaLevel;
     core::f32 fogDensity;
     core::f32 ambient;
     core::f32 grainTiles;
     core::u32 shadowSteps;
+    /** @} */
 
-    // ── Water ───────────────────────────────────────────────────────────────
-    core::u32 waterShallow; ///< Packed 0x00RRGGBB, as everything else here.
+    /**
+     * @name Water
+     * @{
+     */
+    core::u32 waterShallow; /**< Packed 0x00RRGGBB, as everything else here. */
     core::u32 waterDeep;
     core::f32 rippleScale;
     core::f32 rippleAmplitude;
     core::f32 glintPower;
     core::f32 depthScale;
+    /** @} */
 
-    // ── The swell ───────────────────────────────────────────────────────────
-    //
-    // A sea is not a bigger lake, and until these existed the format could not tell the
-    // two apart: it could name a water COLOUR and a ripple frequency, and every body of
-    // water the document could express came out as the same flat rippling mirror.
-    //
-    // All default to zero, which is off, so a cartridge baked before them describes the
-    // same water it always described. See render::WaterParams for what each one buys.
+    /**
+     * @name The swell
+     *
+     * A sea is not a bigger lake, and until these existed the format could not tell the
+     * two apart: it could name a water COLOUR and a ripple frequency, and every body of
+     * water the document could express came out as the same flat rippling mirror.
+     *
+     * All default to zero, which is off, so a cartridge baked before them describes the
+     * same water it always described. See render::WaterParams for what each one buys.
+     * @{
+     */
     core::f32 swellHeight;
     core::f32 crestSharpness;
     core::f32 chopStrength;
@@ -560,33 +709,49 @@ struct ViewV1 {
     core::f32 foamWidth;
     core::f32 foamCrest;
     core::f32 scatterStrength;
+    /** @} */
 
-    // ── Creatures ───────────────────────────────────────────────────────────
+    /**
+     * @name Creatures
+     * @{
+     */
     core::u32 grazerTint;
     core::u32 hunterTint;
     core::f32 bodyScale;
+    /** @} */
 
-    // ── Biome palette ───────────────────────────────────────────────────────
-    //
-    // Indexed by procgen::BiomeId. Only consulted when kViewFlagOverridePalette
-    // is set, so a pack that likes the built-in colours costs sixty-four zero
-    // bytes and says nothing, rather than accidentally painting the world black.
+    /**
+     * @name Biome palette
+     *
+     * Indexed by procgen::BiomeId. Only consulted when kViewFlagOverridePalette
+     * is set, so a pack that likes the built-in colours costs sixty-four zero
+     * bytes and says nothing, rather than accidentally painting the world black.
+     * @{
+     */
     core::u32 biomeColour[kWireBiomeColours];
     core::u32 biomeColourCount;
+    /** @} */
 
-    // ── Horizon ─────────────────────────────────────────────────────────────
-    //
-    // Per-metre-squared drop applied to terrain as it recedes from the camera
-    // (see render::HeightfieldPatchParams::curvatureFactor). 0 is off, so a
-    // cartridge baked before this field still shows an infinite flat plate,
-    // exactly as it always did.
+    /**
+     * @name Horizon
+     * @{
+     */
+    /**
+     * Per-metre-squared drop applied to terrain as it recedes from the camera
+     * (see render::HeightfieldPatchParams::curvatureFactor). 0 is off, so a
+     * cartridge baked before this field still shows an infinite flat plate,
+     * exactly as it always did.
+     */
     core::f32 curvatureFactor;
-    /// Growth of curvatureFactor per metre of altitude above seaLevel. 0 keeps the
-    /// bend fixed; a document opts into the dynamic mode by naming a value here,
-    /// and a dev who never wants it never has to.
+    /**
+     * Growth of curvatureFactor per metre of altitude above seaLevel. 0 keeps the
+     * bend fixed; a document opts into the dynamic mode by naming a value here,
+     * and a dev who never wants it never has to.
+     */
     core::f32 curvatureAltitudeGain;
+    /** @} */
 
-    core::u32 flags; ///< kViewFlag* bits.
+    core::u32 flags; /**< kViewFlag* bits. */
 };
 static_assert(sizeof(ViewV1) == 240u, "GamePack view profile layout is wire format");
 
@@ -606,6 +771,11 @@ static_assert(sizeof(ViewV1) == 240u, "GamePack view profile layout is wire form
  * it likes (a GRUB module, a network buffer, a file) and hands them here. Every
  * accessor re-validates against the image length, so a truncated or corrupt
  * cartridge yields a clean failure instead of reading past the end.
+ *
+ * Freestanding by construction: no allocation, no libc string handling, no
+ * exceptions. Everything is arithmetic on offsets that is checked against the
+ * image length before any dereference — a cartridge is untrusted input, and the
+ * kernel is the target least able to survive a read past the end.
  */
 class View {
 public:
@@ -613,16 +783,28 @@ public:
 
     /**
      * @brief Validates magic, version, size and content hash.
+     *
+     * The image may claim no more bytes than @p size holds: a shorter buffer means a
+     * truncated transfer. A longer one is accepted, and only the image's own length is
+     * read. The section table must fit before any section does, and a section count whose
+     * table size overflows 32 bits is refused.
+     *
      * @param bytes Start of the pack image.
      * @param size  Bytes available at @p bytes.
      * @return true if the image is a well-formed pack this build can read.
      */
     [[nodiscard]] bool open(const core::u8 *bytes, core::u32 size) noexcept;
 
-    /// @return true once @ref open has succeeded.
+    /**
+     * @brief Whether the view is open.
+     * @return true once @ref open has succeeded.
+     */
     [[nodiscard]] bool isOpen() const noexcept { return _bytes != nullptr; }
 
-    /// @return Number of sections in the table (0 when not open).
+    /**
+     * @brief Counts the sections of the image.
+     * @return Number of sections in the table (0 when not open).
+     */
     [[nodiscard]] core::u32 sectionCount() const noexcept;
 
     /**
