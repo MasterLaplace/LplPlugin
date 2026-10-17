@@ -1,16 +1,3 @@
-/**
- * @file ReedSolomon.cpp
- * @brief Systematic RS(n, k) over GF(256): encode, syndromes, Berlekamp-Massey,
- *        Chien search and Forney.
- *
- * Every working array is a fixed-size automatic: the decoder runs in ring 0 on a
- * cartridge that may itself be the thing that is broken, so it allocates nothing.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/ReedSolomon.hpp>
 
 #include <lpl/codec/GaloisField.hpp>
@@ -22,9 +9,6 @@ core::u32 generatorPolynomial(core::u32 parityCount, core::u8 *out) noexcept
     if (out == nullptr || parityCount == 0u || parityCount > kMaxParitySymbols)
         return 0u;
 
-    // g(x) = 1, then multiplied by (x - a^i) once per root. Over GF(256) subtraction
-    // is addition is XOR, so "x - a^i" and "x + a^i" are the same polynomial — which
-    // is why no sign appears anywhere below.
     out[0] = 1u;
     core::u32 degree = 0u;
 
@@ -32,7 +16,6 @@ core::u32 generatorPolynomial(core::u32 parityCount, core::u8 *out) noexcept
     {
         const core::u8 alpha = gf256Pow(root);
         out[degree + 1u] = 0u;
-        // In place, descending, so a coefficient is read before it is overwritten.
         for (core::u32 i = degree + 1u; i > 0u; --i)
             out[i] = gf256Add(out[i - 1u], gf256Mul(out[i], alpha));
         out[0] = gf256Mul(out[0], alpha);
@@ -52,9 +35,6 @@ bool reedSolomonEncode(const core::u8 *data, core::u32 dataCount, core::u32 pari
     if (generatorPolynomial(parityCount, generator) == 0u)
         return false;
 
-    // Long division of data * x^s by g(x); the remainder IS the parity. Written as a
-    // shift register rather than as an array division because the remainder is all
-    // that is wanted and the quotient would be computed only to be thrown away.
     for (core::u32 i = 0u; i < parityCount; ++i)
         outParity[i] = 0u;
 
@@ -66,8 +46,6 @@ bool reedSolomonEncode(const core::u8 *data, core::u32 dataCount, core::u32 pari
         outParity[0] = gf256Mul(feedback, generator[0]);
     }
 
-    // The register holds the remainder with the highest-order symbol last; the wire
-    // wants it in transmission order.
     for (core::u32 i = 0u; i < parityCount / 2u; ++i)
     {
         const core::u8 held = outParity[i];
@@ -87,11 +65,6 @@ bool reedSolomonCorrect(core::u8 *codeword, core::u32 symbolCount, core::u32 par
     if (symbolCount <= parityCount || symbolCount > kMaxCodewordSymbols)
         return false;
 
-    // ── Syndromes ─────────────────────────────────────────────────────────────
-    //
-    // S_i = C(a^i). A codeword with no errors is a multiple of g(x), whose roots are
-    // exactly those points, so every syndrome is zero. Any non-zero one is proof of
-    // corruption — and the cheapest proof there is, at one field multiply per symbol.
     core::u8 syndrome[kMaxParitySymbols]{};
     bool clean = true;
     for (core::u32 i = 0u; i < parityCount; ++i)
@@ -111,11 +84,6 @@ bool reedSolomonCorrect(core::u8 *codeword, core::u32 symbolCount, core::u32 par
         return true;
     }
 
-    // ── Berlekamp-Massey: the shortest recurrence the syndromes obey ──────────
-    //
-    // The error locator polynomial's roots are the inverse positions of the errors.
-    // Finding it is finding the shortest linear feedback register that generates the
-    // syndrome sequence, which is what this loop does — one discrepancy at a time.
     core::u8 locator[kMaxParitySymbols + 1u]{};
     core::u8 previous[kMaxParitySymbols + 1u]{};
     core::u8 scratch[kMaxParitySymbols + 1u]{};
@@ -159,15 +127,12 @@ bool reedSolomonCorrect(core::u8 *codeword, core::u32 symbolCount, core::u32 par
 
     outRepair.errorDegree = locatorLength;
     if (locatorLength == 0u || locatorLength > parityCount / 2u)
-        return false; // more errors than the bound allows; say so rather than guess
+        return false;
 
-    // ── Chien search: which positions the locator points at ───────────────────
     core::u32 position[kMaxParitySymbols]{};
     core::u32 found = 0u;
     for (core::u32 i = 0u; i < symbolCount; ++i)
     {
-        // The symbol at index i has position exponent (symbolCount - 1 - i), because
-        // the codeword was evaluated highest-degree-first above.
         const core::u32 exponent = symbolCount - 1u - i;
         const core::u8 point = gf256Pow((255u - (exponent % 255u)) % 255u);
         if (gf256Evaluate(locator, locatorLength + 1u, point) != 0u)
@@ -178,14 +143,8 @@ bool reedSolomonCorrect(core::u8 *codeword, core::u32 symbolCount, core::u32 par
     }
 
     if (found != locatorLength)
-        return false; // the locator has roots outside the codeword: not our errors
+        return false;
 
-    // ── Forney: how much each of them is wrong by ─────────────────────────────
-    //
-    // Omega(x) = S(x) * Lambda(x) mod x^s, and the magnitude at a root is
-    // Omega(X^-1) / Lambda'(X^-1). The formal derivative over a field of
-    // characteristic two keeps only the odd-degree terms, which is why the loop
-    // below steps by two — every even term differentiates to zero.
     core::u8 omega[kMaxParitySymbols]{};
     for (core::u32 i = 0u; i < parityCount; ++i)
     {
@@ -209,13 +168,6 @@ bool reedSolomonCorrect(core::u8 *codeword, core::u32 symbolCount, core::u32 par
         if (derivative == 0u)
             return false;
 
-        // e_j = X_j^(1-b) * Omega(X_j^-1) / Lambda'(X_j^-1), and this code's first
-        // consecutive root is b = 0, so the factor is X_j itself.
-        //
-        // Leaving it out was measured rather than reasoned about: the decoder refused
-        // 194 of 200 single-error codewords and fixed 6. Three percent is one position
-        // in forty, which is exactly the share where X_j happens to be one — the only
-        // place a missing multiplication by X_j is invisible.
         const core::u8 locatorValue = gf256Pow(exponent % 255u);
         const core::u8 magnitude = gf256Mul(locatorValue, gf256Div(numerator, derivative));
         if (magnitude == 0u)
@@ -225,9 +177,6 @@ bool reedSolomonCorrect(core::u8 *codeword, core::u32 symbolCount, core::u32 par
         ++outRepair.errorCount;
     }
 
-    // Verify rather than trust. A bounded-distance decoder handed more errors than it
-    // can correct will happily converge on a WRONG codeword, and the syndromes are the
-    // only thing that tells the two apart.
     for (core::u32 i = 0u; i < parityCount; ++i)
     {
         core::u8 value = 0u;

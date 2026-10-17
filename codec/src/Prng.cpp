@@ -1,12 +1,3 @@
-/**
- * @file Prng.cpp
- * @brief The robust soliton distribution, in integers, and the seed expansion.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/Prng.hpp>
 
 #include <lpl/math/FixedMath.hpp>
@@ -20,15 +11,19 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 /**
  * @brief The label that turns a droplet seed into its own stream.
  *
- * Part of the wire format: it decides which source blocks a seed names.
+ * Part of the wire format: it decides which source blocks a seed names. Changing it
+ * changes what every seed means, and therefore what every strand already written
+ * decodes to.
  */
 constexpr core::u32 kDropletSalt = 0xD0B1E7u;
 
 /**
  * @brief ln(2) in Q16.16, the bridge from the base-two logarithm this project has to
  *        the natural one the distribution is written with.
+ *
+ * round(0.6931472 * 65536).
  */
-constexpr core::i32 kLn2Raw = 45426; // round(0.6931472 * 65536)
+constexpr core::i32 kLn2Raw = 45426;
 
 /**
  * @brief Natural logarithm of a positive integer, in Q16.16, without libm.
@@ -81,11 +76,6 @@ void SolitonTable::build(const SolitonParams &params)
 
     const core::u32 k = _sourceBlocks;
 
-    // R = c * ln(K / delta) * sqrt(K).
-    //
-    // K/delta is computed as an integer ratio rather than a Fixed32 division so the
-    // argument of the logarithm stays exact: delta is small, so K/delta is large, and
-    // a Q16.16 intermediate would overflow long before the logarithm saw it.
     const core::u32 deltaRaw = params.delta.raw() > 0 ? static_cast<core::u32>(params.delta.raw()) : 1u;
     const core::u64 ratio = (static_cast<core::u64>(k) << 16) / deltaRaw;
     const core::u32 boundedRatio = ratio > 0xFFFFFFFFull ? 0xFFFFFFFFu : static_cast<core::u32>(ratio);
@@ -93,9 +83,6 @@ void SolitonTable::build(const SolitonParams &params)
     _robustScale =
         params.c * fixedLn(boundedRatio) * math::fixedSqrt(math::Fixed32::fromInt(static_cast<core::i32>(k)));
 
-    // The spike sits at K/R. A robust scale at or below one would put it past K,
-    // where tau is defined to be zero — the distribution then degenerates to the
-    // ideal soliton, which is the correct behaviour rather than a special case.
     core::u32 spike = k;
     if (_robustScale.raw() > 0)
     {
@@ -104,7 +91,6 @@ void SolitonTable::build(const SolitonParams &params)
     }
     _spikeDegree = spike;
 
-    // tau's spike value: R * ln(R / delta) / K.
     const core::u32 robustInteger = _robustScale.raw() > 0 ? static_cast<core::u32>(_robustScale.raw() >> 16) : 0u;
     const core::u64 spikeRatio = robustInteger == 0u ? 0u : (static_cast<core::u64>(robustInteger) << 16) / deltaRaw;
     const math::Fixed32 spikeWeight =
@@ -113,14 +99,8 @@ void SolitonTable::build(const SolitonParams &params)
     _cumulative.resize(k, core::u64{0});
     for (core::u32 degree = 1u; degree <= k; ++degree)
     {
-        // Ideal soliton: rho(1) = 1/K, rho(d) = 1/(d(d-1)).
         core::u64 weight = degree == 1u ? inverseQ32(k) : inverseQ32(static_cast<core::u64>(degree) * (degree - 1u));
 
-        // Robust component: tau(d) = R/(dK) below the spike, the spike value at it,
-        // zero past it. This is the whole point of "robust" — it manufactures the
-        // degree-one droplets the peeling decoder needs to start, which the ideal
-        // distribution produces exactly one of on average and therefore often not at
-        // all.
         if (degree < spike)
         {
             const core::u64 numerator = static_cast<core::u64>(robustInteger) << 32;
@@ -144,20 +124,6 @@ core::u32 SolitonTable::drawDegree(math::Random &stream) const noexcept
     if (_sourceBlocks == 0u || _total == 0u)
         return 1u;
 
-    // The draw is scaled into the total rather than the total being normalised into
-    // the draw: a normalisation would divide every weight and throw away the low bits
-    // of exactly the tail the Q32 accumulator exists to keep.
-    //
-    // The multiply is decomposed because the obvious form OVERFLOWS, and it does so
-    // silently and plausibly. The weights are Q32 and sum to a little over one, so
-    // _total sits just above 2^32; times a full 32-bit draw that is 2^64.3, which
-    // wraps. The histogram it produced was not empty or absurd — it was degrees two,
-    // three and four and nothing else, which reads exactly like a distribution with a
-    // narrow support rather than like arithmetic that failed. No degree-one droplet
-    // was ever drawn, so the peeling decoder had nothing to start from.
-    //
-    // __int128 would do it in one line and is unavailable on i686, which is the whole
-    // reason this project has the LPL_NO_INT128 rule.
     const core::u32 draw = stream.next();
     const core::u64 target = ((_total >> 32) * draw) + (((_total & 0xFFFFFFFFull) * draw) >> 32);
 
@@ -195,37 +161,11 @@ void expandDroplet(core::u32 seed, const SolitonTable &table, DropletPlan &out)
     if (blocks == 0u)
         return;
 
-    // deriveStream, NOT Random{seed}, and this is not a stylistic preference.
-    //
-    // Droplet seeds are consecutive by construction — the encoder walks them one by
-    // one. A xorshift32 seeded with a small integer does not avalanche on its first
-    // output: three shift-xors leave the high bits of consecutive seeds nearly
-    // ordered, so consecutive droplets drew nearly the same degree. Measured on the
-    // canonical case, degrees came out as 13 % / 73 % / 14 % over {2,3,4} and NOTHING
-    // else — no droplet of degree one was ever produced, so the peeling decoder had
-    // nothing to start from and every decode fell through to the elimination.
-    //
-    // What makes it worth this comment is that the failure did not look like a broken
-    // generator: a narrow, smooth, plausible-looking distribution reads as a tuning
-    // problem, and the table itself was correct all along.
-    //
-    // The salt is part of the format. Changing it changes what every seed means, and
-    // therefore what every strand already written decodes to.
     math::Random stream = math::deriveStream(seed, kDropletSalt);
     core::u32 degree = table.drawDegree(stream);
     if (degree > blocks)
         degree = blocks;
 
-    // Distinct indices by rejection, with the duplicate scan done against the small
-    // list rather than a K-sized occupancy array. The robust soliton puts most of its
-    // mass on low degrees, so this list is short in the overwhelming majority of
-    // draws, and an array per droplet would be the allocation this module exists to
-    // avoid.
-    //
-    // The attempt budget is what stops a pathological seed from spinning: a droplet
-    // that cannot reach its degree is shortened rather than retried forever. A
-    // fountain loses nothing by it — the next droplet is already available, which is
-    // the property the whole design rests on.
     const core::u32 attemptBudget = degree * 8u + 16u;
     for (core::u32 attempt = 0u; attempt < attemptBudget && out.indices.size() < degree; ++attempt)
     {
@@ -237,7 +177,6 @@ void expandDroplet(core::u32 seed, const SolitonTable &table, DropletPlan &out)
             out.indices.push_back(candidate);
     }
 
-    // Ascending, so the same seed always builds the same matrix row.
     for (core::usize i = 1u; i < out.indices.size(); ++i)
     {
         const core::u32 held = out.indices[i];

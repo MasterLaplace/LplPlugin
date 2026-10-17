@@ -44,11 +44,13 @@ namespace lpl::codec {
  * incapable of failing.
  */
 enum class XorPath : core::u32 {
-    Scalar = 0u, ///< 64-bit words, unrolled by four. The i686 and generic path.
-    Sse2 = 1u,   ///< 128-bit lanes. Baseline on x86-64, so no runtime dispatch.
+    Scalar = 0u, /**< 64-bit words, unrolled by four. The i686 and generic path. */
+    Sse2 = 1u,   /**< 128-bit lanes. Baseline on x86-64, so no runtime dispatch. */
 };
 
 /**
+ * @brief Reports which kernel this build compiled.
+ *
  * @return The path this translation unit compiled.
  */
 [[nodiscard]] XorPath activeXorPath() noexcept;
@@ -60,6 +62,12 @@ enum class XorPath : core::u32 {
  * hide load latency, which a dependent chain cannot. The tail is handled one word at
  * a time rather than by a masked store, because the tail is at most three words and a
  * mask register costs more to set up than the words cost to move.
+ *
+ * On x86-64 the SSE2 path takes two 128-bit lanes per iteration, i.e. four words, so the
+ * vector path and the scalar path consume the same stride. Its loads are unaligned: the
+ * rows ARE aligned (BitMatrix guarantees it), but a droplet payload handed in by net/ or
+ * pack/ is whatever the caller had, and on every processor this module targets an
+ * unaligned load of an aligned address costs the same as an aligned one.
  *
  * @param destination Row to accumulate into.
  * @param source      Row to add.

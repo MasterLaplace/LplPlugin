@@ -56,8 +56,8 @@ inline constexpr core::u32 kGf256Modulus = 0x11Du;
  * per symbol is not a rounding error in a decoder that runs one per byte.
  */
 struct Gf256Tables {
-    core::u8 exp[512]{}; ///< exp[i] = generator^i, repeated once.
-    core::u8 log[256]{}; ///< log[x] = i such that generator^i == x; log[0] is unused.
+    core::u8 exp[512]{}; /**< exp[i] = generator^i, repeated once. */
+    core::u8 log[256]{}; /**< log[x] = i such that generator^i == x; log[0] is unused. */
 };
 
 /**
@@ -80,7 +80,9 @@ struct Gf256Tables {
     return tables;
 }
 
-/// The field itself. One instance, read by the oracle and by ring 0.
+/**
+ * @brief The field itself. One instance, read by the oracle and by ring 0.
+ */
 inline constexpr Gf256Tables kGf256 = makeGf256Tables();
 
 /**
@@ -91,34 +93,19 @@ inline constexpr Gf256Tables kGf256 = makeGf256Tables();
 /**
  * @brief GF(256) multiplication by logarithms.
  */
-[[nodiscard]] constexpr core::u8 gf256Mul(core::u8 a, core::u8 b) noexcept
-{
-    if (a == 0u || b == 0u)
-        return 0u;
-    return kGf256.exp[static_cast<core::u32>(kGf256.log[a]) + static_cast<core::u32>(kGf256.log[b])];
-}
+[[nodiscard]] constexpr core::u8 gf256Mul(core::u8 a, core::u8 b) noexcept;
 
 /**
  * @brief GF(256) division. Dividing by zero yields zero rather than trapping: the
  *        callers feed it syndromes, where a zero divisor means the error locator
  *        already said there is nothing there.
  */
-[[nodiscard]] constexpr core::u8 gf256Div(core::u8 a, core::u8 b) noexcept
-{
-    if (a == 0u || b == 0u)
-        return 0u;
-    return kGf256.exp[static_cast<core::u32>(kGf256.log[a]) + 255u - static_cast<core::u32>(kGf256.log[b])];
-}
+[[nodiscard]] constexpr core::u8 gf256Div(core::u8 a, core::u8 b) noexcept;
 
 /**
  * @brief Multiplicative inverse; zero maps to zero for the reason gf256Div does.
  */
-[[nodiscard]] constexpr core::u8 gf256Inv(core::u8 a) noexcept
-{
-    if (a == 0u)
-        return 0u;
-    return kGf256.exp[255u - static_cast<core::u32>(kGf256.log[a])];
-}
+[[nodiscard]] constexpr core::u8 gf256Inv(core::u8 a) noexcept;
 
 /**
  * @brief generator^exponent, the root evaluation Chien search walks.
@@ -128,12 +115,7 @@ inline constexpr Gf256Tables kGf256 = makeGf256Tables();
 /**
  * @brief @p base raised to @p exponent, by repeated logarithm rather than squaring.
  */
-[[nodiscard]] constexpr core::u8 gf256PowOf(core::u8 base, core::u32 exponent) noexcept
-{
-    if (base == 0u)
-        return exponent == 0u ? 1u : 0u;
-    return kGf256.exp[(static_cast<core::u32>(kGf256.log[base]) * exponent) % 255u];
-}
+[[nodiscard]] constexpr core::u8 gf256PowOf(core::u8 base, core::u32 exponent) noexcept;
 
 /**
  * @brief Evaluates a polynomial at @p x by Horner's rule.
@@ -148,14 +130,10 @@ inline constexpr Gf256Tables kGf256 = makeGf256Tables();
  * @param x            Point of evaluation.
  * @return The value at @p x.
  */
-[[nodiscard]] constexpr core::u8 gf256Evaluate(const core::u8 *coefficients, core::u32 count, core::u8 x) noexcept
-{
-    core::u8 accumulator = 0u;
-    for (core::u32 i = count; i > 0u; --i)
-        accumulator = gf256Add(gf256Mul(accumulator, x), coefficients[i - 1u]);
-    return accumulator;
-}
+[[nodiscard]] constexpr core::u8 gf256Evaluate(const core::u8 *coefficients, core::u32 count, core::u8 x) noexcept;
 
 } // namespace lpl::codec
+
+#    include "GaloisField.inl"
 
 #endif // LPL_LPL_CODEC_GALOISFIELD_HPP

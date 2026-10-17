@@ -1,12 +1,3 @@
-/**
- * @file FourRussians.cpp
- * @brief M4RI elimination and its Gray-code table.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/FourRussians.hpp>
 
 #include <lpl/codec/XorKernel.hpp>
@@ -66,9 +57,6 @@ void GrayCodeTable::build(const BitMatrix &source, core::u32 firstRow, core::u32
 
     _storage.resize(static_cast<core::usize>(_entries) * _rowWords, core::u64{0});
 
-    // Entry 0 is the empty combination and stays zero. Every other entry is the
-    // PREVIOUS Gray entry plus one row — 2^k XORs for the whole table instead of
-    // 2^k * k (SIM-103). Without this the table costs more than the XORs it saves.
     for (core::u32 i = 1u; i < _entries; ++i)
     {
         const core::u32 current = grayCode(i);
@@ -123,15 +111,6 @@ EliminationResult fourRussiansEliminate(BitMatrix &matrix, core::u32 systemColum
         const core::u32 blockFirstRow = pivotRow;
         blockPivotColumn.clear();
 
-        // ── Phase 1: reduce the block among the rows at or below pivotRow ────
-        //
-        // Restricted to those rows ON PURPOSE. The pivot search in the plain
-        // algorithm only ever looks at rows >= pivotRow, and those rows see exactly
-        // the same bits here as they would there — every column left of this block
-        // was cleared from every row by the previous block's phase 2. So the two
-        // algorithms choose the same pivots, perform the same swaps, and end with
-        // the same row permutation. That is what lets the parity test assert they
-        // fold identically rather than merely "agree up to a permutation".
         for (core::u32 column = blockStart; column < blockEnd && pivotRow < rows; ++column)
         {
             core::u32 found = rows;
@@ -167,12 +146,6 @@ EliminationResult fourRussiansEliminate(BitMatrix &matrix, core::u32 systemColum
         if (pivotsInBlock == 0u)
             continue;
 
-        // ── Phase 2: clear the block from every row ABOVE it, in one read ────
-        //
-        // The rows below were already cleared by phase 1, which had to touch them to
-        // find its pivots. What is left is the back-substitution half, and that is
-        // where the table pays: one lookup plus one XOR removes all k columns from a
-        // row at once (SIM-104), instead of up to k separate row XORs.
         table.build(matrix, blockFirstRow, pivotsInBlock);
 
         const core::u32 firstWord = blockStart / kBitsPerWord;
@@ -184,7 +157,7 @@ EliminationResult fourRussiansEliminate(BitMatrix &matrix, core::u32 systemColum
                     index |= (1u << b);
 
             if (index == 0u)
-                continue; // SIM-096: test before calling the kernel
+                continue;
 
             const core::u64 *const combination = table.combination(index);
             if (combination == nullptr)

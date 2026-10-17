@@ -1,12 +1,3 @@
-/**
- * @file Erasure.cpp
- * @brief The façade: cut, emit, and put back together.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/Erasure.hpp>
 
 namespace lpl::codec {
@@ -25,9 +16,6 @@ bool encodeErasure(const core::u8 *payload, core::u32 bytes, const ErasureParams
     outShape.blockBytes = params.blockBytes;
     outShape.originalBytes = bytes;
 
-    // The padded copy is the encoder's, not the caller's: a SourceView is a view, and
-    // reading past the caller's buffer to reach the tail of the last block is exactly
-    // the kind of read a fuzzer finds and a test never does.
     lpl::pmr::vector<core::u8> padded;
     padded.resize(static_cast<core::usize>(blockCount) * params.blockBytes, core::u8{0});
     for (core::u32 i = 0u; i < bytes; ++i)
@@ -40,9 +28,6 @@ bool encodeErasure(const core::u8 *payload, core::u32 bytes, const ErasureParams
 
     const Fountain fountain{source, params.tuning};
 
-    // K * (1 + epsilon). The overhead is what pays for the droplets that turn out to
-    // be linearly dependent on the ones already received — a fountain has no schedule,
-    // so a few of them necessarily say nothing new.
     const core::u64 wanted = static_cast<core::u64>(blockCount) * (1000u + params.overheadPermille) / 1000u;
     const core::u32 count = wanted <= blockCount ? blockCount + 1u : static_cast<core::u32>(wanted);
 
@@ -68,9 +53,6 @@ bool decodeErasure(const lpl::pmr::vector<Droplet> &droplets, const ErasureShape
     if (shape.blockCount == 0u || shape.blockBytes == 0u)
         return false;
 
-    // The decoder rebuilds the SAME distribution the encoder drew from. Not a copy of
-    // it — the same construction from the same K and the same constants, which is what
-    // makes a seed mean one thing rather than two.
     SolitonParams tuning = params.tuning;
     tuning.sourceBlocks = shape.blockCount;
     SolitonTable table;

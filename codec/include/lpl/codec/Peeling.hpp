@@ -34,12 +34,12 @@ namespace lpl::codec {
  * these counters tell the two apart.
  */
 struct DecodeReport {
-    bool recovered{false};          ///< Every source block resolved.
-    core::u32 dropletsUsed{0u};     ///< Droplets handed to the decoder.
-    core::u32 peeledBlocks{0u};     ///< Blocks belief propagation resolved on its own.
-    core::u32 eliminatedBlocks{0u}; ///< Blocks the Gaussian fallback had to finish.
-    core::u32 residualRows{0u};     ///< Rows the fallback was given; 0 when peeling sufficed.
-    core::u32 rank{0u};             ///< Rank of the residual system.
+    bool recovered{false};          /**< Every source block resolved. */
+    core::u32 dropletsUsed{0u};     /**< Droplets handed to the decoder. */
+    core::u32 peeledBlocks{0u};     /**< Blocks belief propagation resolved on its own. */
+    core::u32 eliminatedBlocks{0u}; /**< Blocks the Gaussian fallback had to finish. */
+    core::u32 residualRows{0u};     /**< Rows the fallback was given; 0 when peeling sufficed. */
+    core::u32 rank{0u};             /**< Rank of the residual system. */
 };
 
 /**
@@ -50,6 +50,25 @@ struct DecodeReport {
  * almost everything and stalls near the end, so the fallback IS the normal tail of a
  * successful decode, and a decoder without it fails on the last two or three blocks
  * of most runs.
+ *
+ * Every seed is expanded once. This is where the wire's four bytes become a row of the
+ * matrix again, and it is the only place the decoder needs the distribution — the seed is
+ * meaningless without the same table the encoder drew from.
+ *
+ * Belief propagation: a droplet of degree one names its block outright. Resolving it
+ * removes that block from every other droplet, which lowers their degree, which may expose
+ * the next degree-one droplet. The whole decode is that cascade, and it is why the robust
+ * soliton spends part of its mass manufacturing degree-one droplets: with the ideal
+ * distribution alone the cascade often has nothing to start from.
+ *
+ * The Gaussian tail: what is left is a residual system with no degree-one droplet in it.
+ * It goes to the same elimination the rest of the module uses, with the payload carried as
+ * AUGMENTED COLUMNS of the very same matrix — that is what GaussJordan's systemColumns
+ * parameter is for. Carrying the bytes in a parallel array instead would mean writing a
+ * second elimination that mirrors every row operation, and a mirror is a thing that can
+ * fall out of step. The answers are read off the augmented tail, one pivot row per
+ * unknown; an under-determined residual fails, because some blocks genuinely cannot be
+ * known.
  *
  * @param droplets    What arrived. Order is respected, so two runs of the same bag
  *                    fold identically.

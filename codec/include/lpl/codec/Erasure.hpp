@@ -28,10 +28,10 @@ namespace lpl::codec {
  * @brief What an encode is asked for.
  */
 struct ErasureParams {
-    core::u32 blockBytes{32u};       ///< Payload bytes per droplet.
-    core::u32 overheadPermille{50u}; ///< Droplets beyond K, in thousandths. 50 is the paper's 5 %.
-    core::u32 firstSeed{1u};         ///< Seed of the first droplet; they increase by one.
-    SolitonParams tuning{};          ///< c and delta; sourceBlocks is derived.
+    core::u32 blockBytes{32u};       /**< Payload bytes per droplet. */
+    core::u32 overheadPermille{50u}; /**< Droplets beyond K, in thousandths. 50 is the paper's 5 %. */
+    core::u32 firstSeed{1u};         /**< Seed of the first droplet; they increase by one. */
+    SolitonParams tuning{};          /**< c and delta; sourceBlocks is derived. */
 };
 
 /**
@@ -43,9 +43,9 @@ struct ErasureParams {
  * it is recoverable from the droplet's own seed.
  */
 struct ErasureShape {
-    core::u32 blockCount{0u};    ///< K.
-    core::u32 blockBytes{0u};    ///< Bytes per block.
-    core::u32 originalBytes{0u}; ///< Payload length before padding.
+    core::u32 blockCount{0u};    /**< K. */
+    core::u32 blockBytes{0u};    /**< Bytes per block. */
+    core::u32 originalBytes{0u}; /**< Payload length before padding. */
 };
 
 /**
@@ -55,6 +55,14 @@ struct ErasureShape {
  * rather than in a length prefix inside the payload: a prefix would be part of the
  * data the code protects, so losing the droplets that carry it would cost the length
  * of everything else too.
+ *
+ * The padded copy is the encoder's, not the caller's: a SourceView is a view, and reading
+ * past the caller's buffer to reach the tail of the last block is exactly the kind of read
+ * a fuzzer finds and a test never does.
+ *
+ * It emits K * (1 + epsilon) droplets, and at least K + 1. The overhead is what pays for
+ * the droplets that turn out to be linearly dependent on the ones already received — a
+ * fountain has no schedule, so a few of them necessarily say nothing new.
  *
  * @param payload    Bytes to protect.
  * @param bytes      Length of @p payload.
@@ -72,6 +80,10 @@ struct ErasureShape {
  * Any sufficient subset will do, in any order — that is what rateless means, and it
  * is why this takes no notion of "which" droplets are missing. A caller that lost
  * half of them simply passes the other half.
+ *
+ * The decoder rebuilds the SAME distribution the encoder drew from. Not a copy of it —
+ * the same construction from the same K and the same constants, which is what makes a
+ * seed mean one thing rather than two.
  *
  * @param droplets  What arrived.
  * @param shape     What @ref encodeErasure reported.

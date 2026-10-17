@@ -33,9 +33,9 @@ namespace lpl::codec {
  * needing to know which.
  */
 struct SourceView {
-    const core::u8 *bytes{nullptr}; ///< First byte of block 0.
-    core::u32 blockBytes{0u};       ///< Bytes per block; every block is this size.
-    core::u32 blockCount{0u};       ///< K.
+    const core::u8 *bytes{nullptr}; /**< First byte of block 0. */
+    core::u32 blockBytes{0u};       /**< Bytes per block; every block is this size. */
+    core::u32 blockCount{0u};       /**< K. */
 };
 
 /**
@@ -64,9 +64,9 @@ struct Droplet {
  * authoritative and a float would put two targets on different sides of a comparison.
  */
 struct BiologicalLimits {
-    core::u32 maxHomopolymer{3u};  ///< Longest run of one base tolerated.
-    core::u32 minGcPermille{450u}; ///< Lowest GC share, in thousandths.
-    core::u32 maxGcPermille{550u}; ///< Highest GC share, in thousandths.
+    core::u32 maxHomopolymer{3u};  /**< Longest run of one base tolerated. */
+    core::u32 minGcPermille{450u}; /**< Lowest GC share, in thousandths. */
+    core::u32 maxGcPermille{550u}; /**< Highest GC share, in thousandths. */
 };
 
 /**
@@ -74,7 +74,9 @@ struct BiologicalLimits {
  *
  * The two-bit code is A=0, C=1, G=2, T=3, most significant pair first. The mapping is
  * arbitrary in the chemistry and is NOT arbitrary here: it decides which droplets are
- * rejected, so it is part of the format the way the field modulus is.
+ * rejected, so it is part of the format the way the field modulus is. C and G are the two
+ * that pair with three hydrogen bonds, and their share is what sets the melting
+ * temperature.
  *
  * @param bytes  Droplet payload.
  * @param count  Bytes available.
@@ -101,6 +103,12 @@ public:
 
     /**
      * @brief Emits the droplet named by @p seed.
+     *
+     * Over GF(2) adding is XOR, so a droplet of degree d is d blocks folded together and
+     * nothing more. Byte-wise rather than through XorKernel because a block is not
+     * word-aligned in general — the payload comes from the caller's buffer — and a droplet
+     * payload is tens of bytes, not the kilobyte rows where the vector path earns its keep.
+     *
      * @param seed The droplet's identity.
      * @param out  Receives it; its buffer is reused rather than reallocated.
      */
@@ -114,6 +122,10 @@ public:
      * fixed-rate code would have to reserve parity in advance to survive the same
      * rejections, which is fifteen to thirty percent of the bases spent on a problem
      * that can instead be sidestepped.
+     *
+     * Bounded, because "the fountain never runs dry" is a statement about the code and not
+     * about this loop: limits strict enough to reject everything would spin here forever,
+     * and a budget turns that into a short output the caller can notice.
      *
      * @param count       Valid droplets wanted.
      * @param limits      Constraint every kept droplet satisfies.
@@ -152,14 +164,14 @@ private:
  * @struct DecayParams
  * @brief A millennium of molecular decay, as three rates.
  *
- * Per-thousand rather than per-unit for the reason everything else here is integer:
+ * Per-million rather than per-unit for the reason everything else here is integer:
  * the same run has to be reproducible from a seed, and a float rate compared against
  * a float draw is a comparison two builds can land on either side of.
  */
 struct DecayParams {
-    core::u32 substitutionPerMillionPerCentury{40u}; ///< A base read as a different base.
-    core::u32 breakPerMillionPerCentury{15u};        ///< A strand cut, losing it entirely.
-    core::u32 dropoutPerMillionPerCentury{25u};      ///< A strand never sequenced at all.
+    core::u32 substitutionPerMillionPerCentury{40u}; /**< A base read as a different base. */
+    core::u32 breakPerMillionPerCentury{15u};        /**< A strand cut, losing it entirely. */
+    core::u32 dropoutPerMillionPerCentury{25u};      /**< A strand never sequenced at all. */
 };
 
 /**
@@ -167,10 +179,10 @@ struct DecayParams {
  * @brief What a simulated span of years did to a pool of strands.
  */
 struct DecayReport {
-    core::u32 strands{0u};       ///< Strands the pool started with.
-    core::u32 intact{0u};        ///< Strands that came back readable.
-    core::u32 lost{0u};          ///< Strands broken or never sequenced.
-    core::u32 substitutions{0u}; ///< Bases that came back wrong inside surviving strands.
+    core::u32 strands{0u};       /**< Strands the pool started with. */
+    core::u32 intact{0u};        /**< Strands that came back readable. */
+    core::u32 lost{0u};          /**< Strands broken or never sequenced. */
+    core::u32 substitutions{0u}; /**< Bases that came back wrong inside surviving strands. */
 };
 
 /**
@@ -184,6 +196,12 @@ struct DecayReport {
  *
  * Simulating both is the point of the instrument: density and redundancy are the two
  * levers worth pulling, and neither can be tuned without a way to measure survival.
+ *
+ * Rates compound over centuries rather than multiply: a strand that survives ten
+ * centuries survived each of them, and a linear rate would eventually pass one. The loop
+ * over centuries IS the compounding, which also keeps every draw an integer comparison. A
+ * substitution XORs the base with a non-zero two-bit value: it is a base read as a
+ * DIFFERENT base, so the value has to change.
  *
  * @param pool      Strands, aged in place.
  * @param years     How long they sat.

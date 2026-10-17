@@ -1,12 +1,3 @@
-/**
- * @file GaussJordan.cpp
- * @brief Reduced row echelon form over GF(2), with word skipping.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/GaussJordan.hpp>
 
 #include <lpl/codec/XorKernel.hpp>
@@ -30,7 +21,6 @@ EliminationResult gaussJordan(BitMatrix &matrix, core::u32 systemColumns)
 
     for (core::u32 column = 0u; column < eligible && pivotRow < rows; ++column)
     {
-        // Find a row at or below pivotRow with this column set.
         core::u32 found = rows;
         for (core::u32 r = pivotRow; r < rows; ++r)
         {
@@ -41,22 +31,15 @@ EliminationResult gaussJordan(BitMatrix &matrix, core::u32 systemColumns)
             }
         }
         if (found == rows)
-            continue; // free column: no pivot, and the unknown stays undetermined
+            continue;
 
-        // O(1): the indirection table moves, the kilobytes do not.
         matrix.swapRows(pivotRow, found);
 
-        // Clear the column everywhere else. Both directions, because this is
-        // REDUCED echelon form: leaving the rows above alone would give plain
-        // echelon form and force a second back-substitution pass over the same
-        // memory, which is the pass this loop is already paying for.
         core::u64 *const pivot = matrix.row(pivotRow);
         for (core::u32 r = 0u; r < rows; ++r)
         {
             if (r == pivotRow || !matrix.test(r, column))
                 continue;
-            // Word skipping (SIM-096): every column strictly left of this one is
-            // already zero in both rows, so the XOR starts at the pivot's word.
             const core::u32 firstWord = column / kBitsPerWord;
             xorRow(matrix.row(r) + firstWord, pivot + firstWord, words - firstWord);
         }

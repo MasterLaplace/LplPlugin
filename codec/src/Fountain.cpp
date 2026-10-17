@@ -1,12 +1,3 @@
-/**
- * @file Fountain.cpp
- * @brief The LT encoder and the in-silico constraint filter.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/Fountain.hpp>
 
 namespace lpl::codec {
@@ -20,7 +11,7 @@ bool satisfiesBiologicalLimits(const core::u8 *bytes, core::u32 count, const Bio
     core::u32 gc = 0u;
     core::u32 run = 1u;
     core::u32 longestRun = 1u;
-    core::u32 previous = 4u; // no base has this value, so the first comparison fails
+    core::u32 previous = 4u;
 
     for (core::u32 i = 0u; i < bases; ++i)
     {
@@ -28,8 +19,6 @@ bool satisfiesBiologicalLimits(const core::u8 *bytes, core::u32 count, const Bio
         const core::u32 shift = 6u - 2u * (i % 4u);
         const core::u32 base = static_cast<core::u32>((byte >> shift) & 0x3u);
 
-        // C and G are the two that pair with three hydrogen bonds, and their share is
-        // what sets the melting temperature.
         if (base == 1u || base == 2u)
             ++gc;
 
@@ -72,11 +61,6 @@ void Fountain::emit(core::u32 seed, Droplet &out) const
     DropletPlan plan;
     expandDroplet(seed, _table, plan);
 
-    // The combination itself: over GF(2) adding is XOR, so a droplet of degree d is d
-    // blocks folded together and nothing more. Byte-wise rather than through
-    // XorKernel because a block is not word-aligned in general — the payload comes
-    // from the caller's buffer — and a droplet payload is tens of bytes, not the
-    // kilobyte rows where the vector path earns its keep.
     for (core::usize i = 0u; i < plan.indices.size(); ++i)
     {
         const core::u8 *const block = _source.bytes + static_cast<core::usize>(plan.indices[i]) * _source.blockBytes;
@@ -95,9 +79,6 @@ core::u32 Fountain::emitValid(core::u32 count, const BiologicalLimits &limits, c
     core::u32 examined = 0u;
     Droplet candidate;
 
-    // Bounded, because "the fountain never runs dry" is a statement about the code and
-    // not about this loop: limits strict enough to reject everything would spin here
-    // forever, and a budget turns that into a short output the caller can notice.
     const core::u32 budget = count * 64u + 1024u;
     for (core::u32 seed = firstSeed; out.size() < count && examined < budget; ++seed)
     {
@@ -129,10 +110,6 @@ void simulateDecay(lpl::pmr::vector<Droplet> &pool, core::u32 years, const Decay
         return;
     }
 
-    // Rates compound over centuries rather than multiply: a strand that survives ten
-    // centuries survived each of them, and a linear rate would pass one at a few
-    // hundred years. The loop IS the compounding, which also keeps every draw an
-    // integer comparison.
     lpl::pmr::vector<Droplet> survivors;
     for (core::usize d = 0u; d < pool.size(); ++d)
     {
@@ -163,8 +140,6 @@ void simulateDecay(lpl::pmr::vector<Droplet> &pool, core::u32 years, const Decay
             {
                 if (stream.below(1000000u) >= params.substitutionPerMillionPerCentury)
                     continue;
-                // Flip one of the two bits of that base: a substitution is a base read
-                // as a DIFFERENT base, so the value has to change.
                 const core::u32 shift = 6u - 2u * (base % 4u);
                 const core::u8 delta = static_cast<core::u8>((1u + stream.below(3u)) << shift);
                 aged.payload[base / 4u] = static_cast<core::u8>(aged.payload[base / 4u] ^ delta);
