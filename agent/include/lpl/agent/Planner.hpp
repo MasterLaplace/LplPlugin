@@ -100,6 +100,26 @@ public:
     /**
      * @brief Chooses the next act.
      *
+     * Acts on the first defect whose suggested tool is offered right now. A
+     * capability that is not offered cannot be the fix, whatever the critic hoped:
+     * acting on it would earn a refusal and burn a turn. A call longer than
+     * @ref kActBytes is skipped too: a call that cannot be stated in a shared act
+     * cannot be made.
+     *
+     * A suggestion that is exactly what was just tried is skipped. Repeating it
+     * would leave the anti-loop guard to end the session, which is a worse outcome
+     * than trying the next defect on the list. Only the last act of the transcript
+     * counts, compared on the ACT'S IDENTITY — the tool and its arguments — and
+     * never on the serialised call, which also carries a thought the critic phrases
+     * anew each turn. Comparing whole calls would make the guard depend on JSON
+     * escaping and on wording, so it would silently stop matching and the loop
+     * would spend its budget re-issuing one move. That is the same pair the
+     * previous version compared, and it is what a transcript projection can carry
+     * without a parser.
+     *
+     * When nothing actionable is left, it concludes rather than idling, which is
+     * what makes "the loop terminates" a property instead of a hope.
+     *
      * @param context What the decision may depend on.
      * @return An @ref ActKind::Action carrying a tool-call JSON object, or an
      *         @ref ActKind::Answer meaning there is nothing left worth doing.

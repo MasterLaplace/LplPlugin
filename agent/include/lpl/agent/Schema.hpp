@@ -41,6 +41,9 @@ namespace lpl::agent {
  * Bounds follow @c FieldDesc's encoding: raw Q16.16 for @c Fixed32, the integer
  * itself for integer types, and a float bit pattern for @c F32 (see
  * @c ecs::floatBits), which is why the float case is decoded before printing.
+ *
+ * Byte-for-byte the shape test_reflection.cpp has pinned since 2026-07-16.
+ * Changing it means changing that assertion in the same commit, deliberately.
  */
 [[nodiscard]] std::string emitJsonSchema(const ecs::ComponentSchema &schema);
 
@@ -50,6 +53,10 @@ namespace lpl::agent {
  * @c required lists the parameters without a default. A @c DynamicEnum parameter
  * is expanded here rather than declared, so adding a component widens the schema
  * with no edit to the tool table.
+ *
+ * The object is closed (`additionalProperties` is false): an argument nobody
+ * declared is a typo, and a typo that silently succeeds is worse than one that is
+ * refused with a reason.
  */
 [[nodiscard]] std::string emitJsonSchema(const ToolDesc &tool);
 
@@ -59,6 +66,10 @@ namespace lpl::agent {
  * A @c oneOf over the offered tools, each branch pinning @c tool to one literal
  * name. Shape chosen so that the grammar (Grammar.hpp) and this document describe
  * the same set: a call this accepts is a call the grammar can emit.
+ *
+ * A call is one object: an optional thought, the tool's name, its arguments.
+ * Keeping the thought inside the call is what makes a transcript entry
+ * self-contained — the reasoning and the act cannot drift apart later.
  */
 [[nodiscard]] std::string emitJsonSchema(const ToolRegistry &registry);
 

@@ -58,7 +58,7 @@ namespace lpl::agent {
  */
 inline constexpr core::u32 kActBytes = 512u;
 
-/// Bytes the "what is possible now" alphabet may occupy.
+/** @brief Bytes the "what is possible now" alphabet may occupy. */
 inline constexpr core::u32 kAvailableBytes = 512u;
 
 /**
@@ -66,11 +66,11 @@ inline constexpr core::u32 kAvailableBytes = 512u;
  * @brief What one line of a transcript is.
  */
 enum class ActKind : core::u8 {
-    Thought,     ///< The demon reasoning to itself.
-    Action,      ///< A move on the world.
-    Observation, ///< What the world, or a critic, said back.
-    Answer,      ///< The demon addressing the sovereign, done.
-    Question,    ///< The demon addressing the sovereign, stuck.
+    Thought,     /**< The demon reasoning to itself. */
+    Action,      /**< A move on the world. */
+    Observation, /**< What the world, or a critic, said back. */
+    Answer,      /**< The demon addressing the sovereign, done. */
+    Question,    /**< The demon addressing the sovereign, stuck. */
 };
 
 /**
@@ -78,10 +78,10 @@ enum class ActKind : core::u8 {
  * @brief One line of a transcript.
  */
 struct Act {
-    ActKind kind{ActKind::Thought}; ///< What this line is.
-    char text[kActBytes]{};         ///< Its words: a verb, or a whole call.
-    core::u32 bytes{0u};            ///< How many are in use.
-    core::u32 step{0u};             ///< Which round produced it.
+    ActKind kind{ActKind::Thought}; /**< What this line is. */
+    char text[kActBytes]{};         /**< Its words: a verb, or a whole call. */
+    core::u32 bytes{0u};            /**< How many are in use. */
+    core::u32 step{0u};             /**< Which round produced it. */
 };
 
 /**
@@ -89,14 +89,14 @@ struct Act {
  * @brief Everything a decision is allowed to depend on that both worlds can state.
  */
 struct DecisionContext {
-    const char *available{nullptr}; ///< Space-separated names of what can be done now.
-    core::u32 availableBytes{0u};   ///< Bytes of @ref available.
-    const Act *transcript{nullptr}; ///< What has happened, including observations.
-    core::u32 transcriptLines{0u};  ///< Lines in @ref transcript.
-    const char *goal{nullptr};      ///< What the sovereign asked for; may be null.
-    core::u32 goalBytes{0u};        ///< Bytes of @ref goal.
-    core::u32 turn{0u};             ///< Round within this budget, from zero.
-    core::u32 turnsRemaining{0u};   ///< Including this one.
+    const char *available{nullptr}; /**< Space-separated names of what can be done now. */
+    core::u32 availableBytes{0u};   /**< Bytes of @ref available. */
+    const Act *transcript{nullptr}; /**< What has happened, including observations. */
+    core::u32 transcriptLines{0u};  /**< Lines in @ref transcript. */
+    const char *goal{nullptr};      /**< What the sovereign asked for; may be null. */
+    core::u32 goalBytes{0u};        /**< Bytes of @ref goal. */
+    core::u32 turn{0u};             /**< Round within this budget, from zero. */
+    core::u32 turnsRemaining{0u};   /**< Including this one. */
 
     /**
      * The last stretch of the budget, where a conclusion is required.
@@ -133,32 +133,7 @@ struct DecisionContext {
  * @return true when @p name appears as a whole word.
  */
 [[nodiscard]] constexpr bool alphabetOffers(const char *alphabet, core::u32 bytes, const char *name,
-                                            core::u32 nameBytes) noexcept
-{
-    if (alphabet == nullptr || name == nullptr || nameBytes == 0u)
-        return false;
-
-    core::u32 cursor = 0u;
-    while (cursor < bytes)
-    {
-        while (cursor < bytes && alphabet[cursor] == ' ')
-            ++cursor;
-        const core::u32 start = cursor;
-        while (cursor < bytes && alphabet[cursor] != ' ')
-            ++cursor;
-        if (cursor - start == nameBytes)
-        {
-            bool match = true;
-            for (core::u32 i = 0u; i < nameBytes && match; ++i)
-                match = alphabet[start + i] == name[i];
-            if (match)
-                return true;
-        }
-        if (cursor == start)
-            break;
-    }
-    return false;
-}
+                                            core::u32 nameBytes) noexcept;
 
 /**
  * @class IDecider
@@ -179,7 +154,9 @@ public:
      */
     [[nodiscard]] virtual Act decide(const DecisionContext &context) noexcept = 0;
 
-    /// A word for which policy this is, for a log line.
+    /**
+     * @brief A word for which policy this is, for a log line.
+     */
     [[nodiscard]] virtual const char *name() const noexcept { return "decider"; }
 };
 
@@ -228,5 +205,7 @@ public:
 };
 
 } // namespace lpl::agent
+
+#    include "Decision.inl"
 
 #endif // LPL_LPL_AGENT_DECISION_HPP

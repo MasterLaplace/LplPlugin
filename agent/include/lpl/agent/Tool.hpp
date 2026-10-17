@@ -11,11 +11,15 @@
  * fold must all read the SAME declaration. Four consumers of one table cannot
  * disagree; four hand-written lists always end up disagreeing.
  *
- * Every @ref ToolDesc::name here must be a command @c editor::CommandProcessor
- * accepts. That processor's dispatch lives in an anonymous namespace, so the
- * agreement cannot be checked at compile time — it is asserted at run time by
- * `test-agent-tools`, which dispatches every declared tool and refuses an
- * "unknown command" reply.
+ * Every Journal-hosted @ref ToolDesc::name here must be a command
+ * @c editor::CommandProcessor accepts; `take_screenshot` is Agent-hosted. That
+ * processor's dispatch lives in an anonymous namespace, so the agreement cannot be
+ * checked at compile time — it is asserted at run time by `test-agent-tools`, which
+ * dispatches every Journal-hosted tool and refuses an "unknown command" reply.
+ *
+ * Tool.cpp holds no runtime code: it holds compile-time assertions on the table,
+ * the cheapest place for them — a malformed declaration fails the build of the
+ * module that declares it, not a test run somewhere downstream.
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -47,12 +51,12 @@ namespace lpl::agent {
  * mapping both emitters go through.
  */
 enum class ParamKind : core::u8 {
-    Number = 0, ///< JSON number, human units (metres, seconds, 0..1 ratios).
-    Integer,    ///< JSON number constrained to integers (counts, seeds, raw Q16.16).
-    String,     ///< JSON string.
-    Bool,       ///< JSON true/false.
-    Object,     ///< Nested JSON object, validated by whoever consumes it.
-    Array       ///< JSON array.
+    Number = 0, /**< JSON number, human units (metres, seconds, 0..1 ratios). */
+    Integer,    /**< JSON number constrained to integers (counts, seeds, raw Q16.16). */
+    String,     /**< JSON string. */
+    Bool,       /**< JSON true/false. */
+    Object,     /**< Nested JSON object, validated by whoever consumes it. */
+    Array       /**< JSON array. */
 };
 
 /**
@@ -63,38 +67,19 @@ enum class ParamKind : core::u8 {
  * here is where the second consumer appeared: a JSON-Schema is only ever wanted
  * in order to constrain a model. The test now calls this one, so the emitter it
  * pins and the emitter the grammar uses are the same function.
+ *
+ * Authoritative fields cross the wire as their RAW Q16.16 integer, never as a
+ * decimal: a model that wrote 1.5 and a kernel that read 98304 would agree in
+ * prose and diverge in arithmetic. Tool.cpp pins the cases that matter at compile
+ * time, because getting Fixed32 wrong would put decimals on the wire for
+ * authoritative state.
  */
-[[nodiscard]] constexpr ParamKind paramKindOf(ecs::FieldType t) noexcept
-{
-    switch (t)
-    {
-    case ecs::FieldType::F32: return ParamKind::Number;
-    // Authoritative fields cross the wire as their RAW Q16.16 integer, never as
-    // a decimal: a model that wrote 1.5 and a kernel that read 98304 would agree
-    // in prose and diverge in arithmetic.
-    case ecs::FieldType::Fixed32:
-    case ecs::FieldType::I32:
-    case ecs::FieldType::U32:
-    case ecs::FieldType::U16:
-    case ecs::FieldType::U8: return ParamKind::Integer;
-    default: return ParamKind::Object;
-    }
-}
+[[nodiscard]] constexpr ParamKind paramKindOf(ecs::FieldType t) noexcept;
 
-/** @brief The JSON-Schema spelling of a @ref ParamKind. */
-[[nodiscard]] constexpr std::string_view jsonTypeName(ParamKind k) noexcept
-{
-    switch (k)
-    {
-    case ParamKind::Number: return "number";
-    case ParamKind::Integer: return "integer";
-    case ParamKind::String: return "string";
-    case ParamKind::Bool: return "boolean";
-    case ParamKind::Array: return "array";
-    case ParamKind::Object: return "object";
-    }
-    return "object";
-}
+/**
+ * @brief The JSON-Schema spelling of a @ref ParamKind.
+ */
+[[nodiscard]] constexpr std::string_view jsonTypeName(ParamKind k) noexcept;
 
 /**
  * @enum DynamicEnum
@@ -106,9 +91,9 @@ enum class ParamKind : core::u8 {
  * component therefore widens the grammar with no edit to this file.
  */
 enum class DynamicEnum : core::u8 {
-    None = 0,      ///< Any string of the declared kind is accepted.
-    ComponentName, ///< One of @c ecs::allSchemas() names.
-    CaveKind       ///< One of @c procgen::caveKindName's words, "auto" included.
+    None = 0,      /**< Any string of the declared kind is accepted. */
+    ComponentName, /**< One of @c ecs::allSchemas() names. */
+    CaveKind       /**< One of @c procgen::caveKindName's words, "auto" included. */
 };
 
 /**
@@ -123,31 +108,13 @@ enum class DynamicEnum : core::u8 {
  * @param choices The set.
  * @param sink    Called with each @c std::string_view in the set; nothing for None.
  */
-template <typename Sink> void forEachChoice(DynamicEnum choices, Sink &&sink)
-{
-    switch (choices)
-    {
-    case DynamicEnum::ComponentName:
-        for (const ecs::ComponentSchema &schema : ecs::allSchemas())
-            sink(schema.name);
-        return;
-    case DynamicEnum::CaveKind:
-        for (core::u32 i = 0u; i <= static_cast<core::u32>(procgen::CaveKind::Auto); ++i)
-            sink(std::string_view{procgen::caveKindName(static_cast<procgen::CaveKind>(i))});
-        return;
-    case DynamicEnum::None: return;
-    }
-}
+template <typename Sink> void forEachChoice(DynamicEnum choices, Sink &&sink);
 
-/// @return Whether @p text belongs to @p choices. None accepts anything.
-[[nodiscard]] inline bool inChoices(DynamicEnum choices, std::string_view text)
-{
-    if (choices == DynamicEnum::None)
-        return true;
-    bool found = false;
-    forEachChoice(choices, [&](std::string_view word) { found = found || word == text; });
-    return found;
-}
+/**
+ * @brief Tests @p text against the closed set @p choices.
+ * @return Whether @p text belongs to @p choices. None accepts anything.
+ */
+[[nodiscard]] inline bool inChoices(DynamicEnum choices, std::string_view text);
 
 /**
  * @struct ToolParam
@@ -179,9 +146,9 @@ struct ToolParam {
  * and then refused. Refusals cost a turn; absence costs nothing.
  */
 enum class ToolGate : core::u8 {
-    Always = 0,        ///< Offered unconditionally.
-    RequiresWorld,     ///< Offered once the world holds at least one entity.
-    RequiresEmptyWorld ///< Offered only while nothing has been generated yet.
+    Always = 0,        /**< Offered unconditionally. */
+    RequiresWorld,     /**< Offered once the world holds at least one entity. */
+    RequiresEmptyWorld /**< Offered only while nothing has been generated yet. */
 };
 
 /**
@@ -200,8 +167,8 @@ enum class ToolGate : core::u8 {
  * at compile time in Tool.cpp: **anything that mutates is hosted by the journal**.
  */
 enum class ToolHost : core::u8 {
-    Journal = 0, ///< editor::CommandProcessor, through the journal: undoable, replayable.
-    Agent        ///< Served by agent/, because it needs what editor does not link.
+    Journal = 0, /**< editor::CommandProcessor, through the journal: undoable, replayable. */
+    Agent        /**< Served by agent/, because it needs what editor does not link. */
 };
 
 /**
@@ -209,25 +176,31 @@ enum class ToolHost : core::u8 {
  * @brief One callable capability.
  */
 struct ToolDesc {
-    std::string_view name; ///< For a Journal-hosted tool, a command CommandProcessor accepts.
+    std::string_view name; /**< For a Journal-hosted tool, a command CommandProcessor accepts. */
     std::string_view brief;
     std::span<const ToolParam> params;
     ToolGate gate{ToolGate::Always};
-    bool mutates{false}; ///< Recorded in the CommandJournal, hence undoable.
+    bool mutates{false}; /**< Recorded in the CommandJournal, hence undoable. */
     ToolHost host{ToolHost::Journal};
 };
 
 namespace detail {
 
-// ── generate_world ─────────────────────────────────────────────────────────────
-// The nested blocks are declared as opaque objects ON PURPOSE. Their ~90 field
-// names live in editor/src/GamePackBaker.cpp's parseSceneRecipe, which is the one
-// authority on what a recipe may say; restating them here would be the second
-// recipe parser §18.2 avoided, and it would drift on the first field added.
-// parseSceneRecipe already rejects a malformed block with a reason, so a wrong
-// nested field is caught — one turn later, by an error rather than by a grammar.
-// Deriving these from a reflection table over WorldRecipe (the way components are
-// derived) is a real improvement and a chantier of its own; no such table exists.
+/**
+ * @brief The parameters of `generate_world`.
+ *
+ * The nested blocks are declared as opaque objects ON PURPOSE. Their ~90 field
+ * names live in editor/src/GamePackBaker.cpp's parseSceneRecipe, which is the one
+ * authority on what a recipe may say; restating them here would be the second
+ * recipe parser §18.2 avoided, and it would drift on the first field added.
+ * parseSceneRecipe already rejects a malformed block with a reason, so a wrong
+ * nested field is caught — one turn later, by an error rather than by a grammar.
+ * Deriving these from a reflection table over WorldRecipe (the way components are
+ * derived) is a real improvement and a chantier of its own; no such table exists.
+ *
+ * `caveKind` is the ONE parameter whose legal values are a closed set of words, so
+ * they belong in the sampler and not merely in a rejection: DWG-010 to the letter.
+ */
 inline constexpr ToolParam kGenerateWorldParams[] = {
     {"seed",              ParamKind::Integer, false, true,  0.0,  4294967295.0, DynamicEnum::None,
      "Master seed; same seed, same world."                                                                                                     },
@@ -247,8 +220,6 @@ inline constexpr ToolParam kGenerateWorldParams[] = {
      "Terrace the field into this many steps; 0 leaves it smooth."                                                                             },
     {"provinces",         ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,
      "Voronoi districting of the surface: cellSize, jitter, metric."                                                                           },
-    // The ONE parameter whose legal values are a closed set of words, so they belong
-    // in the sampler and not merely in a rejection: DWG-010 to the letter.
     {"caveKind",          ParamKind::String,  false, false, 0.0,  0.0,          DynamicEnum::CaveKind,
      "Which underground generator runs. `layered` cannot be judged by the gate."                                                               },
     {"caves",             ParamKind::Object,  false, false, 0.0,  0.0,          DynamicEnum::None,     "Cellular-automaton cave carving."      },
@@ -280,12 +251,16 @@ inline constexpr ToolParam kSpawnFromTemplateParams[] = {
     {"overrides", ParamKind::Object,  false, false, 0.0, 0.0,    DynamicEnum::None, "Per-instance field overrides." },
 };
 
+/**
+ * @brief The parameters of `query_entities`.
+ *
+ * The box bounds are in HUMAN units, converted with Fixed32::fromFloat by the
+ * command. Fixed32 only reaches about +-32767, so a range wider than that is not
+ * "very large", it is undefined — the same trap as the raw-vs-value constructor.
+ */
 inline constexpr ToolParam kQueryEntitiesParams[] = {
     {"with",  ParamKind::String,  false, false, 0.0,      0.0,     DynamicEnum::ComponentName,
      "Only entities carrying this component."                                                                                      },
-    // Bounds in HUMAN units, converted with Fixed32::fromFloat by the command.
-    // Fixed32 saturates near +-32767, so a range wider than that is not "very
-    // large", it is undefined — the same trap as the raw-vs-value constructor.
     {"minX",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box lower bound on X."             },
     {"maxX",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box upper bound on X."             },
     {"minY",  ParamKind::Number,  false, true,  -32767.0, 32767.0, DynamicEnum::None,          "Box lower bound on Y."             },
@@ -318,6 +293,16 @@ inline constexpr ToolParam kDiffScenesParams[] = {
  *
  * Order is stable and load-bearing: test-agent-tools signs this table, so a
  * reordering is a deliberate change that a test reports rather than a silent one.
+ *
+ * Every Journal-hosted entry must be a command editor::CommandProcessor already
+ * accepts — a table that advertised a capability the engine does not have would be
+ * a lie the model pays for, one wasted turn at a time. A capability is declared
+ * here on the same change that implements it, never before, and
+ * `test-agent-tools` asserts the agreement so the rule has a consequence.
+ *
+ * `take_screenshot` is Agent-hosted: it needs render/ and image/, which editor/
+ * does not link. It is purely observing, so the single-mutation-surface rule is
+ * untouched.
  */
 inline constexpr ToolDesc kTools[] = {
     {"generate_world",
@@ -336,31 +321,24 @@ inline constexpr ToolDesc kTools[] = {
      detail::kQueryEntitiesParams, ToolGate::RequiresWorld, false},
     {"diff_scenes", "Structured differences between two .lplscene documents.", detail::kDiffScenesParams,
      ToolGate::Always, false},
-    // Agent-hosted: it needs render/ and image/, which editor/ does not link.
-    // Purely observing, so the single-mutation-surface rule is untouched.
     {"take_screenshot", "Render the world off-screen from an orbit pose and write a PPM. Look at what you built.",
      detail::kTakeScreenshotParams, ToolGate::RequiresWorld, false, ToolHost::Agent},
 };
 
-/** @brief How many capabilities exist in total, gating aside. */
+/**
+ * @brief How many capabilities exist in total, gating aside.
+ */
 inline constexpr core::u32 kToolCount = static_cast<core::u32>(std::size(kTools));
 
-// Every Journal-hosted entry above must be a command editor::CommandProcessor
-// already accepts — a table that advertised a capability the engine does not have
-// would be a lie the model pays for, one wasted turn at a time. A capability is
-// declared here on the same change that implements it, never before, and
-// `test-agent-tools` asserts the agreement so the rule has a consequence.
 static_assert(kToolCount == 10u, "kTools changed size — the tool-surface signature moves with it");
 
-/** @brief The capability named @p name, or nullptr. */
-[[nodiscard]] constexpr const ToolDesc *findTool(std::string_view name) noexcept
-{
-    for (const ToolDesc &tool : kTools)
-        if (tool.name == name)
-            return &tool;
-    return nullptr;
-}
+/**
+ * @brief The capability named @p name, or nullptr.
+ */
+[[nodiscard]] constexpr const ToolDesc *findTool(std::string_view name) noexcept;
 
 } // namespace lpl::agent
+
+#    include "Tool.inl"
 
 #endif // LPL_LPL_AGENT_TOOL_HPP

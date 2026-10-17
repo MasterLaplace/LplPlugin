@@ -1,12 +1,3 @@
-/**
- * @file Observation.cpp
- * @brief Implementation of the deterministic critics.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Observation.hpp>
 
 #include <lpl/ecs/Archetype.hpp>
@@ -23,7 +14,9 @@ namespace lpl::agent {
 
 namespace {
 
-/// Escapes @p s into @p out as a JSON string body (no quotes).
+/**
+ * @brief Escapes @p s into @p out as a JSON string body (no quotes).
+ */
 void appendEscaped(std::string &out, std::string_view s)
 {
     for (const char c : s)
@@ -49,7 +42,9 @@ std::string_view severityName(Severity severity) noexcept
     return "info";
 }
 
-/// Adds a finding, honouring the bound but always counting.
+/**
+ * @brief Adds a finding, honouring the bound but always counting.
+ */
 void record(Observations &out, core::u32 limit, Severity severity, std::string code, std::string message,
             std::string tool = {}, std::string args = {})
 {
@@ -62,7 +57,9 @@ void record(Observations &out, core::u32 limit, Severity severity, std::string c
     out.findings.push_back(Finding{severity, std::move(code), std::move(message), std::move(tool), std::move(args)});
 }
 
-/// Packs a Q16.16 XZ position into a key, for spotting entities stacked on a spot.
+/**
+ * @brief Packs a Q16.16 XZ position into a key, for spotting entities stacked on a spot.
+ */
 core::u64 positionKey(const math::Vec3<math::Fixed32> &p) noexcept
 {
     const auto x = static_cast<core::u64>(static_cast<core::u32>(p.x.raw()));
@@ -70,7 +67,9 @@ core::u64 positionKey(const math::Vec3<math::Fixed32> &p) noexcept
     return (x << 32u) | z;
 }
 
-/// Reads an integer field out of a report object.
+/**
+ * @brief Reads an integer field out of a report object.
+ */
 core::i64 field(const editor::detail::JVal &object, std::string_view key, core::i64 fallback)
 {
     const editor::detail::JVal *value = object.find(key);
@@ -79,12 +78,16 @@ core::i64 field(const editor::detail::JVal &object, std::string_view key, core::
     return static_cast<core::i64>(value->num);
 }
 
-/// Whether a `generate_world` block enabled a pass; an unstated pass runs.
+/**
+ * @brief Whether a `generate_world` block enabled a pass; an unstated pass runs.
+ *
+ * An absent block takes the engine defaults, and the defaults run it.
+ */
 bool passEnabled(const editor::detail::JVal &recipe, std::string_view block)
 {
     const editor::detail::JVal *node = recipe.find(block);
     if (node == nullptr || node->t != editor::detail::JVal::T::Obj)
-        return true; // Absent block = engine defaults, and the defaults run it.
+        return true;
     const editor::detail::JVal *enabled = node->find("enabled");
     if (enabled == nullptr || enabled->t != editor::detail::JVal::T::Bool)
         return true;
@@ -150,17 +153,12 @@ Observations inspectWorld(const ecs::Registry &registry, core::u32 limit)
     std::unordered_map<core::u64, core::u32> occupancy;
     core::u32 mostStacked = 0u;
 
-    // Q16.16 saturates a little past ±32767. A coordinate up against that is not
-    // "far away", it is a value the arithmetic can no longer represent — the same
-    // trap that made an unbounded query box mean nothing.
     constexpr core::i32 kSaturationGuard = 32000 << 16;
 
     for (const auto &part : registry.partitions())
     {
         if (!part)
             continue;
-        // readComponent answers a pointer for EVERY id, allocated or not, so the
-        // archetype is what must be asked whether a component is really there.
         const bool hasPosition = part->archetype().has(ecs::ComponentId::Position);
         const bool hasAabb = part->archetype().has(ecs::ComponentId::AABB);
         for (const auto &chunk : part->chunks())
@@ -225,9 +223,6 @@ Observations inspectWorld(const ecs::Registry &registry, core::u32 limit)
                std::to_string(degenerateExtents) +
                    " entities have a zero or negative AABB half-extent, so nothing can ever collide with them.");
 
-    // The Fixed32{10} signature: a scatter whose spacing was read as a raw Q16.16
-    // word collapses every instance onto one square. A threshold rather than
-    // "any", because a small stack is a legitimate pile.
     if (mostStacked > 16u)
         record(out, limit, Severity::Warning, "stacked-entities",
                std::to_string(mostStacked) +
@@ -258,9 +253,6 @@ Observations reviewGeneration(std::string_view recipeJson, std::string_view repo
         return out;
     }
 
-    // Asked-for versus got. Every one of these is a real failure mode: a pass
-    // that runs, succeeds and produces nothing looks exactly like a pass that
-    // worked, until somebody goes and looks.
     if (field(answer, "created", 0) == 0)
         record(out, limit, Severity::Defect, "no-entities", "Generation reported zero entities created.",
                "generate_world", "{\"materializeGround\":true}");
@@ -280,9 +272,6 @@ Observations reviewGeneration(std::string_view recipeJson, std::string_view repo
                "A settlement was enabled and no plot was laid out; the terrain offered nowhere flat enough.",
                "generate_world", "{\"settlement\":{\"enabled\":true},\"erosion\":{\"enabled\":true}}");
 
-    // The playability gate is the one judgement the generator already makes.
-    // Re-deriving it here would be a second answer to a question procgen has
-    // answered, so this reads its verdict instead.
     const editor::detail::JVal *passed = answer.find("passed");
     const editor::detail::JVal *reachable = answer.find("reachable");
     if (reachable != nullptr && reachable->t == editor::detail::JVal::T::Bool && !reachable->b)

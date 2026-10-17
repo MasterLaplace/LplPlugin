@@ -1,12 +1,3 @@
-/**
- * @file Dialogue.cpp
- * @brief Implementation of the master-to-demon channel.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Dialogue.hpp>
 
 #include <utility>
@@ -25,8 +16,6 @@ std::optional<Intent> Dialogue::poll()
 {
     if (_read >= _intents.size())
         return std::nullopt;
-    // Read forward rather than erase from the front: the whole exchange stays
-    // available afterwards, which is what makes a session auditable.
     return _intents[_read++];
 }
 
