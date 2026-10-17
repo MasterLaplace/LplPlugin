@@ -1,9 +1,3 @@
-/**
- * @file Windowing.cpp
- * @brief Implementation of the Hann window DSP stage.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/dsp/Windowing.hpp"
 
 #include <cmath>

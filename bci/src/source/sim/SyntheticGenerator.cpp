@@ -1,9 +1,3 @@
-/**
- * @file SyntheticGenerator.cpp
- * @brief Implementation of the deterministic EEG signal generator.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/source/sim/SyntheticGenerator.hpp"
 
 #include <chrono>

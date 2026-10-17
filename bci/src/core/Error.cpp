@@ -1,9 +1,3 @@
-/**
- * @file Error.cpp
- * @brief Implementation of Error::format().
- * @author MasterLaplace
- */
-
 #include "lpl/bci/core/Error.hpp"
 
 #include <sstream>

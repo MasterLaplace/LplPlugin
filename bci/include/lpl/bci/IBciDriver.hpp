@@ -46,10 +46,14 @@ class IBciDriver {
 public:
     virtual ~IBciDriver() = default;
 
-    /** @brief Connect to the device. */
+    /**
+     * @brief Connect to the device.
+     */
     [[nodiscard]] virtual core::Expected<void> connect() = 0;
 
-    /** @brief Start the acquisition stream. */
+    /**
+     * @brief Start the acquisition stream.
+     */
     [[nodiscard]] virtual core::Expected<void> startStream() = 0;
 
     /**
@@ -58,16 +62,24 @@ public:
      */
     [[nodiscard]] virtual core::Expected<RawSample> poll() = 0;
 
-    /** @brief Stop the acquisition stream. */
+    /**
+     * @brief Stop the acquisition stream.
+     */
     virtual void stopStream() = 0;
 
-    /** @brief Disconnect from the device. */
+    /**
+     * @brief Disconnect from the device.
+     */
     virtual void disconnect() = 0;
 
-    /** @brief Current driver status. */
+    /**
+     * @brief Current driver status.
+     */
     [[nodiscard]] virtual DriverStatus status() const noexcept = 0;
 
-    /** @brief Human-readable driver / hardware name. */
+    /**
+     * @brief Human-readable driver / hardware name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

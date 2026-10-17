@@ -1,8 +1,3 @@
-/**
- * @file TestMetrics.cpp
- * @brief Unit tests for bci::metric (Signal, Neural, Stability).
- */
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -12,16 +7,13 @@
 
 namespace lpl::bci {
 
-using namespace bci::metric;
-using Catch::Matchers::WithinAbs;
-
 TEST_CASE("SignalMetric computes Schumacher ratio", "[metric][signal]")
 {
-    SignalMetricConfig config;
+    lpl::bci::metric::SignalMetricConfig config;
     config.sampleRate = 250.0f;
     config.fftSize = 256;
 
-    SignalMetric metric(config);
+    lpl::bci::metric::SignalMetric metric(config);
 
     std::vector<std::vector<float>> psd(2, std::vector<float>(129, 1.0f));
 
@@ -39,21 +31,21 @@ TEST_CASE("SignalMetric computes Schumacher ratio", "[metric][signal]")
 
 TEST_CASE("SignalMetric mean is average of channel ratios", "[metric][signal]")
 {
-    SignalMetric metric;
+    lpl::bci::metric::SignalMetric metric;
 
     std::vector<std::vector<float>> psd(1, std::vector<float>(129, 1.0f));
 
     auto results = metric.compute(psd);
     float mean = metric.computeMean(psd);
 
-    REQUIRE_THAT(static_cast<double>(mean), WithinAbs(static_cast<double>(results[0].ratio), 1e-5));
+    REQUIRE_THAT(static_cast<double>(mean), Catch::Matchers::WithinAbs(static_cast<double>(results[0].ratio), 1e-5));
 }
 
 TEST_CASE("NeuralMetric normalizes to [0,1]", "[metric][neural]")
 {
-    NeuralMetric metric;
+    lpl::bci::metric::NeuralMetric metric;
 
-    std::vector<ChannelBaseline> baselines = {
+    std::vector<lpl::bci::metric::ChannelBaseline> baselines = {
         {.alpha = {.mean = 10.0f, .stdDev = 2.0f}, .beta = {.mean = 5.0f, .stdDev = 1.0f}},
         {.alpha = {.mean = 10.0f, .stdDev = 2.0f}, .beta = {.mean = 5.0f, .stdDev = 1.0f}},
     };
@@ -71,14 +63,14 @@ TEST_CASE("NeuralMetric normalizes to [0,1]", "[metric][neural]")
         REQUIRE(v <= 1.0f);
     }
 
-    REQUIRE_THAT(static_cast<double>(state.alphaPower), WithinAbs(0.5, 0.1));
+    REQUIRE_THAT(static_cast<double>(state.alphaPower), Catch::Matchers::WithinAbs(0.5, 0.1));
 }
 
 TEST_CASE("NeuralMetric clamps extremes", "[metric][neural]")
 {
-    NeuralMetric metric;
+    lpl::bci::metric::NeuralMetric metric;
 
-    std::vector<ChannelBaseline> baselines = {
+    std::vector<lpl::bci::metric::ChannelBaseline> baselines = {
         {.alpha = {.mean = 10.0f, .stdDev = 1.0f}, .beta = {.mean = 5.0f, .stdDev = 1.0f}},
     };
     metric.setBaselines(baselines);
@@ -88,13 +80,13 @@ TEST_CASE("NeuralMetric clamps extremes", "[metric][neural]")
 
     auto state = metric.compute(highAlpha, lowBeta);
 
-    REQUIRE_THAT(static_cast<double>(state.channelAlpha[0]), WithinAbs(1.0, 1e-5));
-    REQUIRE_THAT(static_cast<double>(state.channelBeta[0]), WithinAbs(0.0, 1e-5));
+    REQUIRE_THAT(static_cast<double>(state.channelAlpha[0]), Catch::Matchers::WithinAbs(1.0, 1e-5));
+    REQUIRE_THAT(static_cast<double>(state.channelBeta[0]), Catch::Matchers::WithinAbs(0.0, 1e-5));
 }
 
 TEST_CASE("StabilityMetric first update returns stable", "[metric][stability]")
 {
-    StabilityMetric metric;
+    lpl::bci::metric::StabilityMetric metric;
 
     Eigen::MatrixXf spd(2, 2);
     spd << 2, 0.5f, 0.5f, 3;
@@ -102,15 +94,15 @@ TEST_CASE("StabilityMetric first update returns stable", "[metric][stability]")
     auto result = metric.update(spd);
     REQUIRE(result.has_value());
     REQUIRE(result->isStable);
-    REQUIRE_THAT(static_cast<double>(result->currentDistance), WithinAbs(0.0, 1e-5));
+    REQUIRE_THAT(static_cast<double>(result->currentDistance), Catch::Matchers::WithinAbs(0.0, 1e-5));
 }
 
 TEST_CASE("StabilityMetric detects instability", "[metric][stability]")
 {
-    StabilityConfig config;
+    lpl::bci::metric::StabilityConfig config;
     config.historySize = 5;
     config.stableThreshold = 0.01f;
-    StabilityMetric metric(config);
+    lpl::bci::metric::StabilityMetric metric(config);
 
     Eigen::MatrixXf a(2, 2);
     a << 2, 0, 0, 2;
@@ -128,7 +120,7 @@ TEST_CASE("StabilityMetric detects instability", "[metric][stability]")
 
 TEST_CASE("StabilityMetric builds history", "[metric][stability]")
 {
-    StabilityMetric metric;
+    lpl::bci::metric::StabilityMetric metric;
 
     Eigen::MatrixXf spd(2, 2);
     spd << 3, 1, 1, 3;

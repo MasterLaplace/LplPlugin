@@ -1,8 +1,3 @@
-/**
- * @file TestSynthetic.cpp
- * @brief Unit tests for bci::source::SyntheticGenerator and SyntheticSource.
- */
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -11,14 +6,12 @@
 
 namespace lpl::bci {
 
-using namespace bci::source;
-
 TEST_CASE("SyntheticGenerator produces correct sample count", "[source][synthetic]")
 {
     const std::uint64_t seed = 42;
     const std::size_t channelCount = 4;
 
-    SyntheticGenerator gen(seed, channelCount);
+    lpl::bci::source::SyntheticGenerator gen(seed, channelCount);
     auto samples = gen.generate(100);
 
     REQUIRE(samples.size() == 100);
@@ -33,8 +26,8 @@ TEST_CASE("SyntheticGenerator is deterministic with same seed", "[source][synthe
     const std::uint64_t seed = 123;
     const std::size_t channelCount = 2;
 
-    SyntheticGenerator gen1(seed, channelCount);
-    SyntheticGenerator gen2(seed, channelCount);
+    lpl::bci::source::SyntheticGenerator gen1(seed, channelCount);
+    lpl::bci::source::SyntheticGenerator gen2(seed, channelCount);
 
     auto samples1 = gen1.generate(50);
     auto samples2 = gen2.generate(50);
@@ -51,9 +44,9 @@ TEST_CASE("SyntheticGenerator is deterministic with same seed", "[source][synthe
 
 TEST_CASE("SyntheticGenerator produces non-zero signal with oscillators", "[source][synthetic]")
 {
-    SyntheticGenerator gen(42, 1);
+    lpl::bci::source::SyntheticGenerator gen(42, 1);
 
-    SyntheticProfile profile;
+    lpl::bci::source::SyntheticProfile profile;
     profile.oscillators = {
         {.freqHz = 10.0f, .amplitudeUv = 50.0f, .phaseOffset = 0.0f}
     };
@@ -70,21 +63,24 @@ TEST_CASE("SyntheticGenerator produces non-zero signal with oscillators", "[sour
     REQUIRE(maxVal > 10.0f);
 }
 
+/**
+ * @brief In burst mode (realtime false), read() yields kFftUpdateInterval (32) samples when the buffer
+ *        allows.
+ */
 TEST_CASE("SyntheticSource implements ISource interface", "[source][synthetic]")
 {
     const std::uint64_t seed = 42;
-    const bool realtime = false; // "burst" mode for tests
+    const bool realtime = false;
     const std::size_t channelCount = 2;
     const float sampleRate = 250.0f;
 
-    SyntheticSource source(seed, realtime, channelCount, sampleRate);
+    lpl::bci::source::SyntheticSource source(seed, realtime, channelCount, sampleRate);
     auto startResult = source.start();
     REQUIRE(startResult.has_value());
 
     std::vector<bci::Sample> buffer(32);
     auto readResult = source.read(buffer);
     REQUIRE(readResult.has_value());
-    // In block mode (realtime = false), read() currently yields kFftUpdateInterval (32) samples if buffer allows
     REQUIRE(*readResult == 32);
 
     auto info = source.info();

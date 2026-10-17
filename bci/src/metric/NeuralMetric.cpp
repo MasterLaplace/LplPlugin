@@ -1,8 +1,3 @@
-/**
- * @file NeuralMetric.cpp
- * @brief Implementation of neural state normalization.
- */
-
 #include "lpl/bci/metric/NeuralMetric.hpp"
 
 #include <algorithm>

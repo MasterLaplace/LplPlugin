@@ -37,51 +37,15 @@ public:
     {
     }
 
-    ~SourceBciDriver() override
-    {
-        if (_status == DriverStatus::Streaming)
-            stopStream();
-        if (_status == DriverStatus::Connected)
-            disconnect();
-    }
+    inline ~SourceBciDriver() override;
 
-    [[nodiscard]] core::Expected<void> connect() override
-    {
-        _status = DriverStatus::Connected;
-        return {};
-    }
+    [[nodiscard]] inline core::Expected<void> connect() override;
 
-    [[nodiscard]] core::Expected<void> startStream() override
-    {
-        auto res = _source->start();
-        if (!res)
-            return core::makeError(core::ErrorCode::kDeviceOpenFailed, "BCI source start failed");
-        _status = DriverStatus::Streaming;
-        return {};
-    }
+    [[nodiscard]] inline core::Expected<void> startStream() override;
 
-    [[nodiscard]] core::Expected<RawSample> poll() override
-    {
-        Sample buf{};
-        std::span<Sample> span{&buf, 1};
-        auto readResult = _source->read(span);
-        if (!readResult.has_value() || readResult.value() == 0)
-            return core::makeError(core::ErrorCode::kInvalidState, "No BCI data available");
+    [[nodiscard]] inline core::Expected<RawSample> poll() override;
 
-        RawSample raw{};
-        raw.channelCount = static_cast<core::u16>(buf.channelCount());
-        for (core::u16 ch = 0; ch < raw.channelCount && ch < RawSample::kMaxChannels; ++ch)
-            raw.channels[ch] = buf.channels[ch];
-        raw.timestampUs = static_cast<core::u64>(buf.timestamp * 1e6);
-        raw.sequence = _seq++;
-        return raw;
-    }
-
-    void stopStream() override
-    {
-        _source->stop();
-        _status = DriverStatus::Connected;
-    }
+    inline void stopStream() override;
 
     void disconnect() override { _status = DriverStatus::Disconnected; }
 
@@ -96,5 +60,7 @@ private:
 };
 
 } // namespace lpl::bci
+
+#    include "SourceBciDriver.inl"
 
 #endif // LPL_BCI_SOURCEBCIDRIVER_HPP

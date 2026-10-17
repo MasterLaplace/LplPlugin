@@ -1,12 +1,3 @@
-/**
- * @file SerialPortWin32.cpp
- * @brief Win32 implementation of the SerialPort abstraction.
- * @author MasterLaplace
- *
- * Uses CreateFile / ReadFile / WriteFile with DCB configuration.
- * Provides the same interface as the POSIX implementation.
- */
-
 #include "lpl/bci/source/serial/SerialPort.hpp"
 
 #ifdef _WIN32

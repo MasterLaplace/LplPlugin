@@ -1,9 +1,3 @@
-/**
- * @file BrainFlowSource.cpp
- * @brief Implementation of the BrainFlow acquisition source.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/source/BrainFlowSource.hpp"
 #include "lpl/bci/core/Constants.hpp"
 
@@ -116,7 +110,7 @@ SourceInfo BrainFlowSource::info() const noexcept
                       .sampleRate = static_cast<float>(_sampleRate)};
 }
 
-#else // !LPL_HAS_BRAINFLOW
+#else
 
 ExpectedVoid BrainFlowSource::start()
 {

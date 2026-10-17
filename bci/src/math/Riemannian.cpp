@@ -1,8 +1,3 @@
-/**
- * @file Riemannian.cpp
- * @brief Implementation of Riemannian geometry on the SPD manifold.
- */
-
 #include "lpl/bci/math/Riemannian.hpp"
 
 #include <cmath>

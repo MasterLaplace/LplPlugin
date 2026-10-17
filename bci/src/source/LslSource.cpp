@@ -1,9 +1,3 @@
-/**
- * @file LslSource.cpp
- * @brief Implementation of the LSL inlet acquisition source.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/source/LslSource.hpp"
 
 namespace lpl::bci::source {

@@ -1,22 +1,8 @@
-/**
- * @file NeuralSafetyChain.cpp
- * @brief NeuralSafetyChain and built-in checks implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <cmath>
 #include <lpl/bci/NeuralSafetyChain.hpp>
 #include <lpl/core/Log.hpp>
 
 namespace lpl::bci {
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NeuralSafetyChain
-// ─────────────────────────────────────────────────────────────────────────────
 
 NeuralSafetyChain::NeuralSafetyChain() = default;
 NeuralSafetyChain::~NeuralSafetyChain() = default;
@@ -48,10 +34,6 @@ SafetyVerdict NeuralSafetyChain::evaluate(const input::NeuralInputState &state) 
 
 core::usize NeuralSafetyChain::checkCount() const noexcept { return _checks.size(); }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AmplitudeBoundsCheck
-// ─────────────────────────────────────────────────────────────────────────────
-
 AmplitudeBoundsCheck::AmplitudeBoundsCheck(core::f32 maxAbsValue) : _maxAbsValue{maxAbsValue} {}
 
 SafetyVerdict AmplitudeBoundsCheck::evaluate(const input::NeuralInputState &state) const noexcept
@@ -69,10 +51,6 @@ SafetyVerdict AmplitudeBoundsCheck::evaluate(const input::NeuralInputState &stat
 
 const char *AmplitudeBoundsCheck::name() const noexcept { return "AmplitudeBoundsCheck"; }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ConfidenceCheck
-// ─────────────────────────────────────────────────────────────────────────────
-
 ConfidenceCheck::ConfidenceCheck(core::f32 minConfidence) : _minConfidence{minConfidence} {}
 
 SafetyVerdict ConfidenceCheck::evaluate(const input::NeuralInputState &state) const noexcept
@@ -85,10 +63,6 @@ SafetyVerdict ConfidenceCheck::evaluate(const input::NeuralInputState &state) co
 }
 
 const char *ConfidenceCheck::name() const noexcept { return "ConfidenceCheck"; }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RateOfChangeCheck
-// ─────────────────────────────────────────────────────────────────────────────
 
 RateOfChangeCheck::RateOfChangeCheck(core::f32 maxDelta) : _maxDelta{maxDelta} {}
 

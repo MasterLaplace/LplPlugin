@@ -1,9 +1,3 @@
-/**
- * @file FftProcessor.cpp
- * @brief Implementation of the Cooley-Tukey radix-2 FFT processor.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/dsp/FftProcessor.hpp"
 
 #include <bit>

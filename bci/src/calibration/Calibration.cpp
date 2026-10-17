@@ -1,8 +1,3 @@
-/**
- * @file Calibration.cpp
- * @brief Implementation of the calibration state machine.
- */
-
 #include "lpl/bci/calibration/Calibration.hpp"
 #include "lpl/bci/math/Statistics.hpp"
 
