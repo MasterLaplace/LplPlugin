@@ -1,22 +1,3 @@
-/**
- * @file lpl_kmod.c
- * @brief Laplace Kernel Module — High-Performance Zero-Copy RingBuffer RX/TX.
- *
- * Character device /dev/lpl0 with:
- *   - Netfilter PRE_ROUTING hook to capture UDP packets before the stack
- *   - vmalloc_user + mmap for zero-copy shared memory (RX/TX ring buffers)
- *   - Lockless SPSC ring buffers via smp_load_acquire/smp_store_release
- *   - TX kthread with wait_event_interruptible + ioctl kick
- *   - Stats reporting via ioctl
- *
- * Build: out-of-tree via Kbuild.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/fs.h>
@@ -45,14 +26,16 @@ MODULE_AUTHOR("MasterLaplace");
 MODULE_DESCRIPTION("Laplace Kernel Module: High-Perf Zero-Copy RingBuffer RX/TX");
 MODULE_VERSION("0.2");
 
-/* ─── Module state ──────────────────────────────────────────────────────── */
-
+/**
+ * @name Module state
+ * @{
+ */
 static dev_t lpl_devno;
 static struct cdev lpl_cdev;
 static struct class *lpl_class;
 static struct device *lpl_device;
 
-static LplSharedMemory *shm; /* vmalloc_user shared memory    */
+static LplSharedMemory *shm; /**< vmalloc_user shared memory. */
 
 /**
  * @brief Serializes the RX producers.
@@ -73,7 +56,9 @@ static uint64_t tx_drops;   /**< Written by the TX thread only. */
 static uint32_t rx_write_index;       /**< Next RX slot to fill, under rx_lock; published to shm->rx.writer. */
 static uint32_t rx_cached_read_index; /**< Last read index of the process the hook read, under rx_lock. */
 
-/** @brief Serializes the TX thread's runs with LPL_IOCTL_RESET and LPL_IOCTL_GET_STATS. */
+/**
+ * @brief Serializes the TX thread's runs with LPL_IOCTL_RESET and LPL_IOCTL_GET_STATS.
+ */
 static DEFINE_MUTEX(tx_lock);
 
 static uint32_t tx_read_index;         /**< Next TX slot to send, under tx_lock; published to shm->tx.reader. */
@@ -82,14 +67,13 @@ static uint32_t tx_cached_write_index; /**< Last write index of the process the 
 /** Most TX slots sent before the thread publishes its read index and yields. */
 #define LPL_TX_RUN 64U
 
-static struct task_struct *tx_task; /* TX kthread                    */
-static wait_queue_head_t tx_wq;     /* wait queue for TX kick        */
+static struct task_struct *tx_task; /**< TX kthread. */
+static wait_queue_head_t tx_wq;     /**< Wait queue for TX kick. */
 
-static struct socket *udp_sock; /* kernel-space UDP socket       */
+static struct socket *udp_sock; /**< Kernel-space UDP socket. */
 
-static struct nf_hook_ops lpl_nf_ops; /* Netfilter hook registration   */
-
-/* ─── UDP send from kernel space ────────────────────────────────────────── */
+static struct nf_hook_ops lpl_nf_ops; /**< Netfilter hook registration. */
+/** @} */
 
 /**
  * @brief Sends one TX slot from the kernel UDP socket.
@@ -127,8 +111,6 @@ static int send_udp_packet(const LplTxPacket *pkt)
 
     return kernel_sendmsg(udp_sock, &msg, &iov, 1, length);
 }
-
-/* ─── TX kthread ────────────────────────────────────────────────────────── */
 
 /**
  * @brief TX slots the process published and the thread has not sent, under tx_lock.
@@ -225,15 +207,6 @@ static int tx_thread_fn(void *data)
     return 0;
 }
 
-/* ─── Netfilter hook: capture UDP packets for LPL_PORT ──────────────────── */
-
-/**
- * @brief Hooks NF_INET_PRE_ROUTING to take the UDP packets for LPL_PORT into the RX ring.
- *
- * @details The payload is copied from the skb at the IP header's own length (ihl * 4), which
- *          counts IP options, straight into the claimed slot. The packet then leaves the normal
- *          stack (NF_DROP), counted as dropped when the ring is full.
- */
 /**
  * @brief The next RX slot, under rx_lock, or NULL when the ring is full.
  *
@@ -253,6 +226,14 @@ static LplRxPacket *rx_claim_slot(void)
     return &shm->rx.packets[rx_write_index & LPL_RING_MASK];
 }
 
+/**
+ * @brief Hooks NF_INET_PRE_ROUTING to take the UDP packets for LPL_PORT into the RX ring.
+ *
+ * @details The payload is copied from the skb at the IP header's own length (ihl * 4), which
+ *          counts IP options, straight into the claimed slot. The packet then leaves the normal
+ *          stack (NF_DROP), counted as dropped when the ring is full. A malformed IP header, one
+ *          whose IHL is below 5, is left to the normal stack.
+ */
 static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
     struct iphdr *iph;
@@ -270,7 +251,6 @@ static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const st
     if (!iph || iph->protocol != IPPROTO_UDP)
         return NF_ACCEPT;
 
-    /* Guard: reject malformed IP headers (IHL must be >= 5) */
     if (iph->ihl < 5)
         return NF_ACCEPT;
 
@@ -300,10 +280,8 @@ static unsigned int hook_ingest_packet(void *priv, struct sk_buff *skb, const st
     rx_bytes += payload_len;
     spin_unlock_bh(&rx_lock);
 
-    return NF_DROP; /* bypass normal stack for LPL packets */
+    return NF_DROP;
 }
-
-/* ─── File operations ───────────────────────────────────────────────────── */
 
 static int lpl_open(struct inode *inode, struct file *filp)
 {
@@ -403,14 +381,20 @@ static const struct file_operations lpl_fops = {
     .unlocked_ioctl = lpl_ioctl,
 };
 
-/* ─── Init / Exit ───────────────────────────────────────────────────────── */
-
+/**
+ * @brief Loads the module: the character device /dev/lpl0 and the zero-copy RX and TX rings behind it.
+ *
+ * @details In order: the shared memory (vmalloc_user, so that lpl_mmap can map it), the character
+ *          device, a kernel UDP socket for TX bound to an ephemeral port, the TX thread, and the
+ *          Netfilter PRE_ROUTING hook that captures the LPL UDP packets. A socket that cannot be
+ *          created leaves TX disabled while RX through Netfilter still works, and a hook that cannot
+ *          be registered leaves RX disabled: neither stops the module from loading.
+ */
 static int __init lpl_init(void)
 {
     int ret;
     struct sockaddr_in bind_addr;
 
-    /* 1. Allocate shared memory (vmalloc_user for mmap) */
     shm = vmalloc_user(sizeof(LplSharedMemory));
     if (!shm)
         return -ENOMEM;
@@ -421,7 +405,6 @@ static int __init lpl_init(void)
     shm->header.slots = LPL_RING_SLOTS;
     shm->header.size = sizeof(LplSharedMemory);
 
-    /* 2. Create character device */
     ret = alloc_chrdev_region(&lpl_devno, 0, 1, LPL_DEVICE_NAME);
     if (ret < 0)
         goto fail_shm;
@@ -447,27 +430,24 @@ static int __init lpl_init(void)
         goto fail_class;
     }
 
-    /* 3. Create kernel UDP socket for TX */
     ret = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, IPPROTO_UDP, &udp_sock);
     if (ret < 0)
     {
         pr_warn("lpl: failed to create UDP socket (%d), TX disabled\n", ret);
         udp_sock = NULL;
-        /* Non-fatal: TX won't work but RX (Netfilter) still functions */
     }
     else
     {
         memset(&bind_addr, 0, sizeof(bind_addr));
         bind_addr.sin_family = AF_INET;
         bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-        bind_addr.sin_port = 0; /* ephemeral port */
+        bind_addr.sin_port = 0;
 
         ret = kernel_bind(udp_sock, (void *) &bind_addr, sizeof(bind_addr));
         if (ret < 0)
             pr_warn("lpl: UDP bind failed (%d)\n", ret);
     }
 
-    /* 4. Start TX kthread */
     init_waitqueue_head(&tx_wq);
 
     if (udp_sock)
@@ -480,7 +460,6 @@ static int __init lpl_init(void)
         }
     }
 
-    /* 5. Register Netfilter hook (PRE_ROUTING, capture LPL UDP packets) */
     memset(&lpl_nf_ops, 0, sizeof(lpl_nf_ops));
     lpl_nf_ops.hook = hook_ingest_packet;
     lpl_nf_ops.pf = NFPROTO_IPV4;
@@ -491,7 +470,6 @@ static int __init lpl_init(void)
     if (ret < 0)
     {
         pr_warn("lpl: Netfilter hook registration failed (%d), RX via hook disabled\n", ret);
-        /* Non-fatal: still usable via read/write fallback */
     }
 
     pr_info("lpl: /dev/%s registered (major %d), shm=%zu bytes\n", LPL_DEVICE_NAME, MAJOR(lpl_devno),
@@ -510,9 +488,11 @@ fail_shm:
     return ret;
 }
 
+/**
+ * @brief Unloads the module, tearing down in the reverse order of lpl_init.
+ */
 static void __exit lpl_exit(void)
 {
-    /* Reverse order teardown */
     nf_unregister_net_hook(&init_net, &lpl_nf_ops);
 
     if (tx_task)
