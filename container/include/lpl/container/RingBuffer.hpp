@@ -126,19 +126,29 @@ public:
     requires std::is_nothrow_invocable_v<Visit &, T &>
     core::usize consume(Visit &&visit, core::usize maxCount) noexcept;
 
-    /** @brief Elements in the ring, as one snapshot. */
+    /**
+     * @brief Elements in the ring, as one snapshot.
+     */
     [[nodiscard]] core::usize size() const noexcept;
 
-    /** @brief True when the snapshot holds no element. */
+    /**
+     * @brief True when the snapshot holds no element.
+     */
     [[nodiscard]] bool isEmpty() const noexcept;
 
-    /** @brief True when the snapshot holds Capacity elements. */
+    /**
+     * @brief True when the snapshot holds Capacity elements.
+     */
     [[nodiscard]] bool isFull() const noexcept;
 
-    /** @brief Elements the producer could not fit since the ring was built. */
+    /**
+     * @brief Elements the producer could not fit since the ring was built.
+     */
     [[nodiscard]] core::u32 rejectedCount() const noexcept;
 
-    /** @brief Number of slots, all usable. */
+    /**
+     * @brief Number of slots, all usable.
+     */
     [[nodiscard]] static constexpr core::usize capacity() noexcept { return Capacity; }
 
 private:
@@ -189,7 +199,9 @@ private:
      */
     [[nodiscard]] core::u32 readySlots(core::u32 readIndex, core::u32 wanted) noexcept;
 
-    /** @brief Adds @p count to the rejected elements, as their only writer. */
+    /**
+     * @brief Adds @p count to the rejected elements, as their only writer.
+     */
     void countRejected(core::usize count) noexcept;
 
     ProducerEnd _producer;

@@ -1,17 +1,9 @@
-/**
- * @file FlatAtomicHashMap.inl
- * @brief Template implementation of lock-free flat hash map with pool recycling.
- * @see   FlatAtomicHashMap.hpp
- */
-
 #ifndef LPL_CONTAINER_FLAT_ATOMIC_HASH_MAP_INL
 #define LPL_CONTAINER_FLAT_ATOMIC_HASH_MAP_INL
 
 #include <algorithm>
 #include <bit>
 
-// forEachParallel farms batches out to a host thread pool; the freestanding
-// kernel has neither <thread> nor <future>, and iterates with forEach instead.
 #if !LPL_TARGET_KERNEL
 #    include <future>
 #    include <thread>
@@ -21,10 +13,13 @@ namespace lpl::container {
 
 namespace detail {
 
+/**
+ * @brief Packs @p key in the high 42 bits and @p index + 1 in the low 22 bits of an entry.
+ *
+ * The index is stored plus one so that pool index 0 does not collide with kEmpty.
+ */
 constexpr core::u64 packEntry(core::u64 key, core::u32 index)
 {
-    // Pack key (42 bits) | poolIndex+1 (22 bits).
-    // +1 so that poolIndex 0 does not collide with kEmpty.
     return ((key & ((core::u64{1} << 42) - 1)) << 22) | (((index + 1u)) & ((1u << 22) - 1));
 }
 
@@ -33,10 +28,6 @@ constexpr core::u64 extractKey(core::u64 packed) { return packed >> 22; }
 constexpr core::u32 extractIndex(core::u64 packed) { return static_cast<core::u32>(packed & ((1u << 22) - 1)) - 1u; }
 
 } // namespace detail
-
-// ========================================================================== //
-//  Constructor                                                               //
-// ========================================================================== //
 
 template <typename V>
 FlatAtomicHashMap<V>::FlatAtomicHashMap(core::u32 capacity)
@@ -56,10 +47,6 @@ FlatAtomicHashMap<V>::FlatAtomicHashMap(core::u32 capacity)
 
     _activeSlots.reserve(_poolCapacity);
 }
-
-// ========================================================================== //
-//  Lookup                                                                    //
-// ========================================================================== //
 
 template <typename V> V *FlatAtomicHashMap<V>::get(core::u64 key)
 {
@@ -82,10 +69,6 @@ template <typename V> const V *FlatAtomicHashMap<V>::get(core::u64 key) const
     return const_cast<FlatAtomicHashMap *>(this)->get(key);
 }
 
-// ========================================================================== //
-//  Insert (default-constructed)                                              //
-// ========================================================================== //
-
 template <typename V> V *FlatAtomicHashMap<V>::insert(core::u64 key)
 {
     core::u32 slotIndex;
@@ -106,17 +89,12 @@ template <typename V> V *FlatAtomicHashMap<V>::insert(core::u64 key)
         return &_pool[slotIndex];
     }
 
-    // Key already exists — recycle the slot and return existing value.
     {
         concurrency::SpinLockGuard lock(_allocLock);
         _freeIndices.push_back(slotIndex);
     }
     return get(key);
 }
-
-// ========================================================================== //
-//  Insert (move semantics)                                                   //
-// ========================================================================== //
 
 template <typename V> V *FlatAtomicHashMap<V>::insert(core::u64 key, V &&value)
 {
@@ -144,10 +122,6 @@ template <typename V> V *FlatAtomicHashMap<V>::insert(core::u64 key, V &&value)
     }
     return get(key);
 }
-
-// ========================================================================== //
-//  Remove                                                                    //
-// ========================================================================== //
 
 template <typename V> bool FlatAtomicHashMap<V>::remove(core::u64 key)
 {
@@ -183,10 +157,6 @@ template <typename V> bool FlatAtomicHashMap<V>::remove(core::u64 key)
     return false;
 }
 
-// ========================================================================== //
-//  linkKeyToSlot (internal)                                                  //
-// ========================================================================== //
-
 template <typename V> bool FlatAtomicHashMap<V>::linkKeyToSlot(core::u64 key, core::u32 slotIndex)
 {
     core::u64 packed = detail::packEntry(key, slotIndex);
@@ -204,20 +174,15 @@ template <typename V> bool FlatAtomicHashMap<V>::linkKeyToSlot(core::u64 key, co
                 _size.fetch_add(1, std::memory_order_relaxed);
                 return true;
             }
-            // CAS failed — retry same slot.
             --i;
             continue;
         }
 
         if (detail::extractKey(prev) == key)
-            return false; // Already exists.
+            return false;
     }
-    return false; // Map full.
+    return false;
 }
-
-// ========================================================================== //
-//  Iteration                                                                 //
-// ========================================================================== //
 
 template <typename V> template <typename Fn> void FlatAtomicHashMap<V>::forEach(Fn &&fn)
 {
@@ -300,10 +265,6 @@ void FlatAtomicHashMap<V>::forEachParallel(TP &pool, Fn &&fn, core::u32 minPerTh
         f.wait();
 }
 #endif // !LPL_TARGET_KERNEL
-
-// ========================================================================== //
-//  Utilities                                                                 //
-// ========================================================================== //
 
 template <typename V> void FlatAtomicHashMap<V>::snapshotActiveSlots(pmr::vector<core::u32> &out)
 {

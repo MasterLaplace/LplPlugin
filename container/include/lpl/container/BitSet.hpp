@@ -44,43 +44,23 @@ public:
         return (_words[index / kBitsPerWord] >> (index % kBitsPerWord)) & 1;
     }
 
-    constexpr void clearAll()
-    {
-        for (auto &w : _words)
-            w = 0;
-    }
+    constexpr void clearAll();
 
-    [[nodiscard]] constexpr core::u32 count() const
-    {
-        core::u32 total = 0;
-        for (auto w : _words)
-            total += static_cast<core::u32>(std::popcount(w));
-        return total;
-    }
+    [[nodiscard]] constexpr core::u32 count() const;
 
     /**
      * @brief Iterate over all set bit indices.
      * @tparam Fn Callable(core::u32 bitIndex).
      * @param fn  Visitor.
      */
-    template <typename Fn> constexpr void forEachSet(Fn &&fn) const
-    {
-        for (core::u32 w = 0; w < kWordCount; ++w)
-        {
-            auto word = _words[w];
-            while (word)
-            {
-                core::u32 bit = static_cast<core::u32>(std::countr_zero(word));
-                fn(w * kBitsPerWord + bit);
-                word &= word - 1;
-            }
-        }
-    }
+    template <typename Fn> constexpr void forEachSet(Fn &&fn) const;
 
 private:
     std::array<core::u64, kWordCount> _words{};
 };
 
 } // namespace lpl::container
+
+#    include "BitSet.inl"
 
 #endif // LPL_CONTAINER_BIT_SET_HPP

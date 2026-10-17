@@ -61,6 +61,9 @@ public:
 
     /**
      * @brief Insert with default-constructed value.
+     *
+     * When @p key is already present, the pool slot taken for the new value goes back to the free list.
+     *
      * @param key Morton key.
      * @return Pointer to the value, or the existing value if key already present.
      *         nullptr if pool exhausted.
@@ -123,6 +126,17 @@ public:
     [[nodiscard]] core::u32 capacity() const { return _poolCapacity; }
 
 private:
+    /**
+     * @brief Publishes the entry of @p key, pointing at pool slot @p slotIndex, in the first empty or
+     *        tombstoned entry of its probe sequence.
+     *
+     * A failed compare-and-swap retries the same entry.
+     *
+     * @param key       Morton key.
+     * @param slotIndex Pool slot that already holds the value.
+     * @return True when the entry was published; false when the probe met @p key already present,
+     *         or went round the whole map without a free entry.
+     */
     [[nodiscard]] bool linkKeyToSlot(core::u64 key, core::u32 slotIndex);
 
     pmr::unique_ptr<std::atomic<core::u64>[]> _entries;
