@@ -1,12 +1,3 @@
-/**
- * @file Grammar.cpp
- * @brief Implementation of GBNF emission for constrained decoding.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Grammar.hpp>
 
 #include <lpl/ecs/ComponentReflection.hpp>
@@ -15,7 +6,9 @@ namespace lpl::agent {
 
 namespace {
 
-/// GBNF rule names accept letters, digits and dashes; tool names use underscores.
+/**
+ * @brief GBNF rule names accept letters, digits and dashes; tool names use underscores.
+ */
 std::string ruleName(std::string_view prefix, std::string_view name)
 {
     std::string out{prefix};
@@ -33,7 +26,9 @@ std::string ruleName(std::string_view prefix, std::string_view tool, std::string
     return out;
 }
 
-/// A JSON string literal as a GBNF terminal.
+/**
+ * @brief A JSON string literal as a GBNF terminal.
+ */
 std::string literal(std::string_view s)
 {
     std::string out = "\"\\\"";
@@ -42,7 +37,9 @@ std::string literal(std::string_view s)
     return out;
 }
 
-/// The GBNF rule producing a value of @p kind.
+/**
+ * @brief The GBNF rule producing a value of @p kind.
+ */
 std::string_view valueRule(ParamKind kind)
 {
     switch (kind)
@@ -57,17 +54,21 @@ std::string_view valueRule(ParamKind kind)
     return "value";
 }
 
-/// The right-hand side of one parameter member.
+/**
+ * @brief The right-hand side of one parameter member.
+ *
+ * A closed set of choices goes into the rule itself: the one thing a grammar does
+ * that a schema cannot is put the closed set into the sampler, so an unknown word
+ * is not merely refused afterwards, it is never generated. WHICH set is
+ * agent::forEachChoice's business — asking here would be the second place to
+ * remember when a set is added.
+ */
 std::string memberBody(const ToolParam &param)
 {
     std::string out = literal(param.name);
     out += " ws \":\" ws ";
     if (param.choices != DynamicEnum::None)
     {
-        // The one thing a grammar does that a schema cannot: put the closed set
-        // into the sampler, so an unknown word is not merely refused afterwards, it
-        // is never generated. WHICH set is agent::forEachChoice's business — asking
-        // here would be the second place to remember when a set is added.
         out += "( ";
         bool first = true;
         forEachChoice(param.choices, [&](std::string_view word) {
@@ -92,7 +93,6 @@ std::string emitGbnf(const ToolRegistry &registry)
     out += "# Regenerated every step: this grammar describes what is callable NOW.\n";
     out += "root ::= call\n\n";
 
-    // ── JSON primitives ────────────────────────────────────────────────────────
     out += "ws ::= [ \\t\\n]*\n";
     out += "string ::= \"\\\"\" ( [^\"\\\\] | \"\\\\\" [\"\\\\/bfnrt] )* \"\\\"\"\n";
     out += "integer ::= \"-\"? ( \"0\" | [1-9] [0-9]* )\n";
@@ -102,16 +102,12 @@ std::string emitGbnf(const ToolRegistry &registry)
     out += "object ::= \"{\" ws ( string ws \":\" ws value ( ws \",\" ws string ws \":\" ws value )* )? ws \"}\"\n";
     out += "array ::= \"[\" ws ( value ( ws \",\" ws value )* )? ws \"]\"\n\n";
 
-    // ── The call ───────────────────────────────────────────────────────────────
     out += "call ::= \"{\" ws ( \"\\\"thought\\\"\" ws \":\" ws string ws \",\" ws )? \"\\\"tool\\\"\" ws \":\" ws "
            "tool-choice ws \"}\"\n";
 
     out += "tool-choice ::= ";
     if (registry.tools().empty())
     {
-        // A registry that offers nothing must produce a grammar that accepts
-        // nothing, not one that accepts anything. An unsatisfiable rule is the
-        // honest encoding of "there is no legal move".
         out += "\"\\u0000\"\n";
         return out;
     }
@@ -135,8 +131,6 @@ std::string emitGbnf(const ToolRegistry &registry)
         out += args;
         out += '\n';
 
-        // Argument object. Three shapes, each the only one that is correct for
-        // its case; see Grammar.hpp for why a single shape cannot serve.
         core::u32 required = 0u;
         for (const ToolParam &p : tool->params)
             required += p.required ? 1u : 0u;
@@ -149,8 +143,6 @@ std::string emitGbnf(const ToolRegistry &registry)
 
         if (required != 0u)
         {
-            // Required first, in declared order, then each optional as a
-            // skippable trailing member.
             out += args + " ::= \"{\" ws ";
             bool firstRequired = true;
             for (const ToolParam &p : tool->params)

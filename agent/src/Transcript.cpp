@@ -1,12 +1,3 @@
-/**
- * @file Transcript.cpp
- * @brief Implementation of the record of a reason-act-observe loop.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Transcript.hpp>
 
 namespace lpl::agent {
@@ -68,9 +59,6 @@ core::u32 Transcript::trailingRepeats() const noexcept
     core::u32 repeats = 0u;
     for (std::size_t i = _turns.size() - 1u; i-- > 0u;)
     {
-        // The observation is part of the identity: reissuing a call and getting a
-        // DIFFERENT answer is progress, however slow. Only the same call answered
-        // the same way means nothing is moving.
         if (_turns[i].tool != last.tool || _turns[i].args != last.args || _turns[i].observation != last.observation)
             break;
         ++repeats;
@@ -102,9 +90,6 @@ std::string Transcript::toJson() const
         }
         out += ",\"ok\":";
         out += turn.ok ? "true" : "false";
-        // The link to the world's real history. A reader that wants to REBUILD
-        // follows this into the journal; a reader that wants to UNDERSTAND stays
-        // here. Two documents, one history.
         if (turn.journalEntry != kNotJournalled)
             out += ",\"journalEntry\":" + std::to_string(turn.journalEntry);
         out += ",\"observation\":";

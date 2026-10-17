@@ -6,8 +6,7 @@
  * the same signature. That makes an agent session auditable and, more importantly,
  * testable.
  *
- * ── What this is NOT ─────────────────────────────────────────────────────────
- *
+ * @par What this is NOT
  * It is not a second journal. @c editor::CommandJournal already records every act
  * that changed the world, already replays them, and already declines to record a
  * query. Writing the acts down again here would give two histories that agree
@@ -37,7 +36,7 @@
 
 namespace lpl::agent {
 
-/// A turn whose act changed nothing, so the journal never recorded it.
+/** @brief A turn whose act changed nothing, so the journal never recorded it. */
 inline constexpr core::u32 kNotJournalled = 0xFFFFFFFFu;
 
 /**
@@ -45,13 +44,13 @@ inline constexpr core::u32 kNotJournalled = 0xFFFFFFFFu;
  * @brief One reason-act-observe step.
  */
 struct Turn {
-    core::u32 index{0u};                    ///< 0-based turn number.
-    std::string thought;                    ///< Why, in the caller's own words. May be empty.
-    std::string tool;                       ///< Which capability was invoked.
-    std::string args;                       ///< Its arguments, as JSON.
-    std::string observation;                ///< What came back: a report, or a refusal.
-    bool ok{false};                         ///< Whether the act was accepted.
-    core::u32 journalEntry{kNotJournalled}; ///< Where CommandJournal recorded it.
+    core::u32 index{0u};                    /**< 0-based turn number. */
+    std::string thought;                    /**< Why, in the caller's own words. May be empty. */
+    std::string tool;                       /**< Which capability was invoked. */
+    std::string args;                       /**< Its arguments, as JSON. */
+    std::string observation;                /**< What came back: a report, or a refusal. */
+    bool ok{false};                         /**< Whether the act was accepted. */
+    core::u32 journalEntry{kNotJournalled}; /**< Where CommandJournal recorded it. */
 };
 
 /**
@@ -87,11 +86,21 @@ public:
      * call and gets the same answer is not converging, it is stuck, and the only
      * useful thing left to do is stop. Counts the trailing run, so an earlier,
      * unrelated repetition does not arm it.
+     *
+     * The observation is part of the identity: reissuing a call and getting a
+     * DIFFERENT answer is progress, however slow. Only the same call answered the
+     * same way means nothing is moving.
      */
     [[nodiscard]] core::u32 trailingRepeats() const noexcept;
 
     /**
      * @brief The session as a JSON document.
+     *
+     * A turn the journal recorded carries its `journalEntry`, the link to the
+     * world's real history: a reader that wants to REBUILD follows it into the
+     * journal; a reader that wants to UNDERSTAND stays here. Two documents, one
+     * history.
+     *
      * @return The JSON string representing the transcript.
      */
     [[nodiscard]] std::string toJson() const;

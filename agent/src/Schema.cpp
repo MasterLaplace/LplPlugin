@@ -1,12 +1,3 @@
-/**
- * @file Schema.cpp
- * @brief Implementation of JSON-Schema emission from the reflection registry.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Schema.hpp>
 
 #include <cstdint>
@@ -17,7 +8,9 @@ namespace lpl::agent {
 
 namespace {
 
-/// Appends @p s as a JSON string literal, quotes included.
+/**
+ * @brief Appends @p s as a JSON string literal, quotes included.
+ */
 void appendString(std::string &out, std::string_view s)
 {
     out += '"';
@@ -35,7 +28,9 @@ void appendString(std::string &out, std::string_view s)
     out += '"';
 }
 
-/// Decodes a @c FieldType::F32 default/bound, which @c FieldDesc stores as bits.
+/**
+ * @brief Decodes a @c FieldType::F32 default/bound, which @c FieldDesc stores as bits.
+ */
 float rawToFloat(core::i64 raw)
 {
     const std::uint32_t bits = static_cast<std::uint32_t>(static_cast<core::i32>(raw));
@@ -44,7 +39,9 @@ float rawToFloat(core::i64 raw)
     return f;
 }
 
-/// The closed set of strings a @ref DynamicEnum stands for, as a JSON array.
+/**
+ * @brief The closed set of strings a @ref DynamicEnum stands for, as a JSON array.
+ */
 void appendChoices(std::string &out, DynamicEnum choices)
 {
     if (choices == DynamicEnum::None)
@@ -60,7 +57,9 @@ void appendChoices(std::string &out, DynamicEnum choices)
     out += ']';
 }
 
-/// A bound in the units the parameter is declared in.
+/**
+ * @brief A bound in the units the parameter is declared in.
+ */
 void appendBound(std::string &out, const char *key, ParamKind kind, double value)
 {
     char buf[64];
@@ -75,8 +74,6 @@ void appendBound(std::string &out, const char *key, ParamKind kind, double value
 
 std::string emitJsonSchema(const ecs::ComponentSchema &schema)
 {
-    // Byte-for-byte the shape test_reflection.cpp has pinned since 2026-07-16.
-    // Changing it means changing that assertion in the same commit, deliberately.
     std::string out = "{\"type\":\"object\",\"title\":\"";
     out += schema.name;
     out += "\",\"properties\":{";
@@ -149,17 +146,12 @@ std::string emitJsonSchema(const ToolDesc &tool)
         first = false;
         appendString(out, p.name);
     }
-    // Closed: an argument nobody declared is a typo, and a typo that silently
-    // succeeds is worse than one that is refused with a reason.
     out += "],\"additionalProperties\":false}";
     return out;
 }
 
 std::string emitJsonSchema(const ToolRegistry &registry)
 {
-    // A call is one object: an optional thought, the tool's name, its arguments.
-    // Keeping the thought inside the call is what makes a transcript entry
-    // self-contained — the reasoning and the act cannot drift apart later.
     std::string out = "{\"type\":\"object\",\"title\":\"tool_call\",\"oneOf\":[";
     bool first = true;
     for (const ToolDesc *tool : registry.tools())

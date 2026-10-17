@@ -50,12 +50,13 @@ namespace lpl::agent {
  */
 struct CameraPose {
     core::f32 yawDeg{45.0f};
-    /// Chosen by looking, not by taste: at 30 degrees a wide terrain converges to
-    /// a point and reads as a spike; at 65 the relief flattens out and a ridge is
-    /// indistinguishable from a plain. Around 45 both survive.
+    /**
+     * Chosen by looking, not by taste: at 30 degrees a wide terrain converges to
+     * a point and reads as a spike; at 65 the relief flattens out and a ridge is
+     * indistinguishable from a plain. Around 45 both survive.
+     */
     core::f32 pitchDeg{45.0f};
-    /// Orbit radius; zero means "frame whatever is there", computed from the bounds.
-    core::f32 distance{0.0f};
+    core::f32 distance{0.0f}; /**< Orbit radius; zero means "frame whatever is there", computed from the bounds. */
 };
 
 /**
@@ -65,8 +66,8 @@ struct CameraPose {
 struct Screenshot {
     core::u32 width{0u};
     core::u32 height{0u};
-    core::u32 fold{0u};          ///< render::foldTarget over the colour buffer.
-    core::u32 entitiesDrawn{0u}; ///< Entities that had a position to draw at.
+    core::u32 fold{0u};          /**< render::foldTarget over the colour buffer. */
+    core::u32 entitiesDrawn{0u}; /**< Entities that had a position to draw at. */
     core::u32 triangles{0u};
 };
 
@@ -77,6 +78,13 @@ struct Screenshot {
  * default when they carry none — a world of invisible points would defeat the
  * purpose. Colour is derived from the archetype so that different KINDS of thing
  * read differently; it is cosmetic and never flows back into world state.
+ *
+ * The camera is centred on what is actually there, and backs off to frame it
+ * unless @p pose gives a distance. A fixed camera over a world whose extent the
+ * caller did not state photographs the void just as happily as the world, and a
+ * blank picture is the least useful observation there is. The far plane follows
+ * the framing, or a world larger than the default 600 units would be clipped away
+ * by the camera meant to photograph it.
  */
 [[nodiscard]] Screenshot renderWorld(const ecs::Registry &registry, core::u32 width, core::u32 height,
                                      const CameraPose &pose, image::Image &out);

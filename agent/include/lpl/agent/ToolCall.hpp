@@ -37,9 +37,9 @@ namespace lpl::agent {
  * @brief One validated invocation, ready to dispatch.
  */
 struct ToolCall {
-    const ToolDesc *tool{nullptr}; ///< Never null once validated.
-    std::string thought;           ///< Optional; empty when the model gave none.
-    std::string args;              ///< The argument object, re-emitted as JSON text.
+    const ToolDesc *tool{nullptr}; /**< Never null once validated. */
+    std::string thought;           /**< Optional; empty when the model gave none. */
+    std::string args;              /**< The argument object, re-emitted as JSON text. */
 
     /**
      * @brief The call as an @c editor::CommandProcessor command object.
@@ -47,6 +47,10 @@ struct ToolCall {
      * The translation is a rename, not a transformation: @c args already uses the
      * command's own parameter names, because the tool table was declared from the
      * command surface rather than beside it.
+     *
+     * Rebuilt through the JSON layer rather than by splicing braces: args came from
+     * a parser and goes to a parser, and a hand-rolled concatenation would be a
+     * third JSON implementation waiting to disagree with the other two.
      */
     [[nodiscard]] std::string toCommandJson() const;
 };
@@ -59,6 +63,13 @@ struct ToolCall {
  * missing or not an object; a required parameter is absent; a parameter is not
  * declared; a value has the wrong JSON type; a number falls outside its declared
  * bounds; or a string is outside its closed set.
+ *
+ * An unknown tool and a tool that is not offered are two different refusals,
+ * because they teach different things: a tool that does not exist is a
+ * hallucination, a tool that exists but is not offered is a precondition the
+ * caller has not met yet. A parameter nobody declared is refused because it is a
+ * typo, and a typo that silently succeeds is worse than one refused with a
+ * reason: the caller would keep making it.
  *
  * Bounds are checked here rather than in the grammar because a context-free
  * grammar cannot express a numeric range — see Grammar.hpp.

@@ -74,14 +74,26 @@ public:
      */
     [[nodiscard]] core::Expected<std::string> dispatchJson(std::string_view json, const ToolRegistry &registry);
 
-    /// @return How many calls have mutated the world since this dispatcher was bound.
+    /**
+     * @brief Counts the mutating calls.
+     * @return How many calls have mutated the world since this dispatcher was bound.
+     */
     [[nodiscard]] core::u32 mutations() const noexcept { return _mutations; }
 
-    /// Rewinds the last mutating call. @return false when there is nothing to undo.
+    /**
+     * @brief Rewinds the last mutating call.
+     * @return false when there is nothing to undo.
+     */
     bool undo();
 
 private:
-    /// The @c ToolHost::Agent half: capabilities editor/ cannot host.
+    /**
+     * @brief The @c ToolHost::Agent half: capabilities editor/ cannot host.
+     *
+     * A screenshot reports render::foldTarget as its `frameSignature`: the
+     * perceptual signature, not a parity signature. It answers "did the picture
+     * change", which is the question a correction loop asks.
+     */
     [[nodiscard]] core::Expected<std::string> dispatchHere(const ToolCall &call);
 
     editor::CommandJournal &_journal;

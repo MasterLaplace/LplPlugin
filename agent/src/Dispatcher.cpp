@@ -1,12 +1,3 @@
-/**
- * @file Dispatcher.cpp
- * @brief Implementation of the abstract execution seam.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Dispatcher.hpp>
 
 #include <lpl/agent/Vision.hpp>
@@ -65,8 +56,6 @@ core::Expected<std::string> Dispatcher::dispatchHere(const ToolCall &call)
         out += ",\"height\":" + std::to_string(shot.value().height);
         out += ",\"entities\":" + std::to_string(shot.value().entitiesDrawn);
         out += ",\"triangles\":" + std::to_string(shot.value().triangles);
-        // The perceptual signature, not a parity signature: it answers "did the
-        // picture change", which is the question a correction loop asks.
         out += ",\"frameSignature\":" + std::to_string(shot.value().fold);
         out += "}";
         return out;

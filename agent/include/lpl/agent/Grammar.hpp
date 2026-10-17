@@ -42,7 +42,13 @@ namespace lpl::agent {
  * cannot omit one; when it has none, the grammar accepts any ordered selection of
  * known members. A context-free grammar cannot say "these three in any order,
  * all present", and forcing an order on fifteen optional parameters would make
- * the common case unreachable.
+ * the common case unreachable. In the first shape the optional parameters follow
+ * the required ones, each as a skippable trailing member. A tool with no
+ * parameter at all takes the empty object, a third shape.
+ *
+ * A registry that offers nothing produces a grammar that accepts nothing, not one
+ * that accepts anything. An unsatisfiable rule is the honest encoding of "there is
+ * no legal move".
  */
 [[nodiscard]] std::string emitGbnf(const ToolRegistry &registry);
 
