@@ -51,12 +51,12 @@ namespace lpl::apps {
  * @brief One monitor's place in the X screen, in screen coordinates.
  */
 struct MonitorRect {
-    int x{0};              ///< Left edge within the X screen.
-    int y{0};              ///< Top edge within the X screen.
-    int width{0};          ///< Width in pixels.
-    int height{0};         ///< Height in pixels.
-    bool primary{false};   ///< Whether the server calls this one primary.
-    bool fromRandr{false}; ///< False when this is the whole-screen fallback.
+    int x{0};              /**< Left edge within the X screen. */
+    int y{0};              /**< Top edge within the X screen. */
+    int width{0};          /**< Width in pixels. */
+    int height{0};         /**< Height in pixels. */
+    bool primary{false};   /**< Whether the server calls this one primary. */
+    bool fromRandr{false}; /**< False when this is the whole-screen fallback. */
 };
 
 /**
@@ -68,64 +68,23 @@ struct MonitorRect {
  * a window created at (0,0) lands on whichever monitor happens to own that corner, which on a
  * vertically stacked pair is routinely the wrong one.
  *
+ * Only the active monitors are asked for: a monitor that is configured and switched off is not
+ * somewhere to put a window, and RandR will happily list it.
+ *
+ * @warning **A server may mark NO monitor primary, and then index zero is a coin toss.**
+ * Measured under WSLg: two monitors, `rdp-0 1920x1200 at (0,1440)` and `rdp-2 2560x1440 at
+ * (0,0)`, and neither carries the primary flag -- so taking the first put the window on the
+ * lower screen, which is exactly the one the user was not looking at.
+ *
+ * The fallback is the monitor that owns the ORIGIN, because that is where X conventionally
+ * puts the main display, with area as the tie-break for a layout that does not cover it. Both
+ * rules pick rdp-2 here, and they agree for the same reason: the screen everything else is
+ * measured from is the screen somebody is sitting in front of.
+ *
  * @param display The connection.
  * @return The primary monitor, or the full screen when RandR reports nothing.
  */
-[[nodiscard]] inline MonitorRect primaryMonitor(Display *display)
-{
-    MonitorRect chosen;
-    const int screen = DefaultScreen(display);
-    chosen.width = DisplayWidth(display, screen);
-    chosen.height = DisplayHeight(display, screen);
-
-    int count = 0;
-    // get_active true: a monitor that is configured and switched off is not somewhere to put a
-    // window, and RandR will happily list it.
-    XRRMonitorInfo *monitors = XRRGetMonitors(display, RootWindow(display, screen), True, &count);
-    if (monitors == nullptr || count <= 0)
-    {
-        if (monitors != nullptr)
-            XRRFreeMonitors(monitors);
-        return chosen;
-    }
-
-    // @warning **A server may mark NO monitor primary, and then index zero is a coin toss.**
-    // Measured under WSLg: two monitors, `rdp-0 1920x1200 at (0,1440)` and `rdp-2 2560x1440 at
-    // (0,0)`, and neither carries the primary flag -- so taking the first put the window on the
-    // lower screen, which is exactly the one the user was not looking at.
-    //
-    // The fallback is the monitor that owns the ORIGIN, because that is where X conventionally
-    // puts the main display, with area as the tie-break for a layout that does not cover it. Both
-    // rules pick rdp-2 here, and they agree for the same reason: the screen everything else is
-    // measured from is the screen somebody is sitting in front of.
-    int pick = -1;
-    for (int i = 0; i < count; ++i)
-        if (monitors[i].primary != 0)
-        {
-            pick = i;
-            break;
-        }
-    for (int i = 0; pick < 0 && i < count; ++i)
-        if (monitors[i].x == 0 && monitors[i].y == 0)
-            pick = i;
-    if (pick < 0)
-    {
-        pick = 0;
-        for (int i = 1; i < count; ++i)
-            if (static_cast<long>(monitors[i].width) * monitors[i].height >
-                static_cast<long>(monitors[pick].width) * monitors[pick].height)
-                pick = i;
-    }
-
-    chosen.x = monitors[pick].x;
-    chosen.y = monitors[pick].y;
-    chosen.width = monitors[pick].width;
-    chosen.height = monitors[pick].height;
-    chosen.primary = monitors[pick].primary != 0;
-    chosen.fromRandr = true;
-    XRRFreeMonitors(monitors);
-    return chosen;
-}
+[[nodiscard]] inline MonitorRect primaryMonitor(Display *display);
 
 /**
  * @brief Prints every monitor the server reports.
@@ -136,28 +95,13 @@ struct MonitorRect {
  *
  * @param display The connection.
  */
-inline void reportMonitors(Display *display)
-{
-    const int screen = DefaultScreen(display);
-    int count = 0;
-    XRRMonitorInfo *monitors = XRRGetMonitors(display, RootWindow(display, screen), True, &count);
-    std::printf("monitors: X screen %dx%d, RandR reports %d\n", DisplayWidth(display, screen),
-                DisplayHeight(display, screen), count);
-    for (int i = 0; i < count; ++i)
-    {
-        char *name = XGetAtomName(display, monitors[i].name);
-        std::printf("  [%d] %s %dx%d at (%d,%d)%s\n", i, name != nullptr ? name : "?", monitors[i].width,
-                    monitors[i].height, monitors[i].x, monitors[i].y, monitors[i].primary != 0 ? "  PRIMARY" : "");
-        if (name != nullptr)
-            XFree(name);
-    }
-    std::fflush(stdout);
-    if (monitors != nullptr)
-        XRRFreeMonitors(monitors);
-}
+inline void reportMonitors(Display *display);
 
 /**
  * @brief Top-left corner that centres a window of @p width by @p height on @p monitor.
+ *
+ * The corner is clamped to the monitor's own: a window taller or wider than its monitor would
+ * centre to a negative corner, which puts its title bar off the top where nothing can grab it.
  *
  * @param monitor Where to put it.
  * @param width   Window width.
@@ -165,17 +109,7 @@ inline void reportMonitors(Display *display)
  * @param outX    Receives the X position.
  * @param outY    Receives the Y position.
  */
-inline void centreOn(const MonitorRect &monitor, int width, int height, int &outX, int &outY)
-{
-    outX = monitor.x + (monitor.width - width) / 2;
-    outY = monitor.y + (monitor.height - height) / 2;
-    // A window taller or wider than its monitor would centre to a negative corner, which puts its
-    // title bar off the top where nothing can grab it.
-    if (outX < monitor.x)
-        outX = monitor.x;
-    if (outY < monitor.y)
-        outY = monitor.y;
-}
+inline void centreOn(const MonitorRect &monitor, int width, int height, int &outX, int &outY);
 
 /**
  * @brief Declares the window's identity, size and input hints.
@@ -183,6 +117,13 @@ inline void centreOn(const MonitorRect &monitor, int width, int height, int &out
  * @warning **Call this BEFORE XMapWindow.** A window manager reads these when the window is
  * mapped; setting them afterwards leaves the association already made without them, and under
  * RAIL that association is the one that decides whether anything is ever drawn.
+ *
+ * Xlib's class hint fields are char* rather than const char*: the cast is Xlib's age, not a lie
+ * about ownership -- XSetClassHint copies both strings into the server's property.
+ *
+ * `_NET_WM_PID` lets the compositor tie the window to a process rather than to a name alone.
+ * Not what RAIL keys on, but it is what makes the association survive two windows sharing a
+ * class -- and the log prints `pid:0` without it.
  *
  * @param display      The connection.
  * @param window       The window, created and not yet mapped.
@@ -195,52 +136,7 @@ inline void centreOn(const MonitorRect &monitor, int width, int height, int &out
  * @param y            Y position it was created at.
  */
 inline void declareWindowIdentity(Display *display, Window window, const char *instanceName, const char *className,
-                                  int width, int height, int x = 0, int y = 0)
-{
-    XClassHint classHint;
-    // Xlib's fields are char* rather than const char*: the cast is Xlib's age, not a lie about
-    // ownership -- XSetClassHint copies both strings into the server's property.
-    classHint.res_name = const_cast<char *>(instanceName);
-    classHint.res_class = const_cast<char *>(className);
-    XSetClassHint(display, window, &classHint);
-
-    XSizeHints sizeHints;
-    std::memset(&sizeHints, 0, sizeof(sizeHints));
-    sizeHints.flags = PPosition | PSize;
-    sizeHints.x = x;
-    sizeHints.y = y;
-    sizeHints.width = width;
-    sizeHints.height = height;
-    XSetWMNormalHints(display, window, &sizeHints);
-
-    XWMHints wmHints;
-    std::memset(&wmHints, 0, sizeof(wmHints));
-    wmHints.flags = InputHint | StateHint;
-    wmHints.input = True;
-    wmHints.initial_state = NormalState;
-    XSetWMHints(display, window, &wmHints);
-
-    // _NET_WM_PID lets the compositor tie the window to a process rather than to a name alone.
-    // Not what RAIL keys on, but it is what makes the association survive two windows sharing a
-    // class -- and the log prints `pid:0` without it.
-    const Atom pidAtom = XInternAtom(display, "_NET_WM_PID", False);
-    const long pid = static_cast<long>(getpid());
-    XChangeProperty(display, window, pidAtom, XA_CARDINAL, 32, PropModeReplace,
-                    reinterpret_cast<const unsigned char *>(&pid), 1);
-
-    char hostname[256];
-    if (gethostname(hostname, sizeof(hostname)) == 0)
-    {
-        hostname[sizeof(hostname) - 1] = '\0';
-        XTextProperty machine;
-        char *machineName = hostname;
-        if (XStringListToTextProperty(&machineName, 1, &machine) != 0)
-        {
-            XSetWMClientMachine(display, window, &machine);
-            XFree(machine.value);
-        }
-    }
-}
+                                  int width, int height, int x = 0, int y = 0);
 
 /**
  * @brief Asks the window manager to make @p window fullscreen.
@@ -258,14 +154,10 @@ inline void declareWindowIdentity(Display *display, Window window, const char *i
  * @param display The connection.
  * @param window  The window, created and not yet mapped.
  */
-inline void requestFullscreen(Display *display, Window window)
-{
-    const Atom state = XInternAtom(display, "_NET_WM_STATE", False);
-    const Atom fullscreen = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
-    XChangeProperty(display, window, state, XA_ATOM, 32, PropModeReplace,
-                    reinterpret_cast<const unsigned char *>(&fullscreen), 1);
-}
+inline void requestFullscreen(Display *display, Window window);
 
 } // namespace lpl::apps
+
+#    include "XWindowIdentity.inl"
 
 #endif // LPL_APPS_XWINDOWIDENTITY_HPP
