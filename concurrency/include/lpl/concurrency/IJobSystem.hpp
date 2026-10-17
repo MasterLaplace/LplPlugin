@@ -51,13 +51,20 @@ public:
  */
 class InlineJobSystem final : public IJobSystem {
 public:
-    void dispatch(std::span<lpl::pmr::function<void()>> jobs) override
-    {
-        for (auto &job : jobs)
-            job();
-    }
+    /**
+     * @brief Runs @p jobs in order on the calling thread.
+     *
+     * Declared inline in the class, and not only where it is defined: a virtual function that is not
+     * inline here would be the class's key function, and every translation unit that includes this
+     * header would emit the vtable, used or not.
+     *
+     * @param jobs Contiguous range of nullary callables.
+     */
+    inline void dispatch(std::span<lpl::pmr::function<void()>> jobs) override;
 };
 
 } // namespace lpl::concurrency
+
+#    include "IJobSystem.inl"
 
 #endif // LPL_CONCURRENCY_IJOBSYSTEM_HPP

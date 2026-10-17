@@ -37,85 +37,35 @@ template <typename T> class ChaseLevDeque {
     static_assert(std::is_pointer_v<T>, "ChaseLevDeque requires pointers to avoid data races on complex types");
 
 public:
-    explicit ChaseLevDeque(core::u32 capacity = 4096) : _mask(capacity - 1), _buffer(new std::atomic<T>[capacity])
-    {
-        LPL_ASSERT((capacity & (capacity - 1)) == 0 && "Capacity must be a power of two");
-        for (core::u32 i = 0; i < capacity; ++i)
-        {
-            _buffer[i].store(nullptr, std::memory_order_relaxed);
-        }
-    }
+    /**
+     * @brief Allocates a deque of @p capacity slots, all empty.
+     * @param capacity Number of slots: a power of two.
+     */
+    explicit ChaseLevDeque(core::u32 capacity = 4096);
 
     /**
      * @brief Pushes an item to the bottom of the deque.
      * @note Only the owner thread may call this.
      */
-    void push(T item)
-    {
-        core::i64 b = _bottom.load(std::memory_order_relaxed);
-        _buffer[b & _mask].store(item, std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_release);
-        _bottom.store(b + 1, std::memory_order_relaxed);
-    }
+    void push(T item);
 
     /**
      * @brief Pops an item from the bottom of the deque.
+     *
+     * When one item is left, the owner races the thieves for it with a compare-and-swap on the top
+     * index, and a steal that wins leaves the owner nothing.
+     *
      * @note Only the owner thread may call this.
-     * @return The popped item, or nullptr if empty.
+     * @return The popped item, or nullptr if empty or a steal took the last item.
      */
-    T pop()
-    {
-        core::i64 b = _bottom.load(std::memory_order_relaxed) - 1;
-        _bottom.store(b, std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-        core::i64 t = _top.load(std::memory_order_relaxed);
-
-        if (t <= b)
-        {
-            // Non-empty deque
-            T item = _buffer[b & _mask].load(std::memory_order_relaxed);
-            if (t == b)
-            {
-                // Single last element in the deque
-                if (!_top.compare_exchange_strong(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
-                {
-                    // Failed race against steal
-                    item = nullptr;
-                }
-                _bottom.store(b + 1, std::memory_order_relaxed);
-            }
-            return item;
-        }
-        else
-        {
-            // Empty deque
-            _bottom.store(b + 1, std::memory_order_relaxed);
-            return nullptr;
-        }
-    }
+    T pop();
 
     /**
      * @brief Steals an item from the top of the deque.
      * @note Any thread may call this.
      * @return The stolen item, or nullptr if empty or contention failed.
      */
-    T steal()
-    {
-        core::i64 t = _top.load(std::memory_order_acquire);
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-        core::i64 b = _bottom.load(std::memory_order_acquire);
-
-        if (t < b)
-        {
-            T item = _buffer[t & _mask].load(std::memory_order_relaxed);
-            if (!_top.compare_exchange_strong(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
-            {
-                return nullptr;
-            }
-            return item;
-        }
-        return nullptr;
-    }
+    T steal();
 
 private:
     alignas(64) std::atomic<core::i64> _top{0};
@@ -125,5 +75,7 @@ private:
 };
 
 } // namespace lpl::concurrency
+
+#    include "ChaseLevDeque.inl"
 
 #endif // LPL_CONCURRENCY_CHASELEVDEQUE_HPP

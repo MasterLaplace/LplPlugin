@@ -1,21 +1,7 @@
-/**
- * @file ThreadPool.cpp
- * @brief Implementation of the fixed-size thread pool.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/concurrency/ThreadPool.hpp>
 #include <lpl/core/Assert.hpp>
 
 namespace lpl::concurrency {
-
-// -------------------------------------------------------------------------- //
-//  Construction / Destruction                                                //
-// -------------------------------------------------------------------------- //
 
 ThreadPool::ThreadPool(core::u32 threadCount)
 {
@@ -32,10 +18,6 @@ ThreadPool::ThreadPool(core::u32 threadCount)
 }
 
 ThreadPool::~ThreadPool() { shutdown(); }
-
-// -------------------------------------------------------------------------- //
-//  Lifecycle                                                                 //
-// -------------------------------------------------------------------------- //
 
 void ThreadPool::shutdown()
 {
@@ -60,10 +42,6 @@ void ThreadPool::shutdown()
 }
 
 core::u32 ThreadPool::threadCount() const noexcept { return static_cast<core::u32>(_workers.size()); }
-
-// -------------------------------------------------------------------------- //
-//  Private                                                                   //
-// -------------------------------------------------------------------------- //
 
 void ThreadPool::workerLoop()
 {

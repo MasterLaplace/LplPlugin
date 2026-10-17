@@ -33,7 +33,9 @@ namespace lpl::concurrency {
  */
 class SpinLock final : public core::NonCopyable<SpinLock> {
 public:
-    /** @brief Default-constructs in unlocked state. */
+    /**
+     * @brief Default-constructs in unlocked state.
+     */
     SpinLock() noexcept = default;
 
     /**
@@ -47,11 +49,7 @@ public:
      * @note Not fair: waiters are not served in arrival order, so under steady contention
      *       one of them can be overtaken again and again.
      */
-    void lock() noexcept
-    {
-        while (!tryLock())
-            waitWhileHeld();
-    }
+    void lock() noexcept;
 
     /**
      * @brief Attempts a single acquire without spinning.
@@ -59,7 +57,9 @@ public:
      */
     [[nodiscard]] bool tryLock() noexcept { return !_flag.test_and_set(std::memory_order_acquire); }
 
-    /** @brief Releases the lock. */
+    /**
+     * @brief Releases the lock.
+     */
     void unlock() noexcept { _flag.clear(std::memory_order_release); }
 
 private:
@@ -71,20 +71,13 @@ private:
     static constexpr core::u32 kMaximumBackoffPauses = 64u;
 
     /**
+     * @brief Spins until the lock is seen free, without trying to take it.
+     *
      * Polls with a plain read, which leaves the cache line shared while the lock is held,
      * rather than test_and_set, which would take it exclusive on every try. The pauses per
      * poll grow so that, at the release, the waiters do not all rush the line at once.
      */
-    void waitWhileHeld() const noexcept
-    {
-        core::u32 pausesPerPoll = 1u;
-        while (_flag.test(std::memory_order_relaxed))
-        {
-            for (core::u32 pause = 0u; pause < pausesPerPoll; ++pause)
-                LPL_CPU_PAUSE();
-            pausesPerPoll = std::min(pausesPerPoll * 2u, kMaximumBackoffPauses);
-        }
-    }
+    void waitWhileHeld() const noexcept;
 
     std::atomic_flag _flag = ATOMIC_FLAG_INIT;
 };
@@ -102,7 +95,9 @@ public:
      */
     explicit SpinLockGuard(SpinLock &lock) noexcept : _lock{lock} { _lock.lock(); }
 
-    /** @brief Releases the spin-lock. */
+    /**
+     * @brief Releases the spin-lock.
+     */
     ~SpinLockGuard() noexcept { _lock.unlock(); }
 
 private:
@@ -110,5 +105,7 @@ private:
 };
 
 } // namespace lpl::concurrency
+
+#    include "SpinLock.inl"
 
 #endif // LPL_CONCURRENCY_SPINLOCK_HPP
