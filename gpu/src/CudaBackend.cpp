@@ -1,17 +1,3 @@
-/**
- * @file CudaBackend.cpp
- * @brief CudaBackend implementation — delegates to real CUDA when available.
- *
- * When compiled with the CUDA toolchain (LPL_HAS_CUDA), this backend
- * uses cudaMalloc/cudaFree/cudaMemcpy and the physics kernel from
- * PhysicsKernel.cu. Without CUDA, all functions return NotSupported.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/gpu/CudaBackend.hpp>
@@ -144,11 +130,8 @@ core::Expected<void> CudaBackend::dispatch(const char *kernelName, core::u32 gri
     (void) gridDim;
     (void) blockDim;
 
-    // Dispatch known kernels by name
     if (std::strcmp(kernelName, "physics_tick") == 0)
     {
-        // Args layout: [9 x float*][const float*][uint32_t count][float dt]
-        // Total: 9 pointers + 1 pointer + 1 uint32_t + 1 float
         struct PhysicsArgs {
             float *posX, *posY, *posZ;
             float *velX, *velY, *velZ;

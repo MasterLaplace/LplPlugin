@@ -24,8 +24,11 @@ namespace lpl::gpu {
  * @class CudaBackend
  * @brief IComputeBackend implementation using CUDA Runtime API.
  *
- * Wraps cudaMalloc / cudaFree / cudaMemcpy / kernel-launch.
- * Only available when compiled with the CUDA toolchain.
+ * Wraps cudaMalloc / cudaFree / cudaMemcpy / kernel-launch, and launches the
+ * physics kernel of PhysicsKernel.cu, when compiled with the CUDA toolchain
+ * (LPL_HAS_CUDA). Without it the class is a stub: init and synchronize
+ * succeed, shutdown only logs, free does nothing, and allocate, uploadSync,
+ * downloadSync and dispatch return NotSupported.
  */
 class CudaBackend final : public IComputeBackend, public core::NonCopyable<CudaBackend> {
 public:
@@ -42,6 +45,12 @@ public:
 
     [[nodiscard]] core::Expected<void> downloadSync(void *dst, const void *src, core::usize bytes) override;
 
+    /**
+     * @brief Dispatches a kernel it knows by name, which is only "physics_tick".
+     *
+     * The @p args of physics_tick are laid out as
+     * [9 x float*][const float*][uint32_t count][float dt].
+     */
     [[nodiscard]] core::Expected<void> dispatch(const char *kernelName, core::u32 gridDim, core::u32 blockDim,
                                                 std::span<const core::byte> args) override;
 
