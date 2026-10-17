@@ -1,12 +1,3 @@
-/**
- * @file Interpreter.cpp
- * @brief The reference machine: eight registers, a flat memory, no traps.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/rosetta/Interpreter.hpp>
 
 #include <lpl/rosetta/SelfDescribing.hpp>
@@ -88,9 +79,6 @@ bool Interpreter::run(const core::u8 *program, core::u32 programSize, core::u8 *
         const core::u8 b = word[2];
         const core::u8 c = word[3];
 
-        // An opcode this machine was never told about stops it. Not a trap and not a
-        // no-op: a reader rebuilt from an incomplete specification has to FAIL, or the
-        // engraving could omit half the ISA and nothing would say so.
         if (!knows(rawOpcode))
             break;
 

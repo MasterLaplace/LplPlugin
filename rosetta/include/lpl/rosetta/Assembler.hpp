@@ -19,7 +19,7 @@
 
 namespace lpl::rosetta {
 
-// TODO(lot 9): declarations only — no implementation yet.
+// TODO(#251): declarations only — no implementation yet.
 
 } // namespace lpl::rosetta
 

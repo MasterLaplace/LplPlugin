@@ -27,12 +27,6 @@
 namespace lpl::rosetta {
 
 /**
- * @brief Bytes a mnemonic occupies in the specification, NUL padding included.
- */
-// The field width lives with the names it measures, in MinimalIsa.hpp: a width declared apart
-// from its storage is how a five-character literal came to be read as eight bytes.
-
-/**
  * @brief The four bytes a specification starts with.
  *
  * "LPLI" — a reader that finds them knows it is holding an instruction-set
@@ -46,9 +40,9 @@ inline constexpr core::u8 kSpecificationMagic[4] = {'L', 'P', 'L', 'I'};
  * @brief One row of the engraved table: what an opcode is called and how wide it is.
  */
 struct IsaEntry {
-    core::u8 opcode{0u};             ///< Numeric value in the instruction stream.
-    core::u8 operands{0u};           ///< Operand bytes it reads, 0 to 3.
-    char mnemonic[kMnemonicBytes]{}; ///< NUL-padded name.
+    core::u8 opcode{0u};             /**< Numeric value in the instruction stream. */
+    core::u8 operands{0u};           /**< Operand bytes it reads, 0 to 3. */
+    char mnemonic[kMnemonicBytes]{}; /**< NUL-padded name. */
 };
 
 /**
@@ -56,9 +50,9 @@ struct IsaEntry {
  * @brief Every opcode a specification names.
  */
 struct IsaTable {
-    core::u32 instructionBytes{0u}; ///< Bytes per instruction.
-    core::u32 registerCount{0u};    ///< Registers the machine has.
-    core::u32 count{0u};            ///< Rows below.
+    core::u32 instructionBytes{0u}; /**< Bytes per instruction. */
+    core::u32 registerCount{0u};    /**< Registers the machine has. */
+    core::u32 count{0u};            /**< Rows below. */
     IsaEntry entry[static_cast<core::u32>(Opcode::Count)]{};
 };
 
@@ -78,6 +72,9 @@ inline constexpr core::u32 kSpecificationBytes =
  * word, and nothing is a pointer or an offset — an offset is a rule, and the point of
  * this file is to have as few rules as possible.
  *
+ * The names are stored AT the field's width and already NUL-padded, so a row is a plain
+ * copy: no terminator search, no tail to zero, and no way to read past the end.
+ *
  * @param out  Receives @ref kSpecificationBytes bytes.
  * @param size Room available.
  * @return Bytes written, or 0 when there is not enough room.
@@ -86,6 +83,10 @@ core::u32 emitSpecification(core::u8 *out, core::u32 size) noexcept;
 
 /**
  * @brief Reads a specification back into a table.
+ *
+ * A count from an engraving is input, not a promise: a plate that lost a corner
+ * can name more rows than it carries bytes for.
+ *
  * @param bytes    The engraved specification.
  * @param size     Its length.
  * @param outTable Receives the table.

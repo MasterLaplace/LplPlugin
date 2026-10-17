@@ -60,11 +60,11 @@ enum class Medium : core::u32 {
  * @brief What reading a plate had to do.
  */
 struct EngravingReport {
-    bool bootstrapFound{false};    ///< At least one replica survived intact.
-    bool payloadRecovered{false};  ///< The payload came back whole.
-    core::u32 replicasIntact{0u};  ///< Replicas whose fold checked out.
-    core::u32 repairedColumns{0u}; ///< Columns the parity had to correct.
-    core::u32 repairedBytes{0u};   ///< Symbols the parity changed.
+    bool bootstrapFound{false};    /**< At least one replica survived intact. */
+    bool payloadRecovered{false};  /**< The payload came back whole. */
+    core::u32 replicasIntact{0u};  /**< Replicas whose fold checked out. */
+    core::u32 repairedColumns{0u}; /**< Columns the parity had to correct. */
+    core::u32 repairedBytes{0u};   /**< Symbols the parity changed. */
 };
 
 /**
@@ -89,6 +89,19 @@ public:
 
     /**
      * @brief Builds the plate image.
+     *
+     * The plate starts with four little-endian words outside the coded region: the length of
+     * that region, the data rows, the parity rows and the bytes per row. Outside on purpose —
+     * they are the bootstrap of the bootstrap, the same reason a pack's parity locator lives in
+     * its header rather than in its section table. The coded region follows: replica stride and
+     * count, then the payload size, the replicas, the payload and its fold. The parity rows end
+     * the plate.
+     *
+     * The parity share, a fifth by default, is taken in rows. The coded region is cut into 32
+     * data rows, fewer only when it is shorter than that, so a row is a meaningful slice of the
+     * plate rather than a byte: a burst has to be able to sit inside ONE row for the
+     * transversal argument to hold.
+     *
      * @param bootstrap   The four levels a reader needs first.
      * @param payload     What the artifact is for.
      * @param payloadSize Its length.
@@ -108,6 +121,16 @@ public:
      * Static, and it takes the image rather than reading a member, because the whole
      * point of the artifact is that reading it must not need the object that wrote it.
      *
+     * Repair first. It may fail — a plate broken in half is far past any column code —
+     * and that is NOT the end of the read: the five replicas exist precisely for the
+     * damage the parity cannot touch.
+     *
+     * Then a replica that proves itself. Scanning every copy rather than trusting the
+     * first is the whole reason there are five of them. Of the first intact one, only
+     * level 3 is kept, the machine: the bytes an interpreter is rebuilt from. That is
+     * what the caller wants out of a plate, and everything above it is what makes those
+     * bytes legible in the first place.
+     *
      * @param bytes         The plate, modified where the parity corrected it.
      * @param size          Its length.
      * @param outSpec       Receives the engraved machine specification, level 3.
@@ -121,7 +144,7 @@ public:
 private:
     lpl::pmr::vector<core::u8> _image{};
     Medium _medium{Medium::FusedQuartz};
-    core::u32 _parityPermille{200u}; ///< A fifth of the coded area, as the file comment says.
+    core::u32 _parityPermille{200u}; /**< A fifth of the coded area, as the file comment says. */
 };
 
 } // namespace lpl::rosetta
