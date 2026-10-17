@@ -1,13 +1,3 @@
-/**
- * @file ReplayRecorder.cpp
- * @brief ReplayRecorder implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/serial/ReplayRecorder.hpp>
@@ -37,8 +27,7 @@ const ReplayFrame &ReplayRecorder::frame(core::usize index) const
 
 core::Expected<void> ReplayRecorder::saveToDisk(std::string_view /*path*/) const
 {
-    /// @todo Serialize all recorded frames and snapshots to binary file.
-    ///       Format: [frameCount][frames...][snapshotCount][snapshots...].
+    // TODO(#141): write [frameCount][frames...][snapshotCount][snapshots...] to the replay file.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }

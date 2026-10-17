@@ -50,10 +50,14 @@ public:
      */
     [[nodiscard]] core::Expected<void> loadFromDisk(std::string_view path);
 
-    /** @brief Start playback from tick 0 (or last seek position). */
+    /**
+     * @brief Start playback from tick 0 (or last seek position).
+     */
     void play();
 
-    /** @brief Pause playback. */
+    /**
+     * @brief Pause playback.
+     */
     void pause();
 
     /**
@@ -69,13 +73,19 @@ public:
      */
     [[nodiscard]] core::Expected<void> seekToTick(core::u64 tick);
 
-    /** @brief Current playback tick. */
+    /**
+     * @brief Current playback tick.
+     */
     [[nodiscard]] core::u64 currentTick() const noexcept;
 
-    /** @brief Current playback state. */
+    /**
+     * @brief Current playback state.
+     */
     [[nodiscard]] PlaybackState state() const noexcept;
 
-    /** @brief Total number of frames in the loaded replay. */
+    /**
+     * @brief Total number of frames in the loaded replay.
+     */
     [[nodiscard]] core::usize totalFrames() const noexcept;
 
 private:
