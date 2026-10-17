@@ -87,6 +87,10 @@ namespace lpl::net::protocol {
  * it has already simulated; the server compares against its own digest for that
  * tick and answers Match / Diverged / TickUnknown. See the book's §6.4.
  *
+ * The payload is @p tick then @p digest, each as two 32-bit halves, high first —
+ * the Bitstream has no 64-bit width and this keeps the wire layout explicit.
+ * PacketDispatch reads them back in the same order.
+ *
  * @param transport Transport to send through.
  * @param address   Server address.
  * @param tick      The tick the client hashed.

@@ -31,8 +31,8 @@ namespace lpl::net::transport {
  * alive for the duration of the call and no longer.
  */
 struct Datagram {
-    std::span<const core::byte> data; ///< Packet bytes.
-    const Endpoint *address;          ///< Destination, or nullptr for the default one.
+    std::span<const core::byte> data; /**< Packet bytes. */
+    const Endpoint *address;          /**< Destination, or nullptr for the default one. */
 };
 
 /**
@@ -44,9 +44,9 @@ struct Datagram {
  * that matters precisely when the receive path is the bottleneck.
  */
 struct ReceiveSlot {
-    std::span<core::byte> buffer; ///< In: where to write this packet's bytes.
-    Endpoint source;              ///< Out: who sent it.
-    core::u32 length{0};          ///< Out: bytes written; 0 if the slot went unused.
+    std::span<core::byte> buffer; /**< In: where to write this packet's bytes. */
+    Endpoint source;              /**< Out: who sent it. */
+    core::u32 length{0};          /**< Out: bytes written; 0 if the slot went unused. */
 };
 
 /**
@@ -91,7 +91,7 @@ public:
      * Handed over one at a time that is one syscall each; handed over together,
      * a transport that can do better does better — @c SocketTransport issues a
      * single @c sendmmsg on Linux, @c KernelTransport fills its TX ring and
-     * wakes the module's thread with ONE ioctl instead of one per packet.
+     * wakes the module's thread with at most ONE ioctl instead of one per packet.
      *
      * The default implementation simply loops over @ref send, so a transport
      * that has nothing to gain (or a platform with no batching syscall, such as

@@ -28,9 +28,6 @@ namespace lpl::net::session {
 /**
  * @class SessionManager
  * @brief Active session registry with timeout-based disconnection.
- *
- * Uses Read-Copy-Update (RCU) semantics for concurrent read access during
- * tick while mutations (connect/disconnect) happen on the main thread.
  */
 class SessionManager final : public core::NonCopyable<SessionManager> {
 public:
@@ -85,8 +82,14 @@ public:
      * @brief Broadcasts state data to all active sessions with UDP fragmentation.
      *
      * Splits the data into packets of at most @c kMaxPayloadSize bytes each
-     * (legacy MAX_ENTITIES_PER_PACKET logic), and sends each fragment with
-     * the PacketFlag::Fragment bit set.
+     * (legacy MAX_ENTITIES_PER_PACKET logic).
+     *
+     * Every fragment for every client is ready at this instant, so the whole
+     * burst is handed to the transport at once instead of one packet at a time:
+     * fragments × clients syscalls collapse into one sendmmsg per 64 datagrams
+     * (sockets) or at most one ring kick (kernel module). The datagrams borrow
+     * their bytes from @p data and their addresses from the sessions, both of
+     * which outlive the call.
      *
      * @param transport Transport to send through.
      * @param data      Raw state data to broadcast.

@@ -25,7 +25,8 @@ namespace lpl::net::transport {
  * @brief Accesses the LPL kernel module character device for zero-copy
  *        packet I/O via mmap'd ring buffers.
  *
- * Falls back to @c SocketTransport if the device node is unavailable.
+ * When the device node is unavailable, @ref open fails, and the caller falls
+ * back to @c SocketTransport.
  */
 class KernelTransport final : public ITransport, public core::NonCopyable<KernelTransport> {
 public:
@@ -42,10 +43,13 @@ public:
     [[nodiscard]] core::Expected<core::u32> send(std::span<const core::byte> data, const Endpoint *address) override;
 
     /**
-     * @brief Batched send: fill the TX ring, then ONE ioctl kick.
+     * @brief Batched send: fill the TX ring, then at most ONE ioctl kick.
      *
      * The module's ioctl only wakes its sender thread, which drains the whole
-     * ring — so a burst costs one syscall instead of one per packet.
+     * ring — so a burst costs at most one syscall instead of one per packet.
+     *
+     * A full ring or an oversized packet stops the batch: the packets before it
+     * are published, and their count is returned.
      */
     [[nodiscard]] core::Expected<core::u32> sendBatch(std::span<const Datagram> datagrams) override;
 

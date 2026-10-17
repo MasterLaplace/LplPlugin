@@ -47,13 +47,18 @@ public:
      * On any other platform (Windows, macOS) this falls back to the base
      * implementation's loop — there is no portable equivalent, and this
      * transport is exactly the path those platforms rely on.
+     *
+     * Each sendmmsg carries at most 64 datagrams. A short send means the socket
+     * buffer filled: the batch stops there rather than spin. A failure reports
+     * what did get out, and is an error only when nothing did.
      */
     [[nodiscard]] core::Expected<core::u32> sendBatch(std::span<const Datagram> datagrams) override;
 
     /**
      * @brief Batched receive: one @c recvmmsg syscall on Linux.
      *
-     * Falls back to the base loop on Windows/macOS, which have no recvmmsg.
+     * It drains at most 64 waiting packets. Falls back to the base loop on
+     * Windows/macOS, which have no recvmmsg.
      */
     [[nodiscard]] core::Expected<core::u32> receiveBatch(std::span<ReceiveSlot> slots) override;
 

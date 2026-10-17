@@ -104,7 +104,9 @@ void writeEntityDelta(Bitstream &stream, const EntitySnapshot &cur, core::u8 mas
 void writeEntityDeltaQuantized(Bitstream &stream, const EntitySnapshot &cur, core::u8 mask, float extent,
                                core::u32 posBits);
 
-/** @brief Reads an entity written by @ref writeEntityDeltaQuantized (same params). */
+/**
+ * @brief Reads an entity written by @ref writeEntityDeltaQuantized (same params).
+ */
 [[nodiscard]] core::Expected<void> readEntityDeltaQuantized(Bitstream &stream, EntitySnapshot &inOut, core::u32 &outId,
                                                             core::u8 &outMask, float extent, core::u32 posBits);
 

@@ -46,16 +46,24 @@ public:
     explicit Prediction(core::u32 maxPrediction = 128);
     ~Prediction();
 
-    /** @brief Stores a new predicted input. */
+    /**
+     * @brief Stores a new predicted input.
+     */
     void push(PredictedInput input);
 
-    /** @brief Acknowledges all inputs up to @p sequence (inclusive). */
+    /**
+     * @brief Acknowledges all inputs up to @p sequence (inclusive).
+     */
     void acknowledge(core::u32 sequence);
 
-    /** @brief Returns the unacknowledged inputs after @p fromSequence. */
+    /**
+     * @brief Returns the unacknowledged inputs after @p fromSequence.
+     */
     [[nodiscard]] std::vector<PredictedInput> getUnacknowledged(core::u32 fromSequence) const;
 
-    /** @brief Number of unacknowledged predictions. */
+    /**
+     * @brief Number of unacknowledged predictions.
+     */
     [[nodiscard]] core::u32 pendingCount() const noexcept;
 
 private:

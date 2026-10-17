@@ -1,13 +1,3 @@
-/**
- * @file PacketBuilder.cpp
- * @brief Typed protocol packet builders.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/net/protocol/PacketBuilder.hpp>
 
 namespace lpl::net::protocol {
@@ -68,9 +58,6 @@ core::Expected<core::u32> sendState(transport::ITransport &transport, const Endp
 core::Expected<core::u32> sendStateHashReport(transport::ITransport &transport, const Endpoint *address, core::u64 tick,
                                               core::u64 digest, core::u32 seq)
 {
-    // Two 32-bit halves each, high first — the Bitstream has no 64-bit width and
-    // this keeps the wire layout explicit. PacketDispatch reads them back in the
-    // same order.
     Bitstream stream;
     stream.writeU32(static_cast<core::u32>(tick >> 32));
     stream.writeU32(static_cast<core::u32>(tick & 0xFFFFFFFFULL));

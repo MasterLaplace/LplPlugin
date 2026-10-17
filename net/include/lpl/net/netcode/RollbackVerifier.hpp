@@ -51,7 +51,8 @@ public:
      * @brief Verifies that two snapshots are byte-identical.
      *
      * Call this after a rollback+re-simulation to ensure the state matches
-     * the original forward simulation. A mismatch indicates non-determinism.
+     * the original forward simulation. A mismatch indicates non-determinism;
+     * for diagnostics, the first byte offset where they diverge is logged.
      *
      * @param before Snapshot captured before rollback.
      * @param after  Snapshot captured after rollback + re-simulate.
@@ -67,7 +68,6 @@ public:
 
         if (std::memcmp(before.data(), after.data(), before.size()) != 0)
         {
-            // Find first divergence offset for diagnostics
             for (core::usize i = 0; i < before.size(); ++i)
             {
                 if (before[i] != after[i])
@@ -98,10 +98,8 @@ public:
         simulate(state, size);
         auto result1 = captureSnapshot(state, size);
 
-        // Restore original state
         std::memcpy(state, snapshot1.data(), size);
 
-        // Run again
         simulate(state, size);
         auto result2 = captureSnapshot(state, size);
 

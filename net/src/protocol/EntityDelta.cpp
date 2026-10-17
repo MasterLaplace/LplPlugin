@@ -1,13 +1,3 @@
-/**
- * @file EntityDelta.cpp
- * @brief Field-masked entity delta codec implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-24
- * @copyright MIT License
- */
-
 #include <lpl/net/protocol/EntityDelta.hpp>
 
 namespace lpl::net::protocol {
@@ -66,8 +56,6 @@ core::Expected<void> readEntityDelta(Bitstream &stream, EntitySnapshot &inOut, c
     outMask = rMask.value();
     inOut.id = outId;
 
-    // Each present field overwrites the corresponding component of the baseline;
-    // absent ones keep whatever the receiver already believed.
     const auto readF = [&](float &dst) -> core::Expected<void> {
         auto r = stream.readFloat();
         if (!r.has_value())

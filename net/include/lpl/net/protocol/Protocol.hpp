@@ -38,14 +38,20 @@ enum class PacketType : core::u8 {
     InputPayload = 0x10,
     StateSnapshot = 0x11,
     StateDelta = 0x12,
-    /// Client -> server: "at tick T my authoritative state hashed to H".
-    /// The server compares it against its own digest for that tick to detect a
-    /// desync (see engine::Server::checkClientHash and the book's §6.4).
+    /**
+     * @brief Client -> server: "at tick T my authoritative state hashed to H".
+     *
+     * The server compares it against its own digest for that tick to detect a
+     * desync (see engine::Server::checkClientHash and the book's §6.4).
+     */
     StateHashReport = 0x13,
-    /// Client -> server: "I have fully applied every snapshot up to sequence N".
-    /// The server advances that client's delta baseline to N, so it never resends
-    /// what the client has confirmed and keeps resending what it has not — the
-    /// acked-baseline model of Quake III / DOOM III (§6.2.5).
+    /**
+     * @brief Client -> server: "I have fully applied every snapshot up to sequence N".
+     *
+     * The server advances that client's delta baseline to N, so it never resends
+     * what the client has confirmed and keeps resending what it has not — the
+     * acked-baseline model of Quake III / DOOM III (§6.2.5).
+     */
     SnapshotAck = 0x14,
     EntitySpawn = 0x20,
     EntityDestroy = 0x21,
@@ -53,10 +59,11 @@ enum class PacketType : core::u8 {
     RollbackRequest = 0x30,
     RollbackAck = 0x31,
     BciPayload = 0x40,
-    /// Server-mesh liveness ping between peer nodes (see net::ServerMesh, §6.2.8).
-    NodeHeartbeat = 0x50,
-    /// Server-mesh entity handoff: an entity's serialised state migrating to the
-    /// node that now owns its region (server meshing).
+    NodeHeartbeat = 0x50, /**< Server-mesh liveness ping between peer nodes (see net::ServerMesh, §6.2.8). */
+    /**
+     * @brief Server-mesh entity handoff: an entity's serialised state migrating to the
+     *        node that now owns its region (server meshing).
+     */
     EntityMigrate = 0x51,
     Custom = 0xFF
 };
