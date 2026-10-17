@@ -42,10 +42,10 @@ namespace lpl::zarr {
  * a timeout as absence would render a hole and say nothing.
  */
 enum class FetchStatus : core::u8 {
-    Ok = 0,   ///< Bytes were written.
-    Absent,   ///< The store does not have this key: the chunk is entirely fill value.
-    TooLarge, ///< The value does not fit the buffer offered.
-    Failed,   ///< Transport or decode error. Not absence.
+    Ok = 0,   /**< Bytes were written. */
+    Absent,   /**< The store does not have this key: the chunk is entirely fill value. */
+    TooLarge, /**< The value does not fit the buffer offered. */
+    Failed,   /**< Transport or decode error. Not absence. */
 };
 
 /**
@@ -54,7 +54,7 @@ enum class FetchStatus : core::u8 {
  */
 struct FetchResult final {
     FetchStatus status{FetchStatus::Failed};
-    core::usize size{0}; ///< Bytes written on Ok; bytes needed on TooLarge.
+    core::usize size{0}; /**< Bytes written on Ok; bytes needed on TooLarge. */
 
     /**
      * The bytes are the array's fill value because the store had no such key.
@@ -87,7 +87,9 @@ public:
      */
     [[nodiscard]] virtual FetchResult read(const char *key, std::span<core::u8> buffer) noexcept = 0;
 
-    /// @brief Human-readable name of the transport, for logs that have to say where bytes failed.
+    /**
+     * @brief Human-readable name of the transport, for logs that have to say where bytes failed.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

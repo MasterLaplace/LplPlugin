@@ -1,12 +1,3 @@
-/**
- * @file FileStore.cpp
- * @brief Keys as paths.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/zarr/FileStore.hpp>
 
 #include <cerrno>
@@ -39,9 +30,6 @@ FileStore::FileStore(const char *root) noexcept
     if (n == 0u || n + 2u >= sizeof(_root))
         return;
     std::memcpy(_root, root, n);
-    // A trailing separator here means every path below is one concatenation rather than a
-    // conditional, and a conditional separator is how a cache ends up with two spellings of the
-    // same key.
     _root[n] = (root[n - 1u] == '/') ? '\0' : '/';
     _root[n + 1u] = '\0';
 }
@@ -50,8 +38,6 @@ bool FileStore::pathFor(const char *key, char *out, core::usize capacity) const 
 {
     if (key == nullptr || !valid())
         return false;
-    // A key that climbs out of the root is refused. Keys come from metadata, metadata can come
-    // from a network, and a store that resolves ".." writes wherever the document says.
     for (const char *p = key; *p != '\0'; ++p)
     {
         if (p[0] == '.' && p[1] == '.')
@@ -95,10 +81,6 @@ bool FileStore::write(const char *key, std::span<const core::u8> bytes) noexcept
     if (!pathFor(key, path, sizeof(path)))
         return false;
 
-    // Create every parent, INCLUDING the root: a cache directory that does not exist yet is the
-    // normal state on a first run, and a store that only created directories below the root would
-    // fail on exactly that. Start after the leading separator so an absolute path does not try to
-    // create "".
     for (char *p = path + 1; *p != '\0'; ++p)
     {
         if (*p != '/')
@@ -108,8 +90,6 @@ bool FileStore::write(const char *key, std::span<const core::u8> bytes) noexcept
         *p = '/';
     }
 
-    // Write beside, then rename. A reader that finds a half-written chunk has no way to tell it
-    // from a short one, and rename is the only step that is atomic.
     char partial[kMaxPathLength + sizeof(kPartialSuffix)];
     const int n = std::snprintf(partial, sizeof(partial), "%s%s", path, kPartialSuffix);
     if (n <= 0 || static_cast<core::usize>(n) >= sizeof(partial))

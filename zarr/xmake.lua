@@ -21,7 +21,7 @@ target("lpl-zarr")
     add_deps("lpl-core")
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
-    add_headerfiles("include/(lpl/zarr/**.hpp)")
+    add_headerfiles("include/(lpl/zarr/**.hpp)", "include/(lpl/zarr/**.inl)")
     add_packages("pkgconfig::blosc", "pkgconfig::libzstd", { public = true })
 
     on_config(function (target)

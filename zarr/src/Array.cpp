@@ -1,12 +1,3 @@
-/**
- * @file Array.cpp
- * @brief Parsing `.zarray`, building chunk keys, decoding chunks.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/zarr/Array.hpp>
 
 #include <limits>
@@ -24,7 +15,9 @@ namespace {
     return p;
 }
 
-/// @return Position just past @p prefix when the text at @p p starts with it, or nullptr.
+/**
+ * @return Position just past @p prefix when the text at @p p starts with it, or nullptr.
+ */
 [[nodiscard]] const char *pastPrefix(const char *p, const char *end, const char *prefix) noexcept
 {
     for (; *prefix != '\0'; ++prefix, ++p)
@@ -35,7 +28,9 @@ namespace {
     return p;
 }
 
-/// Moves @p p past a JSON integer. Refuses a fraction, an exponent, and what an i64 cannot hold.
+/**
+ * @brief Moves @p p past a JSON integer. Refuses a fraction, an exponent, and what an i64 cannot hold.
+ */
 [[nodiscard]] bool readInteger(const char *&p, const char *end, core::i64 &out) noexcept
 {
     const bool negative = p < end && *p == '-';
@@ -58,8 +53,10 @@ namespace {
     return true;
 }
 
-/// @return Position just past the bracket that closes the one at @p open, or nullptr when the
-/// document ends first. Brackets inside strings do not count.
+/**
+ * @return Position just past the bracket that closes the one at @p open, or nullptr when the
+ * document ends first. Brackets inside strings do not count.
+ */
 [[nodiscard]] const char *pastMatchingBracket(const char *open, const char *end) noexcept
 {
     core::u32 depth = 0u;
@@ -92,7 +89,12 @@ struct Scanner final {
     const char *begin{nullptr};
     const char *end{nullptr};
 
-    /// @return Position of the value after `"key":`, or nullptr when the key is absent or has no value.
+    /**
+     * @brief Finds the value after `"key":`. The name must end exactly where the key does, or "shape"
+     *        would match "shapes".
+     *
+     * @return Position of the value after `"key":`, or nullptr when the key is absent or has no value.
+     */
     [[nodiscard]] const char *afterKey(const char *key) const noexcept
     {
         for (const char *p = begin; p < end; ++p)
@@ -100,7 +102,6 @@ struct Scanner final {
             if (*p != '"')
                 continue;
             const char *q = pastPrefix(p + 1, end, key);
-            // The name must end exactly where the key does, or "shape" would match "shapes".
             if (q == nullptr || q >= end || *q != '"')
                 continue;
             q = skipSpaces(q + 1, end);
@@ -126,7 +127,11 @@ struct Scanner final {
         return p != nullptr && readInteger(p, end, out);
     }
 
-    /// Reads `[a, b, c]` of integers. @return How many it holds, or 0 when it is malformed.
+    /**
+     * @brief Reads `[a, b, c]` of integers.
+     *
+     * @return How many it holds, or 0 when it is malformed.
+     */
     [[nodiscard]] core::u32 integerArray(const char *key, core::i64 *out, core::u32 capacity) const noexcept
     {
         const char *p = afterKey(key);
@@ -151,8 +156,10 @@ struct Scanner final {
         }
     }
 
-    /// Copies a string value; returns length written, 0 when absent, not a string, empty, too long
-    /// for @p capacity, or unterminated.
+    /**
+     * @brief Copies a string value; returns length written, 0 when absent, not a string, empty, too long
+     *        for @p capacity, or unterminated.
+     */
     [[nodiscard]] core::u32 string(const char *key, char *out, core::u32 capacity) const noexcept
     {
         const char *p = afterKey(key);
@@ -171,7 +178,9 @@ struct Scanner final {
         return n;
     }
 
-    /// @return Whether the value is a string of exactly one character, which lands in @p out.
+    /**
+     * @return Whether the value is a string of exactly one character, which lands in @p out.
+     */
     [[nodiscard]] bool letter(const char *key, char &out) const noexcept
     {
         char text[2];
@@ -181,7 +190,9 @@ struct Scanner final {
         return true;
     }
 
-    /// @return A scanner over the object or array @p key holds, or an empty one when it holds neither.
+    /**
+     * @return A scanner over the object or array @p key holds, or an empty one when it holds neither.
+     */
     [[nodiscard]] Scanner nested(const char *key) const noexcept
     {
         const char *open = afterKey(key);
@@ -202,13 +213,17 @@ struct Scanner final {
     return *a == *b;
 }
 
+/**
+ * @brief Reads the sample type, which must be a single byte.
+ *
+ * Only single-byte samples: that is what every tomographic volume this serves publishes, and
+ * guessing an endianness and a width from a two-character code is how a viewer renders noise.
+ */
 [[nodiscard]] bool readSampleType(const Scanner &document, bool &signedSamples) noexcept
 {
     char dtype[16];
     if (document.string("dtype", dtype, sizeof(dtype)) == 0u)
         return false;
-    // Only single-byte samples: that is what every tomographic volume this serves publishes, and
-    // guessing an endianness and a width from a two-character code is how a viewer renders noise.
     signedSamples = sameText(dtype, "|i1");
     return signedSamples || sameText(dtype, "|u1") || sameText(dtype, "u1");
 }
@@ -229,7 +244,9 @@ struct Scanner final {
     return true;
 }
 
-/// The compressor's own "id", and only that one: a filter can carry an "id" too.
+/**
+ * @brief The compressor's own "id", and only that one: a filter can carry an "id" too.
+ */
 [[nodiscard]] Codec codecOfCompressor(const Scanner &document) noexcept
 {
     if (document.isNull("compressor"))
