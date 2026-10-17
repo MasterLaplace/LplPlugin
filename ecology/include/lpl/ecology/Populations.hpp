@@ -46,7 +46,7 @@
 
 namespace lpl::ecology {
 
-/// Trophic levels a web may hold. Four is the pyramid the energetics allow.
+/** Trophic levels a web may hold. Four is the pyramid the energetics allow. */
 inline constexpr core::u32 kMaxTrophicLevels = 4u;
 
 /**
@@ -54,10 +54,10 @@ inline constexpr core::u32 kMaxTrophicLevels = 4u;
  * @brief Where a species sits in the flow of energy.
  */
 enum class TrophicLevel : core::u8 {
-    Producer = 0, ///< Makes its own energy: plants, mana crystals, algae.
-    Primary,      ///< Herbivores. The r-strategists: many, cheap, fast.
-    Secondary,    ///< Carnivores. Regulate the herbivores.
-    Apex          ///< No natural predator. The K-strategists: few, costly, slow.
+    Producer = 0, /**< Makes its own energy: plants, mana crystals, algae. */
+    Primary,      /**< Herbivores. The r-strategists: many, cheap, fast. */
+    Secondary,    /**< Carnivores. Regulate the herbivores. */
+    Apex          /**< No natural predator. The K-strategists: few, costly, slow. */
 };
 
 /**
@@ -67,12 +67,12 @@ enum class TrophicLevel : core::u8 {
 struct SpeciesParams {
     TrophicLevel level{TrophicLevel::Primary};
 
-    math::Fixed32 growth{math::Fixed32::fromRaw(0x0CCC)};     ///< @f$\alpha@f$: intrinsic growth per step.
-    math::Fixed32 mortality{math::Fixed32::fromRaw(0x0666)};  ///< @f$\gamma@f$: death rate with no food.
-    math::Fixed32 predation{math::Fixed32::fromRaw(0x0199)};  ///< @f$\beta@f$: how hard it hits its prey.
-    math::Fixed32 conversion{math::Fixed32::fromRaw(0x1999)}; ///< @f$\delta@f$: prey eaten to offspring.
+    math::Fixed32 growth{math::Fixed32::fromRaw(0x0CCC)};     /**< @f$\alpha@f$: intrinsic growth per step. */
+    math::Fixed32 mortality{math::Fixed32::fromRaw(0x0666)};  /**< @f$\gamma@f$: death rate with no food. */
+    math::Fixed32 predation{math::Fixed32::fromRaw(0x0199)};  /**< @f$\beta@f$: how hard it hits its prey. */
+    math::Fixed32 conversion{math::Fixed32::fromRaw(0x1999)}; /**< @f$\delta@f$: prey eaten to offspring. */
 
-    math::Fixed32 capacity{math::Fixed32::fromInt(1000)}; ///< @f$K@f$: what the habitat supports.
+    math::Fixed32 capacity{math::Fixed32::fromInt(1000)}; /**< @f$K@f$: what the habitat supports. */
 
     /**
      * @brief Population that predation cannot reach.
@@ -92,7 +92,7 @@ struct SpeciesParams {
 struct Species {
     SpeciesParams params{};
     math::Fixed32 population{};
-    core::u32 preyIndex{0xFFFFFFFFu}; ///< Index of what it eats; kNoPrey for producers.
+    core::u32 preyIndex{0xFFFFFFFFu}; /**< Index of what it eats; kNoPrey for producers. */
 
     static constexpr core::u32 kNoPrey = 0xFFFFFFFFu;
 };
@@ -104,7 +104,9 @@ struct Species {
 struct TrophicWeb {
     lpl::pmr::vector<Species> species;
 
-    /// @brief Adds a species and returns its index.
+    /**
+     * @brief Adds a species and returns its index.
+     */
     core::u32 add(const SpeciesParams &params, math::Fixed32 initial, core::u32 preyIndex);
 
     /**
@@ -114,11 +116,31 @@ struct TrophicWeb {
      * refuge applied before any predator is fed — so the untouchable fraction
      * really is untouchable rather than merely restored afterwards.
      *
+     * Every species' rates are computed from the SAME snapshot. Updating in place
+     * would let a predator eat prey that the same sweep has already grown, so the
+     * result would depend on the order species were registered in.
+     *
+     * - Producers and unfed prey grow logistically. The (1 - N/K) term is what
+     *   turns a neutrally stable orbit into a stable one: a population knocked off
+     *   equilibrium comes BACK instead of oscillating at its new amplitude forever.
+     * - Predators: mass action against the prey ABOVE its refuge, less starvation.
+     *   The conversion factor is where the ten-percent rule enters the dynamics
+     *   rather than being a comment about them. The same meal is taken off the
+     *   prey. Symmetry matters: energy that appears in a predator without leaving
+     *   its prey is energy the world creates from nothing, and the pyramid stops
+     *   meaning anything.
+     * - Two clamps, and both are load-bearing. The refuge stops the
+     *   pseudo-extinction the classical model walks into; the capacity stops a
+     *   fixed-point overflow from a runaway exponential.
+     *
      * @param steps How many steps to run.
      */
     void step(core::u32 steps = 1u);
 
-    /// @return The population of @p index, or zero.
+    /**
+     * @brief The population of one species.
+     * @return The population of @p index, or zero.
+     */
     [[nodiscard]] math::Fixed32 populationOf(core::u32 index) const;
 
     /**
@@ -133,11 +155,17 @@ struct TrophicWeb {
      * The mechanism behind a trophic cascade: everything downstream reacts, and
      * nothing here says how. That is the point.
      *
+     * Zero AND refuge-zero: a species that has been hunted out must not be
+     * resurrected by its own floor on the next step. That floor exists to survive
+     * predation, not to survive removal.
+     *
      * @param index Species to remove.
      */
     void extirpate(core::u32 index);
 
-    /// @brief FNV-1a fold of every population, for determinism checks.
+    /**
+     * @brief FNV-1a fold of every population, for determinism checks.
+     */
     [[nodiscard]] core::u32 fold() const;
 };
 
@@ -150,13 +178,9 @@ struct TrophicWeb {
  * than guessing and discovering the top level starves.
  *
  * @param level Level to ask about.
- * @return The transfer efficiency, in [0, 1].
+ * @return The transfer efficiency, in [0, 1]: 0.10.
  */
-[[nodiscard]] constexpr math::Fixed32 transferEfficiency(TrophicLevel level) noexcept
-{
-    (void) level;
-    return math::Fixed32::fromRaw(0x199A); // 0.10
-}
+[[nodiscard]] constexpr math::Fixed32 transferEfficiency(TrophicLevel level) noexcept;
 
 /**
  * @brief Population a level can support given the one below it.
@@ -170,5 +194,7 @@ struct TrophicWeb {
 }
 
 } // namespace lpl::ecology
+
+#    include "Populations.inl"
 
 #endif // LPL_ECOLOGY_POPULATIONS_HPP

@@ -57,8 +57,8 @@ struct Genome {
     math::Fixed32 maxSpeed{math::Fixed32::fromInt(4)};
     math::Fixed32 vision{math::Fixed32::fromInt(8)};
     math::Fixed32 strength{math::Fixed32::fromInt(5)};
-    math::Fixed32 absorption{math::Fixed32::one()}; ///< Energy extracted per unit of food.
-    math::Fixed32 size{math::Fixed32::one()};       ///< Body scale; drives the island rule.
+    math::Fixed32 absorption{math::Fixed32::one()}; /**< Energy extracted per unit of food. */
+    math::Fixed32 size{math::Fixed32::one()};       /**< Body scale; drives the island rule. */
 };
 
 /**
@@ -75,12 +75,7 @@ struct Fitness {
     math::Fixed32 energyAbsorbed{};
     math::Fixed32 damageTaken{};
 
-    [[nodiscard]] math::Fixed32 score() const noexcept
-    {
-        return math::Fixed32::fromInt(static_cast<core::i32>(age)) +
-               math::Fixed32::fromInt(static_cast<core::i32>(kills)) * math::Fixed32::fromInt(10) +
-               energyAbsorbed / math::Fixed32::fromInt(10) - damageTaken / math::Fixed32::fromInt(2);
-    }
+    [[nodiscard]] math::Fixed32 score() const noexcept;
 };
 
 /**
@@ -88,8 +83,8 @@ struct Fitness {
  * @brief Mutation rates, and when they go wrong on purpose.
  */
 struct HeredityParams {
-    core::u32 mutationChance16{1u};     ///< Per-gene mutation chance, in sixteenths.
-    core::f32 mutationAmplitude{0.12f}; ///< Ordinary mutation: +/- this share.
+    core::u32 mutationChance16{1u};     /**< Per-gene mutation chance, in sixteenths. */
+    core::f32 mutationAmplitude{0.12f}; /**< Ordinary mutation: +/- this share. */
 
     /**
      * @brief Population share below which drift takes over, in sixteenths of K.
@@ -100,8 +95,8 @@ struct HeredityParams {
      */
     core::u32 collapseShare16{2u};
 
-    core::u32 meltdownChance16{6u};     ///< Per-gene mutation chance under collapse.
-    core::f32 meltdownAmplitude{0.50f}; ///< Chaotic mutation: +/- half.
+    core::u32 meltdownChance16{6u};     /**< Per-gene mutation chance under collapse. */
+    core::f32 meltdownAmplitude{0.50f}; /**< Chaotic mutation: +/- half. */
 
     /**
      * @brief Standard deviations above the species mean that make an anomaly.
@@ -120,6 +115,10 @@ struct HeredityParams {
  * population can only ever hold the alleles it started with; blending lets a
  * lineage reach values neither parent had, which is what makes selection able to
  * move a species rather than only sort it.
+ *
+ * The mix weight is drawn in [0.3, 0.7] rather than [0, 1]: at the extremes
+ * blending degenerates into copying one parent, and a population that copies
+ * stops exploring the space between its members.
  *
  * @param a      First parent.
  * @param b      Second parent.
@@ -166,6 +165,11 @@ struct PopulationStats {
 /**
  * @brief Has this individual broken its species' symmetry?
  *
+ * A species of one has no distribution to be exceptional against, and calling
+ * the last survivor a boss because it is its own mean plus zero would make an
+ * anomaly out of every extinction: a sample of fewer than four, or with no
+ * spread, holds no anomaly.
+ *
  * @param genome The individual.
  * @param stats  Its species' distribution.
  * @param params The sigma threshold.
@@ -192,5 +196,7 @@ struct PopulationStats {
                            const HeredityParams &params, core::u32 &stream);
 
 } // namespace lpl::ecology
+
+#    include "Genome.inl"
 
 #endif // LPL_ECOLOGY_GENOME_HPP

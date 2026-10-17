@@ -16,7 +16,8 @@
  *    map recover at once, which reads as a graphical glitch rather than as growth.
  *
  * Free functions over a span, because where the plants live is the world's business:
- * one list for a bounded map, one list per chunk for a streamed one.
+ * one list for a bounded map, one list per chunk for a streamed one. They are defined
+ * in a `.inl`: they are consumed header-only, the freestanding kernel included.
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -43,7 +44,7 @@ namespace lpl::ecology {
 struct PlantCell {
     core::i32 cellX{0};
     core::i32 cellZ{0};
-    core::u32 regrowth{0u}; ///< Ticks until it stands again; 0 when standing.
+    core::u32 regrowth{0u}; /**< Ticks until it stands again; 0 when standing. */
     bool standing{true};
 };
 
@@ -53,7 +54,9 @@ struct PlantCell {
  */
 core::u32 tickPlants(PlantCell *plants, core::u32 count) noexcept;
 
-/** @brief Plants standing in a span, without advancing anything. */
+/**
+ * @brief Plants standing in a span, without advancing anything.
+ */
 [[nodiscard]] core::u32 countStanding(const PlantCell *plants, core::u32 count) noexcept;
 
 /**
@@ -65,7 +68,6 @@ bool grazeAt(PlantCell *plants, core::u32 count, core::i32 worldX, core::i32 wor
 
 } // namespace lpl::ecology
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/ecology/Vegetation.inl>
+#    include "Vegetation.inl"
 
 #endif // LPL_ECOLOGY_VEGETATION_HPP

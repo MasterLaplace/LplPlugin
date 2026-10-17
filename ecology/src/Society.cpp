@@ -1,12 +1,3 @@
-/**
- * @file Society.cpp
- * @brief Implementation of packs, isolation, overflow and invasion.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ecology/Society.hpp>
 
 #include <lpl/math/FixedMath.hpp>
@@ -81,14 +72,11 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
 
     core::u32 nextPack = highestPackId(members, count);
 
-    // ── Formation: lone kin band together ───────────────────────────────────
     for (core::u32 i = 0u; i < count; ++i)
     {
         if (!members[i].alive || members[i].pack != kSolitary)
             continue;
 
-        // Look for an existing pack of the same lineage first — adoption is
-        // cheaper than founding, ecologically and computationally.
         core::u32 joined = kSolitary;
         if (params.adoptStrays)
         {
@@ -111,7 +99,6 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
             continue;
         }
 
-        // Otherwise found one with another stray of the same lineage.
         for (core::u32 j = i + 1u; j < count; ++j)
         {
             if (!members[j].alive || members[j].pack != kSolitary)
@@ -126,7 +113,6 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
         }
     }
 
-    // ── Budding: a pack that outgrows its territory splits ──────────────────
     const core::u32 packCount = nextPack;
     for (core::u32 pack = 0u; pack < packCount; ++pack)
     {
@@ -134,9 +120,6 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
         if (size <= params.maxSize)
             continue;
 
-        // The splinter is led by the SECOND best — the ambitious beta who will
-        // never inherit. Taking the weakest members instead would make budding a
-        // cull; taking the strongest would decapitate the parent pack.
         const core::u32 alpha = bestOfPack(members, count, pack);
         core::u32 beta = 0xFFFFFFFFu;
         for (core::u32 i = 0u; i < count; ++i)
@@ -165,7 +148,6 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
         ++events.budded;
     }
 
-    // ── Alpha election ──────────────────────────────────────────────────────
     for (core::u32 pack = 0u; pack < nextPack; ++pack)
     {
         const core::u32 leader = bestOfPack(members, count, pack);
@@ -183,7 +165,6 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
         }
     }
 
-    // ── Dissolution: a pack too small to be one ─────────────────────────────
     for (core::u32 pack = 0u; pack < nextPack; ++pack)
     {
         const core::u32 size = packSize(members, count, pack);
@@ -225,10 +206,6 @@ PackEvents killMember(PackMember *members, core::u32 count, core::u32 id, const 
     if (!wasAlpha || pack == kSolitary)
         return events;
 
-    // The consequence a trophy hunter does not price in. A pack that loses its
-    // leader may hold together under the next in line — or shatter into solitary
-    // aggressive animals with no territory, which is how a profitable hunt turns
-    // into a problem on the trade roads a week later.
     if ((nextRandom(stream) & 0xFu) < params.dissolutionChance16)
     {
         for (core::u32 i = 0u; i < count; ++i)
@@ -248,12 +225,6 @@ Genome applyIslandRule(const Genome &genome, math::Fixed32 ancestralSize, bool i
     if (!isolated)
         return genome;
 
-    // The direction comes from what the species WAS, not what it currently is.
-    // Reading the current size turns the threshold into an unstable equilibrium
-    // that both a mouse and an elephant converge onto and never leave — measured
-    // at 0.996 and 1.003 after two hundred generations, which is the rule
-    // inverted. Isolation drives lineages apart; it cannot do that if the rule
-    // forgets which lineage it is looking at.
     const math::Fixed32 small = math::Fixed32::fromFloat(params.smallThreshold);
     const math::Fixed32 target = ancestralSize < small ? math::Fixed32::fromFloat(params.giantTarget) :
                                                          math::Fixed32::fromFloat(params.dwarfTarget);
@@ -262,9 +233,6 @@ Genome applyIslandRule(const Genome &genome, math::Fixed32 ancestralSize, bool i
     Genome pushed = genome;
     pushed.size = genome.size + (target - genome.size) * pressure;
 
-    // Body size is not a cosmetic gene: a bigger animal hits harder and moves
-    // less nimbly. Letting size drift without its consequences would make the
-    // island rule a visual effect.
     const math::Fixed32 ratio = genome.size.raw() != 0 ? pushed.size / genome.size : math::Fixed32::one();
     pushed.strength = genome.strength * ratio;
     pushed.maxSpeed = ratio.raw() != 0 ? genome.maxSpeed / ratio : genome.maxSpeed;
@@ -284,8 +252,6 @@ core::u32 markIsolatedRegions(const procgen::Grid<core::u32> &regions, core::u32
         if (regions[i] < regionCount)
             ++sizes[regions[i]];
 
-    // A share of the map, not a cell count. A forty-cell pocket is an island on a
-    // small map and a puddle on a large one, and only the ratio can tell.
     const math::Fixed32 threshold = math::Fixed32::fromFloat(params.isolationShare) *
                                     math::Fixed32::fromInt(static_cast<core::i32>(regions.cellCount()));
 
@@ -318,9 +284,6 @@ OverflowState evaluateOverflow(math::Fixed32 population, math::Fixed32 capacity,
         if (energies != nullptr && energies[i] < starvingBelow)
             ++state.starving;
 
-    // The raid condition, and it is deliberately not "the region decided to
-    // attack". It is: too many animals, and enough of them hungry enough to stop
-    // caring about the thing that used to keep them away.
     state.raiding = state.overcrowded && state.starving > 0u;
     return state;
 }
@@ -334,9 +297,6 @@ void seedInvasion(const Genome &ancestor, core::u32 count, core::f32 spread, cor
     const math::Fixed32 swing = math::Fixed32::fromFloat(spread);
     for (core::u32 i = 0u; i < count; ++i)
     {
-        // Every founder is a near-copy of one ancestor. That is the founder
-        // effect: numerically dangerous, genetically almost uniform — and
-        // therefore vulnerable to anything that works on one of them.
         const auto jitter = [&](math::Fixed32 gene) {
             const math::Fixed32 unit = math::Fixed32::fromRaw(static_cast<core::i32>(nextRandom(stream) & 0xFFFFu));
             const math::Fixed32 delta = (unit * math::Fixed32::fromInt(2) - math::Fixed32::one()) * swing;
@@ -358,9 +318,6 @@ math::Fixed32 geneticDiversity(const Genome *genomes, core::u32 count)
     if (genomes == nullptr || count < 2u)
         return math::Fixed32::zero();
 
-    // Coefficient of variation — the standard deviation over the mean — averaged
-    // across the genes. Dividing by the mean is what makes it comparable between
-    // a species whose strength is 5 and one whose strength is 500.
     const auto variation = [&](math::Fixed32 Genome::*gene) {
         math::Fixed32 total{};
         for (core::u32 i = 0u; i < count; ++i)
