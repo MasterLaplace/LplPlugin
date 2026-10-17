@@ -58,6 +58,9 @@ static constexpr math::Fixed32 kNeighbourMargin = math::Fixed32::fromRaw(1024);
 /** @brief Neighbours reserved per body: a packed pile gives a body thirteen after it, at most. */
 static constexpr core::u32 kNeighboursReserved = 32;
 
+/** @brief Cells per body past which the neighbour lists are made through the tree, not a grid. */
+static constexpr core::u32 kMostGridCellsPerBody = 8;
+
 /**
  * @brief Sorts @p bodies by their keys, @p keys holding the key of each in the same order, then by
  *        number: the order a broad-phase search reports them in. An insertion sort, since a body has
@@ -104,10 +107,10 @@ LPL_NOINLINE static void publishContact(ecs::EntityId a, ecs::EntityId b, math::
 /**
  * @brief What the backend keeps from one step to the next.
  *
- * The broad-phase tree is made once and refilled in place each step: a tree made per step re-grew
- * every buffer it owns at every tick, the largest source of heap traffic in the authoritative step.
- * One tree serves the whole step, which walks the chunks one after the other: chunks resolved in
- * parallel would need one tree per worker.
+ * The broad-phase tree is made once, at the first listing, and refilled in place whenever a step
+ * searches it: a tree made per step re-grew every buffer it owns at every tick, the largest source
+ * of heap traffic in the authoritative step. One tree serves the whole step, which walks the chunks
+ * one after the other: chunks resolved in parallel would need one tree per worker.
  */
 struct CpuPhysicsBackend::Impl {
     /**
@@ -150,6 +153,11 @@ struct CpuPhysicsBackend::Impl {
     lpl::pmr::vector<core::u32> neighbourStarts; /**< Where each body's list starts; one more than the bodies. */
     lpl::pmr::vector<core::u32> neighbours;      /**< The bodies after each one that came within two margins. */
     lpl::pmr::vector<math::AABB<math::Fixed32>> filedBoxes; /**< The boxes as the iteration began: what a tree holds. */
+    lpl::pmr::vector<core::u32>
+        gridCellOf; /**< The grid cell each body's box starts in, when listing through a grid. */
+    lpl::pmr::vector<core::u32> gridStarts;  /**< Where each grid cell's bodies start; one more than the cells. */
+    lpl::pmr::vector<core::u32> gridCursors; /**< Where the next body of each grid cell goes, while they are placed. */
+    lpl::pmr::vector<core::u32> gridBodies;  /**< The bodies, cell after cell, each cell's in their order. */
     /** @} */
     bool boundsFiled{false}; /**< Whether the broad-phase is bounded by the span of the filed boxes. */
 
@@ -259,7 +267,6 @@ struct CpuPhysicsBackend::Impl {
     {
         const core::u32 count = static_cast<core::u32>(physicsEntities.size());
         fileBoxes();
-        Octree &octree = buildTree();
         listedIds.resize(count);
         listedHalves.resize(count);
         listedPositions.resize(count);
@@ -271,10 +278,134 @@ struct CpuPhysicsBackend::Impl {
             listedIds[body] = physicsEntities[body].id;
             listedHalves[body] = physicsEntities[body].half;
             listedPositions[body] = *physicsEntities[body].position;
+        }
+        if (!listThroughGrid())
+            listThroughTree();
+    }
+
+    /**
+     * @brief Lists every body's neighbours by searching the tree, built over the filed boxes, once
+     *        per body.
+     */
+    void listThroughTree()
+    {
+        const core::u32 count = static_cast<core::u32>(filedBoxes.size());
+        Octree &octree = buildTree();
+        for (core::u32 body = 0u; body < count; ++body)
+        {
             neighbourStarts[body] = static_cast<core::u32>(neighbours.size());
             octree.collect(filedBoxes[body].expand(kNeighbourMargin + kNeighbourMargin), body + 1u, neighbours);
         }
         neighbourStarts[count] = static_cast<core::u32>(neighbours.size());
+    }
+
+    /**
+     * @brief Lists every body's neighbours through a grid whose cells are as wide as the widest box
+     *        and two margins, when the filed boxes span few enough of them.
+     *
+     * Two boxes that come within two margins of each other start at most one cell apart on each
+     * axis, so a body's neighbours are among the bodies of the 27 cells around the one its box
+     * starts in, and the test that decides is the one a search of the tree makes: the lists hold
+     * the same bodies. Their order differs, which no reader depends on, since a list of two or
+     * more is sorted as the tree files them. Building the tree only to search it once per body
+     * cost more than placing the bodies in cells.
+     *
+     * @return False, having listed nothing, before the tree has been built once, when the boxes
+     *         span more than kMostGridCellsPerBody cells per body, or when a cell would be wider
+     *         than half the range of a word. The first listing builds the tree, so that its storage
+     *         is sized before a search through it needs it.
+     */
+    [[nodiscard]] bool listThroughGrid()
+    {
+        if (!broadPhase)
+            return false;
+        const core::u32 count = static_cast<core::u32>(filedBoxes.size());
+        core::u32 extents[3] = {0u, 0u, 0u};
+        for (const auto &box : filedBoxes)
+        {
+            const core::u32 x = static_cast<core::u32>(box.max.x.raw()) - static_cast<core::u32>(box.min.x.raw());
+            const core::u32 y = static_cast<core::u32>(box.max.y.raw()) - static_cast<core::u32>(box.min.y.raw());
+            const core::u32 z = static_cast<core::u32>(box.max.z.raw()) - static_cast<core::u32>(box.min.z.raw());
+            extents[0] = x > extents[0] ? x : extents[0];
+            extents[1] = y > extents[1] ? y : extents[1];
+            extents[2] = z > extents[2] ? z : extents[2];
+        }
+
+        const math::AABB<math::Fixed32> span = filedSpan();
+        const core::u32 lows[3] = {static_cast<core::u32>(span.min.x.raw()), static_cast<core::u32>(span.min.y.raw()),
+                                   static_cast<core::u32>(span.min.z.raw())};
+        const core::u32 highs[3] = {static_cast<core::u32>(span.max.x.raw()), static_cast<core::u32>(span.max.y.raw()),
+                                    static_cast<core::u32>(span.max.z.raw())};
+        core::u32 widths[3];
+        core::u32 cells[3];
+        core::u64 cellCount = 1u;
+        const core::u32 reach = static_cast<core::u32>((kNeighbourMargin + kNeighbourMargin).raw());
+        for (core::u32 axis = 0u; axis < 3u; ++axis)
+        {
+            if (extents[axis] > 0x7FFFFFFFu - reach)
+                return false;
+            widths[axis] = extents[axis] + reach;
+            cells[axis] = (highs[axis] - lows[axis]) / widths[axis] + 1u;
+            cellCount *= cells[axis];
+            if (cellCount > static_cast<core::u64>(count) * kMostGridCellsPerBody)
+                return false;
+        }
+
+        const core::u32 total = static_cast<core::u32>(cellCount);
+        if (gridStarts.capacity() < static_cast<std::size_t>(count) * kMostGridCellsPerBody + 1u)
+        {
+            gridStarts.reserve(static_cast<std::size_t>(count) * kMostGridCellsPerBody + 1u);
+            gridCursors.reserve(static_cast<std::size_t>(count) * kMostGridCellsPerBody);
+        }
+        gridStarts.resize(total + 1u);
+        for (core::u32 &start : gridStarts)
+            start = 0u;
+        gridCellOf.resize(count);
+        for (core::u32 body = 0u; body < count; ++body)
+        {
+            const math::AABB<math::Fixed32> &box = filedBoxes[body];
+            const core::u32 x = (static_cast<core::u32>(box.min.x.raw()) - lows[0]) / widths[0];
+            const core::u32 y = (static_cast<core::u32>(box.min.y.raw()) - lows[1]) / widths[1];
+            const core::u32 z = (static_cast<core::u32>(box.min.z.raw()) - lows[2]) / widths[2];
+            const core::u32 cell = (z * cells[1] + y) * cells[0] + x;
+            gridCellOf[body] = cell;
+            ++gridStarts[cell + 1u];
+        }
+        for (core::u32 cell = 0u; cell < total; ++cell)
+            gridStarts[cell + 1u] += gridStarts[cell];
+        gridCursors.resize(total);
+        for (core::u32 cell = 0u; cell < total; ++cell)
+            gridCursors[cell] = gridStarts[cell];
+        gridBodies.resize(count);
+        for (core::u32 body = 0u; body < count; ++body)
+            gridBodies[gridCursors[gridCellOf[body]]++] = body;
+
+        for (core::u32 body = 0u; body < count; ++body)
+        {
+            const math::AABB<math::Fixed32> region = filedBoxes[body].expand(kNeighbourMargin + kNeighbourMargin);
+            const core::u32 cell = gridCellOf[body];
+            const core::u32 x = cell % cells[0];
+            const core::u32 y = (cell / cells[0]) % cells[1];
+            const core::u32 z = cell / cells[0] / cells[1];
+            const core::u32 firstX = x == 0u ? 0u : x - 1u;
+            const core::u32 lastX = x + 1u < cells[0] ? x + 1u : x;
+            neighbourStarts[body] = static_cast<core::u32>(neighbours.size());
+            for (core::u32 nearZ = z == 0u ? 0u : z - 1u; nearZ <= z + 1u && nearZ < cells[2]; ++nearZ)
+            {
+                for (core::u32 nearY = y == 0u ? 0u : y - 1u; nearY <= y + 1u && nearY < cells[1]; ++nearY)
+                {
+                    const core::u32 row = (nearZ * cells[1] + nearY) * cells[0];
+                    for (core::u32 k = gridStarts[row + firstX]; k < gridStarts[row + lastX + 1u]; ++k)
+                    {
+                        const core::u32 other = gridBodies[k];
+                        if (other > body && filedBoxes[other].intersects(region))
+                            neighbours.push_back(other);
+                    }
+                }
+            }
+        }
+        neighbourStarts[count] = static_cast<core::u32>(neighbours.size());
+        return true;
     }
 
     /**
