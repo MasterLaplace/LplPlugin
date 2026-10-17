@@ -1,8 +1,3 @@
-/**
- * @file LslOutlet.cpp
- * @brief Implementation of the LSL outlet wrapper.
- */
-
 #include "lpl/bci/stream/LslOutlet.hpp"
 
 #include <lsl_cpp.h>

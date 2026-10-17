@@ -1,8 +1,3 @@
-/**
- * @file TestCalibration.cpp
- * @brief Unit tests for bci::calibration::Calibration state machine.
- */
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -10,28 +5,26 @@
 
 namespace lpl::bci {
 
-using namespace bci::calibration;
-
 TEST_CASE("Calibration starts in Idle state", "[calibration]")
 {
-    Calibration cal;
-    REQUIRE(cal.state() == CalibrationState::kIdle);
+    lpl::bci::calibration::Calibration cal;
+    REQUIRE(cal.state() == lpl::bci::calibration::CalibrationState::kIdle);
     REQUIRE(cal.trialCount() == 0);
 }
 
 TEST_CASE("Calibration transitions Idle → Calibrating → Ready", "[calibration]")
 {
-    CalibrationConfig config;
+    lpl::bci::calibration::CalibrationConfig config;
     config.channelCount = 2;
     config.requiredTrials = 3;
 
-    Calibration cal(config);
+    lpl::bci::calibration::Calibration cal(config);
 
     SECTION("start transitions to Calibrating")
     {
         auto result = cal.start();
         REQUIRE(result.has_value());
-        REQUIRE(cal.state() == CalibrationState::kCalibrating);
+        REQUIRE(cal.state() == lpl::bci::calibration::CalibrationState::kCalibrating);
     }
 
     SECTION("adding trials transitions to Ready when complete")
@@ -52,13 +45,13 @@ TEST_CASE("Calibration transitions Idle → Calibrating → Ready", "[calibratio
 
         auto res3 = cal.addTrial(alpha, beta);
         REQUIRE(res3.has_value());
-        REQUIRE(cal.state() == CalibrationState::kReady);
+        REQUIRE(cal.state() == lpl::bci::calibration::CalibrationState::kReady);
     }
 }
 
 TEST_CASE("Calibration rejects operations in wrong state", "[calibration]")
 {
-    Calibration cal;
+    lpl::bci::calibration::Calibration cal;
 
     SECTION("addTrial fails when idle")
     {
@@ -84,11 +77,11 @@ TEST_CASE("Calibration rejects operations in wrong state", "[calibration]")
 
 TEST_CASE("Calibration produces valid baselines", "[calibration]")
 {
-    CalibrationConfig config;
+    lpl::bci::calibration::CalibrationConfig config;
     config.channelCount = 1;
     config.requiredTrials = 4;
 
-    Calibration cal(config);
+    lpl::bci::calibration::Calibration cal(config);
     auto res = cal.start();
     REQUIRE(res.has_value());
 
@@ -112,14 +105,15 @@ TEST_CASE("Calibration produces valid baselines", "[calibration]")
 
 TEST_CASE("Calibration observer is notified", "[calibration]")
 {
-    CalibrationConfig config;
+    lpl::bci::calibration::CalibrationConfig config;
     config.channelCount = 1;
     config.requiredTrials = 1;
 
-    Calibration cal(config);
+    lpl::bci::calibration::Calibration cal(config);
 
     int callCount = 0;
-    cal.onStateChange([&](CalibrationState, CalibrationState) { ++callCount; });
+    cal.onStateChange(
+        [&](lpl::bci::calibration::CalibrationState, lpl::bci::calibration::CalibrationState) { ++callCount; });
 
     auto res = cal.start();
     REQUIRE(res.has_value());
@@ -134,21 +128,21 @@ TEST_CASE("Calibration observer is notified", "[calibration]")
 
 TEST_CASE("Calibration reset returns to Idle", "[calibration]")
 {
-    CalibrationConfig config;
+    lpl::bci::calibration::CalibrationConfig config;
     config.channelCount = 1;
     config.requiredTrials = 1;
 
-    Calibration cal(config);
+    lpl::bci::calibration::Calibration cal(config);
     auto res_start = cal.start();
     REQUIRE(res_start.has_value());
     std::vector<float> alpha = {1.0f};
     std::vector<float> beta = {2.0f};
     auto res_trial = cal.addTrial(alpha, beta);
     REQUIRE(res_trial.has_value());
-    REQUIRE(cal.state() == CalibrationState::kReady);
+    REQUIRE(cal.state() == lpl::bci::calibration::CalibrationState::kReady);
 
     cal.reset();
-    REQUIRE(cal.state() == CalibrationState::kIdle);
+    REQUIRE(cal.state() == lpl::bci::calibration::CalibrationState::kIdle);
     REQUIRE(cal.trialCount() == 0);
 }
 

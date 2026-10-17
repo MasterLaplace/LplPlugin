@@ -1,8 +1,3 @@
-/**
- * @file Statistics.cpp
- * @brief Implementation of basic statistical utilities.
- */
-
 #include "lpl/bci/math/Statistics.hpp"
 
 #include <cmath>

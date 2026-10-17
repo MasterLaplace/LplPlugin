@@ -49,11 +49,7 @@ public:
      */
     template <typename T, typename... Args>
     requires std::derived_from<T, IStage>
-    PipelineBuilder &add(Args &&...args)
-    {
-        _stages.push_back(std::make_unique<T>(std::forward<Args>(args)...));
-        return *this;
-    }
+    PipelineBuilder &add(Args &&...args);
 
     /**
      * @brief Finalizes construction and returns the Pipeline.
@@ -105,3 +101,5 @@ private:
 };
 
 } // namespace lpl::bci::dsp
+
+#include "Pipeline.inl"

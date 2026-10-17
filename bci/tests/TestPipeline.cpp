@@ -1,8 +1,3 @@
-/**
- * @file TestPipeline.cpp
- * @brief Unit tests for bci::dsp::Pipeline and DSP stages.
- */
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -12,9 +7,6 @@
 #include "lpl/bci/dsp/Windowing.hpp"
 
 namespace lpl::bci {
-
-using namespace bci;
-using namespace bci::dsp;
 
 static SignalBlock makeConstantBlock(std::size_t samples, std::size_t channels, float value)
 {
@@ -31,7 +23,7 @@ static SignalBlock makeConstantBlock(std::size_t samples, std::size_t channels, 
 
 TEST_CASE("Pipeline processes empty stage list as identity", "[dsp][pipeline]")
 {
-    auto pipeline = PipelineBuilder().build();
+    auto pipeline = lpl::bci::dsp::PipelineBuilder().build();
     auto block = makeConstantBlock(256, 2, 1.0f);
     auto result = pipeline.process(block);
 
@@ -41,7 +33,7 @@ TEST_CASE("Pipeline processes empty stage list as identity", "[dsp][pipeline]")
 
 TEST_CASE("HannWindow applies window coefficients", "[dsp][windowing]")
 {
-    HannWindow window(256);
+    lpl::bci::dsp::HannWindow window(256);
     auto block = makeConstantBlock(256, 1, 1.0f);
     auto result = window.process(block);
 
@@ -52,7 +44,7 @@ TEST_CASE("HannWindow applies window coefficients", "[dsp][windowing]")
 
 TEST_CASE("HannWindow rejects mismatched block size", "[dsp][windowing]")
 {
-    HannWindow window(256);
+    lpl::bci::dsp::HannWindow window(256);
     auto block = makeConstantBlock(128, 1, 1.0f);
     auto result = window.process(block);
 
@@ -61,7 +53,7 @@ TEST_CASE("HannWindow rejects mismatched block size", "[dsp][windowing]")
 
 TEST_CASE("FftProcessor produces half-spectrum PSD", "[dsp][fft]")
 {
-    FftProcessor fft(256);
+    lpl::bci::dsp::FftProcessor fft(256);
     auto block = makeConstantBlock(256, 2, 0.0f);
 
     for (std::size_t i = 0; i < 256; ++i)
@@ -78,7 +70,7 @@ TEST_CASE("FftProcessor produces half-spectrum PSD", "[dsp][fft]")
 
 TEST_CASE("FftProcessor rejects non-power-of-two size", "[dsp][fft]")
 {
-    FftProcessor fft(200);
+    lpl::bci::dsp::FftProcessor fft(200);
     auto block = makeConstantBlock(200, 1, 1.0f);
     auto result = fft.process(block);
 
@@ -92,7 +84,7 @@ TEST_CASE("BandExtractor extracts correct frequency bands", "[dsp][band]")
         {.low = 13.0f, .high = 30.0f},
     };
 
-    BandExtractor extractor(bands, 250.0f, 256);
+    lpl::bci::dsp::BandExtractor extractor(bands, 250.0f, 256);
 
     SignalBlock block = makeConstantBlock(256, 1, 0.0f);
     block.data.assign(129, std::vector<float>(1, 1.0f));

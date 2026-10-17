@@ -1,13 +1,3 @@
-/**
- * @file SerialPortPosix.cpp
- * @brief POSIX implementation of the SerialPort abstraction.
- * @author MasterLaplace
- *
- * Uses termios for configuration, O_RDWR | O_NOCTTY for opening,
- * and TIOCEXCL for exclusive access. Ported and hardened from the
- * V1 OpenBCIDriver serial setup.
- */
-
 #include "lpl/bci/source/serial/SerialPort.hpp"
 
 #include <cerrno>

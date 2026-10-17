@@ -35,21 +35,32 @@ struct BciAdapterConfig {
  *
  * Adapter pattern: wraps an IBciDriver and exposes a high-level
  * update() method that the InputManager can call each tick.
+ *
+ * Pipeline: poll() → Hann Window → FFT → BandExtractor → NeuralMetric (once calibrated) →
+ * NeuralSafetyChain → NeuralInputState.
  */
 class BciAdapter {
 public:
-    /// @param driver Owned BCI driver instance.
-    /// @param config DSP pipeline configuration.
+    /**
+     * @param driver Owned BCI driver instance.
+     * @param config DSP pipeline configuration.
+     */
     explicit BciAdapter(std::unique_ptr<IBciDriver> driver, const BciAdapterConfig &config = {});
     ~BciAdapter();
 
     BciAdapter(const BciAdapter &) = delete;
     BciAdapter &operator=(const BciAdapter &) = delete;
 
-    /** @brief Connect and start streaming from the BCI device. */
+    /**
+     * @brief Connect and start streaming from the BCI device.
+     *
+     * The DSP pipeline it builds extracts two bands: alpha (8 to 13 Hz), then beta (13 to 30 Hz).
+     */
     [[nodiscard]] core::Expected<void> start();
 
-    /** @brief Stop streaming and disconnect. */
+    /**
+     * @brief Stop streaming and disconnect.
+     */
     void stop();
 
     /**
@@ -61,6 +72,10 @@ public:
      * If calibration is active, this also feeds band powers to the
      * Calibration state machine. Once calibrated, NeuralMetric
      * normalization is applied (μ ± kσ clamping).
+     *
+     * Until a full FFT window has accumulated, the channels carry the raw samples clamped to [0, 1]
+     * and the confidence is zero. Once calibrated, each channel carries its normalized alpha power.
+     * A state the safety chain rejects comes back zeroed.
      */
     [[nodiscard]] core::Expected<input::NeuralInputState> update();
 
@@ -74,10 +89,14 @@ public:
      */
     [[nodiscard]] core::Expected<void> startCalibration();
 
-    /** @brief Returns true if calibration is complete and baselines are available. */
+    /**
+     * @brief Returns true if calibration is complete and baselines are available.
+     */
     [[nodiscard]] bool isCalibrated() const noexcept;
 
-    /** @brief Access the underlying driver (read-only). */
+    /**
+     * @brief Access the underlying driver (read-only).
+     */
     [[nodiscard]] const IBciDriver &driver() const noexcept;
 
 private:

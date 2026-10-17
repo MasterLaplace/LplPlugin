@@ -39,7 +39,9 @@ public:
      */
     [[nodiscard]] virtual SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept = 0;
 
-    /** @brief Human-readable name of the check. */
+    /**
+     * @brief Human-readable name of the check.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
@@ -57,7 +59,9 @@ public:
     NeuralSafetyChain(const NeuralSafetyChain &) = delete;
     NeuralSafetyChain &operator=(const NeuralSafetyChain &) = delete;
 
-    /** @brief Append a check to the chain. */
+    /**
+     * @brief Append a check to the chain.
+     */
     void addCheck(std::unique_ptr<ISafetyCheck> check);
 
     /**
@@ -67,16 +71,19 @@ public:
      */
     [[nodiscard]] SafetyVerdict evaluate(const input::NeuralInputState &state) const noexcept;
 
-    /** @brief Number of checks in the chain. */
+    /**
+     * @brief Number of checks in the chain.
+     */
     [[nodiscard]] core::usize checkCount() const noexcept;
 
 private:
     std::vector<std::unique_ptr<ISafetyCheck>> _checks;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Built-in safety checks
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * @name Built-in safety checks
+ * @{
+ */
 
 /** @brief Rejects signals where any channel exceeds an amplitude bound. */
 class AmplitudeBoundsCheck final : public ISafetyCheck {
@@ -112,6 +119,8 @@ private:
     mutable math::Fixed32 _previousChannels[input::NeuralInputState::kChannels]{};
     mutable bool _hasPrevious{false};
 };
+
+/** @} */
 
 } // namespace lpl::bci
 

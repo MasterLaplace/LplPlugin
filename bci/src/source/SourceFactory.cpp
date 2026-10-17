@@ -1,9 +1,3 @@
-/**
- * @file SourceFactory.cpp
- * @brief Implementation of the SourceFactory.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/source/SourceFactory.hpp"
 #include "lpl/bci/source/BrainFlowSource.hpp"
 #include "lpl/bci/source/CsvReplaySource.hpp"

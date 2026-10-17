@@ -1,8 +1,3 @@
-/**
- * @file SignalMetric.cpp
- * @brief Implementation of the Schumacher spectral ratio metric.
- */
-
 #include "lpl/bci/metric/SignalMetric.hpp"
 #include "lpl/bci/math/Statistics.hpp"
 

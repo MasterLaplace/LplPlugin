@@ -1,9 +1,3 @@
-/**
- * @file SyntheticSource.cpp
- * @brief Implementation of the synthetic EEG acquisition source.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/source/SyntheticSource.hpp"
 
 #include <algorithm>

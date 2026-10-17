@@ -1,8 +1,3 @@
-/**
- * @file Covariance.cpp
- * @brief Implementation of batch and online covariance estimators.
- */
-
 #include "lpl/bci/math/Covariance.hpp"
 
 namespace lpl::bci::math {

@@ -31,7 +31,7 @@ target("lpl-bci")
     add_deps("lpl-core", "lpl-math", "lpl-input", "lpl-container")
     add_includedirs("include", { public = true })
     add_files("src/**.cpp")
-    add_headerfiles("include/(lpl/bci/**.hpp)")
+    add_headerfiles("include/(lpl/bci/**.hpp)", "include/(lpl/bci/**.inl)")
 
     if is_plat("windows") then
         remove_files("src/source/serial/SerialPortPosix.cpp")

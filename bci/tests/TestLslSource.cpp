@@ -1,13 +1,3 @@
-/**
- * @file TestLslSource.cpp
- * @brief BCI component: TestLslSource.cpp
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include "lpl/bci/core/Types.hpp"
 #include "lpl/bci/source/LslSource.hpp"
 #include <catch2/catch_test_macros.hpp>
@@ -19,28 +9,29 @@
 
 namespace lpl::bci {
 
-using namespace bci::source;
-using namespace bci;
-
+/**
+ * @brief Reads one sample from a short-lived outlet, which pushes it after a brief delay so that the
+ *        inlet sees it.
+ *
+ * The resolve timeout is short, for a quick fail-over in CI, and the channel count is the resolved
+ * stream's. A run where no sample arrives passes: LSL resolution may be unreliable in CI.
+ */
 TEST_CASE("LslSource reads from temporary outlet", "[source][lsl]")
 {
-    // create a short-lived outlet
     lsl::stream_info streamInfo("TestStream", "EEG", 2, 250.0, lsl::cf_float32, "testid");
     lsl::stream_outlet outlet(streamInfo);
 
-    // push a single sample after a brief delay to ensure inlet sees it
     std::vector<float> sample = {1.0f, 2.0f};
     std::thread writer([&]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         outlet.push_sample(sample);
     });
 
-    LslSourceConfig cfg;
+    lpl::bci::source::LslSourceConfig cfg;
     cfg.streamName = "TestStream";
-    cfg.resolveTimeoutSec = 0.1; // quick fail-over in CI
-    // channel count determined by the resolved stream
+    cfg.resolveTimeoutSec = 0.1;
 
-    LslSource src(cfg);
+    lpl::bci::source::LslSource src(cfg);
     REQUIRE(src.start().has_value());
 
     std::array<Sample, 1> buf;
@@ -51,7 +42,6 @@ TEST_CASE("LslSource reads from temporary outlet", "[source][lsl]")
     REQUIRE(r.has_value());
     if (r.value() == 0)
     {
-        // no samples arrived - network/LSL resolution may be unreliable in CI
         SUCCEED("no sample received; environment may not support LSL");
     }
     else
