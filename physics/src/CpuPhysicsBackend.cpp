@@ -210,13 +210,30 @@ struct CpuPhysicsBackend::Impl {
 
     /**
      * @brief The box the filed boxes span.
+     *
+     * The lowest corner first, then the highest: on i686, the six bounds of a merge do not fit the
+     * registers together, and each box spilled them.
      */
     [[nodiscard]] math::AABB<math::Fixed32> filedSpan() const noexcept
     {
-        math::AABB<math::Fixed32> span = filedBoxes[0];
-        for (core::u32 body = 1u; body < static_cast<core::u32>(filedBoxes.size()); ++body)
-            span = span.merge(filedBoxes[body]);
-        return span;
+        const core::u32 count = static_cast<core::u32>(filedBoxes.size());
+        FVec3 low = filedBoxes[0].min;
+        for (core::u32 body = 1u; body < count; ++body)
+        {
+            const FVec3 &corner = filedBoxes[body].min;
+            low.x = corner.x < low.x ? corner.x : low.x;
+            low.y = corner.y < low.y ? corner.y : low.y;
+            low.z = corner.z < low.z ? corner.z : low.z;
+        }
+        FVec3 high = filedBoxes[0].max;
+        for (core::u32 body = 1u; body < count; ++body)
+        {
+            const FVec3 &corner = filedBoxes[body].max;
+            high.x = corner.x > high.x ? corner.x : high.x;
+            high.y = corner.y > high.y ? corner.y : high.y;
+            high.z = corner.z > high.z ? corner.z : high.z;
+        }
+        return {low, high};
     }
 
     /**
