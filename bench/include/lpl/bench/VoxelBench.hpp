@@ -26,7 +26,9 @@
 
 namespace lpl::bench {
 
-/// @brief Runs every voxel benchmark and prints its summary lines.
+/**
+ * @brief Runs every voxel benchmark and prints its summary lines.
+ */
 void runVoxelBenchmarks();
 
 } // namespace lpl::bench

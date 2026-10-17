@@ -1,14 +1,3 @@
-/**
- * @file Harness.cpp
- * @brief Non-template implementation of the benchmark harness: sample
- *        reduction, formatting, and reporting.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-06
- * @copyright MIT License
- */
-
 #include <lpl/bench/Harness.hpp>
 
 #include <lpl/bench/JsonRows.hpp>

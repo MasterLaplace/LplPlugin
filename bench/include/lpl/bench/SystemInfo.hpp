@@ -28,16 +28,16 @@ namespace lpl::bench {
  * @brief Snapshot of the host context a benchmark result must be read against.
  */
 struct SystemInfo {
-    std::string os;             ///< OS name, kernel/build release, and architecture.
-    std::string platform;       ///< OS and architecture the build targets, no release: "Linux x86_64".
-    std::string cpu;            ///< CPU brand string, or "Unknown" off x86.
-    core::u32 logicalCores = 0; ///< std::thread::hardware_concurrency().
-    std::string hypervisor;     ///< Vendor CPUID names, "none" on bare metal, "unknown" off x86.
-    core::u64 ramBytes = 0;     ///< Total physical RAM, or 0 if undetermined.
-    std::string compiler;       ///< Compiler name and version.
-    std::string buildConfig;    ///< "Debug" / "Release" / "Profile" / "Unknown".
-    std::string cpuGovernor;    ///< Linux frequency governor, else "unknown".
-    std::string commit;         ///< Short commit built from, "-dirty" if modified, else "unknown".
+    std::string os;             /**< OS name, kernel/build release, and architecture. */
+    std::string platform;       /**< OS and architecture the build targets, no release: "Linux x86_64". */
+    std::string cpu;            /**< CPU brand string, or "Unknown" off x86. */
+    core::u32 logicalCores = 0; /**< std::thread::hardware_concurrency(). */
+    std::string hypervisor;     /**< Vendor CPUID names, "none" on bare metal, "unknown" off x86. */
+    core::u64 ramBytes = 0;     /**< Total physical RAM, or 0 if undetermined. */
+    std::string compiler;       /**< Compiler name and version. */
+    std::string buildConfig;    /**< "Debug" / "Release" / "Profile" / "Unknown". */
+    std::string cpuGovernor;    /**< Linux frequency governor, else "unknown". */
+    std::string commit;         /**< Short commit built from, "-dirty" if modified, else "unknown". */
 };
 
 /**

@@ -44,8 +44,8 @@ inline constexpr core::u32 kJsonRowSchema = 1u;
 
 /** One field of a JSON row: its key, and what its value means. */
 struct JsonRowField {
-    std::string_view key;     ///< The key, as written.
-    std::string_view meaning; ///< What the value is, with its unit or its closed set of values.
+    std::string_view key;     /**< The key, as written. */
+    std::string_view meaning; /**< What the value is, with its unit or its closed set of values. */
 };
 
 /** The fields of a JSON row, in the order every row writes them. */

@@ -1,14 +1,3 @@
-/**
- * @file SystemInfo.cpp
- * @brief Portable host hardware/toolchain introspection (Linux / macOS /
- *        Windows, GCC / Clang / MSVC on x86/x64).
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-06
- * @copyright MIT License
- */
-
 #include <lpl/bench/SystemInfo.hpp>
 
 #include <lpl/core/Platform.hpp>
@@ -43,9 +32,11 @@
 namespace lpl::bench {
 namespace {
 
-/// Reads the x86 CPUID brand string (leaves 0x80000002..4). Returns an empty
-/// string off x86, where no portable equivalent exists without going
-/// OS-specific.
+/**
+ * @brief Reads the x86 CPUID brand string (leaves 0x80000002..4). Returns an empty
+ *        string off x86, where no portable equivalent exists without going
+ *        OS-specific.
+ */
 std::string cpuBrandString()
 {
 #if (defined(LPL_ARCH_X64) || defined(LPL_ARCH_X86)) &&                                                                \
@@ -105,7 +96,12 @@ std::string hypervisorVendor()
 #endif
 }
 
-/// Returns "<OS> (<kernel/build release>) <arch>".
+/**
+ * @brief Returns "<OS> (<kernel/build release>) <arch>".
+ *
+ * On Windows, RtlGetVersion (resolved dynamically) avoids the deprecated GetVersionEx
+ * and the version lie it tells without an application manifest.
+ */
 std::string osDescription()
 {
 #if defined(LPL_OS_LINUX) || defined(LPL_OS_MACOS)
@@ -114,8 +110,6 @@ std::string osDescription()
         return std::string(uts.sysname) + " (" + uts.release + ") " + uts.machine;
     return "Unix (unknown release)";
 #elif defined(LPL_OS_WINDOWS)
-    // RtlGetVersion (resolved dynamically) avoids the deprecated GetVersionEx
-    // and the version lie it tells without an application manifest.
     using RtlGetVersionFn = LONG(WINAPI *)(OSVERSIONINFOEXW *);
     std::string desc = "Windows";
     if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll"))
@@ -135,7 +129,9 @@ std::string osDescription()
 #endif
 }
 
-/// Returns total physical RAM in bytes, or 0 if it could not be determined.
+/**
+ * @brief Returns total physical RAM in bytes, or 0 if it could not be determined.
+ */
 core::u64 totalPhysicalRamBytes()
 {
 #if defined(LPL_OS_LINUX)
@@ -156,10 +152,13 @@ core::u64 totalPhysicalRamBytes()
 #endif
 }
 
-/// Best-effort read of the Linux CPU frequency-scaling governor. A governor
-/// other than "performance" means the OS may throttle or boost cores mid-run,
-/// a real source of timing noise. Returns "unknown" elsewhere or when
-/// unreadable (e.g. inside a VM or WSL2, where cpufreq is not exposed).
+/**
+ * @brief Best-effort read of the Linux CPU frequency-scaling governor.
+ *
+ * A governor other than "performance" means the OS may throttle or boost cores mid-run,
+ * a real source of timing noise. Returns "unknown" elsewhere or when
+ * unreadable (e.g. inside a VM or WSL2, where cpufreq is not exposed).
+ */
 std::string cpuGovernor()
 {
 #if defined(LPL_OS_LINUX)
@@ -171,7 +170,9 @@ std::string cpuGovernor()
     return "unknown";
 }
 
-/// Returns "<Compiler name> <version>".
+/**
+ * @brief Returns "<Compiler name> <version>".
+ */
 std::string compilerDescription()
 {
 #if defined(LPL_COMPILER_CLANG)
@@ -185,7 +186,9 @@ std::string compilerDescription()
 #endif
 }
 
-/// Build configuration selected by the xmake mode (see root xmake.lua).
+/**
+ * @brief Build configuration selected by the xmake mode (see root xmake.lua).
+ */
 const char *buildConfig()
 {
 #if defined(LPL_RELEASE)
