@@ -47,7 +47,9 @@ public:
      */
     [[nodiscard]] virtual IMemoryBackend &memory() noexcept = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

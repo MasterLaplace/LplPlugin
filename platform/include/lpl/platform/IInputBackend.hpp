@@ -29,10 +29,14 @@ class IInputBackend {
 public:
     virtual ~IInputBackend() = default;
 
-    /** @brief Pop one decoded character; false if the ring is empty. */
+    /**
+     * @brief Pop one decoded character; false if the ring is empty.
+     */
     [[nodiscard]] virtual bool tryPopCharacter(char &outCharacter) = 0;
 
-    /** @brief Number of decoded characters currently waiting. */
+    /**
+     * @brief Number of decoded characters currently waiting.
+     */
     [[nodiscard]] virtual core::u32 pendingCount() const noexcept = 0;
 
     /**
@@ -53,13 +57,8 @@ public:
      *                   is what stops each caller from picking a different one.
      * @param outButtons Bit 0 left, bit 1 right, bit 2 middle.
      */
-    [[nodiscard]] virtual bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY, core::u32 &outButtons)
-    {
-        outDeltaX = 0;
-        outDeltaY = 0;
-        outButtons = 0u;
-        return false;
-    }
+    [[nodiscard]] inline virtual bool tryPopPointerMotion(core::i32 &outDeltaX, core::i32 &outDeltaY,
+                                                          core::u32 &outButtons);
 
     /**
      * @brief Whether the key that types @p character is held down right now.
@@ -75,16 +74,16 @@ public:
      * Not pure: a backend that only has a character stream is legitimate, and the
      * default is the honest answer rather than a lie about the key being down.
      */
-    [[nodiscard]] virtual bool isKeyHeld(char character) const noexcept
-    {
-        (void) character;
-        return false;
-    }
+    [[nodiscard]] inline virtual bool isKeyHeld(char character) const noexcept;
 
-    /** @brief Whether this backend can report held keys at all. */
+    /**
+     * @brief Whether this backend can report held keys at all.
+     */
     [[nodiscard]] virtual bool hasKeyStates() const noexcept { return false; }
 
-    /** @brief Whether a pointing device is present at all. */
+    /**
+     * @brief Whether a pointing device is present at all.
+     */
     [[nodiscard]] virtual bool hasPointer() const noexcept { return false; }
 
     /**
@@ -97,10 +96,14 @@ public:
      */
     [[nodiscard]] virtual core::u32 pointerInterruptCount() const noexcept { return 0u; }
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
 } // namespace lpl::platform
+
+#    include "IInputBackend.inl"
 
 #endif // LPL_PLATFORM_IINPUTBACKEND_HPP

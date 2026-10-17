@@ -31,16 +31,24 @@ class IClockBackend {
 public:
     virtual ~IClockBackend() = default;
 
-    /** @brief Monotonic tick count (may wrap; use modular deltas). */
+    /**
+     * @brief Monotonic tick count (may wrap; use modular deltas).
+     */
     [[nodiscard]] virtual core::u32 tickCount() const noexcept = 0;
 
-    /** @brief Tick frequency in Hz. */
+    /**
+     * @brief Tick frequency in Hz.
+     */
     [[nodiscard]] virtual core::u32 tickHertz() const noexcept = 0;
 
-    /** @brief High-resolution CPU timestamp counter for sub-tick timing. */
+    /**
+     * @brief High-resolution CPU timestamp counter for sub-tick timing.
+     */
     [[nodiscard]] virtual core::u64 timestampCounter() const noexcept = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

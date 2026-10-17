@@ -36,6 +36,12 @@ namespace lpl::platform::kernel {
  */
 class KernelLogger final : public core::ILogger {
 public:
+    /**
+     * @brief Writes one log line to the kernel console.
+     *
+     * A string_view is not NUL-terminated and the kernel console takes C strings, so the line is copied into a
+     * bounded stack buffer (no heap: the logger must work before and after the heap, and during failure paths).
+     */
     void write(core::LogLevel level, std::string_view tag, std::string_view message) override;
 };
 
@@ -77,9 +83,6 @@ public:
     [[nodiscard]] const char *name() const noexcept override { return "KernelInput(PS/2)"; }
 };
 
-/**
- * @brief Pinned graphics-memory backend over the kernel HAL.
- */
 /** @brief Arena-backing memory backend over the kernel heap HAL. */
 class KernelMemoryBackend final : public IMemoryBackend {
 public:
@@ -92,6 +95,9 @@ public:
     [[nodiscard]] const char *name() const noexcept override { return "KernelMemory(kmalloc-backed)"; }
 };
 
+/**
+ * @brief Pinned graphics-memory backend over the kernel HAL.
+ */
 class KernelGpuMemoryBackend final : public IGpuMemoryBackend {
 public:
     [[nodiscard]] core::Expected<GpuAllocation> allocate(core::u32 sizeBytes, GpuMemoryFlags flags) override;

@@ -1,16 +1,3 @@
-/**
- * @file KernelPlatform.cpp
- * @brief Kernel platform backends over the C HAL (libengine-only TU).
- *
- * Compiled only into libengine.a (LPL_TARGET_KERNEL=1); empty on the hosted
- * build. Each backend is a thin adaptor from the lpl::platform interfaces to
- * the kernel's <kernel/hal/hal.h> C contract — no logic of its own.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-26
- * @copyright MIT License
- */
 #include <lpl/core/Platform.hpp>
 
 #if LPL_TARGET_KERNEL
@@ -21,13 +8,8 @@
 
 namespace lpl::platform::kernel {
 
-// ---- Logger --------------------------------------------------------------
-
 void KernelLogger::write(core::LogLevel level, std::string_view tag, std::string_view message)
 {
-    // string_view is not NUL-terminated and the kernel console takes C strings,
-    // so copy into a bounded stack buffer (no heap: the logger must work before
-    // and after the heap, and during failure paths).
     constexpr core::usize kMaxLine = 256;
     char line[kMaxLine];
     core::usize pos = 0;
@@ -55,16 +37,12 @@ void KernelLogger::write(core::LogLevel level, std::string_view tag, std::string
     hardware_abstraction_layer_console_write_string(line);
 }
 
-// ---- Clock ---------------------------------------------------------------
-
 core::u32 KernelClockBackend::tickCount() const noexcept { return hardware_abstraction_layer_clock_tick_count(); }
 core::u32 KernelClockBackend::tickHertz() const noexcept { return hardware_abstraction_layer_clock_tick_hertz(); }
 core::u64 KernelClockBackend::timestampCounter() const noexcept
 {
     return hardware_abstraction_layer_clock_timestamp_counter();
 }
-
-// ---- Display -------------------------------------------------------------
 
 bool KernelDisplayBackend::querySurface(SurfaceDescriptor &outDescriptor) const noexcept
 {
@@ -89,8 +67,6 @@ core::u32 KernelDisplayBackend::readPixel(core::u32 x, core::u32 y) const noexce
 }
 
 void KernelDisplayBackend::present() { hardware_abstraction_layer_display_present(); }
-
-// ---- Input ---------------------------------------------------------------
 
 bool KernelInputBackend::tryPopCharacter(char &outCharacter)
 {
@@ -124,8 +100,6 @@ bool KernelInputBackend::isKeyHeld(char character) const noexcept
     return hardware_abstraction_layer_input_is_key_held(character);
 }
 
-// ---- Memory --------------------------------------------------------------
-
 void *KernelMemoryBackend::reserve(core::usize sizeBytes, core::usize alignment)
 {
     return hardware_abstraction_layer_memory_reserve(static_cast<core::u32>(sizeBytes),
@@ -150,8 +124,6 @@ core::u32 KernelMemoryBackend::realTimeBoundedCount() const noexcept
 {
     return hardware_abstraction_layer_memory_real_time_bounded_count();
 }
-
-// ---- Graphics memory -----------------------------------------------------
 
 core::Expected<GpuAllocation> KernelGpuMemoryBackend::allocate(core::u32 sizeBytes, GpuMemoryFlags flags)
 {
