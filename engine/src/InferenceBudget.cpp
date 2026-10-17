@@ -1,12 +1,3 @@
-/**
- * @file InferenceBudget.cpp
- * @brief Implementation of where the server profile's spare capacity goes.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/engine/InferenceBudget.hpp>
 
 namespace lpl::engine {

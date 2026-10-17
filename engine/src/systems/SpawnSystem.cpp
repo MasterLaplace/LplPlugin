@@ -32,11 +32,6 @@ void SpawnSystem::execute(core::f32 /*dt*/)
         arch.add(ecs::ComponentId::AABB);
         arch.add(ecs::ComponentId::Health);
 
-        // Create the avatar UNDER the server-assigned id (from the welcome), not a
-        // fresh local one — otherwise CameraSystem/input, which name the entity by
-        // _myEntityId, could never find it, and a reconciliation snapshot for the
-        // same id would spawn a second copy. Idempotent with StateReconciliation:
-        // whichever runs first, the other adopts the same live id.
         [[maybe_unused]] auto res = _registry.createEntityWithId(ecs::EntityId{_myEntityId}, arch);
         _spawned = true;
     }

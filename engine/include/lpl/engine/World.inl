@@ -1,21 +1,5 @@
-/**
- * @file World.inl
- * @brief Out-of-line definitions for engine::World.
- *
- * Included at the end of World.hpp. World is used header-only, in the
- * freestanding kernel as well as on the host, so its non-trivial definitions
- * go here instead of a translation unit the kernel build paths do not list.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-22
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_ENGINE_WORLD_INL
-#    define LPL_ENGINE_WORLD_INL
+#define LPL_ENGINE_WORLD_INL
 
 namespace lpl::engine {
 
@@ -40,12 +24,6 @@ inline core::u64 World::stateHash() const noexcept
             if (count == 0)
                 continue;
 
-            // The WRITE buffer, not the read one: chunks are double
-            // buffered, the integrator advances the write side, and the read
-            // side is last frame's snapshot kept for concurrent readers.
-            // Folding the read side would digest stale state — and would sit
-            // still for a whole tick, which is exactly how this was caught.
-            // samples::CubePile's parity fold reads the same side.
             const auto *positions =
                 hasPosition ?
                     static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position)) :
@@ -81,6 +59,36 @@ inline core::u64 World::stateHash() const noexcept
     }
 
     return accumulator;
+}
+
+inline ecs::WorldPartition &World::enableSpatialPartition(math::Fixed32 cellSize, core::u32 cellCapacity)
+{
+    if (!_spatial)
+        _spatial = lpl::pmr::make_unique<ecs::WorldPartition>(cellSize, cellCapacity);
+    return *_spatial;
+}
+
+inline LivingLayer &World::enableLivingLayer(const LivingLayerParams &params, const ecology::LivingRecipe &recipe,
+                                             core::u32 seed)
+{
+    if (!_living)
+    {
+        _living = lpl::pmr::make_unique<LivingLayer>();
+        _living->configure(params, recipe, seed);
+    }
+    return *_living;
+}
+
+inline core::Expected<void> World::onInit(WorldContext &context)
+{
+    (void) context;
+    return {};
+}
+
+inline void World::onRender(WorldContext &context, core::f64 alpha)
+{
+    (void) context;
+    (void) alpha;
 }
 
 } // namespace lpl::engine

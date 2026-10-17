@@ -1,13 +1,3 @@
-/**
- * @file NetworkReceiveSystem.cpp
- * @brief Polls transport and dispatches packets into typed event queues.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/engine/PacketDispatch.hpp>
 #include <lpl/engine/systems/NetworkReceiveSystem.hpp>
@@ -19,15 +9,7 @@
 
 namespace lpl::engine::systems {
 
-// ========================================================================== //
-//  Descriptor (static storage)                                               //
-// ========================================================================== //
-
 static const ecs::SystemDescriptor kNetworkReceiveDesc{"NetworkReceive", ecs::SchedulePhase::Input, {}};
-
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
 
 struct NetworkReceiveSystem::Impl {
     std::shared_ptr<net::transport::ITransport> transport;
@@ -35,10 +17,6 @@ struct NetworkReceiveSystem::Impl {
 
     Impl(std::shared_ptr<net::transport::ITransport> t, EventQueues &q) : transport{std::move(t)}, queues{q} {}
 };
-
-// ========================================================================== //
-//  Public                                                                    //
-// ========================================================================== //
 
 NetworkReceiveSystem::NetworkReceiveSystem(std::shared_ptr<net::transport::ITransport> transport, EventQueues &queues)
     : _impl{std::make_unique<Impl>(std::move(transport), queues)}
@@ -51,7 +29,6 @@ const ecs::SystemDescriptor &NetworkReceiveSystem::descriptor() const noexcept {
 
 void NetworkReceiveSystem::execute(core::f32 /*dt*/)
 {
-    // Buffer must fit a full UDP datagram: PacketHeader (16B) + max payload.
     std::array<core::byte, sizeof(net::protocol::PacketHeader) + net::session::SessionManager::kMaxPayloadSize>
         buffer{};
     net::Endpoint fromAddr{};
@@ -71,8 +48,6 @@ void NetworkReceiveSystem::execute(core::f32 /*dt*/)
         if (!detail::parsePacket(std::span<const core::byte>{buffer.data(), bytesRead}, header, payload))
             continue;
 
-        // A single-world host decodes everything into its one set of queues; the
-        // multi-instance server picks the queues per sender instead.
         detail::dispatchPacket(header, payload, fromAddr, _impl->queues);
     }
 }

@@ -20,7 +20,7 @@
  *    it belongs to the render path (engine::TerrainRenderer already takes it as a
  *    callable). Letting a simulation system read it would put a float on the
  *    authoritative path, which the determinism contract forbids.
- *  - anything that resembles a query language. Two questions, both answered in
+ *  - anything that resembles a query language. Three questions, all answered in
  *    O(1) by every implementation, because a system asks them once per animal per
  *    tick.
  *
@@ -42,7 +42,7 @@ namespace lpl::engine {
 
 /**
  * @class ITerrainQuery
- * @brief The ground, as the two questions a walking animal asks it.
+ * @brief The ground, as the three questions a walking animal asks it.
  *
  * Implemented by whatever generated the world — a bounded heightfield, a streamed
  * one, or a test's flat plane. A World implements it because a World is what knows
@@ -103,17 +103,12 @@ public:
      * @param outZ  Receives a unit-ish direction, Z.
      * @return false when this world has no advice to offer.
      */
-    [[nodiscard]] virtual bool recoveryDirection(math::Fixed32 x, math::Fixed32 z, math::Fixed32 &outX,
-                                                 math::Fixed32 &outZ) const
-    {
-        (void) x;
-        (void) z;
-        (void) outX;
-        (void) outZ;
-        return false;
-    }
+    [[nodiscard]] inline virtual bool recoveryDirection(math::Fixed32 x, math::Fixed32 z, math::Fixed32 &outX,
+                                                        math::Fixed32 &outZ) const;
 };
 
 } // namespace lpl::engine
+
+#    include "ITerrainQuery.inl"
 
 #endif // LPL_ENGINE_ITERRAINQUERY_HPP

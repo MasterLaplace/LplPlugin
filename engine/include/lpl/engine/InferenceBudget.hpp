@@ -7,8 +7,7 @@
  * inference — bounded because the tick contract still comes first: the demon may
  * think, but never at the price of a missed deadline.
  *
- * ── Counted in TURNS, not in milliseconds ────────────────────────────────────
- *
+ * @par Counted in turns, not in milliseconds
  * An earlier sketch spelled this `InferenceBudget::ofFrame(0.6f)` — sixty per cent
  * of the frame. That spelling is deliberately NOT kept, and the reason is the
  * determinism contract rather than taste: a budget read off a wall clock makes the

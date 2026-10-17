@@ -37,10 +37,10 @@ namespace lpl::engine {
  * @brief The machine a build targets.
  */
 enum class HostProfile {
-    Ring0Client,     ///< Freestanding, 4 MiB heap, HAL display, no network.
-    Ring0Server,     ///< Freestanding, headless, deterministic tick, no display.
-    DesktopClient,   ///< Hosted, memory to spare, every presentation feature on.
-    DedicatedServer, ///< Hosted, headless, networking and interest management on.
+    Ring0Client,     /**< Freestanding, 4 MiB heap, HAL display, no network. */
+    Ring0Server,     /**< Freestanding, headless, deterministic tick, no display. */
+    DesktopClient,   /**< Hosted, memory to spare, every presentation feature on. */
+    DedicatedServer, /**< Hosted, headless, networking and interest management on. */
 };
 
 /**
@@ -48,143 +48,37 @@ enum class HostProfile {
  *
  * Returns the builder for chaining, so an app writes what is genuinely its own
  * around it: `applyHostProfile(Builder{}.tickRate(60), HostProfile::Ring0Client)`.
+ *
+ * - Ring0Client is sized for the kernel's 4 MiB heap, not a desktop's. The hosted
+ *   defaults (a 64 MiB arena, 65536 world cells) exhaust it during Engine::init and
+ *   starve the simulation of its entity chunks — measured, not assumed. The real-time
+ *   guard is ON: inside the guarded section the heap still serves its bounded O(1)
+ *   paths (a slab hit, a TLSF block) and refuses only the unbounded ones (pool growth,
+ *   a first-fit walk), so a threatened deadline is caught rather than hoped for.
+ *   Rendering stays OFF because the World rasterizes itself: the engine's built-in
+ *   render systems assume a renderer the kernel does not have. The world is endless:
+ *   the client has a walker, and a walker is what streaming is for. The server
+ *   profiles stay BOUNDED, which is what keeps the parity tests folding a finite
+ *   world. Presentation gets everything the software rasterizer can afford at
+ *   480x300, which measurement says is more than expected — the frame is bounded by
+ *   the simulation, not by the fill. Six divisions per water quad are enough that a
+ *   swell reads as geometry at 480x300, at 72 triangles per water chunk rather than
+ *   two; the cost is quadratic, so this is where a low-resolution target stops. Ten
+ *   cells of cave are lit around the eye: the gallery is 2.8 m tall and the fog closes
+ *   at about nine metres, so this is a little past what the lamp reaches — drawing
+ *   further would be geometry the aerial perspective has already faded to the
+ *   background colour.
+ * - Ring0Server has no display at all, so every presentation knob is off rather than
+ *   merely unused: a headless build that still computed shadows would burn its tick
+ *   budget on pixels nobody receives.
+ * - Both servers draw nothing, so they walk no voxels. The caves still EXIST on them —
+ *   they are authoritative and a body collides with them — which is the distinction
+ *   the cave budget draws and the sea one next to it does not.
  */
-inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile profile)
-{
-    switch (profile)
-    {
-    case HostProfile::Ring0Client:
-        // Sized for the kernel's 4 MiB heap, not a desktop's. The hosted defaults
-        // (a 64 MiB arena, 65536 world cells) exhaust it during Engine::init and
-        // starve the simulation of its entity chunks — measured, not assumed.
-        //
-        // The real-time guard is ON: inside the guarded section the heap still
-        // serves its bounded O(1) paths (a slab hit, a TLSF block) and refuses
-        // only the unbounded ones (pool growth, a first-fit walk), so a threatened
-        // deadline is caught rather than hoped for.
-        //
-        // Rendering stays OFF because the World rasterizes itself: the engine's
-        // built-in render systems assume a renderer the kernel does not have.
-        builder.arenaSize(256u * 1024u)
-            .worldArenaSize(512u * 1024u)
-            .worldCellCapacity(1024u)
-            .maxResidentChunks(56u)
-            .enablePhysics(true)
-            .enableNetworking(false)
-            .enableRendering(false)
-            .enableGpu(false)
-            .enableBci(false)
-            .enableRealTimeGuard(true)
-            // Endless: the client has a walker, and a walker is what streaming is
-            // for. The server profiles below stay BOUNDED, which is what keeps the
-            // parity tests folding a finite world.
-            .enableStreaming(true)
-            .headless(false)
-            .serverMode(false)
-            // Presentation: everything the software rasterizer can afford at
-            // 480x300, which measurement says is more than expected — the frame is
-            // bounded by the simulation, not by the fill.
-            .lodRings(3u)
-            .viewDistance(70.0f)
-            .enableTerrainShadows(true)
-            .shadowChunksPerTick(1u)
-            .enablePerPixelSurface(true)
-            .enablePbrSurface(false)
-            .enableWaterReflection(true)
-            // Six divisions per water quad: enough that a swell reads as geometry at
-            // 480x300, and 72 triangles per water chunk rather than two. The cost is
-            // quadratic, so this is where a low-resolution target stops.
-            .waterTessellation(6u)
-            // Ten cells of cave lit around the eye. The gallery is 2.8 m tall and the
-            // fog closes at about nine metres, so this is a little past what the lamp
-            // reaches — drawing further would be geometry the aerial perspective has
-            // already faded to the background colour.
-            .caveDrawRadius(10u)
-            .skyBlockSize(1u);
-        break;
-
-    case HostProfile::Ring0Server:
-        // No display at all, so every presentation knob is off rather than merely
-        // unused: a headless build that still computed shadows would burn its tick
-        // budget on pixels nobody receives.
-        builder.arenaSize(256u * 1024u)
-            .worldArenaSize(512u * 1024u)
-            .worldCellCapacity(1024u)
-            .maxResidentChunks(24u)
-            .enablePhysics(true)
-            .enableNetworking(false)
-            .enableRendering(false)
-            .enableGpu(false)
-            .enableBci(false)
-            .enableRealTimeGuard(true)
-            .headless(true)
-            .serverMode(false)
-            .lodRings(1u)
-            .viewDistance(0.0f)
-            .enableTerrainShadows(false)
-            .shadowChunksPerTick(0u)
-            .enablePerPixelSurface(false)
-            .enablePbrSurface(false)
-            .enableWaterReflection(false)
-            .waterTessellation(0u)
-            // A server draws nothing, so it walks no voxels. The caves still EXIST on
-            // it — they are authoritative and a body collides with them — which is the
-            // distinction this budget draws and the sea one next to it does not.
-            .caveDrawRadius(0u)
-            .skyBlockSize(4u);
-        break;
-
-    case HostProfile::DesktopClient:
-        builder.arenaSize(64u * 1024u * 1024u)
-            .worldArenaSize(64u * 1024u * 1024u)
-            .maxResidentChunks(256u)
-            .enablePhysics(true)
-            .enableNetworking(false)
-            .enableRendering(true)
-            .enableRealTimeGuard(false)
-            .enableStreaming(true)
-            .headless(false)
-            .serverMode(false)
-            .lodRings(4u)
-            .viewDistance(220.0f)
-            .enableTerrainShadows(true)
-            .shadowChunksPerTick(4u)
-            .enablePerPixelSurface(true)
-            .enablePbrSurface(true)
-            .enableWaterReflection(true)
-            .waterTessellation(14u)
-            .caveDrawRadius(24u)
-            .skyBlockSize(1u);
-        break;
-
-    case HostProfile::DedicatedServer:
-        builder.arenaSize(64u * 1024u * 1024u)
-            .worldArenaSize(64u * 1024u * 1024u)
-            .maxResidentChunks(512u)
-            .enablePhysics(true)
-            .enableNetworking(true)
-            .enableRendering(false)
-            .enableRealTimeGuard(false)
-            .headless(true)
-            .serverMode(true)
-            .lodRings(1u)
-            .viewDistance(0.0f)
-            .enableTerrainShadows(false)
-            .shadowChunksPerTick(0u)
-            .enablePerPixelSurface(false)
-            .enablePbrSurface(false)
-            .enableWaterReflection(false)
-            .waterTessellation(0u)
-            // A server draws nothing, so it walks no voxels. The caves still EXIST on
-            // it — they are authoritative and a body collides with them — which is the
-            // distinction this budget draws and the sea one next to it does not.
-            .caveDrawRadius(0u)
-            .skyBlockSize(4u);
-        break;
-    }
-    return builder;
-}
+inline Config::Builder &applyHostProfile(Config::Builder &builder, HostProfile profile);
 
 } // namespace lpl::engine
+
+#    include "HostProfile.inl"
 
 #endif // LPL_ENGINE_HOST_PROFILE_HPP

@@ -46,6 +46,18 @@ public:
     ~BroadcastSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Sends every connected client the whole world state.
+     *
+     * The serialisation format of the legacy SessionManager::broadcast_state(): each
+     * packet is [PacketHeader 16B][u16 count][EntityData × count], where EntityData is
+     * 32 bytes, [id:4][posX:4][posY:4][posZ:4][sizeX:4][sizeY:4][sizeZ:4][hp:4]. A packet
+     * carries at most floor((1400 - 2) / 32) = 43 entities, so its payload fits one
+     * datagram of SessionManager::kMaxPayloadSize; a world with no entity still sends
+     * one empty packet. The wire snapshot stays float (non-authoritative client
+     * display): the authoritative Fixed32 transform is converted at this boundary.
+     */
     void execute(core::f32 dt) override;
 
 private:

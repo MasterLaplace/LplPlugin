@@ -63,7 +63,7 @@ struct TerrainDrawParams {
     core::f32 fovRadians{1.04719755f};
     core::u32 grazerTint{0x00D0A852u};
     core::u32 hunterTint{0x00C03028u};
-    core::f32 bodyScale{0.35f}; ///< World units per unit of genome size.
+    core::f32 bodyScale{0.35f}; /**< World units per unit of genome size. */
 
     /**
      * @brief How far the water stands above a river's carved bed, in world units.
@@ -121,17 +121,21 @@ struct TerrainDrawParams {
      */
     core::f32 mouthHeight{2.8f};
 
-    // ── Underground ─────────────────────────────────────────────────────────
-
-    // @warning There is no `underground` flag here, and there was: it was fed from
-    // engine::CharacterController::isEnclosed on the argument that the body already
-    // resolves it, so the renderer should read rather than re-derive. That argument is
-    // wrong, and wrong in a way that switched the whole feature off. The body is not
-    // the EYE. Detach the camera and the eye is sixty cells behind the walker, often
-    // inside a hill while the body stands in daylight — and the flag said "surface",
-    // so the sky was drawn over an eye buried in rock and no cave was lit. What a
-    // renderer needs is a fact about the eye, so @ref drawStreamed asks the streamer
-    // where the eye is. Non-authoritative: it picks a shading path, nothing else.
+    /**
+     * @name Underground
+     *
+     * @warning There is no `underground` flag here, and there was: it was fed from
+     * engine::CharacterController::isEnclosed on the argument that the body already
+     * resolves it, so the renderer should read rather than re-derive. That argument is
+     * wrong, and wrong in a way that switched the whole feature off. The body is not
+     * the EYE. Detach the camera and the eye is sixty cells behind the walker, often
+     * inside a hill while the body stands in daylight — and the flag said "surface",
+     * so the sky was drawn over an eye buried in rock and no cave was lit. What a
+     * renderer needs is a fact about the eye, so @ref TerrainRenderer::drawStreamed
+     * asks the streamer where the eye is. Non-authoritative: it picks a shading path,
+     * nothing else.
+     * @{
+     */
 
     /**
      * @brief What a cave is made of, and what it fades into.
@@ -175,8 +179,7 @@ struct TerrainDrawParams {
      */
     core::f32 lampConeInner{0.70f};
     core::f32 lampConeOuter{0.10f};
-    /// How far the beam carries, in world units. Beyond it, only the ambient floor.
-    core::f32 lampReach{20.0f};
+    core::f32 lampReach{20.0f}; /**< How far the beam carries, in world units. Beyond it, only the ambient floor. */
     /**
      * @brief What a surface outside the beam still receives.
      *
@@ -197,15 +200,8 @@ struct TerrainDrawParams {
      * can just about infer rather than a surface you can walk along.
      */
     core::u32 lampLitTint{0x009A8C7Au};
+    /** @} */
 
-    /**
-     * @brief Cull the resident set through a spatial hierarchy rather than linearly.
-     *
-     * Off is not a fallback, it is the right answer for a small set: below a few
-     * dozen chunks the tree costs a rebuild to save a handful of box projections.
-     * The threshold below is where the hierarchy starts paying, so the flag says
-     * "use the tree when it is worth it", not "use the tree".
-     */
     /**
      * @brief Anchor the view at a stated height instead of at the ground.
      *
@@ -218,9 +214,16 @@ struct TerrainDrawParams {
     bool useFocusHeight{false};
     core::f32 focusHeight{0.0f};
 
+    /**
+     * @brief Cull the resident set through a spatial hierarchy rather than linearly.
+     *
+     * Off is not a fallback, it is the right answer for a small set: below a few
+     * dozen chunks the tree costs a rebuild to save a handful of box projections.
+     * The threshold below is where the hierarchy starts paying, so the flag says
+     * "use the tree when it is worth it", not "use the tree".
+     */
     bool useSpatialCull{true};
-    core::u32 spatialCullThreshold{48u}; ///< Resident chunks below which the linear
-                                         ///< pass wins outright.
+    core::u32 spatialCullThreshold{48u}; /**< Resident chunks below which the linear pass wins outright. */
 };
 
 /**
@@ -249,17 +252,149 @@ public:
     [[nodiscard]] core::u64 propCycles() const noexcept { return _propCycles; }
     [[nodiscard]] core::u64 herdCycles() const noexcept { return _herdCycles; }
 
-    void resetPhaseCounters() noexcept
-    {
-        _skyCycles = 0u;
-        _groundCycles = 0u;
-        _waterCycles = 0u;
-        _propCycles = 0u;
-        _herdCycles = 0u;
-    }
+    void resetPhaseCounters() noexcept;
 
     /**
      * @brief Draws the streamed world around the camera.
+     *
+     * The eye never goes below the water: the terrain goes on under a lake, and an eye
+     * that followed it there looks up at the underside of the ground sheet.
+     *
+     * Whether the eye is under rock is asked of the EYE and of nothing else (see
+     * TerrainDrawParams for the flag this replaced and why a body's answer was the wrong
+     * one), and it is NOT gated on the draw budget: it is a fact about the world, how much
+     * cave geometry a host can afford is a fact about the host, and tying them made a
+     * budget of zero mean "the sky is visible from inside a hill".
+     *
+     * The lamp you carry: darkness is two things and one lamp, being under rock and being
+     * out at night. render::SunState::intensity is already zero at night, so "dark" is
+     * read off the sky rather than defined a second time here — a second definition is a
+     * thing to keep in step with the first, and it would drift at dusk. Its heading is in
+     * the GROUND plane, renormalised: pitching the view down shortens the horizontal part
+     * of forward, and a cone measured against an unnormalised axis narrows as you look at
+     * your feet.
+     *
+     * The reflection probe is refreshed ONCE per frame, after the visible set is known and
+     * before the ground is drawn. It was called twice for a while, which rendered the
+     * mirrored world for nothing every fourth frame. And not at all underground: a
+     * reflection probe renders the world upside down to put a sky in the water, and there
+     * is no sky.
+     *
+     * Ground seams: index == size is legitimate and expected. It is the shared edge with
+     * the next chunk, and drawing it is what closes the one-cell gap that used to run
+     * around every chunk. The neighbour answers, through the same world height function
+     * both chunks were generated from — so the two agree on that column exactly, which is
+     * the whole reason a world-absolute sampler was chosen in the first place. Shade and
+     * colour are CLAMPED rather than fetched from the neighbour. A seam column lit or
+     * tinted by its own chunk is invisible; a seam column that is not drawn at all is a
+     * slit to the horizon. The two are not the same kind of wrong.
+     *
+     * Doorways: the ones that fall in a chunk are gathered per chunk rather than tested
+     * against every resident warren per cell. A warren spills across chunk borders, so the
+     * aperture of a cave owned next door can land here, and the rectangle test that finds
+     * it costs a handful of comparisons per chunk against nine hundred per cell. They are
+     * the holes cave mouths are. Without them the surface passes straight across the
+     * opening — a continuous hillside quad in front of a gallery you can walk into but
+     * never see, which is the worst of the two failures because it looks like the
+     * collision is broken. A quad is indexed by its LOW corner and spans a stride past it,
+     * so the one that has to go is every quad TOUCHING a doorway cell — not the one
+     * indexed at it. Matching the index alone is off by one in the adit's direction: the
+     * cliff quad between the trench and the mouth is indexed at the trench cell when the
+     * adit runs +Z, so the face the hole is meant to be in stayed drawn and the hole
+     * opened a cell further in, where it removed nothing anybody could see. Measured from
+     * the trench: 1175 cave triangles submitted, ZERO pixels of them visible.
+     *
+     * Skirts: none underground. A skirt is a curtain hung at a chunk border to put opaque
+     * geometry behind an LOD crack — it exists so a seam does not show the SKY through it.
+     * Under a hill there is no sky behind the crack, and what the curtain does instead is
+     * stand a flat panel of surface-coloured ground across the gallery. Measured by
+     * looking: it was the most conspicuous thing in the first frame rendered from inside
+     * a cave.
+     *
+     * The sea, per chunk: one flat quad rather than a world-sized plane, because an
+     * endless world has no width to span — and only where there IS water, or a chunk whose
+     * bed never drops below sea level pays for a per-pixel pass to draw nothing. And only
+     * over the cells that are actually under it. A chunk with one drowned corner used to
+     * pay a per-pixel water pass over its whole extent, with the depth buffer throwing
+     * almost all of it away — the most expensive way there is to draw nothing. One cell of
+     * margin on each side, deliberately: clipped exactly to the submerged cells the
+     * waterline is a hard edge on a cell boundary, and it stair-steps. The margin gives
+     * the bed-depth fade — and the surf — a cell to happen in, and the ground there is
+     * above the sea so the depth buffer rejects the pixels anyway. The lattice pitch is a
+     * WORLD constant — the chunk span divided by the host's division count — not the
+     * quad's extent divided by it. Quads differ in size because each is tightened to its
+     * own drowned cells, so a per-quad division puts neighbouring vertices at different
+     * world positions and the sheet tears along every chunk border.
+     *
+     * The river, per cell, and this is what the blue tiles were missing: they were
+     * Lake-coloured cells of GROUND. Water is a surface standing in a carved bed at its own
+     * height, with the reflection and the Fresnel every other water surface gets — and
+     * with its swell running along its OWN current rather than with the wind, because a
+     * river does not care which way the air goes. Near rings only: a river cell is a metre
+     * across; past the second ring it is sub-pixel, and a per-pixel shader over sub-pixel
+     * quads is pure cost. A river does not heave, so it keeps the shading and drops the
+     * swell — which also drops the tessellated path for it, by the same condition. Flat
+     * water still moves, at the wind's own rate. This was the other half of the "no
+     * animation between two flows": with the speed folded into the direction, a slow
+     * surface had its WAVELENGTH stretched instead.
+     *
+     * @warning ONE river surface for the whole chunk, not one per cell. `WaterParams` is
+     * consumed per PIXEL but supplied per QUAD, so anything that varies from cell to cell
+     * makes the ripple pattern restart at every cell border — which is precisely the "you
+     * can see the tile boundaries" the screenshots showed, and it survived making the
+     * GEOMETRY continuous because it was never geometry. The cost is stated rather than
+     * hidden: a river that turns inside one chunk ripples the same way along its whole
+     * length there. A drift that varied per pixel would need the wave to take a direction
+     * FIELD rather than a constant, which is a change to render::sampleWater and not to
+     * this loop.
+     *
+     * @warning THE CORNERS ARE SHARED, and that is the whole difference between a river
+     * and a stack of plates. Each cell used to get a flat quad at its OWN bed height, so
+     * two neighbours a metre apart in bed height drew two surfaces a metre apart — steps,
+     * never a sheet, and nothing a current could run along. A corner's level is a function
+     * of the CORNER's position and nothing else: the lowest of the four cells that touch
+     * it, plus the fill. Two adjacent cells share two corners, so they agree there by
+     * construction — the same argument the terrain uses for its own seams. The lowest
+     * rather than the average because water sits in the channel, not on its banks.
+     *
+     * Below the sea a river cell IS the sea, already drawn: two surfaces at the same place
+     * fight over the depth buffer and flicker. And A WATERFALL IS NOT A SHEET EITHER.
+     * Where the four corners disagree by more than the water is deep, the channel is
+     * falling rather than flowing, and a quad spanning it is a ramp of water hanging in
+     * the air. Measured on the corners rather than on the neighbouring beds: it is the
+     * same question asked of the surface that is actually drawn. The bed depth comes from
+     * the CARVED bed of the very cell: the channel is what makes the water look like water
+     * rather than a wet stripe, and asking the world height function would answer with the
+     * bed of whichever cell the point rounded into.
+     *
+     * @warning The bed depth is bilinear from the four SHARED corners, not `top - bed` —
+     * which is one number for the whole cell and therefore paints the body colour in
+     * cell-sized blocks. It is consumed per pixel and it drives both the shallow-to-deep
+     * mix and the shore foam, so a constant here is a visible tile edge however continuous
+     * the geometry is.
+     *
+     * Landmarks come before the props and after the ground of their own chunk, for the
+     * same reason the boulders do: they stand ON that ground, so the depth buffer has to
+     * hold the hill first. Only the chunk that OWNS a site draws it — the ground of it was
+     * carved by every chunk in reach, and drawing it there too would put one village on
+     * screen once per chunk that can see it. A building is two boxes rather than one, and
+     * it is the cheapest thing that stops a village reading as a crate yard: walls, then a
+     * roof block oversized by a quarter cell so it overhangs. A single box has no eaves and
+     * no roof colour, because drawBox lights a face from its normal and cannot know that
+     * this face is thatch.
+     *
+     * A cave mouth's dark quad is drawn only where no real warren stands behind it. It was
+     * a STAND-IN from when a mouth led nowhere: a flat panel stood at the back of the shelf
+     * so the shelf read as an opening. With a warren behind it, it is a fake in front of
+     * the real thing — a black rectangle stuck on a hillside, which is exactly what it
+     * looks like. The opening stands at the UPHILL edge of the shelf and faces downhill,
+     * which is the only orientation that reads as going INTO the hill: the shelf was cut
+     * out of the slope, so the rock is behind it. It is perpendicular to the facing, so the
+     * mouth is a wall across the slope rather than a sliver seen edge-on, and it is a
+     * DOORWAY in metres, not a fraction of the hill: both numbers were multiples of the
+     * shelf depth, so when that depth started tracking the world's relief the opening
+     * became a seventeen-metre black wall. A grazed plant is not drawn: the herd ate it,
+     * and the map says so.
      *
      * @param palette (BiomeId) -> packed colour.
      * @param groundAt (worldX, worldZ) -> f32, used for the water's depth and for
@@ -273,6 +408,11 @@ public:
     /**
      * @brief Draws the bounded world: one patch, one sea quad, its plants and herd.
      *
+     * The bounded grid is ONE patch, centred on the origin: the same module call the
+     * streamed world makes per chunk, which is the point of having it. A bounded world
+     * with no sea used to pay a full-grid per-pixel water pass for a surface entirely
+     * behind its own terrain, hence @ref TerrainDrawParams::boundedHasSea.
+     *
      * @param plants Standing vegetation, in grid cells; the caller owns the list.
      */
     template <typename Palette, typename HeightAt, typename ColourAt, typename GroundAt>
@@ -283,7 +423,26 @@ public:
                           GroundAt &&groundAt);
 
 private:
-    /** @brief Refreshes the reflection probe from the visible set. */
+    /**
+     * @brief Refreshes the reflection probe from the visible set.
+     *
+     * Only when there is water on screen to reflect into: the probe is a whole second
+     * render of the world, and over an inland world every frame of it was thrown away.
+     * That is asked of the VISIBLE set rather than of the resident one: a lake four
+     * chunks behind the camera is resident, is not drawn, and has nothing to reflect.
+     *
+     * The probe draws terrain only, flat-shaded, at a coarse stride: at probe
+     * resolution a tree is two pixels, and the pass exists to put the MOUNTAIN in the
+     * water. Index == size is legitimate and expected — it is the shared edge with the
+     * next chunk, which is why the ground pass answers it from the world height
+     * function. This pass did NOT: it indexed the grid directly, so every chunk's far
+     * edge read one row past the end of its own heightfield. On the target there are no
+     * bounds checks, so it quietly mirrored whatever followed the block in the heap; on
+     * the host it aborts, which is how it was found. The colour is clamped rather than
+     * fetched, exactly as the ground pass clamps its own: at probe resolution a seam
+     * column tinted by its own chunk is invisible, and one that is not drawn is a slit
+     * to the horizon.
+     */
     template <typename Palette>
     void refreshProbe(TerrainStreamer &streamer, TerrainSurface &surface, const render::CameraBasis &basis,
                       core::u32 frame, const TerrainDrawParams &params, Palette &&palette);
@@ -295,12 +454,72 @@ private:
      * the part the eye can see and it moves every frame. procgen::forEachVoxelFace is
      * the same walk procgen::appendVoxelFaces uses — one enumeration, two sinks, and
      * neither of them is a sixth copy of the six faces of a cube.
+     *
+     * Two regions are worth walking, not one, and the second is the whole reason a
+     * doorway reads as a doorway. Around the EYE, because that is what you see when you
+     * are inside; and around the DOORWAY, because that is what you see through when you
+     * are outside. With only the first, a warren twelve cells past the eye emitted
+     * nothing and the hole in the hillside showed the background — the cave was there,
+     * collidable, and invisible from the one place a player first meets it.
+     *
+     * ONE of the two, never their union, and that is a cost bound rather than a
+     * simplification: merging them into a bounding box is fine while you stand in the
+     * doorway and spans the whole warren the moment you are sixty cells off it, which is
+     * eleven thousand voxels per cave with three caves resident. Inside, the eye's own
+     * window is what you can see; outside, you can see nothing of the interior EXCEPT
+     * through the door, so the door's window is the whole of it. Either way the walk is
+     * one box of a bounded side. Only a doorway the eye could actually be looking at
+     * counts. The bound is generous — a mouth is a landmark and you spot it before you
+     * reach it — and it is a distance rather than a frustum test because a frustum here
+     * would have to be recomputed per warren for a handful of boxes.
+     *
+     * Outside the ARRAY is rock. A warren is a hole in a hill, not a building standing
+     * in air: answering "empty" there would wrap the whole volume in a shell of faces
+     * nobody can ever be on the outside of. And a column with no rock over it is
+     * TERRAIN, whatever its voxels say, so a face pointing at one is a face pointing at
+     * open air — which is exactly what the doorway is made of. Reading the volume alone
+     * would leave the mouth walled in from the outside.
+     *
+     * The faces are lit from the EYE, not from the sun: underground the sun is behind a
+     * hill, so a lambert against it leaves every face equally black and the cave reads
+     * as a flat silhouette. And as a SPOT rather than a glow — the beam's axis is the
+     * view direction, so turning your head lights what you turned towards, which is what
+     * makes a passage readable. A bulb at the eye lights everything around you the same
+     * and gives a gallery no direction to go in. How far off the beam's axis a face sits
+     * comes from the vector FROM the eye, the negation of the one to it, so the dot
+     * against forward is a cosine straight away — no angle is ever formed, which is what
+     * keeps this off any transcendental. The cone is squared, so the edge of the beam
+     * softens instead of ending on a line. The colour lies between unlit rock and rock
+     * under a torch, rather than being a single colour scaled down: scaling can only
+     * darken, so one tint means the brightest thing in the cave is still as dark as its
+     * darkest. The distance term is the surface's aerial perspective, already pointed at
+     * the cave's own darkness by TerrainSurface::beginCaveFrame — one fade, not a second
+     * one competing with it.
      */
     core::u32 drawWarrens(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
                           const TerrainStreamer &streamer, const render::CameraBasis &basis,
                           const TerrainDrawParams &params, const render::SunState &sun) const;
 
-    /** @brief The herd, as billboards standing on the ground the eye is looking at. */
+    /**
+     * @brief The herd, as billboards standing on the ground the eye is looking at.
+     *
+     * Draws what is IN THE WORLD, not what a container remembers. Everything a body
+     * needs to be drawn — where it is, what kind it is, how big it is — is a component
+     * now, so this pass no longer takes an ecology::Herd at all: the renderer and the
+     * simulation stopped having to agree about a second list.
+     *
+     * It reads the side the WRITER wrote. A creature's components are written on the
+     * back buffer, by the spawn and then by the locomotion system, and the buffer swap
+     * is a phase callback the Engine installs after Physics — so a world whose systems
+     * are all PrePhysics never publishes a front buffer at all. Reading the front drew
+     * every animal at the origin with a size of zero, which looks exactly like no
+     * animals.
+     *
+     * A body stands on the ground that is DRAWN, not the noise: the two differ by exactly
+     * what erosion moved, and the herd hung in the air above the ridges it lowered. It
+     * is a billboard rather than a box: at this scale a creature is a handful of pixels,
+     * and six lit faces cost six times as much to say the same.
+     */
     template <typename GroundAt>
     core::u32 drawHerd(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp, const ecs::Registry &registry,
                        const TerrainDrawParams &params, GroundAt &&groundAt) const;
@@ -311,12 +530,22 @@ private:
      * The two paths drive the SAME @c consider / @c endSelect, so the frustum test,
      * the ring rule and the ordering exist once. What the tree changes is only which
      * chunks get tested at all.
+     *
+     * The tree's bounds are the resident set's own extent, recomputed each frame: a
+     * streamed world slides, and bounds pinned at the origin would spend the whole key
+     * range on space that holds nothing. The node test is the SAME projection the chunks
+     * use, applied to a node's box. A view volume is not an AABB, so querying its
+     * bounding box would hand back most of the world whenever the camera is pitched;
+     * rejecting a node instead prunes a whole subtree, which is the only thing a
+     * hierarchy is worth having for.
      */
     void selectChunks(const math::Mat4<core::f32> &mvp, const render::CameraBasis &basis, core::u32 targetWidth,
                       core::u32 targetHeight, const render::ChunkedViewParams &view, const TerrainDrawParams &params,
                       core::i32 focusChunkX, core::i32 focusChunkZ, TerrainStreamer &streamer);
 
-    /// The cycle counter, or zero when no clock was given.
+    /**
+     * @brief The cycle counter, or zero when no clock was given.
+     */
     [[nodiscard]] core::u64 now() const noexcept { return _clock != nullptr ? _clock->timestampCounter() : 0u; }
 
     platform::IClockBackend *_clock{nullptr};
@@ -341,7 +570,6 @@ private:
 
 } // namespace lpl::engine
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/engine/TerrainRenderer.inl>
+#    include "TerrainRenderer.inl"
 
 #endif // LPL_ENGINE_TERRAIN_RENDERER_HPP

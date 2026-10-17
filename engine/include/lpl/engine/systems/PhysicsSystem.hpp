@@ -4,7 +4,8 @@
  *
  * Pipeline per tick:
  *   1. IPhysicsBackend::step()  — integrate, collide, sleep
- *   2. WorldPartition::step()   — migration + GC (future)
+ *   2. spatial migration        — each entity re-filed in its cell
+ *   3. WorldPartition::step()   — GPU dispatch (future)
  *
  * Used by both server and client.
  *
@@ -43,6 +44,17 @@ public:
     ~PhysicsSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Steps the backend, then re-files every entity in its spatial cell.
+     *
+     * The backend runs integration, collision and sleeping on all chunks. The spatial
+     * migration then walks every partition that has a Position and updates the spatial
+     * index from the write buffer — the post-physics positions, already authoritative
+     * Fixed32, with no float conversion. insertOrUpdate is a no-op when the entity's
+     * cell has not changed (fast early-exit). WorldPartition::step() comes last, for the
+     * GPU dispatch (future).
+     */
     void execute(core::f32 dt) override;
 
 private:

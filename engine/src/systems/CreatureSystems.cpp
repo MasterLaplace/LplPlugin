@@ -1,12 +1,3 @@
-/**
- * @file CreatureSystems.cpp
- * @brief Implementation of the living world as systems over entities.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/engine/systems/CreatureSystems.hpp>
 
 #include <lpl/engine/systems/GroundStep.hpp>
@@ -16,9 +7,6 @@
 #include <lpl/ecs/Archetype.hpp>
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
-// CreaturePipeline builds every stage from the layer, so it needs the whole class;
-// the header keeps only the forward declaration, which is what stops the cycle
-// (LivingLayer.hpp includes this header for CreatureFieldView).
 #include <lpl/engine/LivingLayer.hpp>
 #include <lpl/math/FixedMath.hpp>
 #include <lpl/math/FixedPoint.hpp>
@@ -29,36 +17,38 @@ namespace lpl::engine::systems {
 
 namespace {
 
-/// What a creature is: somewhere to be, a kind, and a way to move.
+/** What a creature is: somewhere to be, a kind, and a way to move. */
 struct CreatureChunk {
     math::Vec3<math::Fixed32> *positions{nullptr};
     math::Vec3<math::Fixed32> *velocities{nullptr};
-    const core::u32 *creature{nullptr};     ///< Pairs of (species, id).
-    const ecology::Genome *genome{nullptr}; ///< Five Fixed32 per body.
-    math::Fixed32 *heading{nullptr};        ///< Pairs of (x, z).
+    const core::u32 *creature{nullptr};     /**< Pairs of (species, id). */
+    const ecology::Genome *genome{nullptr}; /**< Five Fixed32 per body. */
+    math::Fixed32 *heading{nullptr};        /**< Pairs of (x, z). */
     core::u32 count{0u};
 };
 
-/// What a system needs beyond Position and Creature, which are always required.
+/** What a system needs beyond Position and Creature, which are always required. */
 enum Need : core::u32 {
     kNeedVelocity = 1u << 0,
     kNeedGenome = 1u << 1,
     kNeedHeading = 1u << 2,
 };
 
-/// Resolves one chunk into the arrays a creature system asked for.
-///
-/// Asks the ARCHETYPE whether a component is there, never the pointer:
-/// readComponent answers non-null for every id, allocated or not, and trusting it
-/// is how entities came to read another component's bytes as their own.
-///
-/// EVERY pointer comes from the write side, readers included and immutable data
-/// included, and that is not a detail. Chunks are double buffered and the swap is a phase callback the Engine
-/// installs AFTER Physics — so a world whose systems are all PrePhysics never swaps
-/// at all, and its front buffer holds whatever the components were born with.
-/// Reading the front side there made every creature deposit its scent at the origin
-/// for the whole run. World::stateHash folds the write side for the same reason,
-/// with the same story behind it: the read side "would sit still for a whole tick".
+/**
+ * @brief Resolves one chunk into the arrays a creature system asked for.
+ *
+ * Asks the ARCHETYPE whether a component is there, never the pointer:
+ * readComponent answers non-null for every id, allocated or not, and trusting it
+ * is how entities came to read another component's bytes as their own.
+ *
+ * EVERY pointer comes from the write side, readers included and immutable data
+ * included, and that is not a detail. Chunks are double buffered and the swap is a phase callback the Engine
+ * installs AFTER Physics — so a world whose systems are all PrePhysics never swaps
+ * at all, and its front buffer holds whatever the components were born with.
+ * Reading the front side there made every creature deposit its scent at the origin
+ * for the whole run. World::stateHash folds the write side for the same reason,
+ * with the same story behind it: the read side "would sit still for a whole tick".
+ */
 template <typename Chunk, typename Partition>
 bool viewCreatures(const Partition &part, Chunk &chunk, CreatureChunk &out, core::u32 needs)
 {
@@ -94,11 +84,13 @@ const ecs::ComponentAccess kDepositAccesses[] = {
     {ecs::ComponentId::Position, ecs::AccessMode::ReadOnly},
     {ecs::ComponentId::Creature, ecs::AccessMode::ReadOnly},
 };
-// The field is not entity state, so before ecs::ResourceId existed this system
-// declared nothing it wrote — and the scheduler was free to run the evaporation
-// pass in the same wave as the deposits it evaporates. It happened to come out in
-// registration order under the inline job system; a real thread pool would have
-// raced. Naming the resource is what turns that order into an edge.
+/**
+ * The field is not entity state, so before ecs::ResourceId existed this system
+ * declared nothing it wrote — and the scheduler was free to run the evaporation
+ * pass in the same wave as the deposits it evaporates. It happened to come out in
+ * registration order under the inline job system; a real thread pool would have
+ * raced. Naming the resource is what turns that order into an edge.
+ */
 const ecs::ResourceAccess kFieldWrite[] = {
     {ecs::ResourceId::ScentField, ecs::AccessMode::ReadWrite},
 };
@@ -113,9 +105,11 @@ const ecs::SystemDescriptor kFieldDesc{"ScentField", ecs::SchedulePhase::PrePhys
                                        std::span<const ecs::ComponentAccess>{},
                                        std::span<const ecs::ResourceAccess>{kFieldWrite}};
 
-// No Genome here even though an animal's nature scales the pull: personality is
-// derived from the Creature component's (id, species), so declaring Genome would
-// name a dependency this system does not have.
+/**
+ * No Genome here even though an animal's nature scales the pull: personality is
+ * derived from the Creature component's (id, species), so declaring Genome would
+ * name a dependency this system does not have.
+ */
 const ecs::ComponentAccess kSteerAccesses[] = {
     {ecs::ComponentId::Position, ecs::AccessMode::ReadOnly },
     {ecs::ComponentId::Creature, ecs::AccessMode::ReadOnly },
@@ -144,10 +138,12 @@ const ecs::SystemDescriptor kGrazeDesc{"Grazing", ecs::SchedulePhase::PrePhysics
                                        std::span<const ecs::ComponentAccess>{kGrazeAccesses},
                                        std::span<const ecs::ResourceAccess>{kGrazeResources}};
 
-// Velocity is READ-WRITE, not read-only: recovering a stray rewrites it, because
-// leaving the flock's velocity intact walks the body straight back out of bounds on
-// the next tick. A descriptor that understated this would be a lie the scheduler
-// believes.
+/**
+ * Velocity is READ-WRITE, not read-only: recovering a stray rewrites it, because
+ * leaving the flock's velocity intact walks the body straight back out of bounds on
+ * the next tick. A descriptor that understated this would be a lie the scheduler
+ * believes.
+ */
 const ecs::ComponentAccess kWalkAccesses[] = {
     {ecs::ComponentId::Creature, ecs::AccessMode::ReadOnly },
     {ecs::ComponentId::Genome,   ecs::AccessMode::ReadOnly },
@@ -176,8 +172,6 @@ bool CreatureFieldView::toCell(core::i32 worldX, core::i32 worldZ, core::u32 &ou
     outZ = static_cast<core::u32>(localZ);
     return true;
 }
-
-// ── ScentDepositSystem ────────────────────────────────────────────────────────
 
 ScentDepositSystem::ScentDepositSystem(ecs::Registry &registry, ai::StigmergyField &field,
                                        const ecology::HerdParams &params, const CreatureFieldView &view)
@@ -220,8 +214,6 @@ void ScentDepositSystem::execute(core::f32 /*dt*/)
     }
 }
 
-// ── ScentFieldSystem ──────────────────────────────────────────────────────────
-
 ScentFieldSystem::ScentFieldSystem(ai::StigmergyField &field, const ai::StigmergyParams &params)
     : _field(field), _params(params)
 {
@@ -230,8 +222,6 @@ ScentFieldSystem::ScentFieldSystem(ai::StigmergyField &field, const ai::Stigmerg
 const ecs::SystemDescriptor &ScentFieldSystem::descriptor() const noexcept { return kFieldDesc; }
 
 void ScentFieldSystem::execute(core::f32 /*dt*/) { _field.step(_params); }
-
-// ── ScentSteeringSystem ───────────────────────────────────────────────────────
 
 ScentSteeringSystem::ScentSteeringSystem(ecs::Registry &registry, const ai::StigmergyField &field,
                                          const ecology::HerdParams &params, const CreatureFieldView &view)
@@ -272,12 +262,6 @@ void ScentSteeringSystem::execute(core::f32 /*dt*/)
                 if (direction == ai::StigmergyField::kNoDirection)
                     continue;
 
-                // Scaled by the animal's own nature, not by the species average.
-                // personalityOf is a pure function of (id, species), both of which
-                // the Creature component carries — so the system reproduces exactly
-                // what Herd::step used to do, without needing the herd. Dropping
-                // this term flattened the pack's behaviour the first time round,
-                // and the encirclement measurement caught it.
                 const ai::PersonalityTraits traits = ai::personalityOf(view.creature[i * 2u + 1u], species);
                 const math::Fixed32 pull = _params.scentPull * (math::Fixed32::half() + traits.energy);
                 view.velocities[i].x =
@@ -289,8 +273,6 @@ void ScentSteeringSystem::execute(core::f32 /*dt*/)
         }
     }
 }
-
-// ── FlockingSystem ────────────────────────────────────────────────────────────
 
 FlockingSystem::FlockingSystem(ecs::Registry &registry, const ecology::HerdParams &params)
     : _registry(registry), _params(params)
@@ -304,9 +286,6 @@ void FlockingSystem::execute(core::f32 /*dt*/)
     _flocked = 0u;
     for (core::u32 species = 0u; species < _params.speciesCount; ++species)
     {
-        // Gathered per species, because a flock is a species: a deer does not
-        // align with a wolf. clear() keeps the capacity, so this costs an
-        // allocation on the first tick and none afterwards.
         _flock.clear();
         _sinks.clear();
         for (const auto &part : _registry.partitions())
@@ -343,10 +322,6 @@ void FlockingSystem::execute(core::f32 /*dt*/)
         boids.neighbourRadius = math::Fixed32::fromInt(hunter ? _params.neighbourHunter : _params.neighbourGrazer);
         boids.separationRadius = hunter ? _params.separationHunterRadius : _params.separationGrazerRadius;
 
-        // dt is the params' fixed step, not the frame's: this is authoritative, and
-        // a wall clock on the authoritative path is a desync waiting for a slow
-        // frame. The integration the flock performed is thrown away — only the
-        // velocities come back, because terrain decides the position.
         ai::stepBoids(&_flock[0], static_cast<core::u32>(_flock.size()), boids, _params.step);
 
         for (core::usize i = 0u; i < _sinks.size(); ++i)
@@ -357,8 +332,6 @@ void FlockingSystem::execute(core::f32 /*dt*/)
         _flocked += static_cast<core::u32>(_sinks.size());
     }
 }
-
-// ── GrazingSystem ─────────────────────────────────────────────────────────────
 
 GrazingSystem::GrazingSystem(ecs::Registry &registry, const ecology::HerdParams &params, ITerrainQuery &terrain)
     : _registry(registry), _params(params), _terrain(terrain)
@@ -390,8 +363,6 @@ void GrazingSystem::execute(core::f32 /*dt*/)
         }
     }
 }
-
-// ── LocomotionSystem ──────────────────────────────────────────────────────────
 
 LocomotionSystem::LocomotionSystem(ecs::Registry &registry, const ecology::HerdParams &params,
                                    const ITerrainQuery &terrain)
@@ -427,12 +398,6 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
                 math::Fixed32 &headingX = view.heading[i * 2u];
                 math::Fixed32 &headingZ = view.heading[i * 2u + 1u];
 
-                // ── Containment, before anything else ────────────────────────
-                //
-                // A body standing where it may not stand refuses every direction, so
-                // it refuses two steps a tick for the rest of the run. Ask the world
-                // which way is out and take that step; a world with no advice leaves
-                // it to reverse, which at least changes the situation.
                 if (!_terrain.standable(position.x, position.z))
                 {
                     math::Fixed32 outX{};
@@ -446,19 +411,12 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
                     position.z = position.z + outZ;
                     headingX = outX;
                     headingZ = outZ;
-                    // The velocity goes with it. Leaving the flock's velocity intact
-                    // walks the body straight back out of bounds on the next tick.
                     velocity.x = outX;
                     velocity.z = outZ;
                     ++_strays;
                     continue;
                 }
 
-                // Facing follows the velocity only when there IS one: normalising a
-                // velocity near zero turns numerical noise into a direction, and an
-                // animal standing still would spin. Keeping the last heading is the
-                // point of storing one — standing still is a valid boid state and not
-                // a valid animal one.
                 const math::Fixed32 lengthSquared = velocity.x * velocity.x + velocity.z * velocity.z;
                 const math::Fixed32 length = math::fixedSqrt(lengthSquared);
                 if (length.raw() > 256)
@@ -467,16 +425,9 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
                     headingZ = velocity.z / length;
                 }
 
-                // Pace from the genome and the personality, NOT from the velocity's
-                // magnitude: the flock and the scent decide the direction, the genome
-                // decides how fast this animal can possibly travel.
                 const math::Fixed32 pace = view.genome[i].maxSpeed * _params.step *
                                            (math::Fixed32::fromFloat(0.7f) + traits.energy * math::Fixed32::half());
 
-                // @warning The step itself lives in `stepOnGround`, shared with the historical
-                // journey. Two steppers would be two answers to "may a body go there", free to
-                // disagree about corners — and the corner case took three attempts to get right
-                // the first time.
                 const math::Fixed32 reach = math::Fixed32::one() + view.genome[i].size;
                 math::Vec3<math::Fixed32> &body = position;
                 const GroundStepResult stepped = stepOnGround(_terrain, body, headingX, headingZ, pace, reach);
@@ -489,15 +440,8 @@ void LocomotionSystem::execute(core::f32 /*dt*/)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CreaturePipeline — one statement of the order, two ways to drive it
-// ─────────────────────────────────────────────────────────────────────────────
-
 void CreaturePipeline::build(ecs::Registry &registry, LivingLayer &living, ITerrainQuery &terrain)
 {
-    // Constructed in CreatureStage order, and stored under their stage index, so
-    // both drivers below get the order from the enumeration rather than from the
-    // shape of the code around them.
     auto deposit = lpl::pmr::make_unique<ScentDepositSystem>(registry, living.scent().field(), living.herdParams(),
                                                              living.fieldView());
     _deposit = deposit.get();
@@ -530,7 +474,6 @@ core::ExpectedVoid CreaturePipeline::registerOn(ecs::SystemScheduler &scheduler)
     {
         if (!_stages[i])
             continue;
-        // The typed pointers survive this: ownership moves, the objects do not.
         if (auto registered = scheduler.registerSystem(std::move(_stages[i])); !registered)
             return registered;
     }
@@ -546,9 +489,6 @@ void CreaturePipeline::step(core::f32 dt)
 
 void CreaturePipeline::setView(const CreatureFieldView &view) noexcept
 {
-    // Only two stages read the window; the others work in world units. Forwarding
-    // to one and forgetting the other is how a herd deposits where it is and reads
-    // the gradient somewhere else.
     if (_deposit != nullptr)
         _deposit->setView(view);
     if (_steering != nullptr)

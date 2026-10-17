@@ -15,9 +15,6 @@
 
 #    include <lpl/core/Platform.hpp>
 
-// Multi-instance hosting is a SERVER BUILD concern. A client, a solo game and
-// the kernel each run exactly one World and never pay for any of this; only a
-// build with a sockets stack compiles the server layer at all.
 #    ifdef LPL_HAS_NET
 
 #        include <lpl/core/Expected.hpp>
@@ -52,6 +49,10 @@ namespace lpl::engine {
  * World simulates and knows nothing about players or sockets. That keeps a
  * World's state purely deterministic and foldable, whether it runs here, in a
  * solo client, or in ring 0.
+ *
+ * Multi-instance hosting is a SERVER BUILD concern. A client, a solo game and the
+ * kernel each run exactly one World and never pay for any of this; only a build with
+ * a sockets stack (LPL_HAS_NET) compiles the server layer at all.
  */
 class Server final : public core::NonCopyable<Server> {
 public:
@@ -75,7 +76,15 @@ public:
      *
      * Runs the instance's onInit, gives it the server-side systems and resolves
      * its schedule. @ref init must have succeeded first: the systems are wired
-     * to the shared transport.
+     * to the shared transport, and hosting before it would hand them a null socket
+     * that only faults on the first tick, far from the call that caused it.
+     *
+     * No Engine hosts this World — the server does — so its context carries a null
+     * engine handle, which WorldContext documents as legitimate. The schedule is
+     * resolved once every system is registered (the game's in onInit, the server's
+     * after it): without it the instance ticks an empty wave list and nothing it
+     * registered would ever run. Engine::run builds its graph at the same point, and
+     * the legacy server called core.buildSchedule() there too.
      *
      * @param world The instance; ownership transfers. Its onInit runs here.
      * @return Its id, or @ref kInvalidWorldId if the server is not initialised,
@@ -85,6 +94,11 @@ public:
 
     /**
      * @brief Stop hosting an instance and destroy it (its onShutdown runs).
+     *
+     * The World owns the systems, and those systems hold references to the queues,
+     * sessions, input state and physics backend: the World is destroyed first. The
+     * senders bound to it are unrouted, or they would route into a null slot.
+     *
      * @return true if @p id referred to a live instance.
      */
     bool removeWorld(WorldId id);
@@ -107,6 +121,28 @@ public:
      * PreSwap system). The instance steps run in parallel when
      * Config::serverWorkerThreads is non-zero, sequentially otherwise.
      *
+     * The shared socket is drained ONCE and each packet fanned out to its instance.
+     * The instances never touch the transport: the server routes, a World simulates.
+     * The digest reports decoded by the drain are checked before the instances
+     * advance, so a verdict always refers to the tick history as the client saw it.
+     *
+     * Instances are independent — each owns its registry, scheduler, spatial index,
+     * physics backend, queues, sessions and input state — so they can be stepped
+     * concurrently. What they share is either thread-safe (the asset cache),
+     * read-only for the whole step (the transport's fd; sendto is atomic per
+     * datagram), or already done: the drain and the netcode run first,
+     * single-threaded, so no worker touches the socket for reading.
+     *
+     * Checked under ThreadSanitizer (test-server-routing, 4 workers): every report
+     * sits on the JobSystem's work-stealing transfer, never on instance state — no
+     * Registry, WorldPartition, SessionManager, EventQueues or InputManager appears
+     * in any of them. Running the same test with a single worker, where nothing can
+     * be stolen, reports nothing at all, which pins those reports to
+     * ChaseLevDeque::steal: it orders the handover with std::atomic_thread_fence,
+     * which TSan does not model. That is a pre-existing property of the job system,
+     * not of this fan-out — and it is why serverWorkerThreads defaults to 0
+     * (sequential) rather than on.
+     *
      * @param dt Fixed timestep in seconds.
      */
     void tick(core::f32 dt);
@@ -123,6 +159,10 @@ public:
 
     /**
      * @brief Close the session and destroy every instance.
+     *
+     * The workers stop before the instances they step are destroyed. Then the same
+     * ordering rule as @ref removeWorld: the systems die with their World, and they
+     * reference everything cleared afterwards.
      */
     void shutdown();
 
@@ -158,9 +198,9 @@ public:
      * @brief Outcome of comparing a client's reported digest (see §6.4).
      */
     enum class DesyncVerdict {
-        Match,      ///< The client agrees with us on that tick.
-        Diverged,   ///< Same tick, different state: this client is desynced.
-        TickUnknown ///< That tick has fallen out of our history, or is ahead.
+        Match,      /**< The client agrees with us on that tick. */
+        Diverged,   /**< Same tick, different state: this client is desynced. */
+        TickUnknown /**< That tick has fallen out of our history, or is ahead. */
     };
 
     /**
@@ -178,6 +218,10 @@ public:
      * client's simulation no longer matches ours — a determinism bug, memory
      * corruption, or a cheat — and the book's answer is to force a full
      * resynchronisation of that client.
+     *
+     * A history slot is reused every kStateHashHistory ticks, so holding the tick
+     * number alongside the digest is what distinguishes "the tick the client means"
+     * from "a much older tick that happens to land on the same slot".
      *
      * @param id     The instance the client is playing in.
      * @param tick   The tick the client hashed.
@@ -218,11 +262,11 @@ public:
      * error, a race, a logic bug, or a cheat.
      */
     struct DesyncReport {
-        WorldId instance{0};       ///< Which instance the reporter was playing in.
-        core::u64 tick{0};         ///< The tick that diverged.
-        core::u64 serverDigest{0}; ///< The authoritative digest we held for it.
-        core::u64 clientDigest{0}; ///< What the client reported for it.
-        net::Endpoint source{};    ///< Who reported the divergence.
+        WorldId instance{0};       /**< Which instance the reporter was playing in. */
+        core::u64 tick{0};         /**< The tick that diverged. */
+        core::u64 serverDigest{0}; /**< The authoritative digest we held for it. */
+        core::u64 clientDigest{0}; /**< What the client reported for it. */
+        net::Endpoint source{};    /**< Who reported the divergence. */
     };
 
     /**
@@ -286,6 +330,20 @@ public:
 private:
     /**
      * @brief Drain the shared transport and fan each packet out to its instance.
+     *
+     * It receives in bursts of one recvmmsg's worth. An unknown sender is placed in
+     * the default instance — that is the join, and it is remembered so every later
+     * packet from it goes to the same game; with nothing hosted yet the packet is
+     * dropped rather than guessed. A full burst means the socket may still have more
+     * and a short one means it ran dry, so the drain only keeps looping while the
+     * bursts stay full.
+     *
+     * Stopping at the budget with the socket still returning full bursts means the
+     * server did NOT keep up this tick, and the kernel's RX buffer is now absorbing
+     * the overflow (and will silently drop past its limit): that tick counts as a
+     * backpressure event, the metric that makes the otherwise invisible wall visible.
+     * Its tick is recorded as the one about to be stepped, since the tick counter is
+     * bumped only after the instances step.
      */
     void pumpNetwork();
 
@@ -294,18 +352,51 @@ private:
      *
      * Session, input processing, movement, physics, broadcast and monitoring,
      * each bound to THIS instance's queues, sessions and input state — the
-     * legacy server's PreSwap/PostSwap chain, minus NetworkReceiveSystem, which
-     * @ref pumpNetwork replaces (N instances must not race for one socket).
+     * legacy server's PreSwap/PostSwap chain (NetworkReceive -> Session ->
+     * InputProcessing -> Movement -> Physics, then Broadcast and the monitor after
+     * the swap), minus NetworkReceiveSystem, which
+     * @ref pumpNetwork replaces (N instances must not race for one socket, each
+     * stealing datagrams meant for the others). The scheduler orders by phase, so
+     * registration order is free.
+     *
+     * Every one of these systems indexes entities through the spatial grid, so the
+     * instance gets one whether or not its game asked for a broad-phase. Its cell size
+     * comes from fromFloat, NOT Fixed32{10}: the raw-representation constructor would
+     * give a cell size of 10/65536 and put every entity in its own cell.
+     *
+     * Physics: the legacy server stepped the world every tick (its "Physics" PreSwap
+     * system). A hosted World has no Engine to register it, so without this an
+     * instance would receive inputs and broadcast a state that never moved.
+     *
+     * The broadcast is interest-managed when a radius is set and full otherwise. A
+     * positive radius sends each client only what is near its avatar, as
+     * spawn/despawn/delta — the O(clients × N) wall goes away (§2.6). Zero keeps the
+     * full-state fallback, unchanged.
      */
     void registerInstanceSystems(WorldId id);
 
     /**
      * @brief Fold each instance's authoritative state into its digest history.
+     *
+     * Deliberately AFTER the fan-out has joined: every instance is at rest and this
+     * walk is single-threaded, so it never races a step in flight. It also keeps a
+     * periodic snapshot (§6.5), so a divergence reported later can be diagnosed
+     * post-mortem against the state the server actually held.
      */
     void recordStateHashes();
 
     /**
      * @brief Compare every client digest report decoded this tick.
+     *
+     * A client's report names a tick it has already simulated, so this is where the
+     * digest history earns its keep: checkClientHash looks that tick up rather than
+     * comparing against the state held right now. A divergence is logged and counted:
+     * the book's answer is a forced resynchronisation of that client, and acting on it
+     * is the netcode strategy's call. It is also captured for post-mortem (§6.4.2):
+     * the tick, both digests, and who reported it. The server's own full state for
+     * that tick lives in its ReplayRecorder (replay(id)), so this is enough to
+     * reconstruct and compare the two states after the fact. A report naming an
+     * unknown tick is normal for a very late report, or a client ahead of the server.
      */
     void consumeStateHashReports();
 

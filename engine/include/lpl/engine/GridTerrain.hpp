@@ -59,18 +59,7 @@ public:
      * @param depth         Mask depth in cells.
      * @param regrowthTicks Ticks a grazed plant takes to come back.
      */
-    void reset(const procgen::Grid<core::u8> *blocked, core::u32 width, core::u32 depth, core::u32 regrowthTicks)
-    {
-        _blocked = blocked;
-        _width = width;
-        _depth = depth;
-        _regrowthTicks = regrowthTicks;
-        _plants.clear();
-        _grazed = 0u;
-        _regrown = 0u;
-        _standing = 0u;
-        _floraDirty = false;
-    }
+    void reset(const procgen::Grid<core::u8> *blocked, core::u32 width, core::u32 depth, core::u32 regrowthTicks);
 
     /**
      * @brief One plant, at a world cell.
@@ -78,67 +67,32 @@ public:
      * Order matches the props, so a caller drawing flora can ask whether the i-th
      * prop is standing without keeping a second index.
      */
-    void addPlant(core::i32 worldX, core::i32 worldZ)
-    {
-        ecology::PlantCell plant;
-        plant.cellX = worldX;
-        plant.cellZ = worldZ;
-        _plants.push_back(plant);
-        ++_standing;
-    }
+    void addPlant(core::i32 worldX, core::i32 worldZ);
 
-    [[nodiscard]] bool standable(math::Fixed32 x, math::Fixed32 z) const override
-    {
-        if (_blocked == nullptr)
-            return false;
-        core::i32 gx = 0;
-        core::i32 gz = 0;
-        if (!toGrid(x, z, gx, gz))
-            return false;
-        return _blocked->at(static_cast<core::u32>(gx), static_cast<core::u32>(gz)) == 0u;
-    }
+    [[nodiscard]] inline bool standable(math::Fixed32 x, math::Fixed32 z) const override;
 
-    bool consumePlantAt(core::i32 worldX, core::i32 worldZ) override
-    {
-        if (_plants.empty())
-            return false;
-        // ecology::grazeAt with a reach of one cell, which is the module's own
-        // function and the module's own reason: measured with an exact match, sixty
-        // grazers on a 128x128 map with 360 plants ate NOTHING over a minute — two
-        // point sets that sparse almost never coincide, so the producer level sat
-        // still while the herd walked over the trees.
-        if (!ecology::grazeAt(&_plants[0], static_cast<core::u32>(_plants.size()), worldX, worldZ, 1, _regrowthTicks))
-            return false;
-        ++_grazed;
-        --_standing;
-        _floraDirty = true;
-        return true;
-    }
+    /**
+     * @brief Grazes a standing plant within one cell of a world cell.
+     *
+     * ecology::grazeAt with a reach of one cell, which is the module's own function
+     * and the module's own reason: measured with an exact match, sixty grazers on a
+     * 128x128 map with 360 plants ate NOTHING over a minute — two point sets that
+     * sparse almost never coincide, so the producer level sat still while the herd
+     * walked over the trees.
+     */
+    inline bool consumePlantAt(core::i32 worldX, core::i32 worldZ) override;
 
-    /// Toward the middle: a bounded grid's ground is where its centre is.
-    [[nodiscard]] bool recoveryDirection(math::Fixed32 x, math::Fixed32 z, math::Fixed32 &outX,
-                                         math::Fixed32 &outZ) const override
-    {
-        outX = x.raw() > 0 ? -math::Fixed32::one() : math::Fixed32::one();
-        outZ = z.raw() > 0 ? -math::Fixed32::one() : math::Fixed32::one();
-        return true;
-    }
+    /**
+     * @brief Toward the middle: a bounded grid's ground is where its centre is.
+     */
+    [[nodiscard]] inline bool recoveryDirection(math::Fixed32 x, math::Fixed32 z, math::Fixed32 &outX,
+                                                math::Fixed32 &outZ) const override;
 
-    /// Regrowth. @return what is standing, which IS the producer population.
-    core::u32 tickVegetation()
-    {
-        if (_plants.empty())
-            return 0u;
-        const core::u32 standing = ecology::tickPlants(&_plants[0], static_cast<core::u32>(_plants.size()));
-        if (standing != _standing)
-        {
-            if (standing > _standing)
-                _regrown += standing - _standing;
-            _floraDirty = true;
-            _standing = standing;
-        }
-        return standing;
-    }
+    /**
+     * @brief Regrowth.
+     * @return What is standing, which IS the producer population.
+     */
+    core::u32 tickVegetation();
 
     [[nodiscard]] core::u32 standingPlants() const noexcept { return _standing; }
     [[nodiscard]] core::u32 plantCount() const noexcept { return static_cast<core::u32>(_plants.size()); }
@@ -149,19 +103,18 @@ public:
         return index < _plants.size() ? _plants[index].standing : true;
     }
 
-    /// Whether the flora changed since the last @ref clearFloraDirty — a caller
-    /// that rebuilds a mesh per frame regardless does not need to ask.
+    /**
+     * @brief Whether the flora changed since the last @ref clearFloraDirty — a caller
+     *        that rebuilds a mesh per frame regardless does not need to ask.
+     */
     [[nodiscard]] bool floraDirty() const noexcept { return _floraDirty; }
     void clearFloraDirty() noexcept { _floraDirty = false; }
 
 private:
-    /// World units to a cell of this grid, which is centred on the origin.
-    [[nodiscard]] bool toGrid(math::Fixed32 x, math::Fixed32 z, core::i32 &outX, core::i32 &outZ) const
-    {
-        outX = x.toInt() + static_cast<core::i32>(_width / 2u);
-        outZ = z.toInt() + static_cast<core::i32>(_depth / 2u);
-        return _blocked != nullptr && _blocked->contains(outX, outZ);
-    }
+    /**
+     * @brief World units to a cell of this grid, which is centred on the origin.
+     */
+    [[nodiscard]] bool toGrid(math::Fixed32 x, math::Fixed32 z, core::i32 &outX, core::i32 &outZ) const;
 
     const procgen::Grid<core::u8> *_blocked{nullptr};
     lpl::pmr::vector<ecology::PlantCell> _plants;
@@ -175,5 +128,7 @@ private:
 };
 
 } // namespace lpl::engine
+
+#    include "GridTerrain.inl"
 
 #endif // LPL_ENGINE_GRID_TERRAIN_HPP

@@ -17,13 +17,24 @@ namespace lpl::engine::systems {
 
 /**
  * @class RenderSystem
- * @brief Reads ECS position/size/rotation and submits draw calls to IRenderer.
+ * @brief Reads ECS position and size for an IRenderer, to which it submits nothing yet.
  */
 class RenderSystem final : public ecs::ISystem {
 public:
     RenderSystem(ecs::Registry &registry, render::IRenderer *renderer);
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Walks the entities that have a position, and their sizes.
+     *
+     * The authoritative transform is Fixed32; a real renderer converts to float
+     * (toFloat) at submit — rendering is a non-authoritative path.
+     *
+     * @todo #521: In a fully featured Vulkan ECS integration, the transform
+     * matrices of all entities would be extracted here and built into an instance buffer
+     * or push constants for the renderer. Nothing is submitted yet.
+     */
     void execute(core::f32 dt) override;
 
 private:

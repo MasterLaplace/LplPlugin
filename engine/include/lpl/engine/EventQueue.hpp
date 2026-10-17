@@ -27,13 +27,14 @@
 
 namespace lpl::engine {
 
-// ========================================================================== //
-//  Event types                                                               //
-// ========================================================================== //
+/**
+ * @name Event types
+ * @{
+ */
 
 /** @brief A client requests to connect. */
 struct ConnectEvent {
-    net::Endpoint source{}; ///< Address the handshake arrived from.
+    net::Endpoint source{}; /**< Address the handshake arrived from. */
 };
 
 /**
@@ -44,13 +45,13 @@ struct ConnectEvent {
  * it has not keeps being resent until it is.
  */
 struct SnapshotAckEvent {
-    net::Endpoint source{}; ///< Who acked.
-    core::u64 seq{0};       ///< Highest snapshot sequence the client has applied.
+    net::Endpoint source{}; /**< Who acked. */
+    core::u64 seq{0};       /**< Highest snapshot sequence the client has applied. */
 };
 
 /** @brief A client asks to disconnect cleanly (or is dropped). */
 struct DisconnectEvent {
-    net::Endpoint source{}; ///< Address the disconnect arrived from.
+    net::Endpoint source{}; /**< Address the disconnect arrived from. */
 };
 
 /** @brief Server acknowledges a connection with an entity ID. */
@@ -64,18 +65,20 @@ struct StateEntity {
     math::Vec3<float> pos;
     math::Vec3<float> size;
     core::i32 hp;
-    /// Which fields this snapshot actually carries (net::protocol::EntityField
-    /// bits). A full snapshot or AOI spawn sets every bit; an AOI field delta
-    /// (§6.2.5) sets only the fields that changed, and reconciliation leaves the
-    /// rest of the entity as it already stood. 0xFF (all) keeps the full-snapshot
-    /// and spawn paths byte-for-byte unchanged.
+    /**
+     * Which fields this snapshot actually carries (net::protocol::EntityField
+     * bits). A full snapshot or AOI spawn sets every bit; an AOI field delta
+     * (§6.2.5) sets only the fields that changed, and reconciliation leaves the
+     * rest of the entity as it already stood. 0xFF (all) keeps the full-snapshot
+     * and spawn paths byte-for-byte unchanged.
+     */
     core::u8 fieldMask{0xFF};
 };
 
 /** @brief Full state update from the server. */
 struct StateUpdateEvent {
     pmr::vector<StateEntity> entities;
-    core::u64 seq{0}; ///< Server sequence of this snapshot, for the client to ack (§6.2.5).
+    core::u64 seq{0}; /**< Server sequence of this snapshot, for the client to ack (§6.2.5). */
 };
 
 /**
@@ -87,7 +90,7 @@ struct StateUpdateEvent {
  */
 struct EntitySpawnEvent {
     pmr::vector<StateEntity> entities;
-    core::u64 seq{0}; ///< Server sequence of this snapshot, for the client to ack (§6.2.5).
+    core::u64 seq{0}; /**< Server sequence of this snapshot, for the client to ack (§6.2.5). */
 };
 
 /**
@@ -98,7 +101,7 @@ struct EntitySpawnEvent {
  */
 struct StateDeltaEvent {
     pmr::vector<StateEntity> entities;
-    core::u64 seq{0}; ///< Server sequence of this snapshot, for the client to ack (§6.2.5).
+    core::u64 seq{0}; /**< Server sequence of this snapshot, for the client to ack (§6.2.5). */
 };
 
 /**
@@ -139,9 +142,9 @@ struct NeuralInput {
  * simulation diverged.
  */
 struct StateHashReportEvent {
-    net::Endpoint source{}; ///< Who reported it.
-    core::u64 tick{0};      ///< The tick the client hashed.
-    core::u64 digest{0};    ///< What the client computed for it.
+    net::Endpoint source{}; /**< Who reported it. */
+    core::u64 tick{0};      /**< The tick the client hashed. */
+    core::u64 digest{0};    /**< What the client computed for it. */
 };
 
 /** @brief Input event from a remote client. */
@@ -153,9 +156,7 @@ struct InputEvent {
     NeuralInput neural;
 };
 
-// ========================================================================== //
-//  TypedQueue<T>                                                             //
-// ========================================================================== //
+/** @} */
 
 /**
  * @class TypedQueue
@@ -169,40 +170,26 @@ struct InputEvent {
  */
 template <typename T> class TypedQueue {
 public:
-    /** @brief Pushes a single event into the queue. */
-    void push(T event)
-    {
-        pmr::lock_guard<pmr::mutex> lock{mutex_};
-        queue_.push_back(std::move(event));
-    }
+    /**
+     * @brief Pushes a single event into the queue.
+     */
+    void push(T event);
 
     /**
      * @brief Atomically drains all pending events.
      * @return Vector of events (empty if none pending).
      */
-    [[nodiscard]] pmr::vector<T> drain()
-    {
-        pmr::lock_guard<pmr::mutex> lock{mutex_};
-        pmr::vector<T> result;
-        result.swap(queue_);
-        return result;
-    }
+    [[nodiscard]] pmr::vector<T> drain();
 
-    /** @brief Returns true if no events are pending. */
-    [[nodiscard]] bool empty() const
-    {
-        pmr::lock_guard<pmr::mutex> lock{mutex_};
-        return queue_.empty();
-    }
+    /**
+     * @brief Returns true if no events are pending.
+     */
+    [[nodiscard]] bool empty() const;
 
 private:
     mutable pmr::mutex mutex_;
     pmr::vector<T> queue_;
 };
-
-// ========================================================================== //
-//  EventQueues aggregate                                                     //
-// ========================================================================== //
 
 /**
  * @struct EventQueues
@@ -226,5 +213,7 @@ struct EventQueues {
 };
 
 } // namespace lpl::engine
+
+#    include "EventQueue.inl"
 
 #endif // LPL_ENGINE_EVENTQUEUE_HPP

@@ -41,6 +41,14 @@ public:
     ~NetworkReceiveSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Drains up to detail::kMaxPacketsPerTick datagrams into the queues.
+     *
+     * The receive buffer fits a full UDP datagram: PacketHeader (16B) + max payload. A
+     * single-world host decodes everything into its one set of queues; the
+     * multi-instance server picks the queues per sender instead.
+     */
     void execute(core::f32 dt) override;
 
 private:

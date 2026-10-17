@@ -1,21 +1,3 @@
-/**
- * @file BroadcastSystem.cpp
- * @brief Serializes world state and broadcasts to all connected clients.
- *
- * Mirrors the legacy SessionManager::broadcast_state() serialization format:
- *   Packet: [PacketHeader 16B][EntityData × N]
- *   EntityData (32 bytes): [id:4][posX:4][posY:4][posZ:4]
- *                          [sizeX:4][sizeY:4][sizeZ:4][hp:4]
- *
- * Fragments at SessionManager::kMaxPayloadSize (1400 bytes) when the entity
- * count exceeds what fits in a single packet.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/engine/systems/BroadcastSystem.hpp>
@@ -29,10 +11,6 @@
 
 namespace lpl::engine::systems {
 
-// ========================================================================== //
-//  Descriptor                                                                //
-// ========================================================================== //
-
 static const ecs::ComponentAccess kBroadcastAccesses[] = {
     {ecs::ComponentId::Position,    ecs::AccessMode::ReadOnly},
     {ecs::ComponentId::AABB,        ecs::AccessMode::ReadOnly},
@@ -43,18 +21,13 @@ static const ecs::ComponentAccess kBroadcastAccesses[] = {
 static const ecs::SystemDescriptor kBroadcastDesc{"Broadcast", ecs::SchedulePhase::Network,
                                                   std::span<const ecs::ComponentAccess>{kBroadcastAccesses}};
 
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
-
 struct BroadcastSystem::Impl {
     net::session::SessionManager &sessionManager;
     std::shared_ptr<net::transport::ITransport> transport;
     ecs::WorldPartition &world;
     ecs::Registry &registry;
 
-    // Bitstream for packet assembly
-    net::protocol::Bitstream stream;
+    net::protocol::Bitstream stream; /**< Bitstream for packet assembly. */
 
     Impl(net::session::SessionManager &sm, std::shared_ptr<net::transport::ITransport> t, ecs::WorldPartition &w,
          ecs::Registry &reg)
@@ -62,15 +35,17 @@ struct BroadcastSystem::Impl {
     {
     }
 
+    /**
+     * @brief Prefixes the stream with a StateSnapshot header and broadcasts it.
+     *
+     * SessionManager::broadcastState splits anything longer than kMaxPayloadSize into
+     * datagrams of that size, so the packet is passed whole.
+     */
     void flushStream()
     {
         if (stream.bitsWritten() == 0)
             return;
 
-        // Build packet with header + bitstream payload.
-        // Use a dynamic vector: the payload can exceed kMaxPayload when many
-        // entities are alive.  SessionManager::broadcastState() already handles
-        // fragmentation at kMaxPayloadSize, so we just pass the full buffer.
         auto payload = stream.data();
         const core::u32 payloadSize = static_cast<core::u32>(payload.size());
 
@@ -86,16 +61,11 @@ struct BroadcastSystem::Impl {
 
         std::memcpy(pkt.data() + sizeof(header), payload.data(), payloadSize);
 
-        // broadcastState fragments the data into kMaxPayloadSize UDP packets
         sessionManager.broadcastState(*transport, std::span<const core::byte>{pkt.data(), pkt.size()});
 
         stream.reset();
     }
 };
-
-// ========================================================================== //
-//  Public                                                                    //
-// ========================================================================== //
 
 BroadcastSystem::BroadcastSystem(net::session::SessionManager &sessionManager,
                                  std::shared_ptr<net::transport::ITransport> transport, ecs::WorldPartition &world,
@@ -115,16 +85,11 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
 
     _impl->stream.reset();
 
-    // Each entity serializes to: 4+4+4+4+4+4+4+4 = 32 bytes.
-    // A 2-byte entity count header is prepended per packet.
-    // Max entities per UDP datagram so that the payload ≤ kMaxPayload:
-    //   floor((1400 - 2) / 32) = 43
     static constexpr core::u32 kEntityBytes = 32;
     static constexpr core::u32 kCountHeaderBytes = 2;
     static constexpr core::u32 kMaxEntitiesPerPacket =
         (net::session::SessionManager::kMaxPayloadSize - kCountHeaderBytes) / kEntityBytes;
 
-    // Collect all entities first
     struct EntityRecord {
         core::u32 id;
         float px, py, pz;
@@ -166,8 +131,6 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
 
             for (core::u32 i = 0; i < count; ++i)
             {
-                // Wire snapshot stays float (non-authoritative client display);
-                // convert the authoritative Fixed32 transform at this boundary.
                 records.push_back({entityIds[i].raw(), positions[i].x.toFloat(), positions[i].y.toFloat(),
                                    positions[i].z.toFloat(), sizes ? sizes[i].x.toFloat() : 1.0f,
                                    sizes ? sizes[i].y.toFloat() : 1.0f, sizes ? sizes[i].z.toFloat() : 1.0f,
@@ -176,8 +139,6 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
         }
     }
 
-    // Emit records in batches — each batch becomes one complete UDP packet
-    // (header + payload ≤ sizeof(PacketHeader) + kMaxPayload).
     const core::u32 total = static_cast<core::u32>(records.size());
     core::u32 offset = 0;
 
@@ -204,7 +165,6 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
         _impl->flushStream();
         offset += batchSize;
 
-        // If there were no entities, send the empty packet once and break
         if (total == 0)
             break;
     }

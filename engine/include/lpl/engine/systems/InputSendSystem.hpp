@@ -26,6 +26,14 @@ public:
                     const core::u32 &myEntityId, const bool &connected);
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Sends this tick's input of the local player to the server.
+     *
+     * The payload is the entity id (32 bits), the key count and each tracked key with
+     * its state (none without a renderer), the axis count (8 bits, always zero), then the
+     * neural data (3 floats + 1 bool = 97 bits).
+     */
     void execute(core::f32 dt) override;
 
 private:
