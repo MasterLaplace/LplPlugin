@@ -31,17 +31,13 @@ struct NeuralInputState {
     /** @brief Number of control channels. */
     static constexpr core::u32 kChannels = 8;
 
-    /** @brief Per-channel activation level (0 = idle, 1 = max intention). */
-    std::array<math::Fixed32, kChannels> channels{};
+    std::array<math::Fixed32, kChannels> channels{}; /**< Per-channel activation level (0 = idle, 1 = max intention). */
 
-    /** @brief Confidence score for the overall classification (0 – 1). */
-    math::Fixed32 confidence{};
+    math::Fixed32 confidence{}; /**< Confidence score for the overall classification (0 – 1). */
 
-    /** @brief True if the safety chain has validated this frame. */
-    bool validated{false};
+    bool validated{false}; /**< True if the safety chain has validated this frame. */
 
-    /** @brief Tick sequence number. */
-    core::u32 sequence{0};
+    core::u32 sequence{0}; /**< Tick sequence number. */
 };
 
 } // namespace lpl::input

@@ -29,16 +29,24 @@ class IInputSource {
 public:
     virtual ~IInputSource() = default;
 
-    /** @brief Initializes the input source. */
+    /**
+     * @brief Initializes the input source.
+     */
     [[nodiscard]] virtual core::Expected<void> init() = 0;
 
-    /** @brief Polls the device for new data. */
+    /**
+     * @brief Polls the device for new data.
+     */
     [[nodiscard]] virtual core::Expected<void> poll() = 0;
 
-    /** @brief Shuts down the input source. */
+    /**
+     * @brief Shuts down the input source.
+     */
     virtual void shutdown() = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
