@@ -36,7 +36,7 @@
 
 namespace lpl::editor {
 
-/// A resolved handle to one entity slot: its chunk plus its local index.
+/** @brief A resolved handle to one entity slot: its chunk plus its local index. */
 struct EntityLocation {
     ecs::Chunk *chunk{nullptr};
     core::u32 localIndex{0};
@@ -51,23 +51,38 @@ class EditorSession {
 public:
     EditorSession() = default;
 
-    /// @return The live world (for rendering / stepping by a viewport).
+    /**
+     * @brief The live world.
+     * @return The live world (for rendering / stepping by a viewport).
+     */
     [[nodiscard]] ecs::Registry &registry() noexcept { return registry_; }
     [[nodiscard]] const ecs::Registry &registry() const noexcept { return registry_; }
 
-    /// @return Total live entity count across every partition.
+    /**
+     * @brief Counts the live entities.
+     * @return Total live entity count across every partition.
+     */
     [[nodiscard]] core::u32 entityCount() const;
 
-    /// Resolves a flat entity index (iteration order) to its storage slot.
+    /**
+     * @brief Resolves a flat entity index (iteration order) to its storage slot.
+     */
     [[nodiscard]] EntityLocation locate(core::u32 flatIndex) const;
 
-    // ── Selection ────────────────────────────────────────────────────────────
+    /**
+     * @name Selection
+     * @{
+     */
     void select(core::u32 flatIndex) noexcept { selected_ = flatIndex; }
     void clearSelection() noexcept { selected_ = kNoSelection; }
     [[nodiscard]] bool hasSelection() const noexcept { return selected_ != kNoSelection && selected_ < entityCount(); }
     [[nodiscard]] core::u32 selection() const noexcept { return selected_; }
+    /** @} */
 
-    // ── Reflection-driven field access (human units) ───────────────────────────
+    /**
+     * @name Reflection-driven field access (human units)
+     * @{
+     */
     /**
      * @brief Reads one lane of a component field on entity @p flatIndex.
      * @param flatIndex Entity slot (iteration order).
@@ -80,11 +95,19 @@ public:
     [[nodiscard]] bool getField(core::u32 flatIndex, ecs::ComponentId id, std::string_view field, core::u32 lane,
                                 double &out) const;
 
-    /// Writes one lane of a component field (Fixed32 fields are quantised).
+    /**
+     * @brief Writes one lane of a component field (Fixed32 fields are quantised).
+     *
+     * Writes both buffers, so integrators (back) and readers (front) agree.
+     */
     [[nodiscard]] bool setField(core::u32 flatIndex, ecs::ComponentId id, std::string_view field, core::u32 lane,
                                 double value);
+    /** @} */
 
-    // ── Scene / procgen passthrough ────────────────────────────────────────────
+    /**
+     * @name Scene / procgen passthrough
+     * @{
+     */
     /**
      * @brief Runs a JSON command (or batch), recording it in the journal.
      *
@@ -97,16 +120,26 @@ public:
      */
     [[nodiscard]] core::Expected<std::string> command(std::string_view json);
 
-    /// Rewinds the last recorded command; false when there is nothing to undo.
+    /**
+     * @brief Rewinds the last recorded command; false when there is nothing to undo.
+     */
     bool undo() { return journal_.undo(); }
 
-    /// Re-applies the last undone command; false when there is nothing to redo.
+    /**
+     * @brief Re-applies the last undone command; false when there is nothing to redo.
+     */
     bool redo() { return journal_.redo(); }
 
-    /// @return Commands currently applied to the world.
+    /**
+     * @brief Counts the commands applied to the world.
+     * @return Commands currently applied to the world.
+     */
     [[nodiscard]] core::u32 historySize() const noexcept { return journal_.size(); }
 
-    /// @return Commands available to @ref redo.
+    /**
+     * @brief Counts the commands that can be redone.
+     * @return Commands available to @ref redo.
+     */
     [[nodiscard]] core::u32 redoSize() const noexcept { return journal_.redoSize(); }
 
     /**
@@ -131,18 +164,34 @@ public:
      */
     [[nodiscard]] CommandJournal &journal() noexcept { return journal_; }
 
-    /// Rebuilds the world from a serialised history, discarding the current one.
+    /**
+     * @brief Rebuilds the world from a serialised history, discarding the current one.
+     */
     [[nodiscard]] core::Expected<core::u32> replayHistory(std::string_view json) { return journal_.replay(json); }
-    /// Serializes the world to a `.lplscene` document.
+    /**
+     * @brief Serializes the world to a `.lplscene` document.
+     */
     [[nodiscard]] std::string save() const;
-    /// Loads a `.lplscene` document into the world (appends entities).
+    /**
+     * @brief Loads a `.lplscene` document into the world (appends entities).
+     */
     [[nodiscard]] core::Expected<core::u32> load(std::string_view text);
 
-    /// Destroys every entity, emptying the world (keeps the same registry).
+    /**
+     * @brief Destroys every entity, emptying the world (keeps the same registry).
+     *
+     * Collects every live id first: destroying while iterating chunks mutates
+     * them. Forgets the history too: it describes how this world was built, and
+     * emptying the world without forgetting it would leave an undo that replays
+     * commands onto a world that no longer matches them.
+     */
     void clear();
 
-    /// Number of lanes a field of @p type exposes (1, 3, or 4).
+    /**
+     * @brief Number of lanes a field of @p type exposes (1, 3, or 4).
+     */
     [[nodiscard]] static core::u32 laneCount(ecs::FieldType type) noexcept;
+    /** @} */
 
 private:
     ecs::Registry registry_;

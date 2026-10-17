@@ -1,12 +1,3 @@
-/**
- * @file GamePackBaker.cpp
- * @brief Implementation of the `.lplscene` -> `.lplpak` oven.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/editor/GamePackBaker.hpp>
 
 #include <lpl/editor/GameDocument.hpp>
@@ -21,26 +12,34 @@ namespace lpl::editor {
 
 namespace {
 
-/// Reads an unsigned field, keeping @p fallback when absent or not a number.
+/**
+ * @brief Reads an unsigned field, keeping @p fallback when absent or not a number.
+ */
 core::u32 readU32(const detail::JVal &object, const char *key, core::u32 fallback)
 {
     return static_cast<core::u32>(object.numOr(key, static_cast<double>(fallback)));
 }
 
-/// Reads a float field, keeping @p fallback when absent or not a number.
+/**
+ * @brief Reads a float field, keeping @p fallback when absent or not a number.
+ */
 core::f32 readF32(const detail::JVal &object, const char *key, core::f32 fallback)
 {
     return static_cast<core::f32>(object.numOr(key, static_cast<double>(fallback)));
 }
 
-/// Reads a boolean field; JSON true/false, keeping @p fallback when absent.
+/**
+ * @brief Reads a boolean field; JSON true/false, keeping @p fallback when absent.
+ */
 bool readBool(const detail::JVal &object, const char *key, bool fallback)
 {
     const detail::JVal *value = object.find(key);
     return (value != nullptr && value->t == detail::JVal::T::Bool) ? value->b : fallback;
 }
 
-/// Reads a noise kind by name ("fbm", "ridged", "billow"), else @p fallback.
+/**
+ * @brief Reads a noise kind by name ("fbm", "ridged", "billow"), else @p fallback.
+ */
 procgen::NoiseKind readNoiseKind(const detail::JVal &object, const char *key, procgen::NoiseKind fallback)
 {
     const detail::JVal *value = object.find(key);
@@ -55,7 +54,9 @@ procgen::NoiseKind readNoiseKind(const detail::JVal &object, const char *key, pr
     return fallback;
 }
 
-/// The name @ref readNoiseKind accepts for @p kind.
+/**
+ * @brief The name @ref readNoiseKind accepts for @p kind.
+ */
 const char *noiseKindName(procgen::NoiseKind kind)
 {
     switch (kind)
@@ -67,14 +68,18 @@ const char *noiseKindName(procgen::NoiseKind kind)
     return "fbm";
 }
 
-/// Appends the raw bytes of a trivially-copyable value to @p out.
+/**
+ * @brief Appends the raw bytes of a trivially-copyable value to @p out.
+ */
 template <typename T> void appendPod(std::vector<core::u8> &out, const T &value)
 {
     const auto *bytes = reinterpret_cast<const core::u8 *>(&value);
     out.insert(out.end(), bytes, bytes + sizeof(T));
 }
 
-/// Appends `"key":value` to a JSON object under construction.
+/**
+ * @brief Appends `"key":value` to a JSON object under construction.
+ */
 void appendU32(std::string &out, const char *key, core::u32 value)
 {
     char buffer[64];
@@ -96,7 +101,9 @@ void appendF32(std::string &out, const char *key, core::f32 value)
     out += buffer;
 }
 
-/// Appends `"key":true|false`.
+/**
+ * @brief Appends `"key":true|false`.
+ */
 void appendBool(std::string &out, const char *key, bool value)
 {
     out += '"';
@@ -105,7 +112,9 @@ void appendBool(std::string &out, const char *key, bool value)
     out += value ? "true" : "false";
 }
 
-/// Reads a Fixed32 field written as a decimal number in the document.
+/**
+ * @brief Reads a Fixed32 field written as a decimal number in the document.
+ */
 math::Fixed32 readFixed(const detail::JVal &object, const char *key, math::Fixed32 fallback)
 {
     const detail::JVal *value = object.find(key);
@@ -114,7 +123,9 @@ math::Fixed32 readFixed(const detail::JVal &object, const char *key, math::Fixed
     return math::Fixed32::fromFloat(static_cast<core::f32>(value->num));
 }
 
-/// Reads a trophic level by name, else @p fallback.
+/**
+ * @brief Reads a trophic level by name, else @p fallback.
+ */
 ecology::TrophicLevel readTrophicLevel(const detail::JVal &object, const char *key, ecology::TrophicLevel fallback)
 {
     const detail::JVal *value = object.find(key);
@@ -151,9 +162,6 @@ bool parseSceneLiving(const detail::JVal &scene, ecology::LivingRecipe &outLivin
     if (living == nullptr || living->t != detail::JVal::T::Obj)
         return false;
 
-    // Start from the engine defaults, so a document states only what it changes —
-    // the same rule the procedural block follows, and the reason a default that
-    // moves moves both sides together instead of silently splitting them.
     ecology::LivingRecipe recipe{};
 
     recipe.seed = readU32(*living, "seed", recipe.seed);
@@ -216,8 +224,6 @@ bool parseSceneLiving(const detail::JVal &scene, ecology::LivingRecipe &outLivin
         recipe.budget.unlikelyPenalty = readU32(*budget, "unlikelyPenalty", recipe.budget.unlikelyPenalty);
     }
 
-    // The food web, as an ordered table: "eats" is an INDEX into it, so a species
-    // can only eat something declared before it and a cycle is unwritable.
     if (const detail::JVal *species = living->find("species"); species != nullptr && species->t == detail::JVal::T::Arr)
     {
         core::u32 count = 0u;
@@ -253,11 +259,6 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     if (view == nullptr || view->t != detail::JVal::T::Obj)
         return false;
 
-    // The defaults are the ENGINE's, restated here as literals rather than read
-    // from render::SkyParams — this module is the host-side baker and must not
-    // drag in anything that draws, which is the same rule that keeps pack/
-    // readable from ring 0. The numbers are pinned by test-game-pack: a default
-    // that moves on one side and not the other fails there, loudly.
     pack::ViewV1 wire{};
     wire.zenithR = 0.20f;
     wire.zenithG = 0.40f;
@@ -281,8 +282,6 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     wire.ambient = 0.28f;
     wire.grainTiles = 0.25f;
     wire.shadowSteps = 24u;
-    // Defaults off, exactly as the swell does: a document that says nothing about a
-    // horizon gets the flat infinite plate it has always got.
     wire.curvatureFactor = 0.0f;
     wire.curvatureAltitudeGain = 0.0f;
     wire.waterShallow = 0x00246E8Cu;
@@ -291,8 +290,6 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
     wire.rippleAmplitude = 0.16f;
     wire.glintPower = 48.0f;
     wire.depthScale = 0.22f;
-    // The swell defaults OFF, exactly as render::WaterParams does: a document that says
-    // nothing about a sea gets the flat rippling water it has always got.
     wire.swellHeight = 0.0f;
     wire.crestSharpness = 0.0f;
     wire.chopStrength = 1.0f;
@@ -357,9 +354,6 @@ bool parseSceneView(const detail::JVal &scene, pack::ViewV1 &outView)
         wire.scatterStrength = readF32(*water, "scatterStrength", wire.scatterStrength);
     }
 
-    // An ABSENT palette and an EMPTY one are different documents: absent keeps the
-    // host's colours, empty would paint the world black. The flag is what carries
-    // the difference across the wire, so it is only set when the array is there.
     if (const detail::JVal *palette = view->find("palette"); palette != nullptr && palette->t == detail::JVal::T::Arr)
     {
         core::u32 count = 0u;
@@ -485,7 +479,6 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         return core::makeError(core::ErrorCode::kNotFound,
                                lpl::pmr::string{"document carries no \"procedural\" block"});
 
-    // Start from the engine defaults so a document only states what it changes.
     procgen::WorldRecipe recipe{};
 
     recipe.seed = readU32(*procedural, "seed", recipe.seed);
@@ -587,8 +580,6 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         recipe.caves.minRegionSize = readU32(*caves, "minRegionSize", recipe.caves.minRegionSize);
     }
 
-    // Which of the four underground generators, as a WORD: an index would mean
-    // whatever the enumeration was on the day the document was written.
     if (const detail::JVal *kind = procedural->find("caveKind"); kind != nullptr && kind->t == detail::JVal::T::Str)
     {
         procgen::CaveKind resolved = recipe.caveKind;
@@ -753,9 +744,6 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
         if (const detail::JVal *pattern = verges->find("pattern");
             pattern != nullptr && pattern->t == detail::JVal::T::Str)
         {
-            // Truncation is REFUSED rather than silent: a clipped L-system is a
-            // different grammar, and it would grow a different verge on every reload
-            // with nothing to say why.
             if (pattern->str.size() + 1u > procgen::kMaxRoadsidePattern)
                 return core::makeError(core::ErrorCode::kDeserializationFailed,
                                        lpl::pmr::string{"roadside pattern is longer than a recipe may carry"});
@@ -772,8 +760,6 @@ core::ExpectedVoid parseSceneRecipe(std::string_view document, procgen::WorldRec
 
 core::ExpectedVoid parseProceduralBlock(std::string_view proceduralJson, procgen::WorldRecipe &outRecipe)
 {
-    // The minimal document parseSceneRecipe expects, built once instead of at
-    // three call sites that each spelled the format string themselves.
     std::string wrapped{"{\"format\":\"lplscene/1\",\"procedural\":"};
     wrapped.append(proceduralJson);
     wrapped += '}';
@@ -931,7 +917,6 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
     appendU32(out, "minRegionSize", recipe.caves.minRegionSize);
     out += '}';
 
-    // The choice, as a word — four generators plus "auto". See procgen::caveKindName.
     out += ",\"caveKind\":\"";
     out += procgen::caveKindName(recipe.caveKind);
     out += '"';
@@ -1037,9 +1022,6 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
     out += ",\"roadside\":{";
     appendU32(out, "levels", recipe.roadsideLevels);
     out += ",\"pattern\":\"";
-    // The grammar's own alphabet is letters, brackets, commas, colons and stars —
-    // nothing JSON needs escaped. A quote or a backslash reaching here would mean the
-    // pattern came from somewhere it should not have.
     for (core::u32 i = 0u; i < procgen::kMaxRoadsidePattern && recipe.roadsidePattern[i] != '\0'; ++i)
         if (recipe.roadsidePattern[i] != '"' && recipe.roadsidePattern[i] != '\\')
             out += recipe.roadsidePattern[i];
@@ -1144,9 +1126,6 @@ std::string emitSceneRecipe(const procgen::WorldRecipe &recipe)
 
 std::string emitSceneLiving(const ecology::LivingRecipe &living)
 {
-    // Every field, not only the ones that differ from the defaults: a document
-    // that emits a subset is not a round trip, it is a lossy save that looks like
-    // one until a default moves under it.
     std::string out = "{";
     appendU32(out, "seed", living.seed);
     out += ',';
@@ -1281,11 +1260,6 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
 {
     const pack::RecipeV1 wire = pack::toWireRecipe(recipe);
 
-    // One, two or three sections. A world with nothing declared living on it and no
-    // stated look stays a one-section pack: the recipe alone. Sections separate things
-    // that are OPTIONAL and independently consumed — what lives on a world, what it
-    // looks like — not halves of one description. Every pass of the pipeline is in the
-    // recipe section, because every pass is the recipe.
     const core::u32 sectionCount = 1u + (living != nullptr ? 1u : 0u) + (view != nullptr ? 1u : 0u);
     constexpr core::u32 kHeaderBytes = static_cast<core::u32>(sizeof(pack::Header));
     const core::u32 tableBytes = sectionCount * static_cast<core::u32>(sizeof(pack::SectionEntry));
@@ -1295,8 +1269,6 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
         livingOffset + (living != nullptr ? static_cast<core::u32>(sizeof(pack::LivingV1)) : 0u);
     const core::u32 totalSize = viewOffset + (view != nullptr ? static_cast<core::u32>(sizeof(pack::ViewV1)) : 0u);
 
-    // Build the content first: the header carries a hash over everything that
-    // follows it, so it can only be finalised once the content exists.
     std::vector<core::u8> content;
     content.reserve(totalSize - kHeaderBytes);
 
@@ -1327,7 +1299,6 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
         appendPod(content, viewEntry);
     }
 
-    // Payloads in table order, so an offset is always ahead of the entry naming it.
     appendPod(content, wire);
     if (living != nullptr)
         appendPod(content, pack::toWireLiving(*living));
@@ -1340,7 +1311,7 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
     header.totalSize = totalSize;
     header.sectionCount = sectionCount;
     header.contentHash = pack::hashBytes(content.data(), static_cast<core::u32>(content.size()));
-    header.eccOffset = 0u; // no parity section unless attachEcc adds one
+    header.eccOffset = 0u;
     header.eccSize = 0u;
 
     std::vector<core::u8> image;
@@ -1352,9 +1323,6 @@ std::vector<core::u8> bakeGamePack(const procgen::WorldRecipe &recipe, const eco
 
 core::Expected<std::vector<core::u8>> bakeSceneDocument(std::string_view document)
 {
-    // A four-stage document holds its recipe inside the scene it starts on, so
-    // go through the document model first. Falling back to the flat form keeps
-    // every document written before that stage existed bakeable unchanged.
     if (const auto game = parseGameDocument(document); game.has_value())
     {
         const SceneDescription *scene = game->startScene();

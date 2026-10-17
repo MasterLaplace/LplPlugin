@@ -63,6 +63,12 @@ public:
 
     /**
      * @brief Runs @p json, recording it when it mutates the world.
+     *
+     * The command is parsed before it runs: a malformed command must not land in
+     * the journal, or every later replay would fail on it. Recording a command
+     * clears the redo branch, as in every editor: the future that was undone is no
+     * longer reachable from here.
+     *
      * @param json A command object, or an array of them (a batch records as one
      *             entry, so undoing a batch undoes all of it — a batch is a
      *             single intention).
@@ -78,18 +84,33 @@ public:
 
     /**
      * @brief Re-applies the last undone command.
+     *
+     * Only the restored command runs: the world already reflects every entry
+     * before it.
+     *
      * @return false when nothing has been undone since the last execute().
      */
     bool redo();
 
-    /// @return Number of commands currently applied to the world.
+    /**
+     * @brief Counts the commands applied to the world.
+     * @return Number of commands currently applied to the world.
+     */
     [[nodiscard]] core::u32 size() const noexcept { return static_cast<core::u32>(_entries.size()); }
 
-    /// @return Number of undone commands available to @ref redo.
+    /**
+     * @brief Counts the commands that can be redone.
+     * @return Number of undone commands available to @ref redo.
+     */
     [[nodiscard]] core::u32 redoSize() const noexcept { return static_cast<core::u32>(_undone.size()); }
 
     /**
      * @brief Serialises the journal as a replayable document.
+     *
+     * Each entry is embedded verbatim, as the JSON text it was recorded as: no
+     * re-encoding, hence no chance of a round trip changing a number and
+     * therefore the world it rebuilds.
+     *
      * @return `{"format":"lplcommands/1","commands":[ ... ]}`.
      */
     [[nodiscard]] std::string toJson() const;
@@ -97,16 +118,25 @@ public:
     /**
      * @brief Rebuilds the world from a serialised journal, discarding the
      *        current one.
+     *
+     * Each command of the document is re-serialised rather than sliced out of
+     * the source text: the parser does not record byte spans, and a command must
+     * be replayable on its own.
+     *
      * @param json A document produced by @ref toJson.
      * @return Number of commands replayed, or a parse error.
      */
     [[nodiscard]] core::Expected<core::u32> replay(std::string_view json);
 
-    /// Empties the world and forgets every recorded command.
+    /**
+     * @brief Empties the world and forgets every recorded command.
+     */
     void reset();
 
 private:
-    /// Empties the world, then re-applies every entry in order.
+    /**
+     * @brief Empties the world, then re-applies every entry in order.
+     */
     void rebuild();
 
     ecs::Registry &_registry;

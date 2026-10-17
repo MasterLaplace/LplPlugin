@@ -1,13 +1,3 @@
-/**
- * @file Json.cpp
- * @brief Implementation of the editor's minimal JSON parser.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-16
- * @copyright MIT License
- */
-
 #include <lpl/editor/Json.hpp>
 
 #include <cctype>
@@ -15,6 +5,25 @@
 #include <cstdlib>
 
 namespace lpl::editor::detail {
+
+namespace {
+
+void emitEscaped(std::string &out, std::string_view text)
+{
+    for (const char c : text)
+    {
+        switch (c)
+        {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break;
+        case '\t': out += "\\t"; break;
+        default: out += c; break;
+        }
+    }
+}
+
+} // namespace
 
 void Parser::ws()
 {
@@ -57,7 +66,7 @@ JVal Parser::value()
         return boolean();
     if (c == 'n')
     {
-        i += 4; // "null"
+        i += 4;
         return {};
     }
     return number();
@@ -187,25 +196,6 @@ JVal parse(std::string_view text, bool *ok)
     return root;
 }
 
-namespace {
-
-void emitEscaped(std::string &out, std::string_view text)
-{
-    for (const char c : text)
-    {
-        switch (c)
-        {
-        case '"': out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\n': out += "\\n"; break;
-        case '\t': out += "\\t"; break;
-        default: out += c; break;
-        }
-    }
-}
-
-} // namespace
-
 std::string emit(const JVal &value)
 {
     switch (value.t)
@@ -214,10 +204,6 @@ std::string emit(const JVal &value)
     case JVal::T::Bool: return value.b ? "true" : "false";
     case JVal::T::Num: {
         char buffer[40];
-        // %.17g is the shortest precision that round-trips every double
-        // exactly; anything shorter can shift a parameter and therefore the
-        // world a replayed command rebuilds. Integral values are printed
-        // without a decimal point so a journal stays readable.
         if (value.num == static_cast<double>(static_cast<long long>(value.num)))
             std::snprintf(buffer, sizeof(buffer), "%lld", static_cast<long long>(value.num));
         else

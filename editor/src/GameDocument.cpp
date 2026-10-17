@@ -1,12 +1,3 @@
-/**
- * @file GameDocument.cpp
- * @brief Implementation of the four-stage game document.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/editor/GameDocument.hpp>
 
 #include <lpl/ecs/Registry.hpp>
@@ -63,21 +54,27 @@ ResourceScope scopeFromName(std::string_view name)
     return ResourceScope::Shared;
 }
 
-/// Reads a string member, or @p fallback when absent.
+/**
+ * @brief Reads a string member, or @p fallback when absent.
+ */
 std::string stringOr(const detail::JVal &object, const char *key, std::string fallback = {})
 {
     const detail::JVal *value = object.find(key);
     return (value != nullptr && value->t == detail::JVal::T::Str) ? value->str : std::move(fallback);
 }
 
-/// Reads a boolean member, or @p fallback when absent.
+/**
+ * @brief Reads a boolean member, or @p fallback when absent.
+ */
 bool boolOr(const detail::JVal &object, const char *key, bool fallback)
 {
     const detail::JVal *value = object.find(key);
     return (value != nullptr && value->t == detail::JVal::T::Bool) ? value->b : fallback;
 }
 
-/// Re-emits a member as JSON text, or @p fallback when absent.
+/**
+ * @brief Re-emits a member as JSON text, or @p fallback when absent.
+ */
 std::string subDocumentOr(const detail::JVal &object, const char *key, const char *fallback)
 {
     const detail::JVal *value = object.find(key);
@@ -108,10 +105,19 @@ void appendString(std::string &out, const char *key, std::string_view value)
     out += "\"";
 }
 
-/// Reads the resource table of a scene. Accepts both the flat form
-/// (`"resources":[{name,path,kind,scope}]`) and Flakkari's per-kind arrays
-/// (`"textures":[...]`), because that is the shape existing config.cfg files
-/// have and refusing them would make migration a rewrite.
+/**
+ * @brief Reads the resource table of a scene.
+ *
+ * Accepts both the flat form (`"resources":[{name,path,kind,scope}]`) and
+ * Flakkari's per-kind name -> path maps (`"textures":{"name":"path"}`), because
+ * that is the shape existing config.cfg files have and refusing them would make
+ * migration a rewrite.
+ *
+ * A texture, a font, a sound, a music track and a shader are presentation by
+ * definition, so the scope of a per-kind entry is implied rather than spelled
+ * out — a server reading such a document skips them all without the author
+ * having had to say so.
+ */
 void parseResources(const detail::JVal &sceneObject, SceneDescription &scene)
 {
     if (const detail::JVal *flat = sceneObject.find("resources"); flat != nullptr && flat->t == detail::JVal::T::Arr)
@@ -130,10 +136,6 @@ void parseResources(const detail::JVal &sceneObject, SceneDescription &scene)
         }
     }
 
-    // Flakkari's per-kind arrays. A texture, a font, a sound and a music track
-    // are presentation by definition, so their scope is implied rather than
-    // spelled out — a server reading such a document skips them all without the
-    // author having had to say so.
     struct KindArray {
         const char *key;
         ResourceKind kind;
@@ -151,7 +153,6 @@ void parseResources(const detail::JVal &sceneObject, SceneDescription &scene)
         const detail::JVal *node = sceneObject.find(array.key);
         if (node == nullptr || node->t != detail::JVal::T::Obj)
             continue;
-        // Flakkari spells these as name -> path maps.
         for (const auto &binding : node->obj)
         {
             if (binding.second.t != detail::JVal::T::Str)
@@ -161,7 +162,16 @@ void parseResources(const detail::JVal &sceneObject, SceneDescription &scene)
     }
 }
 
-/// Reads one scene object (or a whole document treated as an implicit scene).
+/**
+ * @brief Reads one scene object (or a whole document treated as an implicit scene).
+ *
+ * The system list keeps its order: it IS the schedule. The procedural block goes
+ * through the recipe reader rather than a copy of its field names: a second
+ * parser would drift from the baker's the first time a knob is added, and the
+ * drift would silently change generated worlds. The ecosystem is read straight
+ * off the scene object: unlike the recipe it needs no wrapping, because
+ * parseSceneLiving takes the scene rather than a whole document.
+ */
 SceneDescription parseScene(const detail::JVal &object, std::string defaultName)
 {
     SceneDescription scene;
@@ -170,23 +180,17 @@ SceneDescription parseScene(const detail::JVal &object, std::string defaultName)
     if (const detail::JVal *systems = object.find("systems"); systems != nullptr && systems->t == detail::JVal::T::Arr)
         for (const detail::JVal &entry : systems->arr)
             if (entry.t == detail::JVal::T::Str)
-                scene.systems.push_back(entry.str); // order preserved: it IS the schedule
+                scene.systems.push_back(entry.str);
 
     parseResources(object, scene);
 
     if (const detail::JVal *procedural = object.find("procedural");
         procedural != nullptr && procedural->t == detail::JVal::T::Obj)
     {
-        // Reuse the recipe reader rather than duplicating twenty field names:
-        // a second parser would drift from the baker's the first time a knob is
-        // added, and the drift would silently change generated worlds.
         if (parseProceduralBlock(detail::emit(*procedural), scene.recipe))
             scene.hasRecipe = true;
     }
 
-    // The ecosystem, read straight off the scene object: unlike the recipe it
-    // needs no wrapping, because parseSceneLiving takes the scene rather than a
-    // whole document.
     if (parseSceneLiving(object, scene.living))
         scene.hasLiving = true;
     if (parseSceneView(object, scene.view))
@@ -269,8 +273,6 @@ core::Expected<GameDocument> parseGameDocument(std::string_view text)
     }
     else
     {
-        // No "scenes" array: the root IS the scene. Every document written
-        // before this stage existed has that shape, and they must keep working.
         document.scenes.push_back(parseScene(root, "main"));
     }
 
@@ -318,8 +320,6 @@ std::string emitGameDocument(const GameDocument &document)
         }
         out += "]";
 
-        // Always emitted in the flat form, whatever shape it was read in: one
-        // way to write it means one way to read it back.
         out += ",\"resources\":[";
         for (core::usize i = 0u; i < scene.resources.size(); ++i)
         {
@@ -357,8 +357,6 @@ core::Expected<core::u32> instantiateScene(const SceneDescription &scene, ecs::R
 {
     core::u32 created = 0u;
 
-    // Procedural first, explicit entities on top — see the header's note on why
-    // this order is a contract and not an implementation detail.
     if (scene.hasRecipe)
         created += procgen::bakeWorld(registry, scene.recipe).entityCount;
 
