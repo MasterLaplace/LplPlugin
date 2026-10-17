@@ -1,25 +1,3 @@
-/**
- * @file AoiBroadcastSystem.cpp
- * @brief Area-of-interest server broadcast implementation.
- *
- * For each connected client, queries the spatial index around the client's own
- * avatar and sends only what is near it, as a delta against what that client was
- * last told about:
- *   - EntitySpawn  (0x20): entities newly inside the radius   [u16 count][32B]*
- *   - StateDelta   (0x12): entities still inside, current xf   [u16 count][32B]*
- *   - EntityDestroy(0x21): entities that left the radius       [u16 count][u32]*
- * The 32-byte entity layout matches StateSnapshot:
- *   [id:4][posX:4][posY:4][posZ:4][sizeX:4][sizeY:4][sizeZ:4][hp:4]
- *
- * Every datagram for the tick is handed to the transport in one sendBatch, the
- * same batching win broadcastState takes.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-23
- * @copyright MIT License
- */
-
 #include <lpl/engine/systems/AoiBroadcastSystem.hpp>
 
 #include <lpl/ecs/Partition.hpp>
@@ -38,10 +16,6 @@
 
 namespace lpl::engine::systems {
 
-// ========================================================================== //
-//  Descriptor                                                                //
-// ========================================================================== //
-
 static const ecs::ComponentAccess kAoiAccesses[] = {
     {ecs::ComponentId::Position,    ecs::AccessMode::ReadOnly},
     {ecs::ComponentId::AABB,        ecs::AccessMode::ReadOnly},
@@ -52,27 +26,19 @@ static const ecs::ComponentAccess kAoiAccesses[] = {
 static const ecs::SystemDescriptor kAoiDesc{"AoiBroadcast", ecs::SchedulePhase::Network,
                                             std::span<const ecs::ComponentAccess>{kAoiAccesses}};
 
-// ========================================================================== //
-//  Wire-format constants                                                     //
-// ========================================================================== //
-
 namespace {
 
-constexpr core::u32 kEntityBytes = 32;     ///< id + 6 floats + hp.
-constexpr core::u32 kIdBytes = 4;          ///< one raw entity id.
-constexpr core::u32 kCountHeaderBytes = 2; ///< u16 count prefix.
+constexpr core::u32 kEntityBytes = 32;     /**< id + 6 floats + hp. */
+constexpr core::u32 kIdBytes = 4;          /**< one raw entity id. */
+constexpr core::u32 kCountHeaderBytes = 2; /**< u16 count prefix. */
 
-/// Entities that fit in one datagram: (1400 - 2) / 32 = 43.
+/** Entities that fit in one datagram: (1400 - 2) / 32 = 43. */
 constexpr core::u32 kMaxEntitiesPerPacket =
     (net::session::SessionManager::kMaxPayloadSize - kCountHeaderBytes) / kEntityBytes;
-/// Despawn ids that fit in one datagram: (1400 - 2) / 4 = 349.
+/** Despawn ids that fit in one datagram: (1400 - 2) / 4 = 349. */
 constexpr core::u32 kMaxIdsPerPacket = (net::session::SessionManager::kMaxPayloadSize - kCountHeaderBytes) / kIdBytes;
 
 } // namespace
-
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
 
 struct AoiBroadcastSystem::Impl {
     net::session::SessionManager &sessionManager;
@@ -80,18 +46,20 @@ struct AoiBroadcastSystem::Impl {
     ecs::WorldPartition &world;
     ecs::Registry &registry;
     math::Fixed32 interestRadius;
-    core::u32 keyframeInterval;  ///< Ticks between full re-sends of an in-range entity (§6.2.5).
-    core::u32 budgetBytes;       ///< Per-client delta byte budget per tick; 0 = unlimited (§6.2.7).
-    float nearRadiusSq{0.0f};    ///< Squared radius of the full-rate near ring; 0 = LOD off (§6.2.6).
-    core::u32 lodFarInterval{1}; ///< Update interval (ticks) for entities beyond the near ring.
-    bool strictAcked{false};     ///< Advance the delta baseline only on client ack, not on send (§6.2.5).
-    float farExtent{0.0f};       ///< World half-extent for far-ring position quantization; 0 = off (§6.2.6).
-    core::u32 farPosBits{16};    ///< Bits per position axis for the far ring (multiple of 8).
-    core::u64 tickCounter{0};    ///< Advances each execute; a keyframe tick forces a full snapshot.
+    core::u32 keyframeInterval;  /**< Ticks between full re-sends of an in-range entity (§6.2.5). */
+    core::u32 budgetBytes;       /**< Per-client delta byte budget per tick; 0 = unlimited (§6.2.7). */
+    float nearRadiusSq{0.0f};    /**< Squared radius of the full-rate near ring; 0 = LOD off (§6.2.6). */
+    core::u32 lodFarInterval{1}; /**< Update interval (ticks) for entities beyond the near ring. */
+    bool strictAcked{false};     /**< Advance the delta baseline only on client ack, not on send (§6.2.5). */
+    float farExtent{0.0f};       /**< World half-extent for far-ring position quantization; 0 = off (§6.2.6). */
+    core::u32 farPosBits{16};    /**< Bits per position axis for the far ring (multiple of 8). */
+    core::u64 tickCounter{0};    /**< Advances each execute; a keyframe tick forces a full snapshot. */
 
-    /// One entity's authoritative snapshot, collected once per tick. Position and
-    /// size stay Fixed32 (authoritative) until the wire boundary, so the radius
-    /// query centre is exact and the float conversion happens only when serialised.
+    /**
+     * One entity's authoritative snapshot, collected once per tick. Position and
+     * size stay Fixed32 (authoritative) until the wire boundary, so the radius
+     * query centre is exact and the float conversion happens only when serialised.
+     */
     struct Record {
         core::u32 id;
         math::Vec3<math::Fixed32> pos;
@@ -99,45 +67,65 @@ struct AoiBroadcastSystem::Impl {
         core::i32 hp;
     };
 
-    // ---- Per-tick scratch, reused (capacity kept) so a tick does not allocate.
-    std::vector<Record> records;                         ///< Every entity with a Position, this tick.
-    std::unordered_map<core::u32, core::u32> idToRecord; ///< raw id -> index into `records`.
-    pmr::vector<ecs::EntityId> neighbors;                ///< queryRadius output.
-    std::unordered_set<core::u32> neighborSet;           ///< This session's neighbours (raw ids).
-    std::vector<core::u32> enteredRecs;                  ///< Record indices new to the client.
-    std::vector<core::u32> movedRecs;                    ///< Record indices still known to the client.
-    std::vector<core::u32> leftIds;                      ///< Raw ids that left the client's radius.
+    /**
+     * @name Per-tick scratch, reused (capacity kept) so a tick does not allocate
+     * @{
+     */
+    std::vector<Record> records;                         /**< Every entity with a Position, this tick. */
+    std::unordered_map<core::u32, core::u32> idToRecord; /**< raw id -> index into `records`. */
+    pmr::vector<ecs::EntityId> neighbors;                /**< queryRadius output. */
+    std::unordered_set<core::u32> neighborSet;           /**< This session's neighbours (raw ids). */
+    std::vector<core::u32> enteredRecs;                  /**< Record indices new to the client. */
+    std::vector<core::u32> movedRecs;                    /**< Record indices still known to the client. */
+    std::vector<core::u32> leftIds;                      /**< Raw ids that left the client's radius. */
+    /** @} */
 
-    // ---- Per-session persistent state: what each client currently knows about.
-    std::unordered_map<core::u32, std::unordered_set<core::u32>> known; ///< playerId -> known ids.
-    std::vector<core::u32> seenPlayers; ///< playerIds present this tick (for reaping `known`).
+    /**
+     * @name Per-session persistent state: what each client currently knows about
+     * @{
+     */
+    std::unordered_map<core::u32, std::unordered_set<core::u32>> known; /**< playerId -> known ids. */
+    std::vector<core::u32> seenPlayers; /**< playerIds present this tick (for reaping `known`). */
 
-    /// The last snapshot the server sent each client, per entity — the baseline a
-    /// field delta is computed against (§6.2.5). Mirrors `known`: an id enters
-    /// with its spawn snapshot, updates on each delta, and is erased when it
-    /// leaves the radius or the client disconnects.
+    /**
+     * The last snapshot the server sent each client, per entity — the baseline a
+     * field delta is computed against (§6.2.5). Mirrors `known`: an id enters
+     * with its spawn snapshot, updates on each delta, and is erased when it
+     * leaves the radius or the client disconnects.
+     */
     std::unordered_map<core::u32, std::unordered_map<core::u32, net::protocol::EntitySnapshot>> lastSent;
 
-    /// Tick at which each entity was last actually sent to each client. Feeds the
-    /// staleness term of the relevancy priority so a starved entity rises until it
-    /// is sent, and lets an over-budget entity age instead of being dropped for
-    /// good (§6.2.7).
+    /**
+     * Tick at which each entity was last actually sent to each client. Feeds the
+     * staleness term of the relevancy priority so a starved entity rises until it
+     * is sent, and lets an over-budget entity age instead of being dropped for
+     * good (§6.2.7).
+     */
     std::unordered_map<core::u32, std::unordered_map<core::u32, core::u64>> lastSentTick;
 
-    /// Strict acked-baseline bookkeeping (§6.2.5), used only when @c strictAcked.
-    /// `sentSnap`/`sentSeq` are the last snapshot sent per entity and the sequence
-    /// it went out at; when the client acks a sequence, every entity whose send
-    /// sequence is at or below it is promoted into `lastSent` (the confirmed
-    /// baseline the delta diffs against). Until then its change keeps being resent.
+    /**
+     * Strict acked-baseline bookkeeping (§6.2.5), used only when @c strictAcked.
+     * `sentSnap`/`sentSeq` are the last snapshot sent per entity and the sequence
+     * it went out at; when the client acks a sequence, every entity whose send
+     * sequence is at or below it is promoted into `lastSent` (the confirmed
+     * baseline the delta diffs against). Until then its change keeps being resent.
+     */
     std::unordered_map<core::u32, std::unordered_map<core::u32, net::protocol::EntitySnapshot>> sentSnap;
     std::unordered_map<core::u32, std::unordered_map<core::u32, core::u64>> sentSeq;
+    /** @} */
 
-    // ---- Outbound batching. Buffers are pooled so their bytes outlive sendBatch
-    // without reallocating each tick; a vector move keeps a buffer's data pointer.
+    /**
+     * @name Outbound batching
+     *
+     * Buffers are pooled so their bytes outlive sendBatch without reallocating each
+     * tick; a vector move keeps a buffer's data pointer.
+     * @{
+     */
     std::vector<std::vector<core::byte>> packetPool;
     core::usize packetUsed{0};
     std::vector<net::transport::Datagram> batch;
     net::protocol::Bitstream stream;
+    /** @} */
 
     Impl(net::session::SessionManager &sm, std::shared_ptr<net::transport::ITransport> t, ecs::WorldPartition &w,
          ecs::Registry &reg, math::Fixed32 radius, core::u32 keyframe, core::u32 budget)
@@ -146,7 +134,9 @@ struct AoiBroadcastSystem::Impl {
     {
     }
 
-    /// The wire snapshot of a collected record (Fixed32 → float at the boundary).
+    /**
+     * @brief The wire snapshot of a collected record (Fixed32 → float at the boundary).
+     */
     [[nodiscard]] net::protocol::EntitySnapshot snapshotOf(core::u32 recIndex) const
     {
         const Record &rec = records[recIndex];
@@ -162,16 +152,26 @@ struct AoiBroadcastSystem::Impl {
         return s;
     }
 
-    /// True when this tick re-sends in-range entities in full, so a lost delta
-    /// self-heals. keyframeInterval <= 1 means "always full" (delta compression
-    /// off); otherwise every keyframeInterval-th tick is a keyframe.
+    /**
+     * @brief True when this tick re-sends in-range entities in full, so a lost delta
+     *        self-heals.
+     *
+     * keyframeInterval <= 1 means "always full" (delta compression off); otherwise
+     * every keyframeInterval-th tick is a keyframe.
+     */
     [[nodiscard]] bool isKeyframeTick() const noexcept
     {
         return keyframeInterval <= 1 || (tickCounter % keyframeInterval == 0);
     }
 
-    /// Grabs the next pooled buffer, writes header + payload into it, and queues a
-    /// datagram pointing at it (borrowing @p address, which outlives the tick).
+    /**
+     * @brief Grabs the next pooled buffer, writes header + payload into it, and queues a
+     *        datagram pointing at it (borrowing @p address, which outlives the tick).
+     *
+     * Every snapshot/delta is tagged with the current tick as its sequence, so the
+     * client can acknowledge it (§6.2.5) and the server advance that client's
+     * baseline. u32 is ample: at 144 Hz it wraps only after ~345 days.
+     */
     void emitPacket(net::protocol::PacketType type, std::span<const core::byte> payload, const net::Endpoint *address,
                     core::u8 flags = 0)
     {
@@ -187,9 +187,6 @@ struct AoiBroadcastSystem::Impl {
         header.type = type;
         header.flags = flags;
         header.padding = 0;
-        // Tag every snapshot/delta with the current tick as its sequence, so the
-        // client can acknowledge it (§6.2.5) and the server advance that client's
-        // baseline. u32 is ample: at 144 Hz it wraps only after ~345 days.
         header.sequence = static_cast<core::u32>(tickCounter);
         header.payloadSize = static_cast<core::u32>(payload.size());
 
@@ -202,7 +199,9 @@ struct AoiBroadcastSystem::Impl {
         });
     }
 
-    /// Serialises record indices as one or more 32-byte-entity packets of @p type.
+    /**
+     * @brief Serialises record indices as one or more 32-byte-entity packets of @p type.
+     */
     void emitEntities(net::protocol::PacketType type, const std::vector<core::u32> &recIndices,
                       const net::Endpoint *address)
     {
@@ -229,33 +228,56 @@ struct AoiBroadcastSystem::Impl {
         }
     }
 
-    // ---- Field-delta scratch for one session (reused, capacity kept).
+    /**
+     * @name Field-delta scratch for one session (reused, capacity kept)
+     * @{
+     */
     struct Candidate {
         net::protocol::EntitySnapshot snap;
         core::u8 mask;
         float priority;
-        bool far; ///< In the far ring → quantized position on the wire (§6.2.6).
+        bool far; /**< In the far ring → quantized position on the wire (§6.2.6). */
     };
     std::vector<Candidate> candidates;
-    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaScratch; ///< Near (full-float) group.
-    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaFar;     ///< Far (quantized) group.
+    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaScratch; /**< Near (full-float) group. */
+    std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> deltaFar;     /**< Far (quantized) group. */
+    /** @} */
 
-    /// Byte size of one field-delta on the wire (id + mask + one float per bit).
+    /**
+     * @brief Byte size of one field-delta on the wire (id + mask + one float per bit).
+     */
     [[nodiscard]] static core::u32 deltaBytes(core::u8 mask) noexcept
     {
         return kIdBytes + 1u + static_cast<core::u32>(__builtin_popcount(mask)) * 4u;
     }
 
-    /// Serialises the still-in-range entities for @p playerId as field-masked
-    /// deltas (§6.2.5) under a relevancy priority and a byte budget (§6.2.7):
-    ///   - dormancy: an entity whose fields did not change sends nothing between
-    ///     keyframes, so a resting world costs no traffic;
-    ///   - priority: the rest are ordered by proximity + staleness, so the closest
-    ///     and the longest-unsent go first;
-    ///   - budget: only the top entities up to @c budgetBytes are sent; the others
-    ///     age (their staleness rises) and win a later tick — nothing starves.
-    /// The per-client baseline and last-sent tick are updated only for entities
-    /// actually sent. Fragments on the real (variable) byte size.
+    /**
+     * @brief Serialises the still-in-range entities for @p playerId as field-masked
+     *        deltas (§6.2.5) under a relevancy priority and a byte budget (§6.2.7).
+     *
+     *   - dormancy: an entity whose fields did not change sends nothing between
+     *     keyframes, so a resting world costs no traffic;
+     *   - priority: the rest are ordered by proximity + staleness, so the closest
+     *     and the longest-unsent go first;
+     *   - budget: only the top entities up to @c budgetBytes are sent; the others
+     *     age (their staleness rises) and win a later tick — nothing starves.
+     *
+     * The per-client baseline and last-sent tick are updated only for entities
+     * actually sent. Fragments on the real (variable) byte size.
+     *
+     * In the strict acked-baseline model (§6.2.5), every entity whose last send the
+     * client has now acknowledged is first promoted into the confirmed baseline. Until
+     * an entity is promoted, the delta keeps diffing against the older confirmed state,
+     * so an unacked change is resent rather than silently lost; what is sent, and when,
+     * is recorded, and the baseline advances only once the client acks that sequence,
+     * at the top of a later tick. In the optimistic model the client is assumed to hold
+     * what was sent.
+     *
+     * Between keyframes, a far entity also updates on a slower cadence (network LOD,
+     * §6.2.6): until its tick comes, its change batches. At least one entity is always
+     * sent, to guarantee progress. Near entities keep full-float positions; far ones are
+     * split off to be quantized (§6.2.6).
+     */
     void emitDeltas(core::u32 playerId, const std::vector<core::u32> &recIndices,
                     const math::Vec3<math::Fixed32> &center, core::u64 ackedSeq, const net::Endpoint *address)
     {
@@ -263,10 +285,6 @@ struct AoiBroadcastSystem::Impl {
         auto &sentTick = lastSentTick[playerId];
         const bool keyframe = isKeyframeTick();
 
-        // Strict acked-baseline (§6.2.5): promote into the confirmed baseline every
-        // entity whose last send the client has now acknowledged. Until an entity
-        // is promoted, the delta keeps diffing against the older confirmed state,
-        // so an unacked change is resent rather than silently lost.
         if (strictAcked)
         {
             auto &snaps = sentSnap[playerId];
@@ -281,7 +299,6 @@ struct AoiBroadcastSystem::Impl {
             }
         }
 
-        // 1. Build the due, scored candidate set (dormant entities drop out here).
         candidates.clear();
         for (const core::u32 recIndex : recIndices)
         {
@@ -304,23 +321,19 @@ struct AoiBroadcastSystem::Impl {
             if (!keyframe)
             {
                 if (mask == 0)
-                    continue; // dormant: unchanged and not a keyframe → no traffic
-                // Network LOD (§6.2.6): a far entity updates on a slower cadence.
+                    continue;
                 const core::u32 interval = net::relevancy::lodUpdateInterval(distanceSq, nearRadiusSq, lodFarInterval);
                 if (ticksSince < interval)
-                    continue; // far ring, not its tick yet — its change batches
+                    continue;
             }
 
             const bool far = (farExtent > 0.0f) && (nearRadiusSq > 0.0f) && (distanceSq > nearRadiusSq);
             candidates.push_back(Candidate{cur, mask, net::relevancy::priority(distanceSq, ticksSince), far});
         }
 
-        // 2. Highest priority first.
         std::sort(candidates.begin(), candidates.end(),
                   [](const Candidate &a, const Candidate &b) { return a.priority > b.priority; });
 
-        // 3. Emit under budget; the rest age for a later tick. Near entities keep
-        // full-float positions; far ones are split off to be quantized (§6.2.6).
         deltaScratch.clear();
         deltaFar.clear();
         core::u32 spent = 0;
@@ -329,33 +342,33 @@ struct AoiBroadcastSystem::Impl {
         {
             const core::u32 cost = c.far ? quantBytes(c.mask) : deltaBytes(c.mask);
             if (budgetBytes != 0 && sentCount > 0 && spent + cost > budgetBytes)
-                break; // always send at least one to guarantee progress
+                break;
             if (c.far)
                 deltaFar.emplace_back(c.snap, c.mask);
             else
                 deltaScratch.emplace_back(c.snap, c.mask);
             if (strictAcked)
             {
-                // Record what we sent and when; the baseline advances only once
-                // the client acks this sequence (handled at the top of next tick).
                 sentSnap[playerId][c.snap.id] = c.snap;
                 sentSeq[playerId][c.snap.id] = tickCounter;
             }
             else
             {
-                baseline[c.snap.id] = c.snap; // optimistic: the client is assumed to hold this
+                baseline[c.snap.id] = c.snap;
             }
             sentTick[c.snap.id] = tickCounter;
             spent += cost;
             ++sentCount;
         }
 
-        packGroup(deltaScratch, address, /*quantized*/ false);
-        packGroup(deltaFar, address, /*quantized*/ true);
+        packGroup(deltaScratch, address, false);
+        packGroup(deltaFar, address, true);
     }
 
-    /// Wire size of one field-delta with quantized position (§6.2.6): id + mask +
-    /// (farPosBits/8) per position axis + a full float per size axis + hp.
+    /**
+     * @brief Wire size of one field-delta with quantized position (§6.2.6): id + mask +
+     *        (farPosBits/8) per position axis + a full float per size axis + hp.
+     */
     [[nodiscard]] core::u32 quantBytes(core::u8 mask) const noexcept
     {
         const core::u32 posBytes = farPosBits / 8u;
@@ -371,9 +384,14 @@ struct AoiBroadcastSystem::Impl {
         return bytes;
     }
 
-    /// Packs a delta group into StateDelta datagrams, fragmenting on real byte
-    /// size. A quantized group carries a small header ([posBits][extent]) and the
-    /// Compressed flag so the client decodes its positions at reduced precision.
+    /**
+     * @brief Packs a delta group into StateDelta datagrams, fragmenting on real byte
+     *        size.
+     *
+     * A quantized group carries a small header ([posBits:1][extent:4], before the
+     * count) and the Compressed flag so the client decodes its positions at reduced
+     * precision.
+     */
     void packGroup(const std::vector<std::pair<net::protocol::EntitySnapshot, core::u8>> &group,
                    const net::Endpoint *address, bool quantized)
     {
@@ -382,9 +400,7 @@ struct AoiBroadcastSystem::Impl {
             return;
 
         const core::u32 maxPayload = net::session::SessionManager::kMaxPayloadSize;
-        const core::u32 headerBytes = quantized ? (1u + 4u + kCountHeaderBytes) // posBits + extent + count
-                                                  :
-                                                  kCountHeaderBytes;
+        const core::u32 headerBytes = quantized ? (1u + 4u + kCountHeaderBytes) : kCountHeaderBytes;
         const core::u8 flags = quantized ? static_cast<core::u8>(net::protocol::PacketFlag::Compressed) : 0;
 
         core::u32 i = 0;
@@ -420,7 +436,9 @@ struct AoiBroadcastSystem::Impl {
         }
     }
 
-    /// Serialises raw ids as one or more EntityDestroy packets.
+    /**
+     * @brief Serialises raw ids as one or more EntityDestroy packets.
+     */
     void emitDestroy(const std::vector<core::u32> &ids, const net::Endpoint *address)
     {
         const core::u32 total = static_cast<core::u32>(ids.size());
@@ -436,8 +454,10 @@ struct AoiBroadcastSystem::Impl {
         }
     }
 
-    /// Rebuilds `records` and `idToRecord` from the registry (one pass over all
-    /// entities that carry a Position).
+    /**
+     * @brief Rebuilds `records` and `idToRecord` from the registry (one pass over all
+     *        entities that carry a Position).
+     */
     void collectRecords()
     {
         records.clear();
@@ -493,10 +513,6 @@ struct AoiBroadcastSystem::Impl {
     }
 };
 
-// ========================================================================== //
-//  Public                                                                    //
-// ========================================================================== //
-
 AoiBroadcastSystem::AoiBroadcastSystem(net::session::SessionManager &sessionManager,
                                        std::shared_ptr<net::transport::ITransport> transport,
                                        ecs::WorldPartition &world, ecs::Registry &registry,
@@ -537,7 +553,6 @@ void AoiBroadcastSystem::setPrecisionLod(math::Fixed32 worldExtent, core::u32 po
 {
     const float e = worldExtent.toFloat();
     _impl->farExtent = (e > 0.0f) ? e : 0.0f;
-    // Byte-aligned only, so quantized positions mix cleanly with full-width fields.
     _impl->farPosBits = (posBits >= 8 && posBits <= 32 && posBits % 8 == 0) ? posBits : 16;
 }
 
@@ -552,9 +567,6 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
     d.seenPlayers.clear();
     ++d.tickCounter;
 
-    // One snapshot pass over the whole world; each session then filters it by its
-    // own radius. This is what turns O(clients × N) serialisation into O(N) +
-    // O(clients × neighbours).
     d.collectRecords();
 
     d.sessionManager.forEach([&](net::session::Session &session) {
@@ -565,19 +577,17 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
         d.seenPlayers.push_back(playerId);
 
         const ecs::EntityId avatar = session.boundEntity();
-        auto &known = d.known[playerId]; // creates an empty set on first sight
+        auto &known = d.known[playerId];
 
         if (!avatar.isValid())
-            return; // no avatar yet: nothing to centre the query on
+            return;
 
         const auto centerIt = d.idToRecord.find(avatar.raw());
         if (centerIt == d.idToRecord.end())
-            return; // avatar not in the world this tick
+            return;
 
         const math::Vec3<math::Fixed32> center = d.records[centerIt->second].pos;
 
-        // Neighbours within the radius (grid-cell granular — an interest query,
-        // not exact geometry). Keep only ids we actually have a record for.
         d.neighbors.clear();
         d.world.queryRadius(center, d.interestRadius, d.neighbors);
 
@@ -588,7 +598,6 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
                 d.neighborSet.insert(id.raw());
         }
 
-        // Diff against what this client already knows.
         d.enteredRecs.clear();
         d.movedRecs.clear();
         d.leftIds.clear();
@@ -613,9 +622,6 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
         auto &sentTick = d.lastSentTick[playerId];
         if (!d.enteredRecs.empty())
         {
-            // A spawn is a full snapshot. In the optimistic model it becomes the
-            // delta baseline immediately; in the strict model the baseline waits
-            // for the client's ack, so record it as "sent at this sequence".
             d.emitEntities(net::protocol::PacketType::EntitySpawn, d.enteredRecs, address);
             for (const core::u32 recIndex : d.enteredRecs)
             {
@@ -640,7 +646,7 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
             d.emitDestroy(d.leftIds, address);
             for (const core::u32 raw : d.leftIds)
             {
-                baseline.erase(raw); // no longer replicated to this client
+                baseline.erase(raw);
                 sentTick.erase(raw);
                 if (d.strictAcked)
                 {
@@ -650,14 +656,9 @@ void AoiBroadcastSystem::execute(core::f32 /*dt*/)
             }
         }
 
-        // The neighbour set becomes what the client now knows. Swap, not copy: the
-        // scratch is cleared at the top of the next session anyway.
         known.swap(d.neighborSet);
     });
 
-    // Drop the per-client memory (known set AND delta baseline) of clients that
-    // are gone, so a disconnected player's state does not linger — and a recycled
-    // playerId does not inherit a stale set or baseline.
     if (d.known.size() != d.seenPlayers.size())
     {
         for (auto it = d.known.begin(); it != d.known.end();)

@@ -40,6 +40,14 @@ public:
     ~StateReconciliationSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Applies every snapshot, spawn, delta and despawn decoded this tick.
+     *
+     * Full snapshots (non-AOI server) and AOI spawn/delta all reconcile the same way:
+     * create-or-overwrite each entity from its authoritative snapshot. An AOI despawn
+     * removes locally the entities that left the interest radius.
+     */
     void execute(core::f32 dt) override;
 
     /**

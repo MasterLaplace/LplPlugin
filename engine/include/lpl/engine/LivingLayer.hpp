@@ -47,16 +47,18 @@ namespace lpl::engine {
  * @brief The budgets a host can afford for the living layer.
  */
 struct LivingLayerParams {
-    core::u32 maxBodies{48u};   ///< Bodies on screen, all species together.
-    core::u32 speciesCount{2u}; ///< Species that get bodies (grazer, hunter).
-    core::u32 scentSpan{64u};   ///< Cells across the pheromone window.
-    /// Stigmergy channels. Six, because that is how many @c ai::ScentChannel names
-    /// and the herd now reads them by meaning: plant, herbivore, carnivore, terror,
-    /// kin, pheromone. Two was enough while every animal climbed one hard-coded
-    /// channel — which is exactly the bug that made a grazer follow its own scent.
+    core::u32 maxBodies{48u};   /**< Bodies on screen, all species together. */
+    core::u32 speciesCount{2u}; /**< Species that get bodies (grazer, hunter). */
+    core::u32 scentSpan{64u};   /**< Cells across the pheromone window. */
+    /**
+     * Stigmergy channels. Six, because that is how many @c ai::ScentChannel names
+     * and the herd now reads them by meaning: plant, herbivore, carnivore, terror,
+     * kin, pheromone. Two was enough while every animal climbed one hard-coded
+     * channel — which is exactly the bug that made a grazer follow its own scent.
+     */
     core::u32 scentLayers{6u};
-    core::u32 webPeriod{60u};     ///< Ticks between two food-web integrations.
-    core::f32 spawnRadius{20.0f}; ///< How far from the focus a body may appear.
+    core::u32 webPeriod{60u};     /**< Ticks between two food-web integrations. */
+    core::f32 spawnRadius{20.0f}; /**< How far from the focus a body may appear. */
 };
 
 /**
@@ -67,6 +69,10 @@ class LivingLayer {
 public:
     /**
      * @brief Opens the scent window and seeds the food web from a recipe.
+     *
+     * It configures the one HerdParams this layer runs on: the systems hold a
+     * reference to it, so it is configured here rather than rebuilt each step.
+     *
      * @param params The budgets the host can afford.
      * @param recipe The ecology to seed.
      * @param seed The random seed for reproducible results.
@@ -79,6 +85,12 @@ public:
      * The producer's capacity is the one value a document cannot state: it is how
      * much vegetation this seed actually grew, counted. Everything else is the
      * cartridge's.
+     *
+     * Zero means "the world cannot count its plants yet" — a streamed world has no
+     * total, only what is resident — and then the recipe's own capacity stands.
+     * Overriding it with zero starves the producers on the first tick, and a food web
+     * whose bottom is empty inverts: three grazers, forty-four hunters, which is what
+     * the screen showed.
      */
     void seedWeb(core::u32 standingPlants);
 
@@ -92,12 +104,10 @@ public:
      */
     void bind(ecs::Registry &registry) noexcept { _herd.bind(registry); }
 
-    /// Where the scent window currently sits, for the creature systems.
-    [[nodiscard]] systems::CreatureFieldView fieldView() const noexcept
-    {
-        return systems::CreatureFieldView{_scent.originX(), _scent.originZ(), _scent.field().width(),
-                                          _scent.field().depth()};
-    }
+    /**
+     * @brief Where the scent window currently sits, for the creature systems.
+     */
+    [[nodiscard]] systems::CreatureFieldView fieldView() const noexcept;
 
     [[nodiscard]] ai::ScentWindow &scent() noexcept { return _scent; }
     [[nodiscard]] const ai::ScentWindow &scent() const noexcept { return _scent; }
@@ -110,7 +120,7 @@ public:
     [[nodiscard]] const LivingLayerParams &params() const noexcept { return _params; }
     void countGrazed() noexcept { ++_grazed; }
 
-    /// No such species.
+    /** No such species. */
     static constexpr core::u32 kNoSpecies = 0xFFFFFFFFu;
 
     /**
@@ -151,92 +161,45 @@ public:
     [[nodiscard]] core::u32 bodiesFor(core::u32 species) const noexcept;
 
 private:
-    /// Bodies a head count is worth before the budget caps it.
+    /**
+     * @brief Bodies a head count is worth before the budget caps it.
+     *
+     * At or below its refuge the species is gone as far as the model is concerned,
+     * and drawing a body for it would contradict the census. Above its refuge it
+     * exists — and a world where existing is invisible is not showing the model, so
+     * it gets at least one body. This is the floor that was learned the hard way: at
+     * one body per ten head, a population of seven floored to zero and the map stayed
+     * empty while the HUD cheerfully reported a working ecosystem. The spawning, the
+     * flocking and the drawing were all correct and all ran on an empty list.
+     */
     [[nodiscard]] core::u32 rawBodiesFor(core::u32 webIndex) const noexcept;
 
 public:
     /**
      * @brief Creates one body of a species somewhere it can stand.
      *
+     * The archetype is the species; the genome is this individual. Mutation is what
+     * makes a herd look like animals rather than like copies.
+     *
+     * The body is an ENTITY and every part of it is a component: Position, Velocity
+     * and AABB are what the physics solver already understands, so a creature stops
+     * being a special case the moment it carries them; Genome and Creature are what
+     * the reflection registry knows how to describe, so a document — and an
+     * intelligence — can name one; and Heading is what a walker advances along, which
+     * is why it cannot stay outside the registry the walker lives in.
+     *
      * @param placeAt (attempt, outX, outZ) -> bool: proposes a position and says
      *                whether an animal may stand there. Twenty-four attempts, then
      *                give up — a world can legitimately have nowhere to put one.
      */
-    template <typename PlaceAt> bool spawn(math::Random &random, core::u32 species, PlaceAt &&placeAt)
-    {
-        if (_herd.size() >= _params.maxBodies || _herd.registry() == nullptr)
-            return false;
-
-        const core::u32 identity = _nextId++;
-
-        // The archetype is the species; the genome is this individual. Mutation is
-        // what makes a herd look like animals rather than like copies.
-        ecology::Genome stock{};
-        if (species == 1u)
-        {
-            stock.size = math::Fixed32::fromFloat(1.4f);
-            stock.maxSpeed = math::Fixed32::fromFloat(5.0f);
-        }
-        else
-        {
-            stock.size = math::Fixed32::fromFloat(0.9f);
-            stock.maxSpeed = math::Fixed32::fromFloat(3.5f);
-        }
-        const ecology::Genome genome = ecology::mutate(stock, 8u, 0.18f, _heredity);
-
-        for (core::u32 attempt = 0u; attempt < 24u; ++attempt)
-        {
-            math::Fixed32 x{};
-            math::Fixed32 z{};
-            if (!placeAt(random, attempt, x, z))
-                continue;
-            // The body is an ENTITY and every part of it is a component: Position,
-            // Velocity and AABB are what the physics solver already understands, so
-            // a creature stops being a special case the moment it carries them;
-            // Genome and Creature are what the reflection registry knows how to
-            // describe, so a document — and an intelligence — can name one; and
-            // Heading is what a walker advances along, which is why it cannot stay
-            // outside the registry the walker lives in.
-            ecs::Archetype archetype;
-            archetype.add(ecs::ComponentId::Position);
-            archetype.add(ecs::ComponentId::Velocity);
-            archetype.add(ecs::ComponentId::AABB);
-            archetype.add(ecs::ComponentId::Genome);
-            archetype.add(ecs::ComponentId::Creature);
-            archetype.add(ecs::ComponentId::Heading);
-
-            ecs::Registry &registry = *_herd.registry();
-            auto created = registry.createEntity(archetype);
-            if (!created.has_value())
-                return false;
-            const ecs::EntityId entity = created.value();
-
-            const math::Fixed32 vx = random.unit() - math::Fixed32::half();
-            const math::Fixed32 vz = random.unit() - math::Fixed32::half();
-
-            if (!writeBody(registry, entity, species, identity, genome, x, z, vx, vz))
-            {
-                (void) registry.destroyEntity(entity);
-                return false;
-            }
-            _herd.add(entity);
-            return true;
-        }
-        return false;
-    }
+    template <typename PlaceAt> bool spawn(math::Random &random, core::u32 species, PlaceAt &&placeAt);
 
     /**
      * @brief Brings the bodies in line with the census, keeping the ratio.
      * @param tick The current tick.
      * @param placeAt The function to place an animal at a position.
      */
-    template <typename PlaceAt> void reconcile(core::u32 tick, PlaceAt &&placeAt)
-    {
-        math::Random stock{_seed ^ (0xB0D533u + tick)};
-        _herd.reconcile(
-            _params.speciesCount, [this](core::u32 species) { return bodiesFor(species); },
-            [this, &stock, &placeAt](core::u32 species) { return spawn(stock, species, placeAt); });
-    }
+    template <typename PlaceAt> void reconcile(core::u32 tick, PlaceAt &&placeAt);
 
     /**
      * @brief How this layer's animals move and what they smell.
@@ -250,57 +213,18 @@ public:
     /**
      * @brief Fills a freshly created creature entity's components.
      *
+     * The AABB is sized by the genome, so a big animal is a big obstacle. Mass is left
+     * off deliberately: a creature with no Mass is static to the solver, and giving one
+     * to a body the locomotion system already walks would have two things moving it.
+     * The facing is seeded from the initial velocity, not from a fixed direction: a
+     * herd that all faces north walks north together on its first tick.
+     *
      * @return false when the entity could not be reached, so a caller can undo the
      *         creation instead of leaving a body with no position in the world.
      */
     [[nodiscard]] static bool writeBody(ecs::Registry &registry, ecs::EntityId entity, core::u32 species,
                                         core::u32 identity, const ecology::Genome &genome, math::Fixed32 x,
-                                        math::Fixed32 z, math::Fixed32 vx, math::Fixed32 vz)
-    {
-        auto ref = registry.resolve(entity);
-        if (!ref.has_value())
-            return false;
-        for (const auto &part : registry.partitions())
-        {
-            if (!part || !part->archetype().has(ecs::ComponentId::Creature))
-                continue;
-            const auto &chunks = part->chunks();
-            if (ref.value().chunkIndex >= static_cast<core::u32>(chunks.size()) || !chunks[ref.value().chunkIndex])
-                continue;
-            auto &chunk = *chunks[ref.value().chunkIndex];
-            const auto entities = chunk.entities();
-            if (ref.value().localIndex >= entities.size() || entities[ref.value().localIndex] != entity)
-                continue;
-            const core::u32 slot = ref.value().localIndex;
-
-            if (auto *p = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position)))
-                p[slot] = {x, math::Fixed32{}, z};
-            if (auto *v = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Velocity)))
-                v[slot] = {vx, math::Fixed32{}, vz};
-            // Sized by the genome, so a big animal is a big obstacle. Mass is left
-            // off deliberately: a creature with no Mass is static to the solver,
-            // and giving one to a body the locomotion system already walks would
-            // have two things moving it.
-            if (auto *b = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
-                b[slot] = {genome.size * math::Fixed32::half(), genome.size, genome.size * math::Fixed32::half()};
-            if (auto *g = static_cast<ecology::Genome *>(chunk.writeComponent(ecs::ComponentId::Genome)))
-                g[slot] = genome;
-            if (auto *c = static_cast<core::u32 *>(chunk.writeComponent(ecs::ComponentId::Creature)))
-            {
-                c[slot * 2u] = species;
-                c[slot * 2u + 1u] = identity;
-            }
-            // Facing seeded from the initial velocity, not from a fixed direction:
-            // a herd that all faces north walks north together on its first tick.
-            if (auto *h = static_cast<math::Fixed32 *>(chunk.writeComponent(ecs::ComponentId::Heading)))
-            {
-                h[slot * 2u] = vx;
-                h[slot * 2u + 1u] = vz;
-            }
-            return true;
-        }
-        return false;
-    }
+                                        math::Fixed32 z, math::Fixed32 vx, math::Fixed32 vz);
 
     /**
      * @brief Sets the producer population from what is actually standing.
@@ -309,11 +233,7 @@ public:
      * count is a FACT the world measures rather than a number the model integrates:
      * grazing a valley bare has to move it, and it only does if it is a census.
      */
-    void setProducerPopulation(core::u32 standing) noexcept
-    {
-        if (!_web.species.empty() && standing != 0u)
-            _web.species[0].population = math::Fixed32::fromInt(static_cast<core::i32>(standing));
-    }
+    void setProducerPopulation(core::u32 standing) noexcept;
 
     /**
      * @brief One tick of the substrate: the trails diffuse and evaporate.
@@ -341,7 +261,6 @@ private:
 
 } // namespace lpl::engine
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/engine/LivingLayer.inl>
+#    include "LivingLayer.inl"
 
 #endif // LPL_ENGINE_LIVING_LAYER_HPP

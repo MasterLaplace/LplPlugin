@@ -43,13 +43,26 @@ namespace lpl::engine::systems {
  * @brief What the step had to do about the ground.
  */
 struct GroundStepResult {
-    bool avoided{false};  ///< The heading was turned to get round something.
-    bool cornered{false}; ///< Nothing was free; the heading was reversed instead of freezing.
-    bool moved{false};    ///< The position changed at all.
+    bool avoided{false};  /**< The heading was turned to get round something. */
+    bool cornered{false}; /**< Nothing was free; the heading was reversed instead of freezing. */
+    bool moved{false};    /**< The position changed at all. */
 };
 
 /**
  * @brief Moves a body one step, turning aside from ground it cannot stand on.
+ *
+ * The avoidance comes before the move rather than after refusing it: when the ground a
+ * @p reach ahead cannot be stood on, the heading turns to the free 8-neighbour closest to
+ * it. Turning is cheap, reversing is not, and a body that takes the first free direction
+ * in array order makes every herd drift east.
+ *
+ * @warning The look-ahead must cover what the step will actually traverse, and a caller
+ * passing a shorter one is a body that walks into things it never saw. Measured: a
+ * traveller looking eight units ahead while stepping thirty stopped dead against a boulder
+ * with `clear` true -- it checked a point it would fly past, then put its foot inside the
+ * rock, and the axis test refused a move it had no reason to expect. Clamped in the step
+ * rather than documented, because a rule every caller must remember is a rule one caller
+ * will forget; `LocomotionSystem` only satisfied it because its animals are slow.
  *
  * @warning The look-ahead is a full @p reach rather than the fraction one tick covers: looking only as
  * far as the next step means the turn happens with the obstacle already underfoot, which is a

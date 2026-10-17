@@ -49,12 +49,14 @@ class ResourceManager;
  * host or kernel header and the same World runs on a desktop and in ring 0.
  */
 struct WorldContext {
-    platform::IPlatform &platform; ///< Clock / display / input / GPU memory.
-    ResourceManager &resources;    ///< Shared asset cache (load-once).
-    memory::ArenaAllocator &arena; ///< Per-frame scratch; reset every frame.
-    const Config &config;          ///< The active configuration.
-    /// The hosting Engine, or nullptr when this World is hosted by a Server
-    /// (which owns many Worlds and has no single Engine). Always check it.
+    platform::IPlatform &platform; /**< Clock / display / input / GPU memory. */
+    ResourceManager &resources;    /**< Shared asset cache (load-once). */
+    memory::ArenaAllocator &arena; /**< Per-frame scratch; reset every frame. */
+    const Config &config;          /**< The active configuration. */
+    /**
+     * The hosting Engine, or nullptr when this World is hosted by a Server
+     * (which owns many Worlds and has no single Engine). Always check it.
+     */
     Engine *engine;
 };
 
@@ -93,20 +95,14 @@ public:
      *
      * The spatial partition is a WORLD facility, not a network one: any game
      * with a large map (a solo Minecraft-like as much as a server) enables it,
-     * and a game that does its own broad-phase (samples::CubePile keeps an
-     * octree inside its physics backend) simply never calls this, so it costs
+     * and a game that does its own broad-phase simply never calls this, so it costs
      * nothing. Idempotent — returns the existing index on repeat calls.
      *
      * @param cellSize Side length of a cubic cell (world units).
      * @param cellCapacity Spatial cells budgeted up front (see WorldPartition).
      */
     ecs::WorldPartition &enableSpatialPartition(math::Fixed32 cellSize,
-                                                core::u32 cellCapacity = ecs::WorldPartition::kDefaultCellCapacity)
-    {
-        if (!_spatial)
-            _spatial = lpl::pmr::make_unique<ecs::WorldPartition>(cellSize, cellCapacity);
-        return *_spatial;
-    }
+                                                core::u32 cellCapacity = ecs::WorldPartition::kDefaultCellCapacity);
 
     /**
      * @brief The spatial index, or nullptr if @ref enableSpatialPartition was never called.
@@ -134,15 +130,8 @@ public:
      * @param recipe  The ecosystem: food web, genome drift, stigmergy physics.
      * @param seed    Master seed for the layer's own streams.
      */
-    LivingLayer &enableLivingLayer(const LivingLayerParams &params, const ecology::LivingRecipe &recipe, core::u32 seed)
-    {
-        if (!_living)
-        {
-            _living = lpl::pmr::make_unique<LivingLayer>();
-            _living->configure(params, recipe, seed);
-        }
-        return *_living;
-    }
+    LivingLayer &enableLivingLayer(const LivingLayerParams &params, const ecology::LivingRecipe &recipe,
+                                   core::u32 seed);
 
     /**
      * @brief The living layer, or nullptr if @ref enableLivingLayer was never called.
@@ -181,22 +170,27 @@ public:
      *   join order legitimately give two machines different layouts for the
      *   same world, and those must not read as a desync.
      *
+     * It folds the WRITE buffer, not the read one: chunks are double buffered, the
+     * integrator advances the write side, and the read side is last frame's snapshot
+     * kept for concurrent readers. Folding the read side would digest stale state — and
+     * would sit still for a whole tick, which is exactly how this was caught.
+     * samples::CubePile's parity fold reads the same side.
+     *
      * @return The digest, and 0 for an empty world.
      */
     [[nodiscard]] core::u64 stateHash() const noexcept;
 
-    // ---- Game lifecycle hooks (override in a subclass) -------------------- //
+    /**
+     * @name Game lifecycle hooks (override in a subclass)
+     * @{
+     */
 
     /**
      * @brief Set the world up: populate the registry, register systems, load
      *        assets. Runs once before the loop.
      * @param context Host services (platform, resources, arena, …).
      */
-    [[nodiscard]] virtual core::Expected<void> onInit(WorldContext &context)
-    {
-        (void) context;
-        return {};
-    }
+    [[nodiscard]] inline virtual core::Expected<void> onInit(WorldContext &context);
 
     /**
      * @brief Advance the authoritative simulation one fixed step.
@@ -209,11 +203,7 @@ public:
      * @param context Host services (for the display / input backends).
      * @param alpha Interpolation factor in [0,1) between the last two steps.
      */
-    virtual void onRender(WorldContext &context, core::f64 alpha)
-    {
-        (void) context;
-        (void) alpha;
-    }
+    inline virtual void onRender(WorldContext &context, core::f64 alpha);
 
     /**
      * @brief Release game resources. Runs once at shutdown.
@@ -225,20 +215,18 @@ public:
      * @return The name of the game.
      */
     [[nodiscard]] virtual const char *name() const noexcept { return "World"; }
+    /** @} */
 
 private:
-    concurrency::InlineJobSystem _jobSystem;            ///< Backs the scheduler (declared first).
-    ecs::Registry _registry;                            ///< Authoritative entity state.
-    ecs::SystemScheduler _scheduler;                    ///< Steps the registry; takes _jobSystem.
-    lpl::pmr::unique_ptr<ecs::WorldPartition> _spatial; ///< Optional broad-phase (on demand).
-    lpl::pmr::unique_ptr<LivingLayer> _living;          ///< Optional ecology (on demand).
+    concurrency::InlineJobSystem _jobSystem;            /**< Backs the scheduler (declared first). */
+    ecs::Registry _registry;                            /**< Authoritative entity state. */
+    ecs::SystemScheduler _scheduler;                    /**< Steps the registry; takes _jobSystem. */
+    lpl::pmr::unique_ptr<ecs::WorldPartition> _spatial; /**< Optional broad-phase (on demand). */
+    lpl::pmr::unique_ptr<LivingLayer> _living;          /**< Optional ecology (on demand). */
 };
 
 } // namespace lpl::engine
 
-// Out-of-line definitions. World is consumed header-only (the freestanding
-// kernel included), so they live in a .inl rather than a .cpp that neither
-// kernel build path lists.
-#    include <lpl/engine/World.inl>
+#    include "World.inl"
 
 #endif // LPL_ENGINE_WORLD_HPP

@@ -64,50 +64,28 @@ public:
      * @param args Forwarded to T's constructor on the first call for @p key.
      * @return Reference to the owned resource (stable for the manager's life).
      */
-    template <typename T, typename... Args> [[nodiscard]] T &getOrCreate(core::u64 key, Args &&...args)
-    {
-        static_assert(std::is_base_of_v<IResource, T>, "T must derive from IResource");
-        concurrency::SpinLockGuard guard{_lock};
-        if (auto it = _resources.find(key); it != _resources.end())
-            return static_cast<T &>(*it->second);
-        auto owned = lpl::pmr::make_unique<T>(std::forward<Args>(args)...);
-        T &ref = *owned;
-        _resources.emplace(key, std::move(owned));
-        return ref;
-    }
+    template <typename T, typename... Args> [[nodiscard]] T &getOrCreate(core::u64 key, Args &&...args);
 
     /**
      * @brief Returns the resource at @p key, or nullptr if it was never loaded.
      * @tparam T Concrete resource type to cast to (caller's responsibility).
      */
-    template <typename T> [[nodiscard]] T *find(core::u64 key)
-    {
-        static_assert(std::is_base_of_v<IResource, T>, "T must derive from IResource");
-        concurrency::SpinLockGuard guard{_lock};
-        auto it = _resources.find(key);
-        return it == _resources.end() ? nullptr : static_cast<T *>(it->second.get());
-    }
+    template <typename T> [[nodiscard]] T *find(core::u64 key);
 
-    /** @brief True if @p key currently holds a resource. */
-    [[nodiscard]] bool contains(core::u64 key)
-    {
-        concurrency::SpinLockGuard guard{_lock};
-        return _resources.find(key) != _resources.end();
-    }
+    /**
+     * @brief True if @p key currently holds a resource.
+     */
+    [[nodiscard]] bool contains(core::u64 key);
 
-    /** @brief Number of cached resources. */
-    [[nodiscard]] core::usize size() const
-    {
-        concurrency::SpinLockGuard guard{_lock};
-        return _resources.size();
-    }
+    /**
+     * @brief Number of cached resources.
+     */
+    [[nodiscard]] core::usize size() const;
 
-    /** @brief Drops every cached resource. */
-    void clear()
-    {
-        concurrency::SpinLockGuard guard{_lock};
-        _resources.clear();
-    }
+    /**
+     * @brief Drops every cached resource.
+     */
+    void clear();
 
 private:
     mutable concurrency::SpinLock _lock;
@@ -115,5 +93,7 @@ private:
 };
 
 } // namespace lpl::engine
+
+#    include "ResourceManager.inl"
 
 #endif // LPL_ENGINE_RESOURCEMANAGER_HPP

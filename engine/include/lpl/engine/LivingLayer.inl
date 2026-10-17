@@ -1,17 +1,5 @@
-/**
- * @file LivingLayer.inl
- * @brief Out-of-line definitions for engine::LivingLayer.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-28
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_ENGINE_LIVING_LAYER_INL
-#    define LPL_ENGINE_LIVING_LAYER_INL
+#define LPL_ENGINE_LIVING_LAYER_INL
 
 namespace lpl::engine {
 
@@ -24,19 +12,12 @@ inline void LivingLayer::configure(const LivingLayerParams &params, const ecolog
     _nextId = 1u;
     _grazed = 0u;
     _herd.clear();
-    // The one HerdParams this layer runs on: the systems hold a reference to it,
-    // so it is configured here rather than rebuilt each step.
     _herdParams.speciesCount = params.speciesCount;
     ecology::applyDefaultScents(_herdParams);
 }
 
 inline void LivingLayer::seedWeb(core::u32 standingPlants)
 {
-    // Zero means "the world cannot count its plants yet" — a streamed world has
-    // no total, only what is resident — and then the recipe's own capacity
-    // stands. Overriding it with zero starves the producers on the first tick,
-    // and a food web whose bottom is empty inverts: three grazers, forty-four
-    // hunters, which is what the screen showed.
     _web = ecology::TrophicWeb{};
     const core::u32 declared =
         _recipe.speciesCount < ecology::kMaxLivingSpecies ? _recipe.speciesCount : ecology::kMaxLivingSpecies;
@@ -72,18 +53,11 @@ inline core::u32 LivingLayer::rawBodiesFor(core::u32 webIndex) const noexcept
     if (webIndex >= _web.species.size())
         return 0u;
     const ecology::Species &species = _web.species[webIndex];
-    // At or below its refuge the species is gone as far as the model is concerned,
-    // and drawing a body for it would contradict the census.
     if (species.population <= species.params.refuge)
         return 0u;
 
     const core::u32 perBody = _recipe.headPerBody != 0u ? _recipe.headPerBody : 2u;
     core::i32 wanted = species.population.toInt() / static_cast<core::i32>(perBody);
-    // Above its refuge, so it exists — and a world where existing is invisible is
-    // not showing the model. This is the floor that was learned the hard way: at one
-    // body per ten head, a population of seven floored to zero and the map stayed
-    // empty while the HUD cheerfully reported a working ecosystem. The spawning, the
-    // flocking and the drawing were all correct and all ran on an empty list.
     if (wanted < 1)
         wanted = 1;
     return static_cast<core::u32>(wanted);
@@ -108,9 +82,125 @@ inline core::u32 LivingLayer::bodiesFor(core::u32 species) const noexcept
     if (total <= _params.maxBodies || total == 0u)
         return mine;
 
-    // Proportional, so the shape of the web survives the ceiling.
     const core::u32 scaled = (mine * _params.maxBodies) / total;
     return scaled == 0u && mine != 0u ? 1u : scaled;
+}
+
+inline systems::CreatureFieldView LivingLayer::fieldView() const noexcept
+{
+    return systems::CreatureFieldView{_scent.originX(), _scent.originZ(), _scent.field().width(),
+                                      _scent.field().depth()};
+}
+
+template <typename PlaceAt> inline bool LivingLayer::spawn(math::Random &random, core::u32 species, PlaceAt &&placeAt)
+{
+    if (_herd.size() >= _params.maxBodies || _herd.registry() == nullptr)
+        return false;
+
+    const core::u32 identity = _nextId++;
+
+    ecology::Genome stock{};
+    if (species == 1u)
+    {
+        stock.size = math::Fixed32::fromFloat(1.4f);
+        stock.maxSpeed = math::Fixed32::fromFloat(5.0f);
+    }
+    else
+    {
+        stock.size = math::Fixed32::fromFloat(0.9f);
+        stock.maxSpeed = math::Fixed32::fromFloat(3.5f);
+    }
+    const ecology::Genome genome = ecology::mutate(stock, 8u, 0.18f, _heredity);
+
+    for (core::u32 attempt = 0u; attempt < 24u; ++attempt)
+    {
+        math::Fixed32 x{};
+        math::Fixed32 z{};
+        if (!placeAt(random, attempt, x, z))
+            continue;
+        ecs::Archetype archetype;
+        archetype.add(ecs::ComponentId::Position);
+        archetype.add(ecs::ComponentId::Velocity);
+        archetype.add(ecs::ComponentId::AABB);
+        archetype.add(ecs::ComponentId::Genome);
+        archetype.add(ecs::ComponentId::Creature);
+        archetype.add(ecs::ComponentId::Heading);
+
+        ecs::Registry &registry = *_herd.registry();
+        auto created = registry.createEntity(archetype);
+        if (!created.has_value())
+            return false;
+        const ecs::EntityId entity = created.value();
+
+        const math::Fixed32 vx = random.unit() - math::Fixed32::half();
+        const math::Fixed32 vz = random.unit() - math::Fixed32::half();
+
+        if (!writeBody(registry, entity, species, identity, genome, x, z, vx, vz))
+        {
+            (void) registry.destroyEntity(entity);
+            return false;
+        }
+        _herd.add(entity);
+        return true;
+    }
+    return false;
+}
+
+template <typename PlaceAt> inline void LivingLayer::reconcile(core::u32 tick, PlaceAt &&placeAt)
+{
+    math::Random stock{_seed ^ (0xB0D533u + tick)};
+    _herd.reconcile(
+        _params.speciesCount, [this](core::u32 species) { return bodiesFor(species); },
+        [this, &stock, &placeAt](core::u32 species) { return spawn(stock, species, placeAt); });
+}
+
+inline bool LivingLayer::writeBody(ecs::Registry &registry, ecs::EntityId entity, core::u32 species, core::u32 identity,
+                                   const ecology::Genome &genome, math::Fixed32 x, math::Fixed32 z, math::Fixed32 vx,
+                                   math::Fixed32 vz)
+{
+    auto ref = registry.resolve(entity);
+    if (!ref.has_value())
+        return false;
+    for (const auto &part : registry.partitions())
+    {
+        if (!part || !part->archetype().has(ecs::ComponentId::Creature))
+            continue;
+        const auto &chunks = part->chunks();
+        if (ref.value().chunkIndex >= static_cast<core::u32>(chunks.size()) || !chunks[ref.value().chunkIndex])
+            continue;
+        auto &chunk = *chunks[ref.value().chunkIndex];
+        const auto entities = chunk.entities();
+        if (ref.value().localIndex >= entities.size() || entities[ref.value().localIndex] != entity)
+            continue;
+        const core::u32 slot = ref.value().localIndex;
+
+        if (auto *p = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Position)))
+            p[slot] = {x, math::Fixed32{}, z};
+        if (auto *v = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::Velocity)))
+            v[slot] = {vx, math::Fixed32{}, vz};
+        if (auto *b = static_cast<math::Vec3<math::Fixed32> *>(chunk.writeComponent(ecs::ComponentId::AABB)))
+            b[slot] = {genome.size * math::Fixed32::half(), genome.size, genome.size * math::Fixed32::half()};
+        if (auto *g = static_cast<ecology::Genome *>(chunk.writeComponent(ecs::ComponentId::Genome)))
+            g[slot] = genome;
+        if (auto *c = static_cast<core::u32 *>(chunk.writeComponent(ecs::ComponentId::Creature)))
+        {
+            c[slot * 2u] = species;
+            c[slot * 2u + 1u] = identity;
+        }
+        if (auto *h = static_cast<math::Fixed32 *>(chunk.writeComponent(ecs::ComponentId::Heading)))
+        {
+            h[slot * 2u] = vx;
+            h[slot * 2u + 1u] = vz;
+        }
+        return true;
+    }
+    return false;
+}
+
+inline void LivingLayer::setProducerPopulation(core::u32 standing) noexcept
+{
+    if (!_web.species.empty() && standing != 0u)
+        _web.species[0].population = math::Fixed32::fromInt(static_cast<core::i32>(standing));
 }
 
 } // namespace lpl::engine

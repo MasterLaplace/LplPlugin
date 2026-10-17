@@ -42,6 +42,22 @@ public:
     ~MovementSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Writes each input-driven entity's velocity to the back buffer.
+     *
+     * Every entity with a Velocity and input registered gets the movement velocity of
+     * its current input state (WASD + neural BCI) — the legacy Systems.hpp "movement"
+     * lambda calling computeMovementVelocity() per entity and writing into
+     * _velocities[writeIdx].
+     *
+     * Fixed32 all the way through. The round trip to float and back that used to live
+     * here meant a player's velocity — authoritative state — passed through a float on
+     * one link of the chain; the one measurement that really comes from outside is
+     * quantised inside computeMovementVelocity, at the boundary, exactly once. An entity
+     * that moves is woken if it was sleeping (wake-on-input, through its optional
+     * SleepState).
+     */
     void execute(core::f32 dt) override;
 
 private:

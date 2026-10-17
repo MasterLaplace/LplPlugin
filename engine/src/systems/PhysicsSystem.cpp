@@ -1,23 +1,9 @@
-/**
- * @file PhysicsSystem.cpp
- * @brief Dispatches physics step through IPhysicsBackend + WorldPartition.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/engine/systems/PhysicsSystem.hpp>
 #include <lpl/math/FixedPoint.hpp>
 
 namespace lpl::engine::systems {
-
-// ========================================================================== //
-//  Descriptor                                                                //
-// ========================================================================== //
 
 static const ecs::ComponentAccess kPhysicsAccesses[] = {
     {ecs::ComponentId::Position, ecs::AccessMode::ReadWrite},
@@ -29,10 +15,6 @@ static const ecs::ComponentAccess kPhysicsAccesses[] = {
 static const ecs::SystemDescriptor kPhysicsDesc{"Physics", ecs::SchedulePhase::Physics,
                                                 std::span<const ecs::ComponentAccess>{kPhysicsAccesses}};
 
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
-
 struct PhysicsSystem::Impl {
     ecs::WorldPartition &world;
     physics::IPhysicsBackend &backend;
@@ -40,10 +22,6 @@ struct PhysicsSystem::Impl {
 
     Impl(ecs::WorldPartition &w, physics::IPhysicsBackend &b, ecs::Registry &r) : world{w}, backend{b}, registry{r} {}
 };
-
-// ========================================================================== //
-//  Public                                                                    //
-// ========================================================================== //
 
 PhysicsSystem::PhysicsSystem(ecs::WorldPartition &world, physics::IPhysicsBackend &backend, ecs::Registry &registry)
     : _impl{pmr::make_unique<Impl>(world, backend, registry)}
@@ -56,13 +34,8 @@ const ecs::SystemDescriptor &PhysicsSystem::descriptor() const noexcept { return
 
 void PhysicsSystem::execute(core::f32 dt)
 {
-    // 1. Run physics integration, collision, sleeping on all chunks
     [[maybe_unused]] auto res = _impl->backend.step(dt);
 
-    // 2. Spatial migration: re-assign entities to correct cells after physics
-    //    Iterate all partitions/chunks that have Position and update the
-    //    spatial index. insertOrUpdate is a no-op if the entity's Morton
-    //    code hasn't changed (fast early-exit).
     const auto &partitions = _impl->registry.partitions();
     for (const auto &partition : partitions)
     {
@@ -75,8 +48,6 @@ void PhysicsSystem::execute(core::f32 dt)
             if (count == 0)
                 continue;
 
-            // Read from the write buffer (post-physics positions) — already
-            // authoritative Fixed32, no float conversion needed anymore.
             auto *positions =
                 static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position));
             if (!positions)
@@ -91,7 +62,6 @@ void PhysicsSystem::execute(core::f32 dt)
         }
     }
 
-    // 3. WorldPartition::step() for GPU dispatch (future)
     _impl->world.step(dt);
 }
 

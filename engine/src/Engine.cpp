@@ -1,13 +1,3 @@
-/**
- * @file Engine.cpp
- * @brief Engine façade implementation.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/engine/Config.hpp>
@@ -42,9 +32,6 @@
 #include <lpl/engine/systems/MovementSystem.hpp>
 #include <lpl/engine/systems/PhysicsSystem.hpp>
 
-// The networked session (transport, sessions, netcode, the systems that feed
-// them) is a host feature: it needs a sockets stack. LPL_HAS_NET keeps it out
-// of the freestanding kernel build, where net/ is not compiled at all.
 #ifdef LPL_HAS_NET
 #    include <lpl/engine/systems/AoiBroadcastSystem.hpp>
 #    include <lpl/engine/systems/BroadcastSystem.hpp>
@@ -74,8 +61,6 @@
 #    include <lpl/render/VulkanRenderer.hpp>
 #endif
 
-// The BCI stack pulls in eigen / liblsl / brainflow and re-enables exceptions;
-// none of that exists freestanding.
 #ifdef LPL_HAS_BCI
 #    include <lpl/bci/BciAdapter.hpp>
 #    include <lpl/bci/SourceBciDriver.hpp>
@@ -84,39 +69,49 @@
 
 namespace lpl::engine {
 
+/**
+ * @brief The engine's state.
+ *
+ * The networked session (transport, sessions, netcode, the systems that feed them) is
+ * a host feature: it needs a sockets stack. LPL_HAS_NET keeps it out of the
+ * freestanding kernel build, where net/ is not compiled at all. The BCI stack pulls in
+ * eigen / liblsl / brainflow and re-enables exceptions; none of that exists
+ * freestanding, so LPL_HAS_BCI keeps it out too.
+ */
 struct Engine::Impl {
     Config config;
     pmr::unique_ptr<platform::IPlatform> platform;
-    // The one game World the engine hosts. Injected by the caller (its game), or
-    // a default empty World when none is given. The World owns the authoritative
-    // Registry, its scheduler and (on demand) its spatial index; the engine holds
-    // no game state of its own. A server build owns many Worlds above the engine;
-    // a client / solo / kernel build runs exactly this one.
+    /**
+     * The one game World the engine hosts. Injected by the caller (its game), or
+     * a default empty World when none is given. The World owns the authoritative
+     * Registry, its scheduler and (on demand) its spatial index; the engine holds
+     * no game state of its own. A server build owns many Worlds above the engine;
+     * a client / solo / kernel build runs exactly this one.
+     */
     pmr::unique_ptr<World> world;
     GameLoop loop;
 
-    // The per-frame arena's block is reserved ONCE through the platform seam
-    // (malloc on a host, a kernel reservation in ring 0) and then bump-allocated
-    // from — so no allocator call happens on a tick's path, which is what the
-    // freestanding REAL_TIME mode requires (kmalloc refuses to serve a hot loop).
+    /**
+     * The per-frame arena's block is reserved ONCE through the platform seam
+     * (malloc on a host, a kernel reservation in ring 0) and then bump-allocated
+     * from — so no allocator call happens on a tick's path, which is what the
+     * freestanding REAL_TIME mode requires (kmalloc refuses to serve a hot loop).
+     */
     void *arenaBlock;
     memory::ArenaAllocator arena;
-    // The World's ECS storage arena. Distinct from the frame arena above and
-    // NEVER reset while the World lives: chunks allocated from it must survive
-    // across frames. Bounding it here is what stops a World from eating the
-    // whole kernel heap the way the old un-budgeted spatial index did.
+    /**
+     * The World's ECS storage arena. Distinct from the frame arena above and
+     * NEVER reset while the World lives: chunks allocated from it must survive
+     * across frames. Bounding it here is what stops a World from eating the
+     * whole kernel heap the way the old un-budgeted spatial index did.
+     */
     void *worldArenaBlock;
     memory::ArenaAllocator worldArena;
-    ResourceManager resources; ///< Shared asset cache handed to the World's hooks.
+    ResourceManager resources; /**< Shared asset cache handed to the World's hooks. */
     input::InputManager inputManager;
     core::CommandQueue commandQueue;
 
 #ifdef LPL_HAS_NET
-    // The built-in physics backend steps the entities the networked server
-    // spawns. A client/kernel World is driven by its game instead, so it is not
-    // built there — otherwise it would step an empty registry every tick. (The
-    // spatial index is NOT here: it belongs to the World, enabled on demand by
-    // any game with a large map, networked or solo.)
     pmr::unique_ptr<net::session::SessionManager> sessionManager;
     pmr::unique_ptr<net::netcode::INetcodeStrategy> netcode;
     std::shared_ptr<net::transport::ITransport> transport;
@@ -125,15 +120,22 @@ struct Engine::Impl {
     EventQueues eventQueues;
     pmr::unique_ptr<physics::IPhysicsBackend> physicsBackend;
 #ifdef LPL_HAS_CUDA
-    pmr::unique_ptr<gpu::IComputeBackend> computeBackend; // owns the GPU dispatch backend
+    pmr::unique_ptr<gpu::IComputeBackend> computeBackend; /**< Owns the GPU dispatch backend. */
 #endif
 
-    // Client-side state (set by WelcomeSystem)
-    // The client's own avatar id, assigned by the server's welcome. kNull (not 0)
-    // means "unset": 0 is a valid ECS id — the server's first player — so it must
-    // not double as the sentinel, or that player would read as unconnected.
+    /**
+     * @name Client-side state (set by WelcomeSystem)
+     * @{
+     */
+
+    /**
+     * The client's own avatar id, assigned by the server's welcome. kNull (not 0)
+     * means "unset": 0 is a valid ECS id — the server's first player — so it must
+     * not double as the sentinel, or that player would read as unconnected.
+     */
     core::u32 myEntityId{ecs::EntityId::kNull};
     bool connected{false};
+    /** @} */
 
 #ifdef LPL_HAS_RENDERER
     systems::CameraData cameraData{};
@@ -143,9 +145,11 @@ struct Engine::Impl {
 
     bool initialised{false};
 
-    /// Real-time violation counter sampled once the World is up. The counter is
-    /// global and the kernel's tests bump it before we start, so only the DELTA from
-    /// this baseline says anything about our own tick.
+    /**
+     * Real-time violation counter sampled once the World is up. The counter is
+     * global and the kernel's tests bump it before we start, so only the DELTA from
+     * this baseline says anything about our own tick.
+     */
     core::u32 realTimeViolationBaseline{0};
     core::u32 realTimeBoundedBaseline{0};
     core::u64 stepsTaken{0};
@@ -155,8 +159,10 @@ struct Engine::Impl {
     pmr::unique_ptr<bci::BciAdapter> bciAdapter;
 #endif
 
-    /// Services handed to the World's hooks; refers to members above, so it is
-    /// declared after them and lives exactly as long as the engine.
+    /**
+     * Services handed to the World's hooks; refers to members above, so it is
+     * declared after them and lives exactly as long as the engine.
+     */
     WorldContext worldContext;
 
     Impl(Config cfg, pmr::unique_ptr<platform::IPlatform> plat, pmr::unique_ptr<World> game, Engine &owner)
@@ -170,9 +176,11 @@ struct Engine::Impl {
     {
     }
 
+    /**
+     * @brief Hands the arenas' blocks back to the platform: the arenas never owned them.
+     */
     ~Impl()
     {
-        // The arenas never owned these blocks; the platform did.
         platform->memory().release(arenaBlock, config.arenaSize());
         platform->memory().release(worldArenaBlock, config.worldArenaSize());
     }
@@ -216,9 +224,6 @@ core::Expected<void> Engine::init()
 {
     core::Log::info("Engine::init — wiring subsystems");
 
-    // Probe the injected platform seam (clock / display / input / GPU-memory),
-    // the hosted mirror of the engine test `kernel_platform`. The engine reaches every
-    // host or kernel facility exclusively through these backends.
     {
         platform::IPlatform &plat = *_impl->platform;
         platform::SurfaceDescriptor surface;
@@ -238,7 +243,6 @@ core::Expected<void> Engine::init()
     {
         core::Log::info("Engine: Booting Server");
 
-        // Try kernel transport first, fallback to socket if unavailable
         auto kernelTransport = std::make_shared<net::transport::KernelTransport>("/dev/lpl0");
         if (auto res = kernelTransport->open(); res)
         {
@@ -264,7 +268,6 @@ core::Expected<void> Engine::init()
     {
         core::Log::info("Engine: Booting Client");
 
-        // Client uses socket transport by default (same-machine dev friendly)
         auto socketTransport = std::make_shared<net::transport::SocketTransport>(0);
         if (auto res = socketTransport->open(); !res)
         {
@@ -273,9 +276,6 @@ core::Expected<void> Engine::init()
         }
         core::Log::info("Engine: Using SocketTransport (client default)");
 
-        // Send connect handshake to server and register default destination
-        // so that InputSendSystem can call sendInputs(transport, nullptr, ...)
-        // without carrying the server address.
         {
             net::Endpoint serverAddr{};
             if (!net::Endpoint::parse(_impl->config.serverAddress().c_str(), _impl->config.serverPort(), serverAddr))
@@ -293,7 +293,6 @@ core::Expected<void> Engine::init()
                 core::Log::info("Engine: Connect handshake sent to server");
             }
 
-            // Pre-register server address as default destination for all future sends.
             socketTransport->setDefaultDest(serverAddr);
         }
 
@@ -325,7 +324,6 @@ core::Expected<void> Engine::init()
             return res;
         }
 
-        // Let the Vulkan Renderer bind to the GLFW Window
         auto &vkRenderer = static_cast<render::vk::VulkanRenderer &>(*_impl->renderer);
         vkRenderer.initVulkanContext(_impl->window);
     }
@@ -336,30 +334,11 @@ core::Expected<void> Engine::init()
     }
 #endif
 
-    // ------------------------------------------------------------------ //
-    //  Built-in system groups (selected by Config, see Config::Builder)    //
-    //                                                                      //
-    //  These are engine-provided and game-agnostic. Which groups a World    //
-    //  gets is declared in the Config; the game's OWN systems and content   //
-    //  are registered by World::onInit further down. Nothing here knows     //
-    //  about any particular game.                                           //
-    // ------------------------------------------------------------------ //
-
-    // Physics: a spatial broad-phase index plus the integrator that steps the
-    // World's entities. NOT a networking feature — a solo large-map game wants
-    // it just as much as a server, so it is selected by Config::enablePhysics
-    // alone. A game that does its own broad-phase (samples::CubePile keeps an
-    // octree inside its backend) simply turns it off.
     if (_impl->config.enablePhysics())
     {
         core::Log::info("Engine: Registering built-in physics systems");
         _impl->world->enableSpatialPartition(math::Fixed32::fromFloat(10.0f), _impl->config.worldCellCapacity());
 
-        // The CPU backend is the deterministic reference. When the GPU module is
-        // enabled (Config::enableGpu) and a CUDA build is available, the
-        // GpuPhysicsBackend bridge drives the physics_tick compute kernel
-        // instead; collision/sleeping stay on the CPU. The selection is behind
-        // LPL_HAS_CUDA so non-CUDA hosts never reference the bridge.
 #ifdef LPL_HAS_CUDA
         if (_impl->config.enableGpu())
         {
@@ -401,9 +380,6 @@ core::Expected<void> Engine::init()
         auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
         [[maybe_unused]] auto r3 = _impl->world->scheduler().registerSystem(std::move(movement));
 
-        // Interest-managed broadcast when a radius is set, full broadcast otherwise
-        // (mirrors engine::Server::registerInstanceSystems). Zero keeps the current
-        // full-state fallback.
         if (_impl->config.interestRadius() > math::Fixed32::zero())
         {
             auto broadcast = pmr::make_unique<systems::AoiBroadcastSystem>(
@@ -451,9 +427,6 @@ core::Expected<void> Engine::init()
         auto movement = pmr::make_unique<systems::MovementSystem>(_impl->inputManager, _impl->world->registry());
         [[maybe_unused]] auto r5 = _impl->world->scheduler().registerSystem(std::move(movement));
 
-        // §6.4: tell the server what our authoritative state hashed to, so a
-        // divergence between its simulation and ours is detected rather than
-        // silently drifting.
         auto hashReport =
             pmr::make_unique<systems::StateHashReportSystem>(*_impl->world, _impl->transport, _impl->connected);
         [[maybe_unused]] auto rHash = _impl->world->scheduler().registerSystem(std::move(hashReport));
@@ -476,10 +449,6 @@ core::Expected<void> Engine::init()
     }
 #endif // LPL_HAS_NET
 
-    // ------------------------------------------------------------------ //
-    //  BCI subsystem (client-only, when enableBci is set)               //
-    // ------------------------------------------------------------------ //
-
 #ifdef LPL_HAS_BCI
     if (_impl->config.enableBci() && !_impl->config.serverMode())
     {
@@ -500,13 +469,6 @@ core::Expected<void> Engine::init()
     }
 #endif // LPL_HAS_BCI
 
-    // ------------------------------------------------------------------ //
-    //  Game World setup                                                    //
-    // ------------------------------------------------------------------ //
-
-    // Before the World creates a single entity: its chunk storage comes from the
-    // bounded persistent arena, not the heap. Chunks built after this point never
-    // call the allocator on a tick's path.
     if (_impl->worldArenaBlock != nullptr)
         _impl->world->registry().setAllocator(&_impl->worldArena);
 
@@ -517,8 +479,6 @@ core::Expected<void> Engine::init()
         return res;
     }
 
-    // Baselines, never absolutes: these counters are global and the kernel's own
-    // tests move them well before the engine ever runs a step.
     _impl->realTimeViolationBaseline = _impl->platform->memory().realTimeViolationCount();
     _impl->realTimeBoundedBaseline = _impl->platform->memory().realTimeBoundedCount();
     _impl->initialised = true;
@@ -530,13 +490,8 @@ void Engine::run()
 {
     LPL_ASSERT(_impl->initialised);
 
-    // A malformed system graph is not recoverable, and std::abort does not exist
-    // freestanding; LPL_VERIFY routes to the kernel halt primitive there.
     LPL_VERIFY(_impl->world->scheduler().buildGraph().has_value());
 
-    // Insert buffer swap between Physics and Network phases so that
-    // Broadcast/Render systems read the freshly-computed physics data
-    // (mirrors legacy PreSwap → swapBuffers → PostSwap pattern).
     _impl->world->scheduler().setPhaseCallback(ecs::SchedulePhase::Physics,
                                                [this]() { _impl->world->registry().swapAllBuffers(); });
 
@@ -549,19 +504,15 @@ void Engine::run()
         [[maybe_unused]] auto r = _impl->inputManager.poll();
 
 #ifdef LPL_HAS_BCI
-        // Poll BCI adapter and feed neural data into InputManager
         if (_impl->bciAdapter)
         {
             if (auto result = _impl->bciAdapter->update(); result.has_value())
             {
                 const auto &neural = result.value();
                 if (_impl->myEntityId != ecs::EntityId::kNull)
-                    _impl->inputManager.setNeural(_impl->myEntityId,
-                                                  neural.channels[0].toFloat(),       // alpha
-                                                  neural.channels[1].toFloat(),       // beta
-                                                  neural.channels[2].toFloat(),       // concentration
-                                                  neural.channels[3].toFloat() > 0.5f // blink
-                    );
+                    _impl->inputManager.setNeural(_impl->myEntityId, neural.channels[0].toFloat(),
+                                                  neural.channels[1].toFloat(), neural.channels[2].toFloat(),
+                                                  neural.channels[3].toFloat() > 0.5f);
             }
         }
 #endif // LPL_HAS_BCI
@@ -575,10 +526,6 @@ void Engine::run()
         }
 #endif
 
-        // Advance the World one authoritative step, inside a real-time section:
-        // on a backend that enforces it the heap refuses to allocate here, so an
-        // allocation-free tick is proven rather than assumed. Everything the step
-        // needs was reserved up front (the World's persistent arena).
         const bool guarded = _impl->config.enableRealTimeGuard();
         if (guarded)
             _impl->platform->memory().beginRealTimeSection();
@@ -587,8 +534,6 @@ void Engine::run()
         if (guarded)
             _impl->platform->memory().endRealTimeSection();
 
-        // Report once, after enough steps that any warm-up allocation would have
-        // shown up: did the authoritative tick ever ask the heap for memory?
         constexpr core::u64 kRealTimeProbeSteps = 120;
         if (!_impl->realTimeReported && ++_impl->stepsTaken >= kRealTimeProbeSteps)
         {
@@ -597,9 +542,6 @@ void Engine::run()
                 _impl->platform->memory().realTimeViolationCount() - _impl->realTimeViolationBaseline;
             const auto bounded = _impl->platform->memory().realTimeBoundedCount() - _impl->realTimeBoundedBaseline;
 
-            // Three outcomes, not two: a tick can hold its deadline (no
-            // unbounded path taken) while still doing O(1) heap traffic that is
-            // worth removing for throughput.
             core::Log::info(!guarded   ? "Engine: real-time guard off — allocation behaviour unmeasured" :
                             violations ? "Engine: authoritative tick takes an UNBOUNDED allocation path" :
                             bounded    ? "Engine: authoritative tick is deadline-safe but still touches the heap" :
@@ -620,10 +562,6 @@ void Engine::run()
             requestShutdown();
         }
 #endif
-        // The same question, asked of the display seam rather than of one windowing library.
-        // A scanout answers false and pays nothing; a window answers when its close button is
-        // pressed. Asked BEFORE the world draws, so the frame after a close request is not one
-        // the host has to keep a surface alive for.
         if (_impl->platform->display().shouldClose())
         {
             requestShutdown();

@@ -1,13 +1,3 @@
-/**
- * @file PacketDispatch.cpp
- * @brief Shared packet decoding implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-22
- * @copyright MIT License
- */
-
 #include <lpl/engine/PacketDispatch.hpp>
 
 #ifdef LPL_HAS_NET
@@ -21,9 +11,12 @@ namespace lpl::engine::detail {
 
 namespace {
 
-/// Reads a [u16 count][32-byte entity]* body into @p out. Shared by the full
-/// StateSnapshot and by the AOI EntitySpawn / StateDelta packets, which carry the
-/// exact same entity layout.
+/**
+ * @brief Reads a [u16 count][32-byte entity]* body into @p out.
+ *
+ * Shared by the full StateSnapshot and by the AOI EntitySpawn / StateDelta packets,
+ * which carry the exact same entity layout.
+ */
 void readEntitySnapshots(net::protocol::Bitstream &stream, pmr::vector<StateEntity> &out)
 {
     auto countResult = stream.readU16();
@@ -81,8 +74,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     switch (header.type)
     {
     case net::protocol::PacketType::Handshake: {
-        // The address the packet actually came from is authoritative; the
-        // handshake payload's self-reported address is not consulted.
         ConnectEvent ev{};
         ev.source = fromAddr;
         queues.connects.push(ev);
@@ -90,7 +81,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     }
 
     case net::protocol::PacketType::Disconnect: {
-        // The sender's address is authoritative; the payload (if any) is ignored.
         DisconnectEvent ev{};
         ev.source = fromAddr;
         queues.disconnects.push(ev);
@@ -120,8 +110,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     }
 
     case net::protocol::PacketType::EntitySpawn: {
-        // AOI: entities that just entered the client's interest radius. Full
-        // snapshot, so the client can create them exactly as a StateSnapshot does.
         EntitySpawnEvent ev{};
         ev.seq = header.sequence;
         net::protocol::Bitstream stream{
@@ -134,18 +122,12 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     }
 
     case net::protocol::PacketType::StateDelta: {
-        // AOI: field-masked delta of entities the client already holds and that
-        // stayed in range (§6.2.5). Each entity carries only the fields that
-        // changed against what the server last sent; absent fields are left to
-        // reconciliation, which merges onto the state the client already holds.
         StateDeltaEvent ev{};
         ev.seq = header.sequence;
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
         };
-        // A Compressed StateDelta is a far-ring group (§6.2.6): its positions are
-        // quantized, prefixed by [posBits][extent] so the client can dequantize.
         const bool quantized = net::protocol::hasFlag(header.flags, net::protocol::PacketFlag::Compressed);
         core::u32 posBits = 0;
         float extent = 0.0f;
@@ -188,7 +170,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     }
 
     case net::protocol::PacketType::EntityDestroy: {
-        // AOI: entities that left the client's interest radius — ids only.
         EntityDestroyEvent ev{};
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
@@ -217,8 +198,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
              payloadSize * 8
         };
 
-        // tick and digest are 64-bit; the Bitstream tops out at 32, so each goes
-        // out as an explicit high/low pair rather than widening its API.
         auto rTickHigh = stream.readU32();
         auto rTickLow = stream.readU32();
         auto rDigestHigh = stream.readU32();
@@ -235,7 +214,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
     }
 
     case net::protocol::PacketType::SnapshotAck: {
-        // Client confirms it has applied every snapshot up to a sequence (§6.2.5).
         net::protocol::Bitstream stream{
             std::span<const core::byte>{payload, payloadSize},
              payloadSize * 8
@@ -300,7 +278,6 @@ void dispatchPacket(const net::protocol::PacketHeader &header, std::span<const c
             }
         }
 
-        // Neural data (3 floats + 1 bool)
         auto rAlpha = stream.readFloat();
         auto rBeta = stream.readFloat();
         auto rConc = stream.readFloat();

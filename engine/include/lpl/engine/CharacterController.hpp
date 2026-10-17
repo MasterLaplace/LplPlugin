@@ -68,10 +68,10 @@ namespace lpl::engine {
  * jump that clears about a metre and a quarter.
  */
 struct CharacterParams {
-    math::Fixed32 walkSpeed{math::Fixed32::fromFloat(6.0f)};       ///< Cells per second.
-    math::Fixed32 sprintScale{math::Fixed32::fromFloat(1.9f)};     ///< Multiplier while sprinting.
-    math::Fixed32 acceleration{math::Fixed32::fromFloat(38.0f)};   ///< Cells per second squared.
-    math::Fixed32 groundFriction{math::Fixed32::fromFloat(30.0f)}; ///< Deceleration with no input.
+    math::Fixed32 walkSpeed{math::Fixed32::fromFloat(6.0f)};       /**< Cells per second. */
+    math::Fixed32 sprintScale{math::Fixed32::fromFloat(1.9f)};     /**< Multiplier while sprinting. */
+    math::Fixed32 acceleration{math::Fixed32::fromFloat(38.0f)};   /**< Cells per second squared. */
+    math::Fixed32 groundFriction{math::Fixed32::fromFloat(30.0f)}; /**< Deceleration with no input. */
     /**
      * @brief Share of ground acceleration available in mid-air.
      *
@@ -81,11 +81,11 @@ struct CharacterParams {
      */
     math::Fixed32 airControl{math::Fixed32::fromFloat(0.34f)};
 
-    math::Fixed32 gravity{math::Fixed32::fromFloat(22.0f)};      ///< Cells per second squared, downward.
-    math::Fixed32 terminalFall{math::Fixed32::fromFloat(55.0f)}; ///< Fastest downward speed.
-    math::Fixed32 jumpSpeed{math::Fixed32::fromFloat(7.4f)};     ///< Upward speed at take-off.
+    math::Fixed32 gravity{math::Fixed32::fromFloat(22.0f)};      /**< Cells per second squared, downward. */
+    math::Fixed32 terminalFall{math::Fixed32::fromFloat(55.0f)}; /**< Fastest downward speed. */
+    math::Fixed32 jumpSpeed{math::Fixed32::fromFloat(7.4f)};     /**< Upward speed at take-off. */
 
-    math::Fixed32 eyeHeight{math::Fixed32::fromFloat(1.7f)}; ///< Eye above the feet.
+    math::Fixed32 eyeHeight{math::Fixed32::fromFloat(1.7f)}; /**< Eye above the feet. */
     /**
      * @brief How tall the body is, for deciding what it fits under.
      *
@@ -111,7 +111,7 @@ struct CharacterParams {
      * against run needs a multiply.
      */
     math::Fixed32 maxSlope{math::Fixed32::fromFloat(1.30f)};
-    math::Fixed32 slideSpeed{math::Fixed32::fromFloat(4.5f)}; ///< Downhill drift on ground too steep.
+    math::Fixed32 slideSpeed{math::Fixed32::fromFloat(4.5f)}; /**< Downhill drift on ground too steep. */
 
     /**
      * @brief Ticks after walking off a ledge during which a jump still works.
@@ -141,10 +141,10 @@ struct CharacterParams {
  * yaw, and the caller's yaw is the float one belonging to a camera.
  */
 struct CharacterIntent {
-    math::Fixed32 forward{}; ///< +1 walks toward the heading, -1 backs away.
-    math::Fixed32 strafe{};  ///< +1 sidesteps right.
-    math::Fixed32 turn{};    ///< Radians added to the heading this tick.
-    bool jump{false};        ///< Jump pressed THIS tick (an edge, not a hold).
+    math::Fixed32 forward{}; /**< +1 walks toward the heading, -1 backs away. */
+    math::Fixed32 strafe{};  /**< +1 sidesteps right. */
+    math::Fixed32 turn{};    /**< Radians added to the heading this tick. */
+    bool jump{false};        /**< Jump pressed THIS tick (an edge, not a hold). */
     bool sprint{false};
 };
 
@@ -169,6 +169,52 @@ public:
     /**
      * @brief One authoritative tick: intent, gravity, ground, slope, jump.
      *
+     * The phases run in a fixed order, and each place in it is a decision:
+     *
+     * - Heading: Fixed32 and CORDIC, not a float yaw and a libm sine. This is what keeps
+     *   the POSITION authoritative: the walk direction comes from here.
+     * - Desired horizontal velocity: the same convention OrbitCamera walks by, so the
+     *   body and the view agree about which way "forward" points. Diagonal input must not
+     *   be faster than straight input: normalising only when the magnitude exceeds one
+     *   keeps a half-pressed direction slow, which an unconditional normalise would
+     *   silently turn into a full-speed walk.
+     * - Jump: buffered on the way in and forgiven on the way out, so the two ways a player
+     *   legitimately mistimes a jump both work. Ordered BEFORE gravity: a jump taken this
+     *   tick should get its whole upward speed, not one already shaved by a tick of fall.
+     * - Gravity, while airborne, down to the terminal fall speed.
+     * - Move: horizontally first and one axis at a time, so a wall on one axis does not
+     *   cancel the other.
+     * - Slope: BEFORE the vertical resolution, and horizontal only. Both of those are the
+     *   fix to a bug the probe caught: the slide used to end by snapping the body onto
+     *   whatever ground it had slid over, so walking off a cliff teleported the walker to
+     *   the bottom of it in a single tick, still reported as standing. Sliding down
+     *   something steep is a FALL that has started — it moves you sideways, and gravity
+     *   does the rest through the ordinary ground check. The steepness is measured by
+     *   sampling one cell along each axis rather than by an angle: comparing a rise
+     *   against a run is a subtraction, and an angle would need an arctangent nothing here
+     *   is allowed to call. Downhill is where the ground DROPS, so the step is against the
+     *   gradient — sliding uphill would be the sign error to make here. NOT under a roof,
+     *   and that exclusion is load-bearing rather than tidy. A gallery floor is quantised
+     *   to whole voxel levels, so every level change reads as a slope steeper than any
+     *   walkable one and a body underground would slide continuously — into a wall, where
+     *   the vertical pass has to put it somewhere and every somewhere is wrong. A cave
+     *   floor is a floor: it is what it is, and you stand on it.
+     * - Vertical: last, against the ground under wherever the horizontal move and the
+     *   slide ended up. The other order tests the fall against the cell being LEFT rather
+     *   than the one being entered, which is how a body walks into the air and stays
+     *   there — or drops into the floor. Landing kills downward speed only: clearing an
+     *   UPWARD velocity there would eat the first tick of every jump, because a jump starts
+     *   at ground level and is therefore still "at or below" it. In the air nothing is
+     *   underfoot to slide on. Coyote time counts down only while falling OFF something:
+     *   it was granted on the last landing, and a jump already consumed it.
+     * - Head: after the ground, because a body that is both standing and scraping is
+     *   standing: clamping to the ceiling first and then to the floor would let a gap
+     *   shorter than the body push it under its own floor, which is the one place it can
+     *   never be. The clamp is floored at the ground for the same reason — in a gap it
+     *   should not have been able to enter, it stands crushed rather than sinking. It
+     *   kills upward speed only: killing a downward one would hold a body up against a
+     *   ceiling it is falling away from.
+     *
      * @param dt      Fixed timestep. FIXED is not a detail: the whole point of a
      *                deterministic step is that it is the same length every time,
      *                and a controller integrated with a frame-dependent dt puts the
@@ -181,12 +227,17 @@ public:
     void step(const CharacterParams &params, const CharacterIntent &intent, math::Fixed32 dt, SpaceAt &&spaceAt);
 
     [[nodiscard]] math::Fixed32 x() const noexcept { return _x; }
-    [[nodiscard]] math::Fixed32 y() const noexcept { return _y; } ///< Feet, not eye.
+    /**
+     * @brief Feet, not eye.
+     */
+    [[nodiscard]] math::Fixed32 y() const noexcept { return _y; }
     [[nodiscard]] math::Fixed32 z() const noexcept { return _z; }
     [[nodiscard]] math::Fixed32 yaw() const noexcept { return _yaw; }
     [[nodiscard]] math::Fixed32 verticalSpeed() const noexcept { return _vy; }
 
-    /** @brief Horizontal speed, for a readout or a walk cycle. */
+    /**
+     * @brief Horizontal speed, for a readout or a walk cycle.
+     */
     [[nodiscard]] math::Fixed32 groundSpeed() const noexcept { return math::fixedSqrt(_vx * _vx + _vz * _vz); }
 
     [[nodiscard]] bool isGrounded() const noexcept { return _grounded; }
@@ -199,17 +250,29 @@ public:
      * reads it to decide there is no sky, which is the allowed direction.
      */
     [[nodiscard]] bool isEnclosed() const noexcept { return _enclosed; }
-    /** @brief Underside of the rock over the body; procgen::openSky under the open sky. */
+    /**
+     * @brief Underside of the rock over the body; procgen::openSky under the open sky.
+     */
     [[nodiscard]] math::Fixed32 ceilingHeight() const noexcept { return _ceiling; }
-    /** @brief Times a move was refused because the gap ahead was too low to enter. */
+    /**
+     * @brief Times a move was refused because the gap ahead was too low to enter.
+     */
     [[nodiscard]] core::u32 duckedCount() const noexcept { return _ducked; }
-    /** @brief Times the body's head met a ceiling. */
+    /**
+     * @brief Times the body's head met a ceiling.
+     */
     [[nodiscard]] core::u32 headBumpCount() const noexcept { return _headBumps; }
-    /** @brief Ticks since the body last touched ground; 0 while standing. */
+    /**
+     * @brief Ticks since the body last touched ground; 0 while standing.
+     */
     [[nodiscard]] core::u32 airborneTicks() const noexcept { return _airborneTicks; }
-    /** @brief Jumps taken since the body was placed — a cheap liveness readout. */
+    /**
+     * @brief Jumps taken since the body was placed — a cheap liveness readout.
+     */
     [[nodiscard]] core::u32 jumpCount() const noexcept { return _jumps; }
-    /** @brief Times a move was refused because the rise ahead was a wall. */
+    /**
+     * @brief Times a move was refused because the rise ahead was a wall.
+     */
     [[nodiscard]] core::u32 blockedCount() const noexcept { return _blocked; }
 
     void setYaw(math::Fixed32 radians) noexcept { _yaw = radians; }
@@ -217,14 +280,41 @@ public:
     /**
      * @brief FNV-1a over the authoritative state.
      *
-     * The body is simulation, so it folds. Position, velocity, heading and the two
+     * The body is simulation, so it folds. Position, velocity, heading and the
      * booleans that decide what the next tick does — nothing presentational, or the
-     * signature would move when the camera did.
+     * signature would move when the camera did. Enclosed is one of them: it decides
+     * whether the body slides, so it decides where the body will be. It is state, not
+     * presentation, and a signature that omitted it would call two diverging runs
+     * identical for exactly one tick.
      */
     [[nodiscard]] core::u32 fold(core::u32 seed = 0x811C9DC5u) const noexcept;
 
 private:
-    /** @brief Advances one axis, refusing the move if it walks into a wall or under a low roof. */
+    /**
+     * @brief Advances one axis, refusing the move if it walks into a wall or under a low roof.
+     *
+     * Only a body ON the ground can be stopped by a step. In mid-air the same rise is a
+     * hillside the jump is arcing over, and refusing the move there pins the player
+     * against invisible walls in open sky.
+     *
+     * A wall undoes the axis rather than the whole move: refusing both axes at once makes
+     * a body walking into a corner stop dead, when what it should do is slide along the
+     * face it did not hit. Two independent axis tests give that for free — which is the
+     * same reason the collision resolver tests axes separately.
+     *
+     * A gap too low to stand in is a wall the OTHER way round, and it has to be refused
+     * here rather than resolved vertically afterwards. Let the move through and the body
+     * is inside rock: the vertical pass then has to put it somewhere, and every somewhere
+     * is either a teleport onto the hill or a fall through the floor. Refusing the step is
+     * the only answer that leaves the body where it was. It is measured against the FLOOR
+     * IT WOULD STAND ON, not against its current height: stepping up into a gap and
+     * standing in it are the same act, and a test against the old height passes a body
+     * under a slab it cannot then fit beneath.
+     *
+     * A rise the body CAN take is taken immediately, feet first: a heightfield has no ramp
+     * between two cells, so a walker that waited for gravity would spend every step
+     * falling a few centimetres and never report as grounded.
+     */
     template <typename SpaceAt>
     void moveAxis(const CharacterParams &params, math::Fixed32 &coordinate, math::Fixed32 delta, SpaceAt &&spaceAt);
 
@@ -251,7 +341,6 @@ private:
 
 } // namespace lpl::engine
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/engine/CharacterController.inl>
+#    include "CharacterController.inl"
 
 #endif // LPL_ENGINE_CHARACTER_CONTROLLER_HPP

@@ -56,10 +56,10 @@ namespace lpl::engine {
  * to be able to tell a demon that finished from one that gave up.
  */
 enum class ThinkOutcome : core::u8 {
-    Concluded = 0,   ///< The planner had nothing left worth doing.
-    BudgetExhausted, ///< It ran out of turns with work outstanding.
-    Stuck,           ///< It repeated itself and the world stopped answering differently.
-    NoLegalMove      ///< Every fix the critics suggested is currently ungated.
+    Concluded = 0,   /**< The planner had nothing left worth doing. */
+    BudgetExhausted, /**< It ran out of turns with work outstanding. */
+    Stuck,           /**< It repeated itself and the world stopped answering differently. */
+    NoLegalMove      /**< Every fix the critics suggested is currently ungated. */
 };
 
 /**
@@ -68,11 +68,11 @@ enum class ThinkOutcome : core::u8 {
  */
 struct ThinkResult {
     ThinkOutcome outcome{ThinkOutcome::Concluded};
-    core::u32 turns{0u};         ///< Turns actually taken.
-    core::u32 acts{0u};          ///< Calls that were accepted.
-    core::u32 refusals{0u};      ///< Calls the validator or the world rejected.
-    core::u32 defectsBefore{0u}; ///< Defects the critics saw on entry.
-    core::u32 defectsAfter{0u};  ///< Defects still standing on exit.
+    core::u32 turns{0u};         /**< Turns actually taken. */
+    core::u32 acts{0u};          /**< Calls that were accepted. */
+    core::u32 refusals{0u};      /**< Calls the validator or the world rejected. */
+    core::u32 defectsBefore{0u}; /**< Defects the critics saw on entry. */
+    core::u32 defectsAfter{0u};  /**< Defects still standing on exit. */
 
     /**
      * @brief Whether the world ends up sound: no defect the critics can name.
@@ -99,6 +99,19 @@ public:
 
     /**
      * @brief Runs the loop until it concludes or @p budget runs out.
+     *
+     * Everything the planner sees is recomputed every turn. That is the point of
+     * regenerating the grammar each step: a plan made against a stale picture of the
+     * world is a plan that earns a refusal.
+     *
+     * A call is validated before it acts, and a refusal is recorded rather than
+     * swallowed: an agent that is told WHY it was refused can do better next turn, and
+     * one that is silently ignored cannot. An accepted `generate_world` call and its
+     * report are kept, so the asked-for-versus-got critics have something to judge;
+     * reading them off the transcript instead would work until somebody trimmed it.
+     *
+     * A budget spent with nothing left to do is not exhaustion; it is a conclusion that
+     * happened to land on the last turn.
      */
     [[nodiscard]] ThinkResult think(const InferenceBudget &budget);
 
@@ -135,9 +148,8 @@ private:
     agent::Dialogue _dialogue;
     std::string _goal;
 
-    /// The last `generate_world` call and its report, for the asked-for-vs-got critics.
-    std::string _lastRecipe;
-    std::string _lastGenerationReport;
+    std::string _lastRecipe; /**< The last accepted `generate_world` call, for the asked-for-vs-got critics. */
+    std::string _lastGenerationReport; /**< Its report, for the same critics. */
 };
 
 } // namespace lpl::engine

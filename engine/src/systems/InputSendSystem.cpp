@@ -34,7 +34,6 @@ void InputSendSystem::execute(core::f32 /*dt*/)
 
     net::protocol::Bitstream stream;
 
-    // EntityId (32 bits)
     stream.writeU32(_myEntityId);
 
 #ifdef LPL_HAS_RENDERER
@@ -52,16 +51,13 @@ void InputSendSystem::execute(core::f32 /*dt*/)
     stream.writeU16(0);
 #endif
 
-    // Axis count (8 bits)
     stream.writeU8(0);
 
-    // Neural data (3 floats + 1 bool = 97 bits)
     stream.writeFloat(state->neural.alpha);
     stream.writeFloat(state->neural.beta);
     stream.writeFloat(state->neural.concentration);
     stream.writeBool(state->blinkPrev);
 
-    // Convert bitstream to payload bytes
     auto payload = stream.data();
     std::vector<core::byte> payloadVec{payload.begin(), payload.end()};
 

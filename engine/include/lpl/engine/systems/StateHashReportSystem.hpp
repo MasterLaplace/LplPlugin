@@ -54,9 +54,20 @@ public:
     ~StateHashReportSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Counts the tick and, every @c interval ticks once connected, reports.
+     *
+     * The tick counter advances whether or not the client is connected, so it keeps
+     * meaning "how many steps this world has taken" rather than "how many were
+     * reported". The report goes to no explicit address: the client transport already
+     * points at the server.
+     */
     void execute(core::f32 dt) override;
 
-    /** @brief Ticks this system has counted; the tick a report refers to. */
+    /**
+     * @brief Ticks this system has counted; the tick a report refers to.
+     */
     [[nodiscard]] core::u64 currentTick() const noexcept;
 
 private:

@@ -2,8 +2,8 @@
  * @file ServerMonitorSystem.hpp
  * @brief ECS system that logs server performance metrics periodically.
  *
- * Runs in the Network phase. Logs physics timing, entity counts,
- * chunk counts, and client counts every N frames.
+ * Runs in the Network phase. Logs the frame, client, cell and collected-cell
+ * counts every N frames.
  *
  * Server-side only.
  *
@@ -46,6 +46,17 @@ public:
     ~ServerMonitorSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Every @c logInterval frames, collects the empty cells and logs a heartbeat.
+     *
+     * The heartbeat used to be a fixed string, so it reported nothing a monitor is for,
+     * while the counters were gathered and dropped. The legacy server printed frame,
+     * clients, entities and chunks (see legacy apps/server/main.cpp "ServerMonitor");
+     * this line carries the instance, the frame, the clients, the cells and the cells
+     * collected. The system is host-only (it is gated behind LPL_HAS_NET, which no
+     * kernel build defines), so the host C library is available to format the counters.
+     */
     void execute(core::f32 dt) override;
 
 private:

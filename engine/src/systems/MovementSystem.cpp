@@ -1,21 +1,3 @@
-/**
- * @file MovementSystem.cpp
- * @brief Computes per-entity velocity from input state (WASD + neural BCI).
- *
- * Mirrors the legacy InputManager::computeMovementVelocity() pipeline:
- *   1. Neural concentration scales speed [0.70x .. 1.30x]
- *   2. WASD produces horizontal velocity
- *   3. Blink detection triggers jump (rising-edge, grounded-gated)
- *
- * The result is written back into the entity's velocity component via
- * WorldPartition::insertOrUpdate so the Physics system picks it up.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/ecs/Component.hpp>
 #include <lpl/ecs/Partition.hpp>
 #include <lpl/engine/systems/MovementSystem.hpp>
@@ -23,10 +5,6 @@
 #include <lpl/math/Vec3.hpp>
 
 namespace lpl::engine::systems {
-
-// ========================================================================== //
-//  Descriptor                                                                //
-// ========================================================================== //
 
 static const ecs::ComponentAccess kMovementAccesses[] = {
     {ecs::ComponentId::Velocity,      ecs::AccessMode::ReadWrite},
@@ -37,20 +15,12 @@ static const ecs::ComponentAccess kMovementAccesses[] = {
 static const ecs::SystemDescriptor kMovementDesc{"Movement", ecs::SchedulePhase::PrePhysics,
                                                  std::span<const ecs::ComponentAccess>{kMovementAccesses}};
 
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
-
 struct MovementSystem::Impl {
     input::InputManager &inputManager;
     ecs::Registry &registry;
 
     Impl(input::InputManager &im, ecs::Registry &reg) : inputManager{im}, registry{reg} {}
 };
-
-// ========================================================================== //
-//  Public                                                                    //
-// ========================================================================== //
 
 MovementSystem::MovementSystem(input::InputManager &inputManager, ecs::Registry &registry)
     : _impl{pmr::make_unique<Impl>(inputManager, registry)}
@@ -63,13 +33,6 @@ const ecs::SystemDescriptor &MovementSystem::descriptor() const noexcept { retur
 
 void MovementSystem::execute(core::f32 /*dt*/)
 {
-    // Iterate all chunks that have Velocity + entities known to InputManager.
-    // For each entity with input registered, compute movement velocity from
-    // its current input state (WASD + neural BCI), write to the back buffer.
-    //
-    // Legacy equivalent: Systems.hpp "movement" lambda calling
-    //   computeMovementVelocity() per entity and writing into _velocities[writeIdx].
-
     const auto &partitions = _impl->registry.partitions();
     for (const auto &part : partitions)
     {
@@ -90,10 +53,8 @@ void MovementSystem::execute(core::f32 /*dt*/)
             if (!velocities)
                 continue;
 
-            // Get entity IDs from the chunk
             auto entityIds = chunk->entities();
 
-            // Optional: SleepState for wake-on-input
             auto *sleepStates = part->archetype().has(ecs::ComponentId::SleepState) ?
                                     static_cast<core::u8 *>(chunk->writeComponent(ecs::ComponentId::SleepState)) :
                                     nullptr;
@@ -102,19 +63,12 @@ void MovementSystem::execute(core::f32 /*dt*/)
             {
                 const core::u32 eid = entityIds[i].raw();
 
-                // Only process entities that have input registered
                 if (!_impl->inputManager.hasEntity(eid))
                     continue;
 
-                // Fixed32 all the way through. The round trip to float and back
-                // that used to live here meant a player's velocity — authoritative
-                // state — passed through a float on one link of the chain; the one
-                // measurement that really comes from outside is quantised inside
-                // computeMovementVelocity, at the boundary, exactly once.
                 const math::Vec3<math::Fixed32> vel = _impl->inputManager.computeMovementVelocity(eid, velocities[i]);
                 velocities[i] = vel;
 
-                // Wake entity if velocity is non-zero and it was sleeping
                 const math::Fixed32 speedSq = vel.x * vel.x + vel.y * vel.y + vel.z * vel.z;
                 if (speedSq > math::Fixed32::fromFloat(0.0001f) && sleepStates && sleepStates[i] != 0)
                 {

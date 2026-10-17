@@ -50,6 +50,42 @@ public:
     ~SessionSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Handles this tick's departures, acks and arrivals.
+     *
+     * Departures first, so a slot freed this tick can be reused: explicit disconnects
+     * (the client asked to leave), then the idle timeout — a client that stopped sending
+     * is treated as gone. Input is the heartbeat (InputProcessingSystem touches the
+     * session every tick a client sends), so the timeout only fires for clients that
+     * truly went silent. Snapshot acks then advance each client's confirmed baseline
+     * sequence, so the AOI broadcast stops resending what that client has applied
+     * (§6.2.5).
+     *
+     * Arrivals keep legacy parity (SessionManager::handleConnections): a client is known
+     * by its endpoint, so a handshake from an address that already has a session is a
+     * retransmission — common on UDP — and must NOT spawn a second player. The previous
+     * check asked isDuplicate() about a freshly minted id, which by construction never
+     * collides, so it could never fire. A new client gets an entity with the full
+     * component set, as the legacy SessionManager::connect() built a full EntitySnapshot
+     * (Position, Velocity, Mass, AABB, Health), spawned at {0, 10, 0} (the legacy
+     * default) with zero velocity, unit mass, a {1, 2, 1} box, 100 health, and awake.
+     *
+     * ONE network identity: the entity's ECS id. The legacy keyed session, input and the
+     * welcome on a single publicId; the modern port had split it into a separate player
+     * counter (session/input) and the ECS id (broadcast/hash), so the input a client
+     * sent — tagged with the welcome id — never matched the entity MovementSystem drives
+     * (keyed by the ECS id), and the client could not find its own avatar in a snapshot.
+     * Keying everything on entityId.raw() closes the loop: welcome → client input →
+     * InputProcessing → Movement all name the same entity. When the session cannot be
+     * opened, the entity is destroyed again: a session id collision would leak it.
+     *
+     * The avatar is bound to the session: it is the client's centre of interest.
+     * AoiBroadcastSystem reads it back (Session::boundEntity) to know where to run the
+     * radius query; without the bind the session has a null entity and AOI could not
+     * place the client in the world. The welcome (HandshakeAck) then carries the
+     * entity id.
+     */
     void execute(core::f32 dt) override;
 
 private:

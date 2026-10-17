@@ -21,6 +21,16 @@ public:
     SpawnSystem(ecs::Registry &registry, const core::u32 &myEntityId, const bool &connected);
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Creates the local avatar once the welcome has named it.
+     *
+     * The avatar is created UNDER the server-assigned id (from the welcome), not a fresh
+     * local one — otherwise CameraSystem/input, which name the entity by its id, could
+     * never find it, and a reconciliation snapshot for the same id would spawn a second
+     * copy. Idempotent with StateReconciliation: whichever runs first, the other adopts
+     * the same live id.
+     */
     void execute(core::f32 dt) override;
 
 private:

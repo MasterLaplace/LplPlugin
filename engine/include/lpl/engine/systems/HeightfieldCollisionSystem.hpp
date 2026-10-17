@@ -67,6 +67,18 @@ public:
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override { return _descriptor; }
 
+    /**
+     * @brief Keeps every movable body over the map and on the ground, and slides the
+     *        ones that land along the downhill gradient, losing speed as they go.
+     *
+     * Position, Velocity, AABB and Mass ALL come from the write side. Mixing sides is a
+     * defect this system carried invisibly for as long as it lived in an app: AABB and
+     * Mass were read from the front buffer, which holds nothing until the first phase
+     * swap publishes it — so on tick one every body read mass zero, was taken for
+     * immovable, and nothing landed. One frame of nothing is not something an eye
+     * catches; it is the first thing a test does. A chunk without Velocity is scenery:
+     * it was never going to move, so there is nothing to correct.
+     */
     void execute(core::f32 dt) override;
 
     [[nodiscard]] core::u32 executions() const noexcept { return _executions; }
@@ -81,9 +93,13 @@ public:
      */
     [[nodiscard]] core::u32 resting() const noexcept { return _resting; }
 
-    /// How hard a slope pushes a resting body along it, per tick.
+    /**
+     * @brief How hard a slope pushes a resting body along it, per tick.
+     */
     void setSlide(core::f32 slide) noexcept { _slide = slide; }
-    /// What a resting body keeps of its horizontal speed each tick.
+    /**
+     * @brief What a resting body keeps of its horizontal speed each tick.
+     */
     void setFriction(core::f32 friction) noexcept { _friction = friction; }
 
 private:

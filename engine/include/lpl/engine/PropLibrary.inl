@@ -1,17 +1,5 @@
-/**
- * @file PropLibrary.inl
- * @brief Out-of-line definitions for engine::PropLibrary.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-28
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_ENGINE_PROP_LIBRARY_INL
-#    define LPL_ENGINE_PROP_LIBRARY_INL
+#define LPL_ENGINE_PROP_LIBRARY_INL
 
 namespace lpl::engine {
 
@@ -132,8 +120,6 @@ inline void PropLibrary::buildRocks(core::u32 seed)
         if (written < 4u)
             continue;
 
-        // Only the samples that bound a solid: a closed loop comes back through
-        // negative radius, and a negative radius revolved is inside out.
         core::f32 profileRadius[48];
         core::f32 profileHeight[48];
         core::u32 kept = 0u;
@@ -151,6 +137,35 @@ inline void PropLibrary::buildRocks(core::u32 seed)
         _rocks[variant] =
             render::revolveProfile(profileRadius, profileHeight, kept, 8u, seed ^ (0x8E1u * (variant + 1u)));
     }
+}
+
+template <typename HeightAt>
+inline core::u32 PropLibrary::drawRocks(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
+                                        const render::CameraBasis &basis, core::i32 originX, core::i32 originZ,
+                                        core::u32 size, core::f32 seaLevel, const math::Vec3<core::f32> &sunDirection,
+                                        core::f32 ambient, HeightAt &&heightAt) const
+{
+    core::u32 triangles = 0u;
+    for (core::u32 z = 0u; z < size; z += 4u)
+        for (core::u32 x = 0u; x < size; x += 4u)
+        {
+            const core::i32 cellX = originX + static_cast<core::i32>(x);
+            const core::i32 cellZ = originZ + static_cast<core::i32>(z);
+            core::u32 variant = 0u;
+            core::f32 scale = 1.0f;
+            if (!rockAt(cellX, cellZ, variant, scale))
+                continue;
+            const core::f32 ground = heightAt(x, z);
+            if (ground < seaLevel)
+                continue;
+            const core::f32 worldX = static_cast<core::f32>(cellX) + 0.5f;
+            const core::f32 worldZ = static_cast<core::f32>(cellZ) + 0.5f;
+            if (render::approximateLength(worldX - basis.eye.x, worldZ - basis.eye.z) > _params.propDistance)
+                continue;
+            triangles += render::drawRevolved(rt, mvp, _rocks[variant], worldX, ground, worldZ, scale,
+                                              _params.rockAlbedo, sunDirection, ambient);
+        }
+    return triangles;
 }
 
 } // namespace lpl::engine

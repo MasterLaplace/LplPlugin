@@ -115,11 +115,44 @@ public:
      * has each replicated position axis quantized to @p posBits bits over
      * [-worldExtent, worldExtent] instead of a full float, in a StateDelta marked
      * Compressed. Near-ring entities keep full precision. @p posBits must be a
-     * multiple of 8 (else it falls back to 16). A zero @p worldExtent disables it.
+     * multiple of 8 (else it falls back to 16): byte-aligned only, so quantized
+     * positions mix cleanly with full-width fields. A zero @p worldExtent disables it.
      */
     void setPrecisionLod(math::Fixed32 worldExtent, core::u32 posBits) noexcept;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Sends each connected client what is near its avatar, as a delta against
+     *        what that client was last told about.
+     *
+     * One snapshot pass over the whole world; each session then filters it by its own
+     * radius. This is what turns O(clients × N) serialisation into O(N) +
+     * O(clients × neighbours). A session with no avatar yet, or whose avatar is not in
+     * the world this tick, has nothing to centre the query on and gets nothing. The
+     * neighbours are those within the radius — grid-cell granular, an interest query
+     * rather than exact geometry — that have a record this tick, and they are diffed
+     * against what the client already knows:
+     *
+     * - EntitySpawn (0x20), the entities newly inside the radius: [u16 count] then 32
+     *   bytes each, the StateSnapshot layout
+     *   [id:4][posX:4][posY:4][posZ:4][sizeX:4][sizeY:4][sizeZ:4][hp:4]. A spawn is a
+     *   full snapshot. In the optimistic model it becomes the delta baseline
+     *   immediately; in the strict model the baseline waits for the client's ack, so it
+     *   is recorded as "sent at this sequence".
+     * - StateDelta (0x12), the entities still inside: [u16 count] then, per entity,
+     *   [id:4][mask:1] and the fields its mask names, as field-masked deltas; a far-ring
+     *   group carries the Compressed flag and quantized positions.
+     * - EntityDestroy (0x21), the entities that left the radius: [u16 count][u32]*.
+     *   They are no longer replicated to that client, and leave its baseline.
+     *
+     * The neighbour set becomes what the client now knows: swapped, not copied, since
+     * the scratch is cleared at the top of the next session anyway. The per-client
+     * memory (known set AND delta baseline) of clients that are gone is dropped, so a
+     * disconnected player's state does not linger — and a recycled playerId does not
+     * inherit a stale set or baseline. Every datagram of the tick is handed to the
+     * transport in one sendBatch, the same batching win broadcastState takes.
+     */
     void execute(core::f32 dt) override;
 
 private:
