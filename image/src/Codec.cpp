@@ -1,19 +1,12 @@
-/**
- * @file Codec.cpp
- * @brief Portable PPM (P6) encode/decode — deterministic, freestanding-safe.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-28
- * @copyright MIT License
- */
 #include <lpl/image/Codec.hpp>
 
 namespace lpl::image {
 
 namespace {
 
-/// Append the decimal digits of @p value to @p out.
+/**
+ * @brief Append the decimal digits of @p value to @p out.
+ */
 void appendUint(pmr::vector<core::u8> &out, core::u32 value)
 {
     char digits[10];
@@ -32,14 +25,16 @@ void appendUint(pmr::vector<core::u8> &out, core::u32 value)
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
 }
 
-/// Parser cursor over a PPM header.
+/** @brief Parser cursor over a PPM header. */
 struct Cursor {
     const core::u8 *data;
     core::usize length;
     core::usize pos;
 };
 
-/// Skip whitespace and '#' comment lines.
+/**
+ * @brief Skip whitespace and '#' comment lines.
+ */
 void skipBlanks(Cursor &c) noexcept
 {
     while (c.pos < c.length)
@@ -55,7 +50,9 @@ void skipBlanks(Cursor &c) noexcept
     }
 }
 
-/// Parse a non-negative decimal integer; false if no digits were found.
+/**
+ * @brief Parse a non-negative decimal integer; false if no digits were found.
+ */
 [[nodiscard]] bool parseUint(Cursor &c, core::u32 &out) noexcept
 {
     skipBlanks(c);
@@ -114,7 +111,6 @@ bool readPpm(const core::u8 *data, core::usize length, Image &out)
     if (maxval != 255u || width == 0u || height == 0u)
         return false;
 
-    // Exactly one whitespace byte separates the header from the pixel data.
     if (c.pos >= length || !isSpace(data[c.pos]))
         return false;
     ++c.pos;

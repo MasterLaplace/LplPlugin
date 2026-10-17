@@ -1,19 +1,14 @@
-/**
- * @file Painter.cpp
- * @brief Integer 2D drawing primitives (Bresenham line, midpoint circle, blit).
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-28
- * @copyright MIT License
- */
 #include <lpl/image/Painter.hpp>
 
 namespace lpl::image {
 
 namespace {
 
-/// Source-over composite of @p src over @p dst using 0..255 integer alpha.
+/**
+ * @brief Source-over composite of @p src over @p dst using 0..255 integer alpha.
+ *
+ * The resulting coverage is sa + da*(1-sa).
+ */
 [[nodiscard]] Rgba composite(Rgba dst, Rgba src) noexcept
 {
     const core::u32 sa = alphaOf(src);
@@ -29,7 +24,6 @@ namespace {
     const core::u8 r = chan(redOf(src), redOf(dst));
     const core::u8 g = chan(greenOf(src), greenOf(dst));
     const core::u8 b = chan(blueOf(src), blueOf(dst));
-    // Resulting coverage: sa + da*(1-sa).
     const core::u32 da = alphaOf(dst);
     const core::u8 a = static_cast<core::u8>(sa + (da * ia + 127u) / 255u);
     return packRgba(r, g, b, a);
@@ -48,7 +42,6 @@ void Painter::fillRect(core::i32 x, core::i32 y, core::i32 w, core::i32 h, Rgba 
 {
     if (w <= 0 || h <= 0)
         return;
-    // Clip to the surface up front so the inner loop is branch-light.
     const core::i32 x0 = (x < 0) ? 0 : x;
     const core::i32 y0 = (y < 0) ? 0 : y;
     const core::i32 x1 =
@@ -64,10 +57,10 @@ void Painter::drawRect(core::i32 x, core::i32 y, core::i32 w, core::i32 h, Rgba 
 {
     if (w <= 0 || h <= 0)
         return;
-    drawLine(x, y, x + w - 1, y, color);                 // top
-    drawLine(x, y + h - 1, x + w - 1, y + h - 1, color); // bottom
-    drawLine(x, y, x, y + h - 1, color);                 // left
-    drawLine(x + w - 1, y, x + w - 1, y + h - 1, color); // right
+    drawLine(x, y, x + w - 1, y, color);
+    drawLine(x, y + h - 1, x + w - 1, y + h - 1, color);
+    drawLine(x, y, x, y + h - 1, color);
+    drawLine(x + w - 1, y, x + w - 1, y + h - 1, color);
 }
 
 void Painter::drawLine(core::i32 x0, core::i32 y0, core::i32 x1, core::i32 y1, Rgba color) noexcept
@@ -104,7 +97,7 @@ void Painter::drawCircle(core::i32 cx, core::i32 cy, core::i32 radius, Rgba colo
         return;
     core::i32 x = radius;
     core::i32 y = 0;
-    core::i32 err = 1 - radius; // midpoint decision variable
+    core::i32 err = 1 - radius;
 
     while (x >= y)
     {
@@ -134,8 +127,6 @@ void Painter::fillCircle(core::i32 cx, core::i32 cy, core::i32 radius, Rgba colo
     const core::i32 r2 = radius * radius;
     for (core::i32 dy = -radius; dy <= radius; ++dy)
     {
-        // Half-width of the disc at this row: floor(sqrt(r^2 - dy^2)) via a
-        // bounded integer scan (no libm), kept deterministic.
         const core::i32 rem = r2 - dy * dy;
         core::i32 dx = 0;
         while ((dx + 1) * (dx + 1) <= rem)
