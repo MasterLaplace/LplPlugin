@@ -1,12 +1,3 @@
-/**
- * @file Minimap.cpp
- * @brief Cutting a plane out of the mosaic the caller passes, and putting the eye on it.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/std/cmath.hpp>
 #include <lpl/voxel/Minimap.hpp>
 
@@ -18,20 +9,24 @@ namespace lpl::voxel {
 
 namespace {
 
-/// The heading is drawn as a ring when the squared length of its projection into the slice is at most this.
+/** The heading is drawn as a ring when the squared length of its projection into the slice is at most this. */
 constexpr core::f32 kRingInPlaneLengthSquared = 0.05f;
 
-/// The ring around the dot, from 5.5 to 7 pixels out.
+/**
+ * @name The ring around the dot, from 5.5 to 7 pixels out
+ * @{
+ */
 constexpr core::i32 kRingInnerRadiusSquared = 30;
 constexpr core::i32 kRingOuterRadiusSquared = 49;
+/** @} */
 
-/// The dot that marks the eye, about 2.2 pixels in radius.
+/** The dot that marks the eye, about 2.2 pixels in radius. */
 constexpr core::i32 kDotRadiusSquared = 5;
 
-/// Pixels between two points of the heading line.
+/** Pixels between two points of the heading line. */
 constexpr core::f32 kHeadingStepPixels = 0.5f;
 
-/// Volume axes, in (z, y, x) order: along the slice's columns, along its rows, and across it.
+/** Volume axes, in (z, y, x) order: along the slice's columns, along its rows, and across it. */
 struct SliceAxes final {
     core::u32 u;
     core::u32 v;
@@ -70,7 +65,7 @@ constexpr SliceAxes kAcrossX{.u = 1u, .v = 0u, .normal = 2u};
            style.top <= frameHeight - style.height;
 }
 
-/// The panel's rectangle in the caller's frame. Coordinates are panel pixels from its top-left corner.
+/** The panel's rectangle in the caller's frame. Coordinates are panel pixels from its top-left corner. */
 struct Panel final {
     core::u32 *pixels;
     core::u32 frameWidth;
@@ -84,7 +79,11 @@ struct Panel final {
         return x >= 0.0f && y >= 0.0f && x < static_cast<core::f32>(width) && y < static_cast<core::f32>(height);
     }
 
-    /// @pre @p x < @ref width and @p y < @ref height.
+    /**
+     * @brief Paints one pixel of the panel.
+     *
+     * @pre @p x < @ref width and @p y < @ref height.
+     */
     void put(core::u32 x, core::u32 y, core::u32 colour) const noexcept
     {
         pixels[static_cast<core::usize>(top + y) * frameWidth + left + x] = colour;
@@ -102,9 +101,11 @@ struct PanelPoint final {
     core::f32 y;
 };
 
-/// The darkest non-zero sample of a slice and the distance to its brightest. A fixed window would show a flat
-/// grey on one volume and pure white on the next -- the failure the main renderer's density window exists to
-/// avoid, one panel smaller. A sample of 0 is the mask, not a density, so it takes no part.
+/**
+ * The darkest non-zero sample of a slice and the distance to its brightest. A fixed window would show a flat
+ * grey on one volume and pure white on the next -- the failure the main renderer's density window exists to
+ * avoid, one panel smaller. A sample of 0 is the mask, not a density, so it takes no part.
+ */
 struct ContrastWindow final {
     core::u8 lowest;
     core::f32 span;
@@ -179,7 +180,10 @@ void drawFrame(const Panel &panel, core::u32 colour) noexcept
                             static_cast<core::f32>(panel.height - 1u))};
 }
 
-/// Every pixel whose offset (dx, dy) from @p centre has dx * dx + dy * dy between the two bounds, inclusive.
+/**
+ * @brief Paints every pixel whose offset (dx, dy) from @p centre has dx * dx + dy * dy between the two bounds,
+ * inclusive.
+ */
 void stampAnnulus(const Panel &panel, PanelPoint centre, core::i32 innerRadiusSquared, core::i32 outerRadiusSquared,
                   core::u32 colour) noexcept
 {

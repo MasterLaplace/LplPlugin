@@ -35,9 +35,9 @@ namespace lpl::voxel {
  * @brief The shape of one scanned volume and the scale it is walked at.
  */
 struct VolumeGeometry final {
-    core::i64 samples[3]{0, 0, 0};    ///< Level-0 extent, in (z, y, x) order -- the zarr axis order.
-    core::u32 levels{1u};             ///< Published pyramid levels, finest first.
-    core::f32 voxelMicrometres{1.0f}; ///< Edge of one level-0 sample, in micrometres.
+    core::i64 samples[3]{0, 0, 0};    /**< Level-0 extent, in (z, y, x) order -- the zarr axis order. */
+    core::u32 levels{1u};             /**< Published pyramid levels, finest first. */
+    core::f32 voxelMicrometres{1.0f}; /**< Edge of one level-0 sample, in micrometres. */
 
     /**
      * How many metres of walked world one micrometre of scroll becomes.
@@ -52,37 +52,41 @@ struct VolumeGeometry final {
      */
     core::f32 metresPerMicrometre{1.0f};
 
-    [[nodiscard]] constexpr bool valid() const noexcept
-    {
-        return samples[0] > 0 && samples[1] > 0 && samples[2] > 0 && levels > 0u && levels <= kMaxPyramidLevels &&
-               voxelMicrometres > 0.0f && metresPerMicrometre > 0.0f;
-    }
+    [[nodiscard]] constexpr bool valid() const noexcept;
 
-    /// @return Edge of one level-0 sample, in walked metres.
+    /**
+     * @brief Scale of one sample in the walked world.
+     *
+     * @return Edge of one level-0 sample, in walked metres.
+     */
     [[nodiscard]] constexpr core::f32 metresPerSample() const noexcept
     {
         return voxelMicrometres * metresPerMicrometre * 1e-6f;
     }
 
-    /// @return Extent of the whole volume along @p axis, in walked metres.
+    /**
+     * @brief Size of the volume in the walked world.
+     *
+     * @return Extent of the whole volume along @p axis, in walked metres.
+     */
     [[nodiscard]] constexpr core::f32 extentMetres(core::u32 axis) const noexcept
     {
         return static_cast<core::f32>(samples[axis]) * metresPerSample();
     }
 
-    /// @return Level-0 samples along @p axis at @p level, rounded up the way the pyramid rounds.
-    [[nodiscard]] constexpr core::i64 samplesAtLevel(core::u32 axis, core::u32 level) const noexcept
-    {
-        const core::i64 d = static_cast<core::i64>(1) << level;
-        return (samples[axis] + d - 1) / d;
-    }
+    /**
+     * @brief Extent of the volume at one pyramid level.
+     *
+     * @return Level-0 samples along @p axis at @p level, rounded up the way the pyramid rounds.
+     */
+    [[nodiscard]] constexpr core::i64 samplesAtLevel(core::u32 axis, core::u32 level) const noexcept;
 
-    /// @return Bricks along @p axis at @p level.
-    [[nodiscard]] constexpr core::i32 bricksAtLevel(core::u32 axis, core::u32 level) const noexcept
-    {
-        const core::i64 n = samplesAtLevel(axis, level);
-        return static_cast<core::i32>((n + kBrickEdge - 1) / kBrickEdge);
-    }
+    /**
+     * @brief Extent of the volume at one pyramid level, in bricks.
+     *
+     * @return Bricks along @p axis at @p level.
+     */
+    [[nodiscard]] constexpr core::i32 bricksAtLevel(core::u32 axis, core::u32 level) const noexcept;
 };
 
 /**
@@ -97,10 +101,10 @@ struct VolumeGeometry final {
  * scanned at another energy on another beamline, to land anywhere near that.
  */
 struct DensityProfile final {
-    core::u8 floorSample{0};   ///< Below this, nothing is drawn: the medium, not a sheet.
-    core::u8 sheetSample{255}; ///< At and above this, a sheet is fully present.
-    core::f32 mean{0.0f};      ///< Mean of non-empty samples at level 0.
-    core::f32 deviation{1.0f}; ///< Standard deviation of non-empty samples at level 0.
+    core::u8 floorSample{0};   /**< Below this, nothing is drawn: the medium, not a sheet. */
+    core::u8 sheetSample{255}; /**< At and above this, a sheet is fully present. */
+    core::f32 mean{0.0f};      /**< Mean of non-empty samples at level 0. */
+    core::f32 deviation{1.0f}; /**< Standard deviation of non-empty samples at level 0. */
 
     /**
      * Standard deviation at each level, divided by the level-0 one.
@@ -119,7 +123,11 @@ struct DensityProfile final {
 
     [[nodiscard]] constexpr bool valid() const noexcept { return sheetSample > floorSample; }
 
-    /// @return Where the bulk of the matter sits: everything below this is medium, not structure.
+    /**
+     * @brief The density @p deviations standard deviations above the mean.
+     *
+     * @return Where the bulk of the matter sits: everything below this is medium, not structure.
+     */
     [[nodiscard]] constexpr core::f32 bulkCeiling(core::f32 deviations) const noexcept
     {
         return mean + deviation * deviations;
@@ -145,6 +153,18 @@ struct DensityProfile final {
  * top -- structure against a transparent medium -- while three paints everything and renders fog.
  * The first run of this renderer derived the width from a low percentile and did exactly that: a
  * plausible cream-coloured haze with no sheets in it.
+ *
+ * The window: its upper edge is where the requested fraction of matter starts, and its floor
+ * sits a stated number of measured deviations below. A second quantile would let the window
+ * invert on a narrow distribution, and an inverted window renders black without saying why;
+ * a width in raw sample values would be calibrated on one instrument and wrong on the next.
+ *
+ * The floor is never allowed below the bulk, whatever width was asked for. The distribution of
+ * a carbonised roll is narrow -- matter spans about three deviations -- so a window of one
+ * deviation can still reach past the mean and start painting the medium. It did: the first
+ * real frames had a floor at 143 against a mean of 145, so more than half of every sample
+ * painted and the picture saturated within a metre. Whatever else the width says, the medium is
+ * what sits near the mean, and the medium must stay out of the way.
  */
 [[nodiscard]] DensityProfile measureProfile(const BrickView *bricks, core::u32 count, core::f32 quantile,
                                             core::f32 windowDeviations = 1.0f) noexcept;
@@ -165,6 +185,11 @@ struct DensityProfile final {
  * neutral default: it leaves a curve calibrated on the finest level painting the entire histogram
  * a few levels up, which is exactly what makes a level of detail visible as tiling.
  *
+ * Each brick counts only the part of it that falls inside the box: that is what makes the
+ * comparison between levels a comparison of the SAME region. The finest level with anything in
+ * the box is the reference; below it there is nothing to compare against, and inventing a
+ * reference would be worse than leaving the ratios alone.
+ *
  * @param profile     Filled in place; only @ref DensityProfile::spreadRatio is touched.
  * @param mosaic      The resident set.
  * @param centre      Box centre, in level-0 samples, (z, y, x).
@@ -175,5 +200,7 @@ void measureSpreadOverBox(DensityProfile &profile, const BrickMosaic &mosaic, co
                           core::i64 halfExtent) noexcept;
 
 } // namespace lpl::voxel
+
+#    include "Volume.inl"
 
 #endif // LPL_VOXEL_VOLUME_HPP

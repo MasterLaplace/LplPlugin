@@ -1,21 +1,14 @@
-/**
- * @file Mosaic.cpp
- * @brief The resident set, and the rule that the finest brick wins.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/voxel/Mosaic.hpp>
 
 namespace lpl::voxel {
 
 namespace {
 
-/// Mixes a key into a slot: FNV-1a-style over the four fields, with an xorshift after each one so that a
-/// plane of bricks -- which is what a resident set mostly is -- does not collapse onto a handful of
-/// slots.
+/**
+ * @brief Mixes a key into a slot: FNV-1a-style over the four fields, with an xorshift after each one so that a
+ * plane of bricks -- which is what a resident set mostly is -- does not collapse onto a handful of
+ * slots.
+ */
 [[nodiscard]] core::u32 hashKey(const BrickKey &key) noexcept
 {
     core::u32 h = 2166136261u;
@@ -58,7 +51,6 @@ void BrickMosaic::reindex() noexcept
     for (core::u32 i = 0u; i < _count; ++i)
     {
         core::u32 slot = hashKey(_bricks[i].key) & (kSlots - 1u);
-        // Linear probing. The table is four times the capacity, so a probe run is short.
         for (core::u32 tries = 0u; tries < kSlots; ++tries)
         {
             if (_index[slot] == 0u)
@@ -92,8 +84,6 @@ bool BrickMosaic::insert(const BrickView &brick) noexcept
     if (!brick.valid() || _count >= kMaxResidentBricks || brick.key.level >= kMaxPyramidLevels)
         return false;
 
-    // Replacing rather than appending: two bricks with one key would both answer lookups, and
-    // which one answered would depend on insertion order -- the very thing find() exists to fix.
     for (core::u32 i = 0u; i < _count; ++i)
     {
         if (_bricks[i].key == brick.key)
@@ -143,7 +133,6 @@ bool BrickMosaic::contains(const BrickKey &key) const noexcept { return lookup(k
 
 const BrickView *BrickMosaic::find(core::i64 bz, core::i64 by, core::i64 bx) const noexcept
 {
-    // Finest first: the header of Mosaic.hpp says why that order is the contract.
     for (core::u32 level = 0u; level < kMaxPyramidLevels; ++level)
     {
         if ((_levelMask & (1u << level)) == 0u)

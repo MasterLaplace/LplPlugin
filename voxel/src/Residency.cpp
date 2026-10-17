@@ -1,19 +1,14 @@
-/**
- * @file Residency.cpp
- * @brief Emitting brick requests nearest-first, so a small budget loses the horizon.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/voxel/Residency.hpp>
 
 namespace lpl::voxel {
 
 namespace {
 
-/// @return Whether the brick is inside the subject at its own level.
+/**
+ * @brief Tells whether a brick lies in the volume.
+ *
+ * @return Whether the brick is inside the subject at its own level.
+ */
 bool insideSubject(const VolumeGeometry &geometry, const BrickKey &key) noexcept
 {
     const core::i32 idx[3]{key.z, key.y, key.x};
@@ -45,10 +40,6 @@ core::u32 planResidency(const VolumeGeometry &geometry, const ResidencyParams &p
 
     core::u32 written = 0u;
 
-    // Shell by shell, and inside a shell every level: at radius zero that is the column straight
-    // through the eye at every resolution, so a truncated plan still has something everywhere and
-    // full detail underfoot. Emitting level by level instead would spend the whole budget on the
-    // finest level and leave the far field blank; emitting outward-in would drop the near field.
     for (core::i32 r = 0; r <= radius && written < budget; ++r)
     {
         for (core::u32 level = finest; level <= coarsest && written < budget; ++level)
@@ -63,8 +54,6 @@ core::u32 planResidency(const VolumeGeometry &geometry, const ResidencyParams &p
                 {
                     for (core::i32 dx = -r; dx <= r && written < budget; ++dx)
                     {
-                        // Only the shell: the interior was emitted by a smaller radius, and
-                        // re-emitting it would let one duplicate push a real brick past the budget.
                         const core::i32 az = dz < 0 ? -dz : dz;
                         const core::i32 ay = dy < 0 ? -dy : dy;
                         const core::i32 ax = dx < 0 ? -dx : dx;

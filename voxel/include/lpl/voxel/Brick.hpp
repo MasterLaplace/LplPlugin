@@ -31,27 +31,27 @@
 
 namespace lpl::voxel {
 
-/// Samples along one brick edge. The published chunk shape; see the file header.
+/** Samples along one brick edge. The published chunk shape; see the file header. */
 inline constexpr core::u32 kBrickEdge = 128u;
 
-/// log2 of @ref kBrickEdge. Named rather than open-coded so the two cannot drift apart.
+/** log2 of @ref kBrickEdge. Named rather than open-coded so the two cannot drift apart. */
 inline constexpr core::u32 kBrickEdgeShift = 7u;
 static_assert((1u << kBrickEdgeShift) == kBrickEdge, "the shift and the edge must describe one number");
 
-/// Samples in a whole brick.
+/** Samples in a whole brick. */
 inline constexpr core::u32 kBrickVoxels = kBrickEdge * kBrickEdge * kBrickEdge;
 
-/// Levels the published pyramid carries: level 0 is finest, each step halves every axis.
+/** Levels the published pyramid carries: level 0 is finest, each step halves every axis. */
 inline constexpr core::u32 kMaxPyramidLevels = 8u;
 
-/// Occupancy cells along one brick edge. Each covers @ref kBrickEdge / this samples.
+/** Occupancy cells along one brick edge. Each covers @ref kBrickEdge / this samples. */
 inline constexpr core::u32 kOccupancyEdge = 8u;
 
-/// log2 of the samples one occupancy cell spans.
+/** log2 of the samples one occupancy cell spans. */
 inline constexpr core::u32 kOccupancyShift = 4u;
 static_assert((kOccupancyEdge << kOccupancyShift) == kBrickEdge, "the cell grid must tile the brick");
 
-/// Bytes an occupancy grid needs: one low and one high per cell.
+/** Bytes an occupancy grid needs: one low and one high per cell. */
 inline constexpr core::u32 kOccupancyBytes = kOccupancyEdge * kOccupancyEdge * kOccupancyEdge * 2u;
 
 /**
@@ -63,10 +63,10 @@ inline constexpr core::u32 kOccupancyBytes = kOccupancyEdge * kOccupancyEdge * k
  * cannot go negative turns a subtraction into a wraparound at the origin.
  */
 struct BrickKey final {
-    core::u32 level{0u}; ///< Pyramid level; 0 is finest.
-    core::i32 z{0};      ///< Brick index along the scroll axis.
-    core::i32 y{0};      ///< Brick index along Y.
-    core::i32 x{0};      ///< Brick index along X.
+    core::u32 level{0u}; /**< Pyramid level; 0 is finest. */
+    core::i32 z{0};      /**< Brick index along the scroll axis. */
+    core::i32 y{0};      /**< Brick index along Y. */
+    core::i32 x{0};      /**< Brick index along X. */
 
     [[nodiscard]] constexpr bool operator==(const BrickKey &rhs) const noexcept
     {
@@ -79,10 +79,10 @@ struct BrickKey final {
  * @brief A resident brick: the bytes, where they belong, and what is in them.
  */
 struct BrickView final {
-    const core::u8 *voxels{nullptr}; ///< kBrickVoxels bytes, C order (z, y, x). Not owned.
-    BrickKey key{};                  ///< Which brick these bytes are.
-    core::u8 lowest{255};            ///< Smallest sample in the brick.
-    core::u8 highest{0};             ///< Largest sample in the brick.
+    const core::u8 *voxels{nullptr}; /**< kBrickVoxels bytes, C order (z, y, x). Not owned. */
+    BrickKey key{};                  /**< Which brick these bytes are. */
+    core::u8 lowest{255};            /**< Smallest sample in the brick. */
+    core::u8 highest{0};             /**< Largest sample in the brick. */
 
     /**
      * Low and high per @ref kOccupancyEdge cubed cell, or null.
@@ -102,19 +102,18 @@ struct BrickView final {
     const core::u8 *occupancy{nullptr};
 
     /**
+     * @brief Reads the occupancy grid at a sample.
+     *
      * @return Highest sample in the cell containing the given LOCAL coordinates.
      * @pre @ref occupancy is set, and each coordinate is below @ref kBrickEdge.
      */
-    [[nodiscard]] constexpr core::u8 cellHighest(core::u32 lz, core::u32 ly, core::u32 lx) const noexcept
-    {
-        const core::u32 cell = ((lz >> kOccupancyShift) * kOccupancyEdge + (ly >> kOccupancyShift)) * kOccupancyEdge +
-                               (lx >> kOccupancyShift);
-        return occupancy[cell * 2u + 1u];
-    }
+    [[nodiscard]] constexpr core::u8 cellHighest(core::u32 lz, core::u32 ly, core::u32 lx) const noexcept;
 
     [[nodiscard]] constexpr bool valid() const noexcept { return voxels != nullptr; }
 
     /**
+     * @brief Reads one sample of the brick.
+     *
      * @return Sample at the given LOCAL coordinates.
      * @pre @ref valid(), and each coordinate is below @ref kBrickEdge.
      */
@@ -157,11 +156,7 @@ void summariseCells(BrickView &brick, core::u8 *out) noexcept;
  * @param axis  0 for z, 1 for y, 2 for x: the zarr order of @ref BrickKey.
  * @pre @p axis < 3; any larger value reads x.
  */
-[[nodiscard]] constexpr core::i64 brickOriginInBaseSamples(const BrickKey &key, core::u32 axis) noexcept
-{
-    const core::i32 index = axis == 0u ? key.z : (axis == 1u ? key.y : key.x);
-    return static_cast<core::i64>(index) * brickSpanInBaseSamples(key.level);
-}
+[[nodiscard]] constexpr core::i64 brickOriginInBaseSamples(const BrickKey &key, core::u32 axis) noexcept;
 
 /**
  * @brief Which brick of @p level contains the level-0 sample at @p base, on one axis.
@@ -169,14 +164,15 @@ void summariseCells(BrickView &brick, core::u8 *out) noexcept;
  * @warning Floor division, not truncation. C++ truncates toward zero, so `-1 / 128` is `0` and the
  * brick just below the origin would collide with the brick just above it. That is the same trap
  * this project already paid on a wrapped column index, and the fix is the same one.
+ *
+ * An arithmetic shift rather than a division: a brick span is always a power of two, so the
+ * shift IS the floor division, negatives included, where the old form paid a division and a
+ * modulo. It matters because this is the innermost call of the renderer -- every sample makes
+ * three and every gradient probe three more -- and the shift cut the frame by a third on real
+ * data, with the picture unchanged to the bit.
  */
 [[nodiscard]] constexpr core::i32 brickIndexOfBase(core::i64 base, core::u32 level) noexcept
 {
-    // An arithmetic shift rather than a division: a brick span is always a power of two, so the
-    // shift IS the floor division, negatives included, where the old form paid a division and a
-    // modulo. It matters because this is the innermost call of the renderer -- every sample makes
-    // three and every gradient probe three more -- and the shift cut the frame by a third on real
-    // data, with the picture unchanged to the bit.
     return static_cast<core::i32>(base >> (kBrickEdgeShift + level));
 }
 
@@ -187,12 +183,10 @@ void summariseCells(BrickView &brick, core::u8 *out) noexcept;
  * @warning Floor, not truncation, for the reason @ref brickIndexOfBase gives: -0.5 is in sample -1.
  * @pre @p position is finite and within the range of an i64.
  */
-template <typename Real> [[nodiscard]] constexpr core::i64 floorToI64(Real position) noexcept
-{
-    const core::i64 truncated = static_cast<core::i64>(position);
-    return (position < Real{0} && static_cast<Real>(truncated) != position) ? truncated - 1 : truncated;
-}
+template <typename Real> [[nodiscard]] constexpr core::i64 floorToI64(Real position) noexcept;
 
 } // namespace lpl::voxel
+
+#    include "Brick.inl"
 
 #endif // LPL_VOXEL_BRICK_HPP

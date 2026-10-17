@@ -1,12 +1,3 @@
-/**
- * @file Volume.cpp
- * @brief Measuring what a volume's samples actually look like.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/std/cmath.hpp>
 #include <lpl/voxel/Volume.hpp>
 
@@ -14,7 +5,7 @@ namespace lpl::voxel {
 
 namespace {
 
-/// Histogram of non-empty samples. Zero is the mask, not a density, so it never counts.
+/** Histogram of non-empty samples. Zero is the mask, not a density, so it never counts. */
 struct Histogram final {
     core::u64 bins[256]{};
     core::u64 total{0};
@@ -45,6 +36,13 @@ struct Histogram final {
         return static_cast<core::f32>(acc / static_cast<core::f64>(total));
     }
 
+    /**
+     * @brief Standard deviation of the counted samples about @p m.
+     *
+     * A degenerate volume -- every sample identical -- would otherwise divide by zero in
+     * every spread ratio downstream: its variance is taken as one, the value that makes the
+     * correction a no-op.
+     */
     [[nodiscard]] core::f32 deviation(core::f32 m) const noexcept
     {
         if (total == 0)
@@ -56,12 +54,14 @@ struct Histogram final {
             acc += d * d * static_cast<core::f64>(bins[v]);
         }
         const core::f64 var = acc / static_cast<core::f64>(total);
-        // A degenerate volume -- every sample identical -- would otherwise divide by zero in
-        // every spread ratio downstream. One is the value that makes the correction a no-op.
         return static_cast<core::f32>(pmr::sqrt(var > 0.0 ? var : 1.0));
     }
 
-    /// @return Largest density such that at least @p fraction of the matter is at or above it.
+    /**
+     * @brief The density above which @p fraction of the matter lies.
+     *
+     * @return Largest density such that at least @p fraction of the matter is at or above it.
+     */
     [[nodiscard]] core::u8 upperQuantile(core::f32 fraction) const noexcept
     {
         if (total == 0)
@@ -101,10 +101,6 @@ DensityProfile measureProfile(const BrickView *bricks, core::u32 count, core::f3
     if (quantile > 1.0f)
         quantile = 1.0f;
 
-    // The window: its upper edge is where the requested fraction of matter starts, and its floor
-    // sits a stated number of measured deviations below. A second quantile would let the window
-    // invert on a narrow distribution, and an inverted window renders black without saying why;
-    // a width in raw sample values would be calibrated on one instrument and wrong on the next.
     profile.sheetSample = h.upperQuantile(quantile);
     if (windowDeviations <= 0.0f)
         windowDeviations = 1.0f;
@@ -113,12 +109,6 @@ DensityProfile measureProfile(const BrickView *bricks, core::u32 count, core::f3
         width = 2;
     core::i32 floorSample = static_cast<core::i32>(profile.sheetSample) - width;
 
-    // The floor is never allowed below the bulk, whatever width was asked for. The distribution of
-    // a carbonised roll is narrow -- matter spans about three deviations -- so a window of one
-    // deviation can still reach past the mean and start painting the medium. It did: the first
-    // real frames had a floor at 143 against a mean of 145, so more than half of every sample
-    // painted and the picture saturated within a metre. Whatever else the width says, the medium is
-    // what sits near the mean, and the medium must stay out of the way.
     const core::i32 bulk = static_cast<core::i32>(profile.bulkCeiling(0.5f) + 0.5f);
     if (floorSample < bulk)
         floorSample = bulk;
@@ -146,8 +136,6 @@ void measureSpreadOverBox(DensityProfile &profile, const BrickMosaic &mosaic, co
         const core::u32 level = brick.key.level;
         const core::i64 step = static_cast<core::i64>(1) << level;
 
-        // Only the part of this brick that falls inside the box: that is what makes the
-        // comparison between levels a comparison of the SAME region.
         core::i64 lo[3];
         core::i64 hi[3];
         bool overlaps = true;
@@ -180,8 +168,6 @@ void measureSpreadOverBox(DensityProfile &profile, const BrickMosaic &mosaic, co
         }
     }
 
-    // The finest level with anything in the box is the reference; below it there is nothing to
-    // compare against, and inventing a reference would be worse than leaving the ratios alone.
     core::u32 base = kMaxPyramidLevels;
     for (core::u32 lv = 0u; lv < kMaxPyramidLevels; ++lv)
     {
