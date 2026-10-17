@@ -1,12 +1,3 @@
-/**
- * @file Brick.cpp
- * @brief Summarising a brick so rays can skip it without reading it.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/voxel/Brick.hpp>
 
 namespace lpl::voxel {

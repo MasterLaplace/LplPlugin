@@ -44,8 +44,8 @@ namespace lpl::voxel {
  * space a file stores them in. Converting once, here, keeps the staging scale in one place.
  */
 struct SurfaceMesh final {
-    const math::Vec3<core::f32> *points{nullptr}; ///< Vertices, (x, y, z) in level-0 samples.
-    const core::u32 *indices{nullptr};            ///< Three per triangle.
+    const math::Vec3<core::f32> *points{nullptr}; /**< Vertices, (x, y, z) in level-0 samples. */
+    const core::u32 *indices{nullptr};            /**< Three per triangle. */
     core::u32 pointCount{0};
     core::u32 indexCount{0};
 
@@ -70,9 +70,9 @@ struct SurfaceMesh final {
      * smeared across the cut. Null when the mesh carries none, which is the normal case for a
      * surface this tool traced -- it has geometry and no flattening.
      */
-    const core::f32 *texture{nullptr};        ///< Pairs (u, v).
-    const core::u32 *textureIndices{nullptr}; ///< One per corner, so @ref indexCount of them.
-    core::u32 textureCount{0};                ///< Pairs in @ref texture.
+    const core::f32 *texture{nullptr};        /**< Pairs (u, v). */
+    const core::u32 *textureIndices{nullptr}; /**< One per corner, so @ref indexCount of them. */
+    core::u32 textureCount{0};                /**< Pairs in @ref texture. */
 
     [[nodiscard]] constexpr bool textured() const noexcept
     {
@@ -85,19 +85,13 @@ struct SurfaceMesh final {
     }
 
     /**
+     * @brief Checks every index against the arrays it names.
+     *
      * @return Whether every index names one of the @ref pointCount vertices and, when the mesh is
      *         @ref textured, every texture index one of the @ref textureCount pairs.
      * @pre @ref valid.
      */
-    [[nodiscard]] constexpr bool indicesInRange() const noexcept
-    {
-        for (core::u32 i = 0u; i < indexCount; ++i)
-        {
-            if (indices[i] >= pointCount || (textured() && textureIndices[i] >= textureCount))
-                return false;
-        }
-        return true;
-    }
+    [[nodiscard]] constexpr bool indicesInRange() const noexcept;
 };
 
 /**
@@ -105,8 +99,8 @@ struct SurfaceMesh final {
  * @brief Per-pixel depth of the nearest surface, and how squarely it faces the eye.
  */
 struct SurfaceDepth final {
-    core::f32 *metres{nullptr}; ///< Distance along the ray; a very large value means "no surface".
-    core::f32 *facing{nullptr}; ///< |N . V| at that pixel, for shading. Zero where there is none.
+    core::f32 *metres{nullptr}; /**< Distance along the ray; a very large value means "no surface". */
+    core::f32 *facing{nullptr}; /**< |N . V| at that pixel, for shading. Zero where there is none. */
 
     /**
      * Interpolated texture coordinate at each pixel, or null when nobody asked.
@@ -128,7 +122,7 @@ struct SurfaceDepth final {
     }
 };
 
-/// Depth written where no triangle covers a pixel. Larger than any ray this renderer takes.
+/** Depth written where no triangle covers a pixel. Larger than any ray this renderer takes. */
 inline constexpr core::f32 kNoSurface = 1.0e30f;
 
 /**
@@ -155,6 +149,17 @@ inline constexpr core::f32 kNoSurface = 1.0e30f;
  * Every entry is a unit vector: a vertex no triangle reaches gets +Z, which is a placeholder, not a
  * direction.
  *
+ * Each triangle's normal is left unnormalised on purpose: the cross product's length is twice the
+ * triangle's area, so summing them IS the area weighting. A vertex whose contributions cancelled
+ * exactly has no direction to normalise either, and gets +Z the same way: it is no better a
+ * direction than any other, it only keeps every entry a unit vector.
+ *
+ * @warning A sheet has no outside, so neighbouring triangles can be wound opposite ways and their
+ * normals would cancel -- leaving a zero normal and a black band along every such seam.
+ * Aligning each contribution with what the vertex has so far keeps the accumulation
+ * meaningful; the resulting sign is arbitrary, which is exactly what two-sided lighting
+ * expects.
+ *
  * @param out  One entry per vertex, at least @p mesh.pointCount of them. Nothing is written when the
  *             mesh is not @ref SurfaceMesh::valid or a vertex or texture index is out of range.
  */
@@ -174,9 +179,13 @@ void computeVertexNormals(const SurfaceMesh &mesh, math::Vec3<core::f32> *out) n
 [[nodiscard]] core::u32 rasteriseSurface(const SurfaceMesh &mesh, const VolumeGeometry &geometry, const Eye &eye,
                                          const SurfaceDepth &depth) noexcept;
 
-/// @brief Fills a depth buffer with @ref kNoSurface and zero facing. Call before rasterising.
+/**
+ * @brief Fills a depth buffer with @ref kNoSurface and zero facing. Call before rasterising.
+ */
 void clearSurfaceDepth(const SurfaceDepth &depth) noexcept;
 
 } // namespace lpl::voxel
+
+#    include "Surface.inl"
 
 #endif // LPL_VOXEL_SURFACE_HPP

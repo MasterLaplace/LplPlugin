@@ -45,7 +45,7 @@ namespace lpl::voxel {
  * A value outside these three is read as X.
  */
 enum class SliceAxis : core::u8 {
-    Z = 0, ///< Across the volume's slowest axis. On a rolled scroll, the spiral in cross-section.
+    Z = 0, /**< Across the volume's slowest axis. On a rolled scroll, the spiral in cross-section. */
     Y,
     X,
 };
@@ -60,15 +60,15 @@ enum class SliceAxis : core::u8 {
  * the same spot.
  */
 struct VolumeSlice final {
-    core::u8 *samples{nullptr}; ///< @ref width * @ref height samples, row after row. 0 where none was read.
-    core::u32 width{0};         ///< Columns.
-    core::u32 height{0};        ///< Rows.
+    core::u8 *samples{nullptr}; /**< @ref width * @ref height samples, row after row. 0 where none was read. */
+    core::u32 width{0};         /**< Columns. */
+    core::u32 height{0};        /**< Rows. */
     SliceAxis axis{SliceAxis::Z};
-    core::i64 at{0};    ///< Level-0 sample along @ref axis where the plane is cut.
-    core::i64 lowU{0};  ///< Level-0 sample at column zero.
-    core::i64 lowV{0};  ///< Level-0 sample at row zero.
-    core::i64 stepU{1}; ///< Level-0 samples per column.
-    core::i64 stepV{1}; ///< Level-0 samples per row.
+    core::i64 at{0};    /**< Level-0 sample along @ref axis where the plane is cut. */
+    core::i64 lowU{0};  /**< Level-0 sample at column zero. */
+    core::i64 lowV{0};  /**< Level-0 sample at row zero. */
+    core::i64 stepU{1}; /**< Level-0 samples per column. */
+    core::i64 stepV{1}; /**< Level-0 samples per row. */
 
     [[nodiscard]] constexpr bool valid() const noexcept { return samples != nullptr && width != 0u && height != 0u; }
 };
@@ -100,16 +100,21 @@ struct VolumeSlice final {
  * @brief Where the panel goes in the frame, and what it looks like. Colours are 0xAARRGGBB.
  */
 struct MinimapStyle final {
-    core::u32 left{0}; ///< Panel position in the frame, in pixels from its top-left corner.
+    core::u32 left{0}; /**< Panel position in the frame, in pixels from its top-left corner. */
     core::u32 top{0};
-    core::u32 width{200}; ///< Panel size in pixels.
+    core::u32 width{200}; /**< Panel size in pixels. */
     core::u32 height{200};
     core::u32 border{0xFFE0912Cu};
-    core::u32 background{0xFF0D0F12u}; ///< Where the slice holds 0.
-    core::u32 marker{0xFF5BD6FFu};     ///< The eye and its heading.
-    core::f32 sliceBrightness{0.75f};  ///< Grey of the slice's brightest sample, as a fraction of white clamped to
-                                       ///< [0, 1]. Below 1, the marker stays readable on it.
-    core::f32 headingLength{22.0f};    ///< Pixels of the line that shows the heading.
+    core::u32 background{0xFF0D0F12u}; /**< Where the slice holds 0. */
+    core::u32 marker{0xFF5BD6FFu};     /**< The eye and its heading. */
+
+    /**
+     * Grey of the slice's brightest sample, as a fraction of white clamped to [0, 1]. Below 1, the
+     * marker stays readable on it.
+     */
+    core::f32 sliceBrightness{0.75f};
+
+    core::f32 headingLength{22.0f}; /**< Pixels of the line that shows the heading. */
 };
 
 /**

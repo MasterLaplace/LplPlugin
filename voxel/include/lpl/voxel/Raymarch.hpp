@@ -42,11 +42,11 @@ namespace lpl::voxel {
  * @brief Where the camera is and what it is looking at, in walked metres.
  */
 struct Eye final {
-    math::Vec3<core::f32> position{}; ///< Metres.
+    math::Vec3<core::f32> position{}; /**< Metres. */
     math::Vec3<core::f32> forward{0.0f, 0.0f, 1.0f};
     math::Vec3<core::f32> right{1.0f, 0.0f, 0.0f};
     math::Vec3<core::f32> up{0.0f, 1.0f, 0.0f};
-    core::f32 horizontalFieldOfView{1.0472f}; ///< Radians; 60 degrees.
+    core::f32 horizontalFieldOfView{1.0472f}; /**< Radians; 60 degrees. */
 };
 
 /**
@@ -65,29 +65,45 @@ struct Eye final {
  */
 struct ImagePlane final {
     core::f32 tanHalfFieldOfView{0.0f};
-    core::f32 aspect{0.0f}; ///< Height over width.
+    core::f32 aspect{0.0f}; /**< Height over width. */
     core::f32 width{0.0f};
     core::f32 height{0.0f};
 
-    /// @return Offset along @ref Eye::right per unit along @ref Eye::forward, at frame column @p x.
+    /**
+     * @brief Slope of the ray through frame column @p x.
+     *
+     * @return Offset along @ref Eye::right per unit along @ref Eye::forward, at frame column @p x.
+     */
     [[nodiscard]] constexpr core::f32 rightSlope(core::f32 x) const noexcept
     {
         return (2.0f * x / width - 1.0f) * tanHalfFieldOfView;
     }
 
-    /// @return Offset along @ref Eye::up per unit along @ref Eye::forward, at frame row @p y.
+    /**
+     * @brief Slope of the ray through frame row @p y.
+     *
+     * @return Offset along @ref Eye::up per unit along @ref Eye::forward, at frame row @p y.
+     */
     [[nodiscard]] constexpr core::f32 upSlope(core::f32 y) const noexcept
     {
         return (1.0f - 2.0f * y / height) * aspect * tanHalfFieldOfView;
     }
 
-    /// @return The frame column whose @ref rightSlope is @p slope.
+    /**
+     * @brief The inverse of @ref rightSlope.
+     *
+     * @return The frame column whose @ref rightSlope is @p slope.
+     */
     [[nodiscard]] constexpr core::f32 column(core::f32 slope) const noexcept
     {
         return (slope / tanHalfFieldOfView + 1.0f) * 0.5f * width;
     }
 
-    /// @return The frame row whose @ref upSlope is @p slope.
+    /**
+     * @brief The inverse of @ref upSlope.
+     *
+     * @return The frame row whose @ref upSlope is @p slope.
+     */
     [[nodiscard]] constexpr core::f32 row(core::f32 slope) const noexcept
     {
         return (1.0f - slope / (aspect * tanHalfFieldOfView)) * 0.5f * height;
@@ -96,6 +112,9 @@ struct ImagePlane final {
 
 /**
  * @brief The image plane of a @p width by @p height frame seen from @p eye.
+ *
+ * tan(fov/2) comes from CORDIC, as Mat4::perspective takes it: no libm, and no truncated series,
+ * whose error grows with the angle -- three terms were already 1.3 % short at 90 degrees.
  *
  * @pre @p width and @p height are not zero, and the field of view is in (0, pi).
  */
@@ -125,18 +144,32 @@ public:
     math::Vec3<core::f32> position{};
     core::f32 horizontalFieldOfView{1.0472f};
 
-    /// @brief Turns by @p dYaw and @p dPitch, wrapping the first and clamping the second.
+    /**
+     * @brief Turns by @p dYaw and @p dPitch, wrapping the first and clamping the second.
+     *
+     * Pitch is clamped at 89 degrees either way, just short of straight up and straight down.
+     */
     void turn(core::f32 dYaw, core::f32 dPitch) noexcept;
 
-    /// @brief Moves along the camera's own axes, plus the world vertical.
+    /**
+     * @brief Moves along the camera's own axes, plus the world vertical.
+     */
     void move(core::f32 forward, core::f32 strafe, core::f32 rise, core::f32 distance) noexcept;
 
     [[nodiscard]] Eye eye() const noexcept;
 
-    /// @return Radians about the world vertical, as @ref wrapAngle leaves it.
+    /**
+     * @brief The camera's yaw.
+     *
+     * @return Radians about the world vertical, as @ref wrapAngle leaves it.
+     */
     [[nodiscard]] core::f32 yaw() const noexcept { return _yaw; }
 
-    /// @return Radians, clamped just short of straight up and straight down.
+    /**
+     * @brief The camera's pitch.
+     *
+     * @return Radians, clamped just short of straight up and straight down.
+     */
     [[nodiscard]] core::f32 pitch() const noexcept { return _pitch; }
 
 private:
@@ -146,6 +179,11 @@ private:
 
 /**
  * @brief The same angle, in [-pi, pi] once rounded to float.
+ *
+ * The reduction runs in double: the float error of 2 pi, times the number of turns, would
+ * otherwise grow into a visible error a few thousand radians out. And only so far: past about
+ * 1e16 turns a double no longer holds the count exactly, and the remainder can land several
+ * radians off the circle.
  *
  * @return 0 for an angle that is not finite or beyond 1e8 turns (about 6e8 radians), well past
  *         the point where a float carries any fraction of a turn: a direction derived from it then
@@ -159,11 +197,17 @@ private:
  * Exposed because the camera is not the only thing that needs it and a second copy would be a
  * second chance to leave out the reduction.
  *
+ * sin(pi - a) == sin(a) and sin(-pi - a) == sin(a): both reflections are sign-preserving, so
+ * the polynomial only ever sees |a| <= pi/2, where its first omitted term stays under two parts
+ * in ten thousand.
+ *
  * @return The sine of @ref wrapAngle(@p radians), to about two parts in ten thousand.
  */
 [[nodiscard]] core::f32 wrappedSine(core::f32 radians) noexcept;
 
-/// @brief Cosine of any angle, without libm, with the accuracy of @ref wrappedSine.
+/**
+ * @brief Cosine of any angle, without libm, with the accuracy of @ref wrappedSine.
+ */
 [[nodiscard]] core::f32 wrappedCosine(core::f32 radians) noexcept;
 
 /**
@@ -178,15 +222,15 @@ private:
  * what finally pointed at the gradient stencil.
  */
 enum class DebugView : core::u8 {
-    Off = 0,           ///< The picture.
-    Level,             ///< Which pyramid level answered, as a grey ramp over every possible level.
-    GradientMagnitude, ///< How strong the local gradient is at the first sample that paints.
-    Normal,            ///< The surface normal as colour: x, y, z into red, green, blue.
-    Shade,             ///< The lighting term alone.
-    StepCount,         ///< How many samples the ray took.
+    Off = 0,           /**< The picture. */
+    Level,             /**< Which pyramid level answered, as a grey ramp over every possible level. */
+    GradientMagnitude, /**< How strong the local gradient is at the first sample that paints. */
+    Normal,            /**< The surface normal as colour: x, y, z into red, green, blue. */
+    Shade,             /**< The lighting term alone. */
+    StepCount,         /**< How many samples the ray took. */
 };
 
-/// Traced surfaces one frame can composite. A comparison needs two; the other two are headroom.
+/** Traced surfaces one frame can composite. A comparison needs two; the other two are headroom. */
 inline constexpr core::u32 kMaxSurfaceLayers = 4u;
 
 /**
@@ -210,8 +254,8 @@ struct SurfaceTexture final {
  * evidence.
  */
 struct SurfaceLayer final {
-    const core::f32 *depth{nullptr};  ///< Metres along the ray; a very large value means "none here".
-    const core::f32 *facing{nullptr}; ///< |N . V| for shading. Optional.
+    const core::f32 *depth{nullptr};  /**< Metres along the ray; a very large value means "none here". */
+    const core::f32 *facing{nullptr}; /**< |N . V| for shading. Optional. */
     core::f32 red{0.35f};
     core::f32 green{0.85f};
     core::f32 blue{1.00f};
@@ -246,10 +290,9 @@ struct SurfaceLayer final {
     core::u32 inkWidth{0};
     core::u32 inkHeight{0};
 
-    /// What the map is worth, in [0,1], from a measurement made elsewhere. Zero paints nothing.
-    core::f32 inkConfidence{0.0f};
+    core::f32 inkConfidence{0.0f}; /**< What the map is worth, in [0,1], measured elsewhere. Zero paints nothing. */
 
-    core::u8 inkFloor{128u}; ///< Below this the map is saying nothing, and nothing is painted.
+    core::u8 inkFloor{128u}; /**< Below this the map is saying nothing, and nothing is painted. */
     core::f32 inkRed{0.05f};
     core::f32 inkGreen{0.02f};
     core::f32 inkBlue{0.02f};
@@ -267,12 +310,12 @@ struct SurfaceLayer final {
  * @brief How finely to walk, how soon to stop, and how far to look.
  */
 struct MarchParams final {
-    core::f32 stepSamples{1.0f}; ///< Step length in level-0 samples. Below 1 costs and shows nothing new.
-    core::f32 opaqueAt{0.995f};  ///< Accumulated alpha at which a ray stops. Early termination.
+    core::f32 stepSamples{1.0f}; /**< Step length in level-0 samples. Below 1 costs and shows nothing new. */
+    core::f32 opaqueAt{0.995f};  /**< Accumulated alpha at which a ray stops. Early termination. */
     core::f32 maxDistanceMetres{4000.0f};
-    core::u32 maxSteps{4096u};         ///< Hard stop, so a bad ray cannot hang a frame.
-    core::u32 background{0xFF06070Au}; ///< 0xAARRGGBB painted where nothing was hit.
-    bool trilinear{true};              ///< Off gives nearest-sample: faster, and visibly cubic.
+    core::u32 maxSteps{4096u};         /**< Hard stop, so a bad ray cannot hang a frame. */
+    core::u32 background{0xFF06070Au}; /**< 0xAARRGGBB painted where nothing was hit. */
+    bool trilinear{true};              /**< Off gives nearest-sample: faster, and visibly cubic. */
 
     /**
      * How much of the colour comes from shading the local gradient, in [0,1].
@@ -356,8 +399,7 @@ struct MarchParams final {
      */
     core::f32 levelBlendSamples{24.0f};
 
-    /// @see DebugView. Off in every normal frame.
-    DebugView debug{DebugView::Off};
+    DebugView debug{DebugView::Off}; /**< Off in every normal frame. @see DebugView */
 
     /**
      * A second field, co-registered with the first, painted on top of what it agrees with.
@@ -373,7 +415,7 @@ struct MarchParams final {
      */
     const BrickMosaic *overlay{nullptr};
 
-    core::f32 overlayRed{0.95f}; ///< Tint applied where the overlay is strong.
+    core::f32 overlayRed{0.95f}; /**< Tint applied where the overlay is strong. */
     core::f32 overlayGreen{0.25f};
     core::f32 overlayBlue{0.20f};
 
@@ -386,11 +428,9 @@ struct MarchParams final {
      */
     core::f32 overlayConfidence{0.0f};
 
-    /// Overlay value at and above which the tint is at full strength.
-    core::u8 overlayFull{200u};
+    core::u8 overlayFull{200u}; /**< Overlay value at and above which the tint is at full strength. */
 
-    /// Overlay value below which nothing is tinted at all.
-    core::u8 overlayFloor{128u};
+    core::u8 overlayFloor{128u}; /**< Overlay value below which nothing is tinted at all. */
 
     /**
      * Traced surfaces to composite, at most @ref kMaxSurfaceLayers of them.
@@ -419,17 +459,17 @@ struct MarchParams final {
  * passes against a camera pointing at nothing.
  */
 struct MarchReport final {
-    core::u64 rays{0};          ///< Pixels traced.
-    core::u64 steps{0};         ///< Samples taken.
-    core::u64 skippedBricks{0}; ///< Bricks jumped because nothing in them is visible.
-    core::u64 skippedCells{0};  ///< Occupancy cells jumped. The medium, which is most of a scan.
-    core::u64 missingBricks{0}; ///< Bricks a ray wanted and the mosaic did not have.
-    core::u64 saturated{0};     ///< Rays that stopped early on opacity.
-    core::u64 escaped{0};       ///< Rays that left the volume still transparent.
-    core::u64 gradients{0};     ///< Samples whose gradient was computed; the expensive ones.
-    core::u64 overlaid{0};      ///< Samples the overlay tinted. Zero means nothing was shown.
-    core::u64 surfaceHits{0};   ///< Rays that crossed a traced surface. Zero means none was in view.
-    core::u64 inkPainted{0};    ///< Pixels the surface prediction tinted. Zero means it showed nothing.
+    core::u64 rays{0};          /**< Pixels traced. */
+    core::u64 steps{0};         /**< Samples taken. */
+    core::u64 skippedBricks{0}; /**< Bricks jumped because nothing in them is visible. */
+    core::u64 skippedCells{0};  /**< Occupancy cells jumped. The medium, which is most of a scan. */
+    core::u64 missingBricks{0}; /**< Bricks a ray wanted and the mosaic did not have. */
+    core::u64 saturated{0};     /**< Rays that stopped early on opacity. */
+    core::u64 escaped{0};       /**< Rays that left the volume still transparent. */
+    core::u64 gradients{0};     /**< Samples whose gradient was computed; the expensive ones. */
+    core::u64 overlaid{0};      /**< Samples the overlay tinted. Zero means nothing was shown. */
+    core::u64 surfaceHits{0};   /**< Rays that crossed a traced surface. Zero means none was in view. */
+    core::u64 inkPainted{0};    /**< Pixels the surface prediction tinted. Zero means it showed nothing. */
 };
 
 /**

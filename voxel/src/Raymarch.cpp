@@ -1,12 +1,3 @@
-/**
- * @file Raymarch.cpp
- * @brief Front-to-back volume integration over a resident brick mosaic.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/math/Cordic.hpp>
 #include <lpl/std/cmath.hpp>
 #include <lpl/voxel/Raymarch.hpp>
@@ -18,15 +9,17 @@ namespace lpl::voxel {
 namespace {
 
 /**
- * Axis mapping, stated once because getting it wrong is invisible.
+ * @name Axis mapping, stated once because getting it wrong is invisible
  *
  * A zarr volume is indexed (z, y, x) and the walked world is (x, y, z). World X is the volume's
  * fastest axis, world Z its slowest. A viewer that swapped them would render a perfectly plausible
  * object that is the subject transposed -- and nothing about the picture would say so.
+ * @{
  */
 constexpr core::u32 kAxisOfWorldX = 2u;
 constexpr core::u32 kAxisOfWorldY = 1u;
 constexpr core::u32 kAxisOfWorldZ = 0u;
+/** @} */
 
 struct Slab final {
     core::f32 enter{0.0f};
@@ -34,7 +27,11 @@ struct Slab final {
     bool hit{false};
 };
 
-/// Ray against the axis-aligned box [0, size] in metres.
+/**
+ * @brief Ray against the axis-aligned box [0, size] in metres.
+ *
+ * A ray parallel to a pair of faces is either always inside them or never.
+ */
 [[nodiscard]] Slab intersectBox(const math::Vec3<core::f32> &origin, const math::Vec3<core::f32> &direction,
                                 const core::f32 size[3]) noexcept
 {
@@ -47,7 +44,6 @@ struct Slab final {
     {
         if (d[a] > -1e-9f && d[a] < 1e-9f)
         {
-            // Parallel to this pair of faces: either always inside them or never.
             if (o[a] < 0.0f || o[a] > size[a])
                 return Slab{};
             continue;
@@ -71,7 +67,11 @@ struct Slab final {
     return Slab{tMin, tMax, true};
 }
 
-/// World (x, y, z) into volume (z, y, x) order, scaled. @see kAxisOfWorldX
+/**
+ * @brief World (x, y, z) into volume (z, y, x) order, scaled.
+ *
+ * @see kAxisOfWorldX
+ */
 void toVolumeAxes(const math::Vec3<core::f32> &world, core::f32 scale, core::f32 volume[3]) noexcept
 {
     volume[kAxisOfWorldX] = world.x * scale;
@@ -79,7 +79,9 @@ void toVolumeAxes(const math::Vec3<core::f32> &world, core::f32 scale, core::f32
     volume[kAxisOfWorldZ] = world.z * scale;
 }
 
-/// Rounds a density to the nearest byte, saturating at both ends.
+/**
+ * @brief Rounds a density to the nearest byte, saturating at both ends.
+ */
 [[nodiscard]] constexpr core::u8 toByte(core::f32 v) noexcept
 {
     return static_cast<core::u8>(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v + 0.5f));
@@ -94,7 +96,9 @@ void toVolumeAxes(const math::Vec3<core::f32> &world, core::f32 scale, core::f32
     return 0xFF000000u | (q(r) << 16) | (q(g) << 8) | q(b);
 }
 
-/// Trilinear blend of a cell's eight corners, indexed [z][y][x], at fractions inside the cell.
+/**
+ * @brief Trilinear blend of a cell's eight corners, indexed [z][y][x], at fractions inside the cell.
+ */
 [[nodiscard]] constexpr core::f32 interpolateCorners(const core::f32 corner[2][2][2], core::f32 fz, core::f32 fy,
                                                      core::f32 fx) noexcept
 {
@@ -113,7 +117,7 @@ struct Rgb final {
     core::f32 blue{0.0f};
 };
 
-/// Colour and opacity gathered along one ray, front to back. Colour is premultiplied by alpha.
+/** Colour and opacity gathered along one ray, front to back. Colour is premultiplied by alpha. */
 struct Accumulated final {
     core::f32 red{0.0f};
     core::f32 green{0.0f};
@@ -121,7 +125,9 @@ struct Accumulated final {
     core::f32 alpha{0.0f};
 };
 
-/// Moves @p colour toward @p tint by @p mix, in [0,1].
+/**
+ * @brief Moves @p colour toward @p tint by @p mix, in [0,1].
+ */
 constexpr void tintTowards(Rgb &colour, const Rgb &tint, core::f32 mix) noexcept
 {
     colour.red += (tint.red - colour.red) * mix;
@@ -130,7 +136,7 @@ constexpr void tintTowards(Rgb &colour, const Rgb &tint, core::f32 mix) noexcept
 }
 
 /**
- * How far a prediction may tint: its value above @p floor as a fraction of @p range, capped at
+ * @brief How far a prediction may tint: its value above @p floor as a fraction of @p range, capped at
  * one, times what the map is worth. @see MarchParams::overlayConfidence
  */
 [[nodiscard]] constexpr core::f32 tintMix(core::u8 value, core::u8 floor, core::f32 range,
@@ -142,7 +148,7 @@ constexpr void tintTowards(Rgb &colour, const Rgb &tint, core::f32 mix) noexcept
     return strength * confidence;
 }
 
-/// One sample of the field at a level-0 position, and which brick, at which level, answered.
+/** One sample of the field at a level-0 position, and which brick, at which level, answered. */
 struct Sample final {
     core::u8 density{0};
     core::u32 level{0};
@@ -150,7 +156,12 @@ struct Sample final {
     const BrickView *brick{nullptr};
 };
 
-/// Density of one brick at a level-0 position, without any level blending.
+/**
+ * @brief Density of one brick at a level-0 position, without any level blending.
+ *
+ * A trilinear sample whose cell reaches the brick's last sample on an axis returns 0: the caller
+ * resolves the corners through the mosaic; see @ref crossBrickSample.
+ */
 [[nodiscard]] core::u8 sampleBrick(const BrickView &brick, const core::f32 position[3], bool trilinear) noexcept
 {
     const core::f32 scale = 1.0f / static_cast<core::f32>(static_cast<core::i64>(1) << brick.key.level);
@@ -168,7 +179,7 @@ struct Sample final {
         return brick.at(static_cast<core::u32>(cell[0]), static_cast<core::u32>(cell[1]),
                         static_cast<core::u32>(cell[2]));
     if (cell[0] >= lastIndex || cell[1] >= lastIndex || cell[2] >= lastIndex)
-        return 0u; // Caller resolves the corners through the mosaic; see crossBrickSample.
+        return 0u;
 
     core::f32 corner[2][2][2];
     for (core::u32 dz = 0u; dz < 2u; ++dz)
@@ -187,7 +198,7 @@ struct Sample final {
 }
 
 /**
- * Trilinear sample that resolves each corner through the mosaic when the cell straddles a brick.
+ * @brief Trilinear sample that resolves each corner through the mosaic when the cell straddles a brick.
  *
  * @warning **The cheap version -- clamp to the brick's edge -- leaves a one-sample seam on every
  * brick face, and that is not the harmless thing it sounds like.** Put the eye exactly on such a
@@ -195,6 +206,11 @@ struct Sample final {
  * it runs down the seam: a hard horizontal band across the whole picture. It was the second
  * defect in the first real renders and it survived four other fixes. The extra lookups are paid
  * only on the last cell of each axis -- about one sample in forty at level 0.
+ *
+ * The position snaps to this brick's sample lattice so the eight corners are the same eight
+ * everywhere in the cell -- otherwise neighbouring rays interpolate over different corners and
+ * the surface shimmers. A corner no resident brick holds takes the brick's own edge sample:
+ * reporting zero would make the boundary look like a wall of vacuum.
  */
 [[nodiscard]] core::u8 crossBrickSample(const BrickMosaic &mosaic, const BrickView &brick, const core::f32 position[3],
                                         bool trilinear) noexcept
@@ -202,9 +218,6 @@ struct Sample final {
     if (!trilinear)
         return sampleBrick(brick, position, false);
 
-    // Snap to this brick's sample lattice so the eight corners are the same eight everywhere in
-    // the cell -- otherwise neighbouring rays interpolate over different corners and the surface
-    // shimmers.
     const core::i64 step = static_cast<core::i64>(1) << brick.key.level;
     const core::f32 stepF = static_cast<core::f32>(step);
     const core::i64 span = brickSpanInBaseSamples(brick.key.level);
@@ -234,8 +247,6 @@ struct Sample final {
                                       static_cast<core::f32>(lattice[1] + static_cast<core::i64>(dy) * step),
                                       static_cast<core::f32>(lattice[2] + static_cast<core::i64>(dx) * step)};
                 const BrickView *owner = mosaic.find(floorToI64(at[0]), floorToI64(at[1]), floorToI64(at[2]));
-                // No neighbour: the brick's own edge sample stands in. Reporting zero would make
-                // the boundary look like a wall of vacuum.
                 corner[dz][dy][dx] = static_cast<core::f32>(sampleBrick(owner != nullptr ? *owner : brick, at, false));
             }
         }
@@ -244,7 +255,7 @@ struct Sample final {
 }
 
 /**
- * The brick that answers at a level-0 point, reusing @p hint when it provably would.
+ * @brief The brick that answers at a level-0 point, reusing @p hint when it provably would.
  *
  * The lookup is the expensive half of a sample, and the gradient asks for six of them a step --
  * almost always inside the brick the centre is already in. The hint skips the index for those and
@@ -263,7 +274,7 @@ struct Sample final {
     return mosaic.find(base[0], base[1], base[2]);
 }
 
-/// The nearest face of a brick to a point inside it: how deep, on which axis, and on which side.
+/** The nearest face of a brick to a point inside it: how deep, on which axis, and on which side. */
 struct NearestFace final {
     core::f32 depth{3.0e38f};
     core::u32 axis{0u};
@@ -287,8 +298,12 @@ struct NearestFace final {
 }
 
 /**
- * @p density faded into the coarser brick behind @p brick, within @p blendBand of a face where the
- * detail stops. @see MarchParams::levelBlendSamples
+ * @brief @p density faded into the coarser brick behind @p brick, within @p blendBand of a face where the
+ * detail stops.
+ *
+ * The weight of @p density grows from 0 at the face to 1 at the inner edge of the band.
+ *
+ * @see MarchParams::levelBlendSamples
  */
 [[nodiscard]] core::u8 fadeIntoCoarser(const BrickMosaic &mosaic, const BrickView &brick, core::u8 density,
                                        const core::f32 position[3], const core::i64 base[3], core::f32 blendBand,
@@ -308,7 +323,7 @@ struct NearestFace final {
     if (coarse == nullptr)
         return density;
 
-    const core::f32 inward = face.depth / blendBand; // 0 at the face, 1 at the inner edge of the band.
+    const core::f32 inward = face.depth / blendBand;
     const core::f32 fine = static_cast<core::f32>(density);
     const core::f32 far = static_cast<core::f32>(crossBrickSample(mosaic, *coarse, position, trilinear));
     return toByte(far + (fine - far) * inward);
@@ -333,8 +348,11 @@ struct NearestFace final {
 }
 
 /**
- * Distance along the ray, in level-0 samples, from @p position to where it leaves the box, which
+ * @brief Distance along the ray, in level-0 samples, from @p position to where it leaves the box, which
  * must contain it: 0 when it sits on the low face it is leaving through.
+ *
+ * Zero is an exit, not a miss: refusing it sent a ray sitting on a low face, moving down,
+ * a whole box further, over whatever the box below held.
  */
 [[nodiscard]] core::f32 samplesToBoxExit(const core::f32 lowBound[3], core::f32 span, const core::f32 position[3],
                                          const core::f32 direction[3]) noexcept
@@ -345,8 +363,6 @@ struct NearestFace final {
         if (direction[a] > -1e-9f && direction[a] < 1e-9f)
             continue;
         const core::f32 bound = direction[a] > 0.0f ? lowBound[a] + span : lowBound[a];
-        // Zero is an exit, not a miss: refusing it sent a ray sitting on a low face, moving down,
-        // a whole box further, over whatever the box below held.
         const core::f32 t = (bound - position[a]) / direction[a];
         if (t >= 0.0f && t < best)
             best = t;
@@ -355,7 +371,7 @@ struct NearestFace final {
 }
 
 /**
- * Distance to where the ray leaves the finest-level brick box around @p position: the largest hop
+ * @brief Distance to where the ray leaves the finest-level brick box around @p position: the largest hop
  * that cannot leap over a resident brick. @see BrickMosaic::finestLevel
  *
  * @warning **A hop always ends at a box exit, never a span further on.** A ray usually enters a
@@ -376,7 +392,7 @@ struct NearestFace final {
 }
 
 /**
- * Distance to where the ray leaves the occupancy cell around @p position, when no sample in that
+ * @brief Distance to where the ray leaves the occupancy cell around @p position, when no sample in that
  * cell reaches the curve; nothing when one does. @see BrickView::occupancy
  */
 [[nodiscard]] std::optional<core::f32> samplesToEmptyCellExit(const BrickView &brick, const TransferFunction &curve,
@@ -405,14 +421,18 @@ struct NearestFace final {
                             direction);
 }
 
-/// Opacity of one step of @p samplesPerStep level-0 samples, from the curve's opacity per sample.
+/**
+ * @brief Opacity of one step of @p samplesPerStep level-0 samples, from the curve's opacity per sample.
+ */
 [[nodiscard]] core::f32 opacityOverStep(core::f32 perSample, core::f32 samplesPerStep) noexcept
 {
     const core::f32 a = 1.0f - transparencyAfter(perSample, samplesPerStep);
     return a < 0.0f ? 0.0f : (a > 1.0f ? 1.0f : a);
 }
 
-/// Whole steps that cover @p distance, and at least one, so a hop always moves the ray forward.
+/**
+ * @brief Whole steps that cover @p distance, and at least one, so a hop always moves the ray forward.
+ */
 [[nodiscard]] core::i64 stepsCovering(core::f32 distance, core::f32 stepLength) noexcept
 {
     const core::f32 steps = distance / stepLength;
@@ -424,40 +444,45 @@ struct NearestFace final {
     return whole;
 }
 
-/// What every ray of one call shares, derived once.
+/** What every ray of one call shares, derived once. */
 struct Frame final {
     const BrickMosaic &mosaic;
     const MarchParams &params;
-    TransferFunction curves[kMaxPyramidLevels]; ///< Derived once per call: per sample, it would dominate the frame.
+    TransferFunction curves[kMaxPyramidLevels]; /**< Derived once per call: per sample, it would dominate the frame. */
     core::f32 metresPerSample{0.0f};
     core::f32 samplesPerMetre{0.0f};
     core::f32 stepMetres{0.0f};
 };
 
-/// The intermediate quantity a debug view paints, taken at the first sample that paints.
+/** The intermediate quantity a debug view paints, taken at the first sample that paints. */
 struct DebugCapture final {
     bool captured{false};
     core::f32 value{0.0f};
     core::u32 level{0u};
-    core::f32 normal[3]{0.0f, 0.0f, 0.0f}; ///< World x, y, z.
+    core::f32 normal[3]{0.0f, 0.0f, 0.0f}; /**< World x, y, z. */
 };
 
-/// How one sample is lit, and the opacity per level-0 sample it ends up with.
+/** How one sample is lit, and the opacity per level-0 sample it ends up with. */
 struct Lighting final {
     core::f32 alphaPerSample{0.0f};
     core::f32 shade{1.0f};
     core::f32 gradientLength{0.0f};
-    core::f32 normal[3]{0.0f, 0.0f, 0.0f}; ///< World x, y, z.
+    core::f32 normal[3]{0.0f, 0.0f, 0.0f}; /**< World x, y, z. */
 };
 
 /**
- * Shades a sample from the local gradient and raises its opacity at boundaries.
+ * @brief Shades a sample from the local gradient and raises its opacity at boundaries.
  *
  * @warning **A neighbour outside the resident set is NOT density zero.** Treating a missing brick
  * as empty makes the difference across a brick face enormous, so every face of every resident
  * brick lights up as a false surface, and because the resident set is a grid the picture comes out
  * in rectangles; it is one of the defects @ref DebugView lists. Where there is no neighbour, the
  * centre stands in, which reports "flat" rather than "cliff".
+ *
+ * The shading is two-sided: a sheet has no outside, so a normal that points away from the eye is
+ * the same surface seen from behind, not an unlit one.
+ *
+ * The probes are nearest samples with the centre's brick as a hint: @see MarchParams::gradientSpread.
  */
 [[nodiscard]] Lighting lightFromGradient(const Frame &frame, const Sample &sample, core::f32 alphaPerSample,
                                          const core::f32 position[3], const math::Vec3<core::f32> &direction,
@@ -469,7 +494,6 @@ struct Lighting final {
     ++report.gradients;
 
     const core::f32 here = static_cast<core::f32>(sample.density);
-    // Nearest probes with the centre's brick as a hint: @see MarchParams::gradientSpread.
     const auto probe = [&](core::u32 axis, core::f32 offset) noexcept {
         core::f32 at[3]{position[0], position[1], position[2]};
         at[axis] += offset;
@@ -494,15 +518,12 @@ struct Lighting final {
     lit.normal[0] = gx * inv;
     lit.normal[1] = gy * inv;
     lit.normal[2] = gz * inv;
-    // Two-sided: a sheet has no outside, so a normal that points away from the eye is the same
-    // surface seen from behind, not an unlit one.
     core::f32 lambert = -(lit.normal[0] * direction.x + lit.normal[1] * direction.y + lit.normal[2] * direction.z);
     if (lambert < 0.0f)
         lambert = -lambert;
     lit.shade = params.ambient + (1.0f - params.ambient) * lambert;
     lit.shade = 1.0f + params.shading * (lit.shade - 1.0f);
 
-    // Boundary opacity: homogeneous matter stays translucent, edges turn solid.
     const core::f32 strength = g * (1.0f / (96.0f * params.gradientSpread));
     const core::f32 edge = strength > 1.0f ? 1.0f : strength;
     lit.alphaPerSample *= 1.0f - params.boundaryOpacity * (1.0f - edge);
@@ -510,7 +531,7 @@ struct Lighting final {
 }
 
 /**
- * Called only for a sample that paints: tints its colour where the overlay is strong. That caller
+ * @brief Called only for a sample that paints: tints its colour where the overlay is strong. That caller
  * is what keeps the overlay on matter the scan already put here; a prediction floating in a void
  * would be the model drawing rather than reading. @see MarchParams::overlay
  */
@@ -530,7 +551,12 @@ void tintWithOverlay(const MarchParams &params, const core::f32 position[3], cor
     ++report.overlaid;
 }
 
-/// Tints a surface's colour with the prediction painted on it, at this pixel's texture coordinates.
+/**
+ * @brief Tints a surface's colour with the prediction painted on it, at this pixel's texture coordinates.
+ *
+ * v runs up in a texture and down in an image; flipping here is the one place that convention
+ * lives, rather than in every caller.
+ */
 void tintWithInk(const SurfaceLayer &surface, const SurfaceTexture *texture, core::usize pixelIndex, Rgb &colour,
                  MarchReport &report) noexcept
 {
@@ -542,8 +568,6 @@ void tintWithInk(const SurfaceLayer &surface, const SurfaceTexture *texture, cor
         return;
 
     core::u32 ix = static_cast<core::u32>(tu * static_cast<core::f32>(surface.inkWidth - 1u));
-    // v runs up in a texture and down in an image; flipping here is the one place that convention
-    // lives, rather than in every caller.
     core::u32 iy = static_cast<core::u32>((1.0f - tv) * static_cast<core::f32>(surface.inkHeight - 1u));
     if (ix >= surface.inkWidth)
         ix = surface.inkWidth - 1u;
@@ -560,7 +584,7 @@ void tintWithInk(const SurfaceLayer &surface, const SurfaceTexture *texture, cor
 }
 
 /**
- * Composites every traced surface the ray has reached by @p t, once each. Front-to-back, so
+ * @brief Composites every traced surface the ray has reached by @p t, once each. Front-to-back, so
  * whatever the scan put in front of a surface still occludes it -- unless that layer asked to be
  * drawn through matter. @see SurfaceLayer::throughMatter
  */
@@ -618,6 +642,13 @@ void captureForDebug(DebugView view, const Sample &sample, const Lighting &lit, 
     }
 }
 
+/**
+ * @brief The colour @p view paints for one ray.
+ *
+ * The normal view is the one that finds geometry trouble fastest: a normal quantised onto a
+ * handful of directions comes out as flat patches of pure colour. A grey pixel is a sample with
+ * no gradient at all.
+ */
 [[nodiscard]] core::u32 debugPixel(DebugView view, const DebugCapture &capture, core::u32 takenSteps) noexcept
 {
     core::f32 v = 0.0f;
@@ -632,9 +663,6 @@ void captureForDebug(DebugView view, const Sample &sample, const Lighting &lit, 
     case DebugView::Shade: v = capture.captured ? capture.value : 0.0f; break;
     case DebugView::StepCount: v = static_cast<core::f32>(takenSteps) * (1.0f / 512.0f); break;
     case DebugView::Normal:
-        // The view that finds geometry trouble fastest: a normal quantised onto a handful of
-        // directions comes out as flat patches of pure colour. A grey pixel is a sample with no
-        // gradient at all.
         return packColour(capture.normal[0] * 0.5f + 0.5f, capture.normal[1] * 0.5f + 0.5f,
                           capture.normal[2] * 0.5f + 0.5f);
     default: break;
@@ -648,7 +676,21 @@ struct RayResult final {
     DebugCapture debug{};
 };
 
-/// Integrates one ray, front to back, from where it enters the volume to where it stops.
+/**
+ * @brief Integrates one ray, front to back, from where it enters the volume to where it stops.
+ *
+ * A hop lands on a point of the step grid: the position is an INTEGER count of steps from where
+ * the ray entered, never an accumulated float, so a skipped ray samples exactly the points the
+ * unskipped ray samples after the skip.
+ *
+ * Shading is gated on what the sample will actually CONTRIBUTE, not on whether it is visible at
+ * all: later samples are weighted by (1 - accumulated alpha), so the threshold tightens by itself
+ * as a ray fills. @see MarchParams::shadingCutoff
+ *
+ * Opacity is declared per level-0 sample of path, so a longer step must absorb more. Skipping
+ * this makes the same matter look denser purely because the camera moved back, which reads as the
+ * object changing at a level boundary.
+ */
 [[nodiscard]] RayResult marchRay(const Frame &frame, const math::Vec3<core::f32> &origin,
                                  const math::Vec3<core::f32> &direction, const Slab &slab, core::usize pixelIndex,
                                  MarchReport &report) noexcept
@@ -657,9 +699,6 @@ struct RayResult final {
     core::f32 volumeDirection[3];
     toVolumeAxes(direction, 1.0f, volumeDirection);
 
-    // A hop lands on a point of the step grid: the position is an INTEGER count of steps from where
-    // the ray entered, never an accumulated float, so a skipped ray samples exactly the points the
-    // unskipped ray samples after the skip.
     core::f32 t = slab.enter > 0.0f ? slab.enter : 0.0f;
     const core::f32 tOrigin = t;
     core::i64 stepIndex = 0;
@@ -716,9 +755,6 @@ struct RayResult final {
 
         Lighting lit{};
         lit.alphaPerSample = curve.alpha[sample.density];
-        // Gated on what the sample will actually CONTRIBUTE, not on whether it is visible at all:
-        // later samples are weighted by (1 - accumulated alpha), so the threshold tightens by
-        // itself as a ray fills. @see MarchParams::shadingCutoff
         if (lit.alphaPerSample > 0.0f && (1.0f - acc.alpha) * lit.alphaPerSample > params.shadingCutoff &&
             (params.shading > 0.0f || params.boundaryOpacity > 0.0f))
             lit = lightFromGradient(frame, sample, lit.alphaPerSample, position, direction, report);
@@ -728,9 +764,6 @@ struct RayResult final {
             if (params.debug != DebugView::Off && !ray.debug.captured)
                 captureForDebug(params.debug, sample, lit, ray.debug);
 
-            // Opacity is declared per level-0 sample of path, so a longer step must absorb more.
-            // Skipping this makes the same matter look denser purely because the camera moved
-            // back, which reads as the object changing at a level boundary.
             const core::f32 w = (1.0f - acc.alpha) * opacityOverStep(lit.alphaPerSample, params.stepSamples);
             Rgb colour{curve.red[sample.density] * lit.shade, curve.green[sample.density] * lit.shade,
                        curve.blue[sample.density] * lit.shade};
@@ -779,9 +812,6 @@ core::f32 wrapAngle(core::f32 radians) noexcept
 {
     constexpr core::f64 kPi = 3.14159265358979323846;
     constexpr core::f64 kTwoPi = 2.0 * kPi;
-    // In double: the float error of 2 pi, times the number of turns, would otherwise grow into a
-    // visible error a few thousand radians out. And only so far: past about 1e16 turns a double no
-    // longer holds the count exactly, and the remainder can land several radians off the circle.
     constexpr core::f64 kLargestTurnCount = 1.0e8;
     const core::f64 a = static_cast<core::f64>(radians);
     const core::f64 turns = (a + kPi) / kTwoPi;
@@ -795,9 +825,6 @@ core::f32 wrappedSine(core::f32 radians) noexcept
     constexpr core::f32 kPi = 3.14159265358979f;
     core::f32 a = wrapAngle(radians);
 
-    // sin(pi - a) == sin(a) and sin(-pi - a) == sin(a): both reflections are sign-preserving, so
-    // the polynomial only ever sees |a| <= pi/2, where its first omitted term stays under two parts
-    // in ten thousand.
     if (a > kPi * 0.5f)
         a = kPi - a;
     else if (a < -kPi * 0.5f)
@@ -811,7 +838,7 @@ core::f32 wrappedCosine(core::f32 radians) noexcept { return wrappedSine(wrapAng
 
 void FreeCamera::turn(core::f32 dYaw, core::f32 dPitch) noexcept
 {
-    constexpr core::f32 kLimit = 1.55334306f; // Just short of straight up: 89 degrees.
+    constexpr core::f32 kLimit = 1.55334306f;
     _yaw = wrapAngle(_yaw + dYaw);
     _pitch += dPitch;
     if (_pitch > kLimit)
@@ -848,8 +875,6 @@ Eye FreeCamera::eye() const noexcept
 
 ImagePlane imagePlane(const Eye &eye, core::u32 width, core::u32 height) noexcept
 {
-    // tan(fov/2) from CORDIC, as Mat4::perspective takes it: no libm, and no truncated series,
-    // whose error grows with the angle -- three terms were already 1.3 % short at 90 degrees.
     math::Fixed32 halfSine{};
     math::Fixed32 halfCosine{};
     math::Cordic::sincos(math::Fixed32::fromFloat(eye.horizontalFieldOfView * 0.5f), halfSine, halfCosine);

@@ -50,11 +50,11 @@ struct TransferFunction final {
     core::f32 blue[256]{};
     core::f32 alpha[256]{};
 
-    core::u8 firstVisible{255}; ///< Lowest density whose alpha is non-zero; empty-space skipping reads it.
+    core::u8 firstVisible{255}; /**< Lowest density whose alpha is non-zero; empty-space skipping reads it. */
 
-    core::f32 lowEdge{0.0f};    ///< Density where the ramp this table was built from leaves zero.
-    core::f32 highEdge{255.0f}; ///< Density where that ramp reaches @ref peakAlpha.
-    core::f32 peakAlpha{0.0f};  ///< Opacity per level-0 sample at and above @ref highEdge.
+    core::f32 lowEdge{0.0f};    /**< Density where the ramp this table was built from leaves zero. */
+    core::f32 highEdge{255.0f}; /**< Density where that ramp reaches @ref peakAlpha. */
+    core::f32 peakAlpha{0.0f};  /**< Opacity per level-0 sample at and above @ref highEdge. */
 
     /**
      * @brief The same curve, rescaled for a coarser level.
@@ -71,7 +71,11 @@ struct TransferFunction final {
      */
     [[nodiscard]] TransferFunction forLevel(const DensityProfile &profile, core::u32 level) const noexcept;
 
-    /// @return Whether a brick or a cell whose largest sample is @p highest can paint anything.
+    /**
+     * @brief Tells whether some sample up to @p highest is visible.
+     *
+     * @return Whether a brick or a cell whose largest sample is @p highest can paint anything.
+     */
     [[nodiscard]] constexpr bool reachesVisible(core::u8 highest) const noexcept { return highest >= firstVisible; }
 };
 
@@ -94,6 +98,9 @@ struct TransferFunction final {
  * that thickness is, which depends on the level and the instrument. Stating the intent and
  * deriving the constant keeps the two from drifting apart when either changes.
  *
+ * Solves 1 - (1-a)^n = opacity for a, by bisection. A log/exp pair would be shorter and would
+ * put a transcendental in a module that is otherwise free of them; this runs once, at setup.
+ *
  * @param samples  Path length through full-density matter, in level-0 samples.
  * @param opacity  Accumulated opacity wanted after that path, in (0,1).
  */
@@ -103,6 +110,8 @@ struct TransferFunction final {
  * @brief Fraction of light left after crossing @p samples level-0 samples of opacity @p perSample.
  *
  * Exactly (1 - @p perSample)^n over the whole samples, and linear across the fractional remainder.
+ * Repeated squaring on the whole samples. An exp/log pair would be one line and would put a
+ * transcendental on the hot path of every sample, which this tree does not spend.
  *
  * @return 1 when @p perSample or @p samples is at most 0, and 0 when @p perSample is at least 1.
  */
