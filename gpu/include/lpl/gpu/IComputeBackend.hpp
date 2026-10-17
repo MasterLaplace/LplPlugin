@@ -33,10 +33,14 @@ class IComputeBackend {
 public:
     virtual ~IComputeBackend() = default;
 
-    /** @brief Initializes the backend (create context, etc.). */
+    /**
+     * @brief Initializes the backend (create context, etc.).
+     */
     [[nodiscard]] virtual core::Expected<void> init() = 0;
 
-    /** @brief Shuts down the backend. */
+    /**
+     * @brief Shuts down the backend.
+     */
     virtual void shutdown() = 0;
 
     /**
@@ -46,13 +50,19 @@ public:
      */
     [[nodiscard]] virtual core::Expected<void *> allocate(core::usize bytes) = 0;
 
-    /** @brief Frees device memory. */
+    /**
+     * @brief Frees device memory.
+     */
     virtual void free(void *ptr) = 0;
 
-    /** @brief Copies data from host to device. */
+    /**
+     * @brief Copies data from host to device.
+     */
     [[nodiscard]] virtual core::Expected<void> uploadSync(void *dst, const void *src, core::usize bytes) = 0;
 
-    /** @brief Copies data from device to host. */
+    /**
+     * @brief Copies data from device to host.
+     */
     [[nodiscard]] virtual core::Expected<void> downloadSync(void *dst, const void *src, core::usize bytes) = 0;
 
     /**
@@ -65,10 +75,14 @@ public:
     [[nodiscard]] virtual core::Expected<void> dispatch(const char *kernelName, core::u32 gridDim, core::u32 blockDim,
                                                         std::span<const core::byte> args) = 0;
 
-    /** @brief Waits for all dispatched work to complete. */
+    /**
+     * @brief Waits for all dispatched work to complete.
+     */
     [[nodiscard]] virtual core::Expected<void> synchronize() = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

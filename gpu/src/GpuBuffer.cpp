@@ -1,13 +1,3 @@
-/**
- * @file GpuBuffer.cpp
- * @brief GpuBuffer RAII implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/gpu/GpuBuffer.hpp>
 

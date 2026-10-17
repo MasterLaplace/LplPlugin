@@ -69,8 +69,6 @@ void physics_gpu_timer_start();
  */
 float physics_gpu_timer_stop();
 
-// ─── CPU Fallback (no-ops) ───────────────────────────────────
-
 #    if !defined(__CUDACC__) && !defined(LPL_HAS_CUDA)
 
 inline void physics_gpu_init() {}

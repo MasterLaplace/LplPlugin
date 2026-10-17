@@ -1,16 +1,3 @@
-/**
- * @file PhysicsKernel.cu
- * @brief CUDA physics kernels — gravity + semi-implicit Euler integration.
- *
- * Ported from legacy PhysicsGPU.cu into the new modular architecture.
- * Works on SoA buffers (positions, velocities, forces, masses) in-place.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/gpu/PhysicsKernel.cuh>
 
 #include <cuda_runtime.h>
@@ -20,8 +7,6 @@
 #include <cstdlib>
 
 namespace lpl::gpu {
-
-// ─── CUDA Error Checking ─────────────────────────────────────
 
 #define LPL_CUDA_CHECK(call)                                                                                           \
     do                                                                                                                 \
@@ -34,13 +19,9 @@ namespace lpl::gpu {
         }                                                                                                              \
     } while (0)
 
-// ─── GPU Timing Events ───────────────────────────────────────
-
 static cudaEvent_t s_physStart{};
 static cudaEvent_t s_physStop{};
 static bool s_eventsCreated{false};
-
-// ─── CUDA Kernels ────────────────────────────────────────────
 
 /**
  * @brief Physics tick kernel — gravity + semi-implicit Euler.
@@ -65,12 +46,10 @@ __global__ void kernel_physics_tick(float *__restrict__ posX, float *__restrict_
     if (idx >= count)
         return;
 
-    // Gravity
     frcX[idx] = 0.0f;
     frcY[idx] = -9.81f * masses[idx];
     frcZ[idx] = 0.0f;
 
-    // Semi-implicit Euler: v += a * dt
     if (masses[idx] > 0.0001f)
     {
         float invMass = 1.0f / masses[idx];
@@ -79,13 +58,10 @@ __global__ void kernel_physics_tick(float *__restrict__ posX, float *__restrict_
         velZ[idx] += frcZ[idx] * invMass * dt;
     }
 
-    // Position update: p += v * dt
     posX[idx] += velX[idx] * dt;
     posY[idx] += velY[idx] * dt;
     posZ[idx] += velZ[idx] * dt;
 }
-
-// ─── GPU Lifecycle ───────────────────────────────────────────
 
 void physics_gpu_init()
 {
@@ -107,8 +83,6 @@ void physics_gpu_cleanup()
     }
 }
 
-// ─── Kernel Launcher ─────────────────────────────────────────
-
 void launch_physics_kernel(float *d_posX, float *d_posY, float *d_posZ, float *d_velX, float *d_velY, float *d_velZ,
                            float *d_frcX, float *d_frcY, float *d_frcZ, const float *d_masses, uint32_t count, float dt)
 {
@@ -118,11 +92,7 @@ void launch_physics_kernel(float *d_posX, float *d_posY, float *d_posZ, float *d
                                                       d_frcZ, d_masses, count, dt);
 }
 
-// ─── Synchronization ─────────────────────────────────────────
-
 void physics_gpu_sync() { LPL_CUDA_CHECK(cudaDeviceSynchronize()); }
-
-// ─── GPU Monitoring ──────────────────────────────────────────
 
 void physics_gpu_timer_start()
 {

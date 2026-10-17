@@ -29,34 +29,54 @@ namespace lpl::gpu {
  */
 class GpuBuffer final : public core::NonCopyable<GpuBuffer> {
 public:
-    /** @brief Constructs an empty (null) buffer. */
+    /**
+     * @brief Constructs an empty (null) buffer.
+     */
     GpuBuffer() noexcept = default;
 
-    /** @brief Allocates @p bytes on the given backend. */
+    /**
+     * @brief Allocates @p bytes on the given backend.
+     */
     GpuBuffer(IComputeBackend &backend, core::usize bytes);
 
-    /** @brief Move-constructs from @p other (transfers ownership). */
+    /**
+     * @brief Move-constructs from @p other (transfers ownership).
+     */
     GpuBuffer(GpuBuffer &&other) noexcept;
 
-    /** @brief Move-assigns from @p other. */
+    /**
+     * @brief Move-assigns from @p other.
+     */
     GpuBuffer &operator=(GpuBuffer &&other) noexcept;
 
-    /** @brief Frees the device allocation. */
+    /**
+     * @brief Frees the device allocation.
+     */
     ~GpuBuffer();
 
-    /** @brief Returns the device pointer (may be null). */
+    /**
+     * @brief Returns the device pointer (may be null).
+     */
     [[nodiscard]] void *devicePtr() noexcept;
 
-    /** @brief Returns the device pointer (const). */
+    /**
+     * @brief Returns the device pointer (const).
+     */
     [[nodiscard]] const void *devicePtr() const noexcept;
 
-    /** @brief Returns the size in bytes. */
+    /**
+     * @brief Returns the size in bytes.
+     */
     [[nodiscard]] core::usize size() const noexcept;
 
-    /** @brief Uploads host data to this buffer. */
+    /**
+     * @brief Uploads host data to this buffer.
+     */
     [[nodiscard]] core::Expected<void> upload(const void *hostSrc, core::usize bytes);
 
-    /** @brief Downloads device data to host memory. */
+    /**
+     * @brief Downloads device data to host memory.
+     */
     [[nodiscard]] core::Expected<void> download(void *hostDst, core::usize bytes) const;
 
 private:
