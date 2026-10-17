@@ -122,13 +122,19 @@ public:
      */
     void note(const char *text) noexcept;
 
-    /** @brief Claims checked so far. */
+    /**
+     * @brief Claims checked so far.
+     */
     [[nodiscard]] core::u32 checks() const noexcept { return _checks; }
 
-    /** @brief Claims that did not hold. */
+    /**
+     * @brief Claims that did not hold.
+     */
     [[nodiscard]] core::u32 failures() const noexcept { return _failures; }
 
-    /** @brief Why the test did not run, or nullptr. */
+    /**
+     * @brief Why the test did not run, or nullptr.
+     */
     [[nodiscard]] const char *skipReason() const noexcept { return _skipReason; }
 
 private:
