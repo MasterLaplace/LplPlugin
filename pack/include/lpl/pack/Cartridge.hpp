@@ -39,9 +39,9 @@ namespace lpl::pack {
 
 /** @brief Where a decoded world came from, which a host wants to report. */
 enum class CartridgeSource : core::u8 {
-    Cartridge = 0, ///< The bytes the host was handed (a GRUB module, a file).
-    BuiltIn,       ///< The pack compiled into the image.
-    Defaults       ///< Nothing decoded: the compiled-in recipes are in use.
+    Cartridge = 0, /**< The bytes the host was handed (a GRUB module, a file). */
+    BuiltIn,       /**< The pack compiled into the image. */
+    Defaults       /**< Nothing decoded: the compiled-in recipes are in use. */
 };
 
 /** @brief What a pack decoded to, plus what happened while decoding it. */
@@ -49,8 +49,8 @@ struct Cartridge {
     procgen::WorldRecipe recipe{};
     ecology::LivingRecipe living{};
     CartridgeSource source{CartridgeSource::Defaults};
-    bool livingFromPack{false}; ///< False when the pack declared no ecosystem.
-    bool failed{false};         ///< A pack was offered and did not validate.
+    bool livingFromPack{false}; /**< False when the pack declared no ecosystem. */
+    bool failed{false};         /**< A pack was offered and did not validate. */
     WireRefusal refusal{};      /**< What refused it, when a field held an unknown value; empty otherwise. */
 
     /**
@@ -62,7 +62,7 @@ struct Cartridge {
      * the side of the fence that already knows what a sky is.
      */
     ViewV1 view{};
-    bool viewFromPack{false}; ///< False when the pack said nothing about looks.
+    bool viewFromPack{false}; /**< False when the pack said nothing about looks. */
 };
 
 namespace detail {
@@ -73,16 +73,7 @@ namespace detail {
  * @return false when the pack is refused: @p out then holds part of it, and @c out.refusal names
  *         the field when an enum field was what refused it.
  */
-[[nodiscard]] inline bool decodeRecipes(const View &view, Cartridge &out) noexcept
-{
-    RecipeV1 wire{};
-    LivingV1 livingWire{};
-
-    if (!view.readRecipe(wire) || !toEngineRecipe(wire, out.recipe, out.refusal))
-        return false;
-    out.livingFromPack = view.readLiving(livingWire);
-    return !out.livingFromPack || toEngineLiving(livingWire, out.living, out.refusal);
-}
+[[nodiscard]] inline bool decodeRecipes(const View &view, Cartridge &out) noexcept;
 
 } // namespace detail
 
@@ -98,46 +89,7 @@ namespace detail {
  */
 [[nodiscard]] inline Cartridge loadCartridge(const void *bytes, core::u32 size, const void *fallbackBytes,
                                              core::u32 fallbackSize, const procgen::WorldRecipe &defaults,
-                                             const ecology::LivingRecipe &defaultLiving)
-{
-    Cartridge out;
-    out.recipe = defaults;
-    out.living = defaultLiving;
-
-    const core::u8 *chosen = static_cast<const core::u8 *>(bytes);
-    core::u32 chosenSize = size;
-    out.source = CartridgeSource::Cartridge;
-    if (chosen == nullptr || chosenSize == 0u)
-    {
-        chosen = static_cast<const core::u8 *>(fallbackBytes);
-        chosenSize = fallbackSize;
-        out.source = CartridgeSource::BuiltIn;
-    }
-    if (chosen == nullptr || chosenSize == 0u)
-    {
-        out.source = CartridgeSource::Defaults;
-        return out;
-    }
-
-    View view;
-    if (!view.open(chosen, chosenSize) || !detail::decodeRecipes(view, out))
-    {
-        out.recipe = defaults;
-        out.living = defaultLiving;
-        out.livingFromPack = false;
-        out.failed = true;
-        out.source = CartridgeSource::Defaults;
-        return out;
-    }
-
-    ViewV1 viewWire{};
-    if (view.readView(viewWire))
-    {
-        out.view = viewWire;
-        out.viewFromPack = true;
-    }
-    return out;
-}
+                                             const ecology::LivingRecipe &defaultLiving);
 
 /**
  * @brief Repairs @p bytes with its parity section, then decodes it.
@@ -162,20 +114,10 @@ namespace detail {
 [[nodiscard]] inline Cartridge loadCartridgeRepairing(core::u8 *bytes, core::u32 size, const void *fallbackBytes,
                                                       core::u32 fallbackSize, const procgen::WorldRecipe &defaults,
                                                       const ecology::LivingRecipe &defaultLiving,
-                                                      EccRepairReport &outRepair)
-{
-    outRepair = EccRepairReport{};
-
-    if (bytes != nullptr && size != 0u)
-    {
-        View probe;
-        if (!probe.open(bytes, size))
-            (void) repairPack(bytes, size, outRepair);
-    }
-
-    return loadCartridge(bytes, size, fallbackBytes, fallbackSize, defaults, defaultLiving);
-}
+                                                      EccRepairReport &outRepair);
 
 } // namespace lpl::pack
+
+#    include "Cartridge.inl"
 
 #endif // LPL_PACK_CARTRIDGE_HPP

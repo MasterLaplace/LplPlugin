@@ -34,7 +34,7 @@
 
 namespace lpl::pack {
 
-/// The reference cartridge: a WorldRecipe section holding parityWorldRecipe().
+/** The reference cartridge: a WorldRecipe section holding parityWorldRecipe(). */
 inline constexpr core::u8 kParityPackBytes[] = {
     0x4Cu, 0x50u, 0x4Cu, 0x50u, 0x41u, 0x4Bu, 0x00u, 0x00u, 0x01u, 0x00u, 0x00u, 0x00u, 0x14u, 0x04u, 0x00u, 0x00u,
     0x01u, 0x00u, 0x00u, 0x00u, 0x68u, 0x6Cu, 0x22u, 0xA0u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -105,7 +105,7 @@ inline constexpr core::u8 kParityPackBytes[] = {
 
 };
 
-/// Size of @ref kParityPackBytes, in bytes.
+/** Size of @ref kParityPackBytes, in bytes. */
 inline constexpr core::u32 kParityPackSize = static_cast<core::u32>(sizeof(kParityPackBytes));
 
 } // namespace lpl::pack

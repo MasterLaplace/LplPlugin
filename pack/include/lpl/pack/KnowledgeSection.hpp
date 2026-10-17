@@ -19,7 +19,7 @@
 
 namespace lpl::pack {
 
-// TODO(lot 6): declarations only — no implementation yet.
+// TODO(#220): declarations only — no implementation yet.
 
 } // namespace lpl::pack
 
