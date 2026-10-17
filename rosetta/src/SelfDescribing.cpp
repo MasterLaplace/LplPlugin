@@ -1,12 +1,3 @@
-/**
- * @file SelfDescribing.cpp
- * @brief The instruction set, as bytes an artifact can carry.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/rosetta/SelfDescribing.hpp>
 
 namespace lpl::rosetta {
@@ -61,9 +52,6 @@ core::u32 emitSpecification(core::u8 *out, core::u32 size) noexcept
         out[cursor++] = static_cast<core::u8>(i);
         out[cursor++] = static_cast<core::u8>(operandCount(opcode));
 
-        // The names are stored AT the field's width and already NUL-padded, so a row is a plain
-        // copy: no terminator search, no tail to zero, and no way to read past the end. The two
-        // loops this replaces were one out-of-bounds read and one repair of its output.
         const char(&mnemonic)[kMnemonicBytes] = kOpcodeMnemonics[i];
         for (core::u32 c = 0u; c < kMnemonicBytes; ++c)
             out[cursor + c] = static_cast<core::u8>(mnemonic[c]);
@@ -91,8 +79,6 @@ bool readSpecification(const core::u8 *bytes, core::u32 size, IsaTable &outTable
     const core::u32 capacity = static_cast<core::u32>(Opcode::Count);
     const core::u32 rows = declared > capacity ? capacity : declared;
 
-    // A count from an engraving is input, not a promise: a plate that lost a corner
-    // can name more rows than it carries bytes for.
     core::u32 cursor = 16u;
     for (core::u32 i = 0u; i < rows; ++i)
     {

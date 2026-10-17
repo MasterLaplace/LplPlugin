@@ -31,10 +31,10 @@ namespace lpl::rosetta {
  * @brief What running a program did, in numbers a test can compare.
  */
 struct ExecutionReport {
-    bool halted{false};                    ///< Reached a HALT rather than the budget.
-    core::u32 steps{0u};                   ///< Instructions retired.
-    core::u32 traceSignature{0u};          ///< FNV-1a over every retired instruction and its result.
-    core::u32 registers[kRegisterCount]{}; ///< Final register file.
+    bool halted{false};                    /**< Reached a HALT rather than the budget. */
+    core::u32 steps{0u};                   /**< Instructions retired. */
+    core::u32 traceSignature{0u};          /**< FNV-1a over every retired instruction and its result. */
+    core::u32 registers[kRegisterCount]{}; /**< Final register file. */
 };
 
 /**
@@ -73,6 +73,17 @@ public:
 
     /**
      * @brief Runs @p program over @p memory.
+     *
+     * An opcode this machine was never told about stops it. Not a trap and not a
+     * no-op: a reader rebuilt from an incomplete specification has to FAIL, or the
+     * engraving could omit half the ISA and nothing would say so.
+     *
+     * Plain C++ on purpose. The whole argument of the minimal instruction set is that
+     * a stranger with none of our tools can re-implement it from a drawing; writing our
+     * own interpreter in assembly would say the opposite about how simple it is. If
+     * this dispatch grows past a page, the instruction set is too rich for its purpose
+     * and should be cut rather than optimised.
+     *
      * @param program     Instruction stream, @ref kInstructionBytes per instruction.
      * @param programSize Its length in bytes.
      * @param memory      Data memory, read and written in place.

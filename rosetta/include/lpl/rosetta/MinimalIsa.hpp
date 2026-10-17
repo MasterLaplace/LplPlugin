@@ -53,21 +53,21 @@ inline constexpr core::u32 kRegisterCount = 8u;
  * @brief The ten. Their numeric values are part of the engraved specification.
  */
 enum class Opcode : core::u8 {
-    Halt = 0u,       ///< Stop. Operands ignored.
-    Set = 1u,        ///< r[a] = (b << 8) | c. The only way a constant enters.
-    Load = 2u,       ///< r[a] = memory[r[b] + c].
-    Store = 3u,      ///< memory[r[b] + c] = r[a] (low byte).
-    Add = 4u,        ///< r[a] = r[b] + r[c], wrapping.
-    Sub = 5u,        ///< r[a] = r[b] - r[c], wrapping.
-    Xor = 6u,        ///< r[a] = r[b] ^ r[c].
-    Shift = 7u,      ///< r[a] = r[b] << c when c < 128, else r[b] >> (c - 128).
-    Jump = 8u,       ///< Program counter = (b << 8) | c, in instructions.
-    JumpIfZero = 9u, ///< The same, when r[a] is zero.
-    Count = 10u      ///< Not an opcode: the number of them.
+    Halt = 0u,       /**< Stop. Operands ignored. */
+    Set = 1u,        /**< r[a] = (b << 8) | c. The only way a constant enters. */
+    Load = 2u,       /**< r[a] = memory[r[b] + c]. */
+    Store = 3u,      /**< memory[r[b] + c] = r[a] (low byte). */
+    Add = 4u,        /**< r[a] = r[b] + r[c], wrapping. */
+    Sub = 5u,        /**< r[a] = r[b] - r[c], wrapping. */
+    Xor = 6u,        /**< r[a] = r[b] ^ r[c]. */
+    Shift = 7u,      /**< r[a] = r[b] << c when c < 128, else r[b] >> (c - 128). */
+    Jump = 8u,       /**< Program counter = (b << 8) | c, in instructions. */
+    JumpIfZero = 9u, /**< The same, when r[a] is zero. */
+    Count = 10u      /**< Not an opcode: the number of them. */
 };
 
 /**
- * Bytes a mnemonic occupies, in the table and in storage alike.
+ * @brief Bytes a mnemonic occupies, in the table and in storage alike.
  *
  * @warning **One number, because it used to be two facts.** The engraved table gives every
  * mnemonic a fixed eight-byte field while the names themselves were bare literals of whatever
@@ -99,11 +99,7 @@ inline constexpr char kOpcodeMnemonics[static_cast<core::u32>(Opcode::Count)][kM
  * @param opcode The instruction.
  * @return Its mnemonic, or "?" when the value is not one of the ten.
  */
-[[nodiscard]] constexpr const char *opcodeName(Opcode opcode) noexcept
-{
-    const auto index = static_cast<core::u32>(opcode);
-    return index < static_cast<core::u32>(Opcode::Count) ? kOpcodeMnemonics[index] : "?";
-}
+[[nodiscard]] constexpr const char *opcodeName(Opcode opcode) noexcept;
 
 /**
  * @brief How many of the three operand bytes @p opcode actually reads.
@@ -114,24 +110,7 @@ inline constexpr char kOpcodeMnemonics[static_cast<core::u32>(Opcode::Count)][kM
  * @param opcode The instruction.
  * @return 0 to 3.
  */
-[[nodiscard]] constexpr core::u32 operandCount(Opcode opcode) noexcept
-{
-    switch (opcode)
-    {
-    case Opcode::Halt: return 0u;
-    case Opcode::Jump: return 2u;
-    case Opcode::Set:
-    case Opcode::Load:
-    case Opcode::Store:
-    case Opcode::Add:
-    case Opcode::Sub:
-    case Opcode::Xor:
-    case Opcode::Shift:
-    case Opcode::JumpIfZero: return 3u;
-    case Opcode::Count: break;
-    }
-    return 0u;
-}
+[[nodiscard]] constexpr core::u32 operandCount(Opcode opcode) noexcept;
 
 /**
  * @brief Packs one instruction into its four bytes.
@@ -141,14 +120,10 @@ inline constexpr char kOpcodeMnemonics[static_cast<core::u32>(Opcode::Count)][kM
  * @param c      Third operand.
  * @param out    Receives @ref kInstructionBytes bytes.
  */
-constexpr void encodeInstruction(Opcode opcode, core::u8 a, core::u8 b, core::u8 c, core::u8 *out) noexcept
-{
-    out[0] = static_cast<core::u8>(opcode);
-    out[1] = a;
-    out[2] = b;
-    out[3] = c;
-}
+constexpr void encodeInstruction(Opcode opcode, core::u8 a, core::u8 b, core::u8 c, core::u8 *out) noexcept;
 
 } // namespace lpl::rosetta
+
+#    include "MinimalIsa.inl"
 
 #endif // LPL_LPL_ROSETTA_MINIMALISA_HPP

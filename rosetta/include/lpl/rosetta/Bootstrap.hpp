@@ -31,11 +31,11 @@ namespace lpl::rosetta {
  * @brief The five, in the order they must be read.
  */
 enum class BootstrapLevel : core::u32 {
-    Calibration = 0u, ///< Ratios a finder can verify against physics, not against us.
-    ReadOut = 1u,     ///< How a mark becomes a bit: cell pitch, orientation, row order.
-    Primitives = 2u,  ///< Pictograms for the few types the levels below use.
-    Machine = 3u,     ///< The instruction set, as SelfDescribing writes it.
-    Payload = 4u,     ///< What the artifact is actually for.
+    Calibration = 0u, /**< Ratios a finder can verify against physics, not against us. */
+    ReadOut = 1u,     /**< How a mark becomes a bit: cell pitch, orientation, row order. */
+    Primitives = 2u,  /**< Pictograms for the few types the levels below use. */
+    Machine = 3u,     /**< The instruction set, as SelfDescribing writes it. */
+    Payload = 4u,     /**< What the artifact is actually for. */
     Count = 5u
 };
 
@@ -44,19 +44,7 @@ enum class BootstrapLevel : core::u32 {
  * @param level The level.
  * @return Its name.
  */
-[[nodiscard]] constexpr const char *bootstrapLevelName(BootstrapLevel level) noexcept
-{
-    switch (level)
-    {
-    case BootstrapLevel::Calibration: return "CALIBRATION";
-    case BootstrapLevel::ReadOut: return "READOUT";
-    case BootstrapLevel::Primitives: return "PRIMITIVES";
-    case BootstrapLevel::Machine: return "MACHINE";
-    case BootstrapLevel::Payload: return "PAYLOAD";
-    case BootstrapLevel::Count: break;
-    }
-    return "?";
-}
+[[nodiscard]] constexpr const char *bootstrapLevelName(BootstrapLevel level) noexcept;
 
 /**
  * @struct Bootstrap
@@ -80,14 +68,23 @@ struct Bootstrap {
  * @brief Builds the canonical bootstrap of this build.
  *
  * Level 3 is @ref emitSpecification verbatim — the same bytes an interpreter can be
- * rebuilt from, not a prose restatement of them. The three above it are short and
- * fixed; their content is a design exercise rather than a technical one, and what
- * matters here is that they exist, are ordered, and are engraved together.
+ * rebuilt from, not a prose restatement of them: a description nothing can execute is a
+ * description nothing can check. The three above it are short and fixed; their content
+ * is a design exercise rather than a technical one, and what matters here is that they
+ * exist, are ordered, and are engraved together:
+ *
+ * - Level 0, calibration. Ratios, not units: a metre is a convention and the fine
+ *   structure constant is not. A finder checks their instrument against the plate.
+ * - Level 1, read-out. How a mark becomes a bit, in the units level 0 established.
+ * - Level 2, primitives. The few types everything below is written in. Kept to three
+ *   because every entry is something a reader has to be convinced of.
  *
  * @return The four levels.
  */
 [[nodiscard]] Bootstrap standardBootstrap();
 
 } // namespace lpl::rosetta
+
+#    include "Bootstrap.inl"
 
 #endif // LPL_LPL_ROSETTA_BOOTSTRAP_HPP

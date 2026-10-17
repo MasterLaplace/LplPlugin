@@ -1,12 +1,3 @@
-/**
- * @file Engraving.cpp
- * @brief The plate: five replicas, a payload, and a transversal parity field.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/rosetta/Engraving.hpp>
 
 #include <lpl/codec/ReedSolomon.hpp>
@@ -58,6 +49,11 @@ void appendWord(lpl::pmr::vector<core::u8> &out, core::u32 value)
 
 /**
  * @brief Builds one replica: magic, level lengths, level bytes, and a fold over them.
+ *
+ * The fold covers everything above it, so a replica that survived a cut can prove
+ * it. Without it a reader would take the first four bytes that happen to spell the
+ * magic and read rubble as a specification.
+ *
  * @param bootstrap The four levels.
  * @param out       Receives the replica.
  */
@@ -75,9 +71,6 @@ void buildReplica(const Bootstrap &bootstrap, lpl::pmr::vector<core::u8> &out)
         for (core::usize b = 0u; b < bootstrap.level[i].size(); ++b)
             out.push_back(bootstrap.level[i][b]);
 
-    // The fold covers everything above it, so a replica that survived a cut can prove
-    // it. Without it a reader would take the first four bytes that happen to spell the
-    // magic and read rubble as a specification.
     appendWord(out, foldBytes(out.data(), static_cast<core::u32>(out.size())));
 }
 
@@ -94,9 +87,6 @@ bool Engraving::engrave(const Bootstrap &bootstrap, const core::u8 *payload, cor
     const core::u32 replicaBytes = static_cast<core::u32>(replica.size());
 
     lpl::pmr::vector<core::u8> coded;
-    // Header: replica stride and count, then the payload offset. Outside the coded
-    // region on purpose — it is the bootstrap of the bootstrap, the same reason a
-    // pack's parity locator lives in its header rather than in its section table.
     appendWord(coded, replicaBytes);
     appendWord(coded, kBootstrapCopies);
     appendWord(coded, payloadSize);
@@ -109,9 +99,6 @@ bool Engraving::engrave(const Bootstrap &bootstrap, const core::u8 *payload, cor
         coded.push_back(payload[i]);
     appendWord(coded, foldBytes(payload, payloadSize));
 
-    // A fifth of the coded area, as parity rows. dataShards is chosen so a row is a
-    // meaningful slice of the plate rather than a byte: a burst has to be able to sit
-    // inside ONE row for the transversal argument to hold.
     const core::u32 codedBytes = static_cast<core::u32>(coded.size());
     core::u32 dataShards = 32u;
     if (dataShards > codedBytes)
@@ -166,9 +153,6 @@ bool Engraving::read(core::u8 *bytes, core::u32 size, lpl::pmr::vector<core::u8>
     core::u8 *const coded = bytes + kPlateHeader;
     core::u8 *const parity = coded + codedBytes;
 
-    // Repair first. It may fail — a plate broken in half is far past any column code —
-    // and that is NOT the end of the read: the five replicas exist precisely for the
-    // damage the parity cannot touch.
     codec::TransversalReport columns{};
     if (codec::transversalRepair(coded, codedBytes, parity, dataShards, parityShards, rowBytes, columns))
     {
@@ -184,8 +168,6 @@ bool Engraving::read(core::u8 *bytes, core::u32 size, lpl::pmr::vector<core::u8>
     if (replicaBytes < 12u || replicaCount == 0u || payloadSize == 0u)
         return false;
 
-    // Find a replica that proves itself. Scanning every copy rather than trusting the
-    // first is the whole reason there are five of them.
     for (core::u32 copy = 0u; copy < replicaCount; ++copy)
     {
         const core::u64 offset = 12u + static_cast<core::u64>(copy) * replicaBytes;
@@ -220,9 +202,6 @@ bool Engraving::read(core::u8 *bytes, core::u32 size, lpl::pmr::vector<core::u8>
             cursor += 4u;
         }
 
-        // Level 3 is the machine: the bytes an interpreter is rebuilt from. That is
-        // what the caller wants out of a plate, and everything above it is what makes
-        // those bytes legible in the first place.
         core::u32 levelStart = cursor;
         for (core::u32 i = 0u; i + 1u < kept; ++i)
             levelStart += lengths[i];
