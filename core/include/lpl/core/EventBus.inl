@@ -23,13 +23,16 @@ inline EventBus &EventBus::instance()
     return instance;
 }
 
-template <typename T> inline u32 EventBus::subscribe(lpl::pmr::function<void(const T &)> callback)
+template <typename T, typename Callback>
+requires std::is_invocable_v<const std::decay_t<Callback> &, const T &>
+inline u32 EventBus::subscribe(Callback &&callback)
 {
     lpl::pmr::lock_guard lock{_mutex};
     const u32 id = ++_nextId;
     auto &handlers = _handlers[getEventId<T>()];
 
-    handlers.push_back({id, [cb = std::move(callback)](const void *ev) { cb(*static_cast<const T *>(ev)); }});
+    handlers.push_back(
+        {id, [cb = std::forward<Callback>(callback)](const void *ev) { cb(*static_cast<const T *>(ev)); }});
     _subscriptions.fetch_add(1u, std::memory_order_relaxed);
 
     return id;
