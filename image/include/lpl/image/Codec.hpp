@@ -37,6 +37,8 @@ namespace lpl::image {
  * Tolerates leading whitespace and `#` comment lines in the header. Pixels are
  * read as opaque RGBA (alpha = 255). Returns false on a malformed header,
  * unsupported maxval (!= 255) or truncated pixel data.
+ *
+ * Exactly one whitespace byte separates the header from the pixel data.
  */
 [[nodiscard]] bool readPpm(const core::u8 *data, core::usize length, Image &out);
 

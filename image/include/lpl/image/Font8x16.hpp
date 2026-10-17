@@ -303,20 +303,7 @@ inline constexpr core::u8 kFont8x16[256][16] = {
  * @param colorRgb Packed 0x00RRGGBB text colour.
  */
 inline void drawGlyph8x16(core::u32 *destination, core::u32 pitchPixels, core::u32 x, core::u32 y,
-                          unsigned char character, core::u32 colorRgb) noexcept
-{
-    const core::u8 *glyph = kFont8x16[character];
-    for (core::u32 row = 0u; row < kFontHeight; ++row)
-    {
-        const core::u8 bits = glyph[row];
-        core::u32 *destinationRow = &destination[(y + row) * pitchPixels + x];
-        for (core::u32 column = 0u; column < kFontWidth; ++column)
-        {
-            if (bits & (0x80u >> column))
-                destinationRow[column] = colorRgb;
-        }
-    }
-}
+                          unsigned char character, core::u32 colorRgb) noexcept;
 
 /**
  * @brief Blits a NUL-terminated string, advancing 8 pixels per character.
@@ -328,12 +315,10 @@ inline void drawGlyph8x16(core::u32 *destination, core::u32 pitchPixels, core::u
  * @param colorRgb Packed 0x00RRGGBB text colour.
  */
 inline void drawText8x16(core::u32 *destination, core::u32 pitchPixels, core::u32 x, core::u32 y, const char *text,
-                         core::u32 colorRgb) noexcept
-{
-    for (core::u32 i = 0u; text[i] != '\0'; ++i)
-        drawGlyph8x16(destination, pitchPixels, x + i * kFontWidth, y, static_cast<unsigned char>(text[i]), colorRgb);
-}
+                         core::u32 colorRgb) noexcept;
 
 } // namespace lpl::image
+
+#    include "Font8x16.inl"
 
 #endif // LPL_IMAGE_FONT8X16_HPP

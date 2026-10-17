@@ -1,27 +1,22 @@
-/**
- * @file Image.cpp
- * @brief Out-of-line Image sampling + histogram (integer-only, deterministic).
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-28
- * @copyright MIT License
- */
 #include <lpl/image/Image.hpp>
 
 namespace lpl::image {
 
 namespace {
 
-/// Blend two channel values with an 0..256 weight toward @p hi.
+/**
+ * @brief Blend two channel values with an 0..256 weight toward @p hi.
+ */
 [[nodiscard]] core::u8 lerp8(core::u8 lo, core::u8 hi, core::u32 weight) noexcept
 {
     return static_cast<core::u8>((static_cast<core::u32>(lo) * (256u - weight) + static_cast<core::u32>(hi) * weight) >>
                                  8);
 }
 
-/// Bilinearly blend four corner colors with 0..256 weights (wx toward right,
-/// wy toward bottom), per channel.
+/**
+ * @brief Bilinearly blend four corner colors with 0..256 weights (wx toward right,
+ *        wy toward bottom), per channel.
+ */
 [[nodiscard]] Rgba blend4(Rgba c00, Rgba c10, Rgba c01, Rgba c11, core::u32 wx, core::u32 wy) noexcept
 {
     const core::u8 top_r = lerp8(redOf(c00), redOf(c10), wx);
@@ -44,8 +39,6 @@ Rgba Image::sampleBilinear(core::u32 u, core::u32 v) const noexcept
     if (_width == 0u || _height == 0u)
         return 0u;
 
-    // Map normalized Q16 to a Q16 pixel coordinate biased by -0.5 px so samples
-    // land at texel centres, then split into integer index + 0..256 weight.
     const core::i64 fx = (static_cast<core::i64>(u) * _width) - 0x8000;
     const core::i64 fy = (static_cast<core::i64>(v) * _height) - 0x8000;
 

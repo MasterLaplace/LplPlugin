@@ -41,16 +41,13 @@ public:
     Image() = default;
     Image(core::u32 width, core::u32 height) { resize(width, height); }
 
-    /** @brief Resize to @p width x @p height, clearing to transparent black. */
-    void resize(core::u32 width, core::u32 height)
-    {
-        _width = width;
-        _height = height;
-        // clear()+resize() (rather than assign()) keeps this portable to the
-        // freestanding kstd::vector, which has no assign().
-        _pixels.clear();
-        _pixels.resize(static_cast<core::usize>(width) * height, 0u);
-    }
+    /**
+     * @brief Resize to @p width x @p height, clearing to transparent black.
+     *
+     * clear()+resize() (rather than assign()) keeps this portable to the
+     * freestanding kstd::vector, which has no assign().
+     */
+    void resize(core::u32 width, core::u32 height);
 
     [[nodiscard]] core::u32 width() const noexcept { return _width; }
     [[nodiscard]] core::u32 height() const noexcept { return _height; }
@@ -58,58 +55,43 @@ public:
     [[nodiscard]] const Rgba *data() const noexcept { return _pixels.data(); }
     [[nodiscard]] Rgba *data() noexcept { return _pixels.data(); }
 
-    /** @brief Fill the whole image with @p color. */
-    void fill(Rgba color)
-    {
-        for (auto &pixel : _pixels)
-            pixel = color;
-    }
+    /**
+     * @brief Fill the whole image with @p color.
+     */
+    void fill(Rgba color);
 
-    /** @brief Read a pixel with coordinates clamped to the image bounds. */
-    [[nodiscard]] Rgba at(core::i32 x, core::i32 y) const noexcept
-    {
-        if (_width == 0u || _height == 0u)
-            return 0u;
-        const core::u32 cx = clampCoord(x, _width);
-        const core::u32 cy = clampCoord(y, _height);
-        return _pixels[static_cast<core::usize>(cy) * _width + cx];
-    }
+    /**
+     * @brief Read a pixel with coordinates clamped to the image bounds.
+     */
+    [[nodiscard]] Rgba at(core::i32 x, core::i32 y) const noexcept;
 
-    /** @brief Write a pixel; out-of-bounds writes are ignored. */
-    void set(core::i32 x, core::i32 y, Rgba color) noexcept
-    {
-        if (x < 0 || y < 0 || static_cast<core::u32>(x) >= _width || static_cast<core::u32>(y) >= _height)
-            return;
-        _pixels[static_cast<core::usize>(y) * _width + static_cast<core::u32>(x)] = color;
-    }
+    /**
+     * @brief Write a pixel; out-of-bounds writes are ignored.
+     */
+    void set(core::i32 x, core::i32 y, Rgba color) noexcept;
 
     /**
      * @brief Nearest-neighbour sample at normalized Q16 coordinates.
      * @param u Horizontal coordinate in Q16 (0x10000 == right edge).
      * @param v Vertical coordinate in Q16 (0x10000 == bottom edge).
      */
-    [[nodiscard]] Rgba sampleNearest(core::u32 u, core::u32 v) const noexcept
-    {
-        const core::i32 x = static_cast<core::i32>((static_cast<core::u64>(u) * _width) >> 16);
-        const core::i32 y = static_cast<core::i32>((static_cast<core::u64>(v) * _height) >> 16);
-        return at(x, y);
-    }
+    [[nodiscard]] Rgba sampleNearest(core::u32 u, core::u32 v) const noexcept;
 
-    /** @brief Bilinear sample at normalized Q16 coordinates (integer-weighted). */
+    /**
+     * @brief Bilinear sample at normalized Q16 coordinates (integer-weighted).
+     *
+     * Maps normalized Q16 to a Q16 pixel coordinate biased by -0.5 px so samples
+     * land at texel centres, then splits it into integer index + 0..256 weight.
+     */
     [[nodiscard]] Rgba sampleBilinear(core::u32 u, core::u32 v) const noexcept;
 
-    /** @brief Accumulate per-channel and luminance histograms over all pixels. */
+    /**
+     * @brief Accumulate per-channel and luminance histograms over all pixels.
+     */
     [[nodiscard]] Histogram histogram() const noexcept;
 
 private:
-    [[nodiscard]] static core::u32 clampCoord(core::i32 v, core::u32 size) noexcept
-    {
-        if (v < 0)
-            return 0u;
-        if (static_cast<core::u32>(v) >= size)
-            return size - 1u;
-        return static_cast<core::u32>(v);
-    }
+    [[nodiscard]] static core::u32 clampCoord(core::i32 v, core::u32 size) noexcept;
 
     core::u32 _width = 0u;
     core::u32 _height = 0u;
@@ -117,5 +99,7 @@ private:
 };
 
 } // namespace lpl::image
+
+#    include "Image.inl"
 
 #endif // LPL_IMAGE_IMAGE_HPP
