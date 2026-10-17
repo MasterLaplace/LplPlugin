@@ -1,12 +1,3 @@
-/**
- * @file Social.cpp
- * @brief Implementation of asymmetric memory and faction reputation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ai/Social.hpp>
 
 namespace lpl::ai {
@@ -16,8 +7,8 @@ namespace {
 constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
 constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
-/// Below this confidence a model is worthless and is dropped.
-constexpr core::i32 kForgetThreshold = 0x0666; // ~0.025 in Q16.16
+/** Below this confidence (~0.025 in Q16.16) a model is worthless and is dropped. */
+constexpr core::i32 kForgetThreshold = 0x0666;
 
 } // namespace
 
@@ -34,9 +25,6 @@ void RelationshipTracker::observe(core::u32 observer, core::u32 subject, core::u
         existing.lastVz = vz;
         existing.confidence = math::Fixed32::one();
 
-        // Seeing something again reinforces the opinion rather than replacing it.
-        // Replacing would make a creature's view of another swing on a single
-        // glance, which is exactly the memoryless behaviour this exists to avoid.
         if (existing.attitude == attitude)
         {
             existing.intensity =
@@ -83,9 +71,6 @@ core::u32 RelationshipTracker::tick(core::u32 width, core::u32 depth, math::Fixe
             continue;
         }
 
-        // Extrapolate the remembered position along the last seen velocity. The
-        // creature will search where the target WOULD be if it had not turned —
-        // and the fact that it usually did turn is the behaviour, not a defect.
         const core::i32 x = static_cast<core::i32>(opinion.lastSeenCell % width) + opinion.lastVx.toInt();
         const core::i32 z = static_cast<core::i32>(opinion.lastSeenCell / width) + opinion.lastVz.toInt();
         const core::i32 cx = x < 0 ? 0 : (x >= static_cast<core::i32>(width) ? static_cast<core::i32>(width) - 1 : x);
@@ -137,9 +122,6 @@ math::Fixed32 RelationshipTracker::reputation(core::u32 faction, core::u32 subje
 Attitude RelationshipTracker::effectiveAttitude(Attitude remembered, const PersonalityTraits &traits,
                                                 math::Fixed32 intensity)
 {
-    // Personality modulates, never overrides. A creature that remembers you as
-    // prey does not become afraid of you because it is timid — it becomes
-    // reluctant, which is `Antagonises`.
     switch (remembered)
     {
     case Attitude::Antagonises:
@@ -150,15 +132,11 @@ Attitude RelationshipTracker::effectiveAttitude(Attitude remembered, const Perso
         return remembered;
 
     case Attitude::Eats:
-        // A timid predator hesitates rather than charging. `Antagonises` is the
-        // honest name for "wants it, will not commit".
         if (traits.bravery < math::Fixed32::fromRaw(0x4CCC))
             return Attitude::Antagonises;
         return remembered;
 
     case Attitude::Afraid:
-        // Bravery does not remove fear, it raises the threshold at which fear
-        // wins. A brave creature stands its ground against a weak impression.
         if (traits.bravery > math::Fixed32::fromRaw(0xCCCC) && intensity < math::Fixed32::half())
             return Attitude::Antagonises;
         return remembered;

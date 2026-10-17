@@ -56,7 +56,7 @@
 
 namespace lpl::ai {
 
-/// Channels a field may carry. Four covers the ecosystem's needs; more is cheap.
+/** Channels a field may carry. ScentChannel names six; more is cheap. */
 inline constexpr core::u32 kMaxStigmergyChannels = 8u;
 
 /**
@@ -67,12 +67,12 @@ inline constexpr core::u32 kMaxStigmergyChannels = 8u;
  * naming them is what lets two systems agree about which number means "predator".
  */
 enum class ScentChannel : core::u32 {
-    Plant = 0, ///< Attracts herbivores.
-    Herbivore, ///< Attracts carnivores.
-    Carnivore, ///< Repels herbivores: this is what triggers flight.
-    Terror,    ///< An apex predator's territory. Repels everything.
-    Kin,       ///< Same-species presence. Mildly REPULSIVE, and that is the point.
-    Pheromone  ///< Ant-colony trail strength.
+    Plant = 0, /**< Attracts herbivores. */
+    Herbivore, /**< Attracts carnivores. */
+    Carnivore, /**< Repels herbivores: this is what triggers flight. */
+    Terror,    /**< An apex predator's territory. Repels everything. */
+    Kin,       /**< Same-species presence. Mildly REPULSIVE, and that is the point. */
+    Pheromone  /**< Ant-colony trail strength. */
 };
 
 /**
@@ -86,7 +86,7 @@ enum class ScentChannel : core::u32 {
  */
 struct ScentAffinity {
     core::u32 channel{0u};
-    math::Fixed32 weight{}; ///< Positive attracts, negative repels.
+    math::Fixed32 weight{}; /**< Positive attracts, negative repels. */
 };
 
 /**
@@ -108,11 +108,7 @@ struct ScentPalate {
      * @param channel The scent channel to add.
      * @param weight The weight of the term.
      */
-    constexpr void add(ScentChannel channel, math::Fixed32 weight) noexcept
-    {
-        if (count < kMaxStigmergyChannels)
-            terms[count++] = ScentAffinity{static_cast<core::u32>(channel), weight};
-    }
+    constexpr void add(ScentChannel channel, math::Fixed32 weight) noexcept;
 };
 
 /**
@@ -133,8 +129,8 @@ struct StigmergyParams {
      *          meant to guide across a room wants @c evaporation near 0.999.
      */
     core::f32 evaporation{0.92f};
-    core::f32 diffusion{0.08f}; ///< Share redistributed to the four neighbours.
-    core::f32 maximum{100.0f};  ///< Saturation, so one source cannot dominate forever.
+    core::f32 diffusion{0.08f}; /**< Share redistributed to the four neighbours. */
+    core::f32 maximum{100.0f};  /**< Saturation, so one source cannot dominate forever. */
 
     /**
      * @brief Below this a cell is cleared to exactly zero.
@@ -185,6 +181,10 @@ public:
 
     /**
      * @brief Adds to a cell, saturating at the configured maximum.
+     *
+     * Nothing stands inside a wall, so nothing deposits there: a deposit on a
+     * blocked cell is ignored.
+     *
      * @param channel Channel index.
      * @param x       Column.
      * @param z       Row.
@@ -215,6 +215,11 @@ public:
      * the two together are for: a source that stops emitting fades from its
      * furthest reach inward.
      *
+     * A wall blocks diffusion in BOTH directions: nothing flows in from it, and
+     * nothing flows out into it. Letting it absorb would make walls into sinks, so
+     * a corridor would read as less scented than an open room carrying the same
+     * traffic.
+     *
      * @param params Rates and floor.
      */
     void step(const StigmergyParams &params);
@@ -235,6 +240,10 @@ public:
      * @ref kNoDirection when no neighbour is better. Obstacles are never
      * returned, so following this never walks into a wall.
      *
+     * A neighbour must be strictly better, so a plateau leaves the agent where it
+     * is rather than letting the neighbour order decide — the same tie rule the
+     * rest of the engine uses, and the reason two targets agree.
+     *
      * @param channel Channel index.
      * @param x       Column.
      * @param z       Row.
@@ -254,6 +263,11 @@ public:
      * tick, and rebuilding a full map per tick would cost the width times the
      * depth times the channels to answer a question about nine cells. Same idea,
      * different substrate, different cost — do not unify them.
+     *
+     * Attraction and repulsion are the same sum with opposite signs, which is
+     * why a wolf and a deer can share one field and one line of code. A
+     * neighbour must score strictly better, the same tie rule
+     * @ref gradientDirection uses.
      *
      * @param palate What this animal is attracted to and repelled by.
      * @param x      Agent column.
@@ -284,10 +298,12 @@ private:
     core::u32 _depth{0u};
     core::u32 _channels{0u};
     lpl::pmr::vector<math::Fixed32> _cells;
-    lpl::pmr::vector<math::Fixed32> _scratch; ///< The second buffer; never read while writing.
+    lpl::pmr::vector<math::Fixed32> _scratch; /**< The second buffer; never read while writing. */
     lpl::pmr::vector<core::u8> _blocked;
 };
 
 } // namespace lpl::ai
+
+#    include "StigmergyField.inl"
 
 #endif // LPL_AI_STIGMERGYFIELD_HPP

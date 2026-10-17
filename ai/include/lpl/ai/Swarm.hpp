@@ -44,12 +44,12 @@ namespace lpl::ai {
  * @brief Weights of the three local rules, and how far a boid can see.
  */
 struct BoidParams {
-    math::Fixed32 separationRadius{math::Fixed32::fromRaw(2 << 16)}; ///< Below this, push apart.
-    math::Fixed32 neighbourRadius{math::Fixed32::fromRaw(6 << 16)};  ///< Beyond this, ignore.
-    core::f32 separationWeight{1.5f};                                ///< Avoiding overlap. The strongest, deliberately.
-    core::f32 alignmentWeight{0.6f};                                 ///< Matching the local heading.
-    core::f32 cohesionWeight{0.3f};                                  ///< Drifting toward the local centre.
-    core::f32 maxSpeed{1.0f}; ///< Speed cap, so the flock cannot accelerate forever.
+    math::Fixed32 separationRadius{math::Fixed32::fromRaw(2 << 16)}; /**< Below this, push apart. */
+    math::Fixed32 neighbourRadius{math::Fixed32::fromRaw(6 << 16)};  /**< Beyond this, ignore. */
+    core::f32 separationWeight{1.5f}; /**< Avoiding overlap. The strongest, deliberately. */
+    core::f32 alignmentWeight{0.6f};  /**< Matching the local heading. */
+    core::f32 cohesionWeight{0.3f};   /**< Drifting toward the local centre. */
+    core::f32 maxSpeed{1.0f};         /**< Speed cap, so the flock cannot accelerate forever. */
 };
 
 /**
@@ -64,18 +64,21 @@ struct Boid {
 };
 
 /**
- * @brief Applies separation, alignment and cohesion to every boid.
- *
- * Double-buffered like the field, and for the same reason: a boid that reads a
- * neighbour the same sweep already moved is reacting to a future the others
- * cannot see, so the flock's shape would depend on iteration order.
- *
- * @param boids   Agents to steer, updated in place.
- * @param count   Entries in @p boids.
- * @param params  Weights and radii.
- */
-/**
  * @brief Advances a flock by one step of @p dt seconds.
+ *
+ * Applies separation, alignment and cohesion to every boid. Double-buffered like
+ * the field, and for the same reason: a boid that reads a neighbour the same
+ * sweep already moved is reacting to a future the others cannot see, so the
+ * flock's shape would depend on iteration order.
+ *
+ * The neighbourhood is a Chebyshev box: no square root, and a box is what a
+ * spatial hash returns anyway — so the test agrees with the query rather than
+ * trimming its results. A neighbour closer than the separation radius r, at
+ * Chebyshev distance d, pushes the boid away by its offset scaled by
+ * (r - d) / r. Steering is an ACCELERATION, so it is scaled by the step as well:
+ * a flock that turns as hard per tick as per second changes shape with the tick
+ * rate. The speed cap is on the Chebyshev norm too, for the same reason: no
+ * square root in an authoritative path.
  *
  * @warning @p dt is explicit and has no default, deliberately. This function used
  *          to integrate `x + vx` — an implicit dt of one — which reads as harmless
@@ -107,12 +110,18 @@ struct AntParams {
      */
     core::u32 explore16{2u};
 
-    math::Fixed32 depositQuality{math::Fixed32::fromRaw(64 << 16)}; ///< @f$Q@f$ in @f$Q/L@f$.
-    core::u32 channel{0u};                                          ///< Which stigmergy channel carries the trail.
+    math::Fixed32 depositQuality{math::Fixed32::fromRaw(64 << 16)}; /**< @f$Q@f$ in @f$Q/L@f$. */
+    core::u32 channel{0u};                                          /**< Which stigmergy channel carries the trail. */
 };
 
 /**
  * @brief Chooses one agent's next move: follow the trail, or explore.
+ *
+ * The caller's stream is advanced in place: the agent owns its randomness, so
+ * two agents stepping in a different order still each get their own sequence.
+ * An explorer ignores the field completely. Not "prefers a weaker trail" —
+ * ignores it, because a weighted choice still concentrates on whatever the
+ * colony already believes, and the point is to look where nobody has.
  *
  * @param field    The pheromone field.
  * @param params   Exploration balance.
@@ -134,6 +143,12 @@ struct AntParams {
  * a hint, not an answer — the trails still have to be walked — but it stops the
  * colony spending its first hundred ticks rediscovering that the map has a
  * shape.
+ *
+ * Each cell takes the nearest goal by Chebyshev distance, then a linear
+ * falloff. Linear rather than inverse-square: this is a hint about where to
+ * start looking, and a sharp falloff would pin the colony to the goal's
+ * immediate surroundings — which is the search it was supposed to avoid having
+ * to do.
  *
  * @param field   Field to seed.
  * @param channel Channel to write.

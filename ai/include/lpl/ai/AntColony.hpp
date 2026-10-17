@@ -49,10 +49,10 @@ namespace lpl::ai {
  * @brief How many agents, how far they range, and on which channel.
  */
 struct AntColonyParams {
-    core::u32 agents{48u}; ///< Foragers walking the field.
+    core::u32 agents{48u}; /**< Foragers walking the field. */
 
     /**
-     * @brief Chebyshev-ish range, in cells, before an agent is sent home.
+     * @brief Euclidean range, in cells, before an agent is sent home.
      *
      * The colony's closing rule. Too large and the trail never closes; too small
      * and the agents never reach anything worth marking. It is a distance rather
@@ -61,8 +61,8 @@ struct AntColonyParams {
      */
     core::u32 forageRange{40u};
 
-    core::u32 seed{0xA57Eu}; ///< Anchors the per-agent random streams.
-    AntParams ants{};        ///< Exploration balance, deposit quality, channel.
+    core::u32 seed{0xA57Eu}; /**< Anchors the per-agent random streams. */
+    AntParams ants{};        /**< Exploration balance, deposit quality, channel. */
 };
 
 /**
@@ -73,6 +73,11 @@ struct AntColonyParams {
  * channels are named in @ref ScentChannel and the ants use exactly one — the one
  * the enumeration already calls @c Pheromone — so a colony and a food web can share
  * one field without reading each other's marks.
+ *
+ * Its definitions live in a `.inl` rather than a `.cpp` on purpose: every source
+ * in `ai/src/` is compiled into the kernel image by both build paths, and ring 0
+ * has no use for a forage colony. Header-defined, it costs nothing to a target
+ * that does not include it.
  */
 class AntColony {
 public:
@@ -83,6 +88,11 @@ public:
      * adaptive initialisation the literature reports halves convergence: the field
      * starts already sloping toward home instead of spending its first hundred ticks
      * rediscovering that the map has a shape.
+     *
+     * Every agent starts ON the nest. Scattering them would look livelier and
+     * would destroy the claim being made: a trail that forms from a single origin
+     * is evidence the field converged, one that starts spread out is evidence of
+     * nothing.
      *
      * @param field  The field to seed and later deposit on.
      * @param width  Grid width, in cells.
@@ -111,12 +121,18 @@ public:
     [[nodiscard]] core::u32 nestX() const noexcept { return _nestX; }
     [[nodiscard]] core::u32 nestZ() const noexcept { return _nestZ; }
 
-    /// How many agents have been sent home since @ref reset. A colony whose returns
-    /// stay at zero is not foraging, it is sitting on its nest.
+    /**
+     * @brief How many agents have been sent home since @ref reset.
+     *
+     * A colony whose returns stay at zero is not foraging, it is sitting on its
+     * nest.
+     */
     [[nodiscard]] core::u32 returns() const noexcept { return _returns; }
 
-    /// How many moves ignored the field on the last @ref step — the exploration that
-    /// finds a detour when the best route is blocked.
+    /**
+     * @brief How many moves ignored the field on the last @ref step — the
+     *        exploration that finds a detour when the best route is blocked.
+     */
     [[nodiscard]] core::u32 explored() const noexcept { return _explored; }
 
 private:
@@ -144,6 +160,6 @@ private:
 
 } // namespace lpl::ai
 
-#    include <lpl/ai/AntColony.inl>
+#    include "AntColony.inl"
 
 #endif // LPL_AI_ANT_COLONY_HPP

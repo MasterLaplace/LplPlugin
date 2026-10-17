@@ -37,12 +37,12 @@ namespace lpl::ai {
  * @brief Six axes in [0, 1], derived from an identifier and never stored.
  */
 struct PersonalityTraits {
-    math::Fixed32 aggression{};  ///< High: strikes first, pursues longer. Low: flees when hurt.
-    math::Fixed32 bravery{};     ///< High: investigates noises, ignores unreachable threats.
-    math::Fixed32 dominance{};   ///< High: leads packs, shoulders through. Low: yields.
-    math::Fixed32 energy{};      ///< High: moves fast, explores more nodes per tick.
-    math::Fixed32 nervousness{}; ///< High: overreacts to repeated stimuli.
-    math::Fixed32 sympathy{};    ///< High: tolerates, shares, warns before killing.
+    math::Fixed32 aggression{};  /**< High: strikes first, pursues longer. Low: flees when hurt. */
+    math::Fixed32 bravery{};     /**< High: investigates noises, ignores unreachable threats. */
+    math::Fixed32 dominance{};   /**< High: leads packs, shoulders through. Low: yields. */
+    math::Fixed32 energy{};      /**< High: moves fast, explores more nodes per tick. */
+    math::Fixed32 nervousness{}; /**< High: overreacts to repeated stimuli. */
+    math::Fixed32 sympathy{};    /**< High: tolerates, shares, warns before killing. */
 };
 
 /**
@@ -53,39 +53,15 @@ struct PersonalityTraits {
  * would tend to come out brave too, and the population would have two
  * personalities instead of a spread.
  *
+ * Each axis has its own odd multiplier, then a full avalanche: six independent
+ * draws, not six windows onto one. 16 bits of the avalanche become the
+ * fractional part directly, so the value lands in [0, 1) with no division.
+ *
  * @param id      The creature's identifier.
  * @param species A per-species salt, so the same id in two species differs.
  * @return The six traits, each in [0, 1].
  */
-[[nodiscard]] constexpr PersonalityTraits personalityOf(core::u32 id, core::u32 species = 0u) noexcept
-{
-    const auto avalanche = [](core::u32 v) -> core::u32 {
-        v ^= v >> 16;
-        v *= 0x7FEB352Du;
-        v ^= v >> 15;
-        v *= 0x846CA68Bu;
-        v ^= v >> 16;
-        return v;
-    };
-
-    // Distinct odd multipliers per axis, then a full avalanche each. Six
-    // independent draws, not six windows onto one.
-    const auto trait = [&](core::u32 salt) -> math::Fixed32 {
-        const core::u32 h = avalanche((id ^ (species * 0x9E3779B1u)) * salt + salt);
-        // 16 bits of the avalanche become the fractional part directly, so the
-        // value lands in [0, 1) with no division.
-        return math::Fixed32::fromRaw(static_cast<core::i32>(h & 0xFFFFu));
-    };
-
-    PersonalityTraits traits;
-    traits.aggression = trait(0x1B873593u);
-    traits.bravery = trait(0xCC9E2D51u);
-    traits.dominance = trait(0x85EBCA6Bu);
-    traits.energy = trait(0xC2B2AE35u);
-    traits.nervousness = trait(0x27D4EB2Fu);
-    traits.sympathy = trait(0x165667B1u);
-    return traits;
-}
+[[nodiscard]] constexpr PersonalityTraits personalityOf(core::u32 id, core::u32 species = 0u) noexcept;
 
 /**
  * @brief How long a creature waits before attacking, as a share of the base delay.
@@ -94,11 +70,11 @@ struct PersonalityTraits {
  * aggression drops the delay toward a quarter, low aggression stretches it.
  *
  * @param traits The creature's temperament.
- * @return A multiplier in roughly [0.25, 1.25].
+ * @return 1.25 - aggression: a multiplier in roughly [0.25, 1.25].
  */
 [[nodiscard]] constexpr math::Fixed32 attackDelayScale(const PersonalityTraits &traits) noexcept
 {
-    return math::Fixed32::fromRaw(0x14000) - traits.aggression; // 1.25 - aggression
+    return math::Fixed32::fromRaw(0x14000) - traits.aggression;
 }
 
 /**
@@ -110,16 +86,10 @@ struct PersonalityTraits {
  * @param traits The creature's temperament.
  * @return A threshold in [0, 1].
  */
-[[nodiscard]] constexpr math::Fixed32 fleeThreshold(const PersonalityTraits &traits) noexcept
-{
-    math::Fixed32 t = math::Fixed32::half() + (traits.bravery - traits.nervousness) * math::Fixed32::half();
-    if (t < math::Fixed32::zero())
-        t = math::Fixed32::zero();
-    if (t > math::Fixed32::one())
-        t = math::Fixed32::one();
-    return t;
-}
+[[nodiscard]] constexpr math::Fixed32 fleeThreshold(const PersonalityTraits &traits) noexcept;
 
 } // namespace lpl::ai
+
+#    include "Personality.inl"
 
 #endif // LPL_AI_PERSONALITY_HPP
