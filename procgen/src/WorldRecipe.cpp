@@ -1,12 +1,3 @@
-/**
- * @file WorldRecipe.cpp
- * @brief Implementation of recipe baking and the authoritative state fold.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/WorldRecipe.hpp>
 
 #include <lpl/ecs/Component.hpp>
@@ -26,6 +17,10 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
 /**
  * @brief Raises the finished field until its lowest cell reaches @p clearance.
+ *
+ * normalize maps min and max onto the two bounds linearly, so asking for the same span
+ * translated is an exact shift, not a rescale.
+ *
  * @return The shift actually applied; 0 when the ground was already high enough,
  *         which is also what every caller adds to its absolute thresholds.
  */
@@ -43,8 +38,6 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
     if (lift <= 0.0f)
         return 0.0f;
 
-    // normalize maps min and max onto the two bounds linearly, so asking for the same
-    // span translated is an exact shift, not a rescale.
     builder.normalize(low.toFloat() + lift, high.toFloat() + lift);
     return lift;
 }
@@ -60,10 +53,6 @@ core::u32 foldWorldState(const ecs::Registry &registry) noexcept
     {
         if (!partition)
             continue;
-        // Archetype membership, never a null pointer test: readComponent returns
-        // a valid pointer for every component id a chunk was built with, so a
-        // null check would answer a different question than "does this partition
-        // store positions".
         const bool hasPosition = partition->archetype().has(ecs::ComponentId::Position);
         const bool hasAabb = partition->archetype().has(ecs::ComponentId::AABB);
         if (!hasPosition)
@@ -98,34 +87,15 @@ core::u32 foldWorldState(const ecs::Registry &registry) noexcept
 
 core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const ReliefBlend *relief)
 {
-    // The pass order lives here, in one place, rather than at every call site.
-    // It is not a style preference: two callers ordering erosion and rivers
-    // differently would produce two different worlds from the same recipe, and
-    // the parity gate would be comparing worlds that were never meant to match.
-    //
-    // It is a free function rather than a step inside bakeWorld because a caller
-    // may want the GRIDS without the entities — a viewer draws a heightfield, it
-    // does not need one entity per ground cell. Before this existed the in-kernel
-    // viewer built its own pipeline by hand, which is exactly how a project ends
-    // up with two generators and a gate that exercises the one nothing else runs.
     builder.cellSize(recipe.cellSize);
     builder.terrain(recipe.width, recipe.depth, recipe.terrain);
 
-    // @warning **Measured ground displaces the LOWEST frequency, so it lands here and not later.**
-    // Erosion softening real relief is what makes a survey read as terrain rather than as a
-    // photograph pasted onto one, and normalising afterwards keeps the whole field in the frame the
-    // rest of the recipe expects. Injected rather than named by the recipe, for the same reason
-    // `ChunkParams::relief` is a pointer beside serialisable noise: a recipe is a wire object and a
-    // survey is data that has to come from outside it.
     if (relief != nullptr)
         builder.relief(*relief);
 
     if (recipe.normalizeTerrain)
         builder.normalize(recipe.heightLow, recipe.heightHigh);
 
-    // Terracing before erosion, because erosion is what softens the steps back into
-    // something that looks cut rather than stamped. The other way round gives sharp
-    // benches on a smooth hill, which reads as a rendering artefact.
     if (recipe.terraceSteps != 0u)
         builder.terraces(recipe.terraceSteps);
 
@@ -138,15 +108,8 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
     if (recipe.carveRivers)
         builder.rivers(recipe.rivers);
 
-    // The world is put in the frame the physics expects HERE — after erosion and the
-    // rivers, because the lowest cell is not knowable before them, and before a single
-    // entity exists, because moving the ground under things already standing on it
-    // means chasing a list that only ever grows. See WorldRecipe::groundClearance.
     const core::f32 lift = liftGround(builder, recipe.groundClearance);
 
-    // Provinces before the climate block: the districting is a partition of the
-    // SURFACE, so it belongs with the terrain that is now final, and a settlement laid
-    // out later can be anchored on it.
     if (recipe.partitionRegions)
         builder.regions(recipe.provinces);
 
@@ -154,9 +117,6 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
     {
         BiomeParams biomes = recipe.biomes;
         ClimateParams axes = recipe.axes;
-        // Every absolute threshold travels with the lift, or the classifier reads the
-        // shifted field against thresholds tuned for the old one and calls a plain a
-        // summit.
         biomes.seaLevel += lift;
         biomes.mountainHeight += lift;
         biomes.snowHeight += lift;
@@ -171,19 +131,11 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
     for (core::u32 i = 0u; i < rules; ++i)
         builder.scatter(recipe.scatter[i]);
 
-    // One underground, chosen by the recipe. Four generators existed and only the
-    // cellular one could be named, so the other three were reachable exclusively by
-    // hand-written builder calls — a world nothing could save, bake or replay.
     if (recipe.carveCaves)
     {
         CaveKind kind = recipe.caveKind;
         if (kind == CaveKind::Auto)
         {
-            // The evidence is the map that has already been built, not a guess about
-            // it: the moisture field is computed above, at line `builder.climate`, and
-            // whether people live here is a thing the recipe states outright. Reading
-            // a field that exists is the difference between a procedural default and
-            // one invented for the occasion.
             CaveContext context;
             context.settled = recipe.placeSettlement;
             context.layerCount = recipe.caveSystem.layers;
@@ -204,7 +156,7 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
         case CaveKind::Bsp: builder.dungeon(recipe.rooms); break;
         case CaveKind::Dla: builder.dlaCaves(recipe.aggregation); break;
         case CaveKind::Layered: builder.caveSystem(recipe.caveSystem); break;
-        case CaveKind::Auto: // resolved above; the case exists so a new kind cannot
+        case CaveKind::Auto:
         case CaveKind::Cellular: builder.caves(recipe.caves); break;
         }
     }
@@ -216,14 +168,9 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
         builder.settlement(settlement);
     }
 
-    // The grammar needs the plots the settlement laid out, so it cannot run before
-    // one exists. Raising a town is what turns a painted footprint into a silhouette.
     if (recipe.raiseBuildings)
         builder.buildings(recipe.buildings);
 
-    // After the settlement, never before: the road field is anchored on the
-    // districts the town laid out, so growing first would steer the network by
-    // a town that does not exist yet.
     if (recipe.growRoads)
     {
         RoadParams roads = recipe.roads;
@@ -231,7 +178,6 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
         builder.roads(roads);
     }
 
-    // And the verges after the roads they decorate.
     if (recipe.roadsideLevels != 0u && recipe.roadsidePattern[0] != '\0')
         builder.roadside(recipe.roadsidePattern, recipe.roadsideLevels);
 
@@ -269,8 +215,6 @@ WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe)
     }
     else
     {
-        // A recipe that declines the check is trivially "not failing" it, so the
-        // ok flag below stays a statement about the world, not about the gate.
         result.gateReachable = 1u;
     }
 

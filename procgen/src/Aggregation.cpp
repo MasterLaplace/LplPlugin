@@ -1,12 +1,3 @@
-/**
- * @file Aggregation.cpp
- * @brief Implementation of diffusion-limited aggregation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Aggregation.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -15,7 +6,9 @@ namespace lpl::procgen {
 
 namespace {
 
-/// Chebyshev distance, which matches the 8-neighbourhood the walk uses.
+/**
+ * @brief Chebyshev distance, which matches the 8-neighbourhood the walk uses.
+ */
 core::u32 chebyshev(core::i32 ax, core::i32 az, core::i32 bx, core::i32 bz)
 {
     const core::u32 dx = static_cast<core::u32>(ax > bx ? ax - bx : bx - ax);
@@ -45,7 +38,9 @@ bool touchesCluster(const DungeonMap &map, core::i32 x, core::i32 z)
     return false;
 }
 
-/// Carves a filled square of the given radius, clipped to the map.
+/**
+ * @brief Carves a filled square of the given radius, clipped to the map.
+ */
 void carveBlob(DungeonMap &map, core::i32 x, core::i32 z, core::u32 radius, core::u32 &outOpened)
 {
     const core::i32 r = static_cast<core::i32>(radius);
@@ -85,12 +80,8 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
     const core::i32 centerX = static_cast<core::i32>(params.width / 2u);
     const core::i32 centerZ = static_cast<core::i32>(params.depth / 2u);
 
-    // The seed the cluster grows from.
     carveBlob(map, centerX, centerZ, params.thickness, report.openCells);
 
-    // Walks are confined to a margin, and spawns track the cluster's current
-    // extent: releasing from the far edge of a large map would spend nearly the
-    // whole budget crossing empty rock before the cluster is even reachable.
     const core::u32 border = 1u;
     const core::u32 maxRadius = (params.width < params.depth ? params.width : params.depth) / 2u - border - 1u;
 
@@ -102,7 +93,6 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
         if (spawnRadius < 2u)
             spawnRadius = 2u;
 
-        // Spawn on the ring at spawnRadius: pick a side, then a position along it.
         const core::u32 side = random.below(4u);
         const core::i32 along = random.range(-static_cast<core::i32>(spawnRadius), static_cast<core::i32>(spawnRadius));
         core::i32 x = centerX;
@@ -145,9 +135,6 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
             const core::i32 nx = x + kNeighbor8X[direction];
             const core::i32 nz = z + kNeighbor8Z[direction];
 
-            // A particle that wanders too far is reflected rather than lost:
-            // letting it escape would waste the whole budget on a walk that can
-            // no longer reach the cluster.
             const core::u32 leash = spawnRadius + params.spawnMargin + 2u;
             if (nx < static_cast<core::i32>(border) || nz < static_cast<core::i32>(border) ||
                 nx >= static_cast<core::i32>(params.width - border) ||
@@ -161,9 +148,6 @@ DungeonMap generateDlaCave(const DlaParams &params, DlaReport *outReport)
             ++report.abandoned;
     }
 
-    // DLA is connected by construction — a particle only sticks where it
-    // touches the cluster — but the thickness carve can round corners into
-    // shapes the flood fill sees differently, so the guarantee is re-asserted.
     (void) connectRegions(map, 1u);
 
     if (outReport != nullptr)

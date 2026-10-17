@@ -1,12 +1,3 @@
-/**
- * @file Liminal.cpp
- * @brief Implementation of the layered liminal-space pipeline.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Liminal.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -19,13 +10,15 @@ namespace {
 constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
 constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
-/// How each zone shapes its partition. This table IS the difference between the
-/// four zones — everything downstream reads it rather than testing the zone.
+/**
+ * How each zone shapes its partition. This table IS the difference between the
+ * four zones — everything downstream reads it rather than testing the zone.
+ */
 struct ZoneShape {
-    core::u32 minLeafSize;   ///< Smallest room the partition allows.
-    core::u32 corridorWidth; ///< Corridor thickness.
-    core::f32 erodeScale;    ///< Multiplier on the erosion strength.
-    core::f32 mergeScale;    ///< Multiplier on the wall-dissolution strength.
+    core::u32 minLeafSize;   /**< Smallest room the partition allows. */
+    core::u32 corridorWidth; /**< Corridor thickness. */
+    core::f32 erodeScale;    /**< Multiplier on the erosion strength. */
+    core::f32 mergeScale;    /**< Multiplier on the wall-dissolution strength. */
 };
 
 constexpr ZoneShape kZoneShapes[static_cast<core::u32>(LiminalZone::Count)] = {
@@ -35,7 +28,9 @@ constexpr ZoneShape kZoneShapes[static_cast<core::u32>(LiminalZone::Count)] = {
     {13u, 2u, 0.35f, 1.20f}, // Pool: wide, shallow partitions, barely eroded.
 };
 
-/// The zone that covers most of the map, which decides the partition's shape.
+/**
+ * @brief The zone that covers most of the map, which decides the partition's shape.
+ */
 LiminalZone dominantZone(const LiminalZoneMap &zones)
 {
     core::u32 counts[static_cast<core::u32>(LiminalZone::Count)] = {};
@@ -58,6 +53,29 @@ LiminalZone dominantZone(const LiminalZoneMap &zones)
  * Shared by the bounded and the chunked entry points, because they must produce
  * the same space from the same inputs — two spellings of the pipeline would drift
  * and a sector would stop matching the map it belongs to.
+ *
+ * The stages run in this order:
+ *
+ * 1. Partition: rigid order, laid down first.
+ * 2. Erode: a process that knows nothing about the partition.
+ * 3. Repair: the guarantee, after everything that could break it. Last, not first.
+ *    Every erosion step can seal a corridor or strand a room, so a repair run any
+ *    earlier would be repairing a map that no longer exists by the time a player
+ *    walks it.
+ * 4. Read the topology back, and place things by what it says.
+ *
+ * Events go ON the route, because that is where a player will be. Spacing them
+ * evenly rather than at random keeps the pacing readable — three anomalies in the
+ * same corridor and then nothing is not tension. The spacing is even through the
+ * route's cells taken in storage order, not in distance walked along the route.
+ *
+ * Rewards go as FAR from the route as the level allows. The survey makes the same
+ * point twice over: the cell that maximises the detour distance is both the
+ * generator's worst structural offence and the perfect place to hide something,
+ * which turns a topological defect into a reason to explore it. The deepest few
+ * are selected by repeated scan rather than a sort: the count is a handful and a
+ * sort would need a comparator whose ties are resolved somehow — this way the tie
+ * rule is "lower index", visibly.
  */
 LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, core::u32 seed)
 {
@@ -67,7 +85,6 @@ LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, c
     const LiminalZone zone = dominantZone(space.zones);
     const ZoneShape &shape = kZoneShapes[static_cast<core::u32>(zone)];
 
-    // ── 1. Partition: rigid order, laid down first ──────────────────────────
     BspDungeonParams bsp;
     bsp.width = params.width;
     bsp.depth = params.depth;
@@ -77,16 +94,10 @@ LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, c
     bsp.corridorWidth = shape.corridorWidth;
     space.map = generateBspDungeon(bsp, nullptr);
 
-    // ── 2. Erode: a process that knows nothing about the partition ──────────
     erodeEdges(space.map, seed ^ 0x1E20Du, params.erosionStrength * shape.erodeScale);
     space.wallsDissolved = mergeRoomsAsymmetric(space.map, seed ^ 0x2E20Du, params.mergeStrength * shape.mergeScale);
     space.pillars = misalignPillars(space.map, seed ^ 0x3E20Du, params.pillarDensity);
 
-    // ── 3. Repair: the guarantee, after everything that could break it ──────
-    //
-    // Last, not first. Every erosion step above can seal a corridor or strand a
-    // room, so a repair run any earlier would be repairing a map that no longer
-    // exists by the time a player walks it.
     space.wallsBroken = forceConnectivity(space.map, seed ^ 0x4E20Du);
     space.connected = isFullyConnected(space.map);
 
@@ -94,7 +105,6 @@ LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, c
         if (isWalkable(space.map[i]))
             ++space.openCells;
 
-    // ── 4. Read the topology back, and place things by what it says ─────────
     core::u32 startX = 0u;
     core::u32 startZ = 0u;
     core::u32 goalX = 0u;
@@ -106,9 +116,6 @@ LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, c
     if (!path.valid)
         return space;
 
-    // Events go ON the route, because that is where a player will be. Spacing
-    // them evenly along it rather than at random keeps the pacing readable —
-    // three anomalies in the same corridor and then nothing is not tension.
     lpl::pmr::vector<core::u32> route;
     for (core::u32 i = 0u; i < path.onPath.cellCount(); ++i)
         if (path.onPath[i] != 0u)
@@ -125,10 +132,6 @@ LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, c
         }
     }
 
-    // Rewards go as FAR from the route as the level allows. The survey makes the
-    // same point twice over: the cell that maximises the detour distance is both
-    // the generator's worst structural offence and the perfect place to hide
-    // something, which turns a topological defect into a reason to explore it.
     if (params.secretSites > 0u)
     {
         lpl::pmr::vector<core::u32> byDepth;
@@ -136,9 +139,6 @@ LiminalSpace buildFromZones(const LiminalParams &params, LiminalZoneMap zones, c
             if (isWalkable(space.map[i]) && path.detour[i] != kUnreachable && path.detour[i] > 0u)
                 byDepth.push_back(i);
 
-        // Selection of the deepest few, by repeated scan rather than a sort: the
-        // count is a handful and a sort would need a comparator whose ties are
-        // resolved somehow — this way the tie rule is "lower index", visibly.
         for (core::u32 s = 0u; s < params.secretSites; ++s)
         {
             core::u32 best = 0xFFFFFFFFu;
@@ -183,9 +183,6 @@ LiminalZoneMap zoneMap(const LiminalParams &params)
             const math::Fixed32 n = ValueNoise2D::fbm(math::Fixed32::fromInt(static_cast<core::i32>(x)) * frequency,
                                                       math::Fixed32::fromInt(static_cast<core::i32>(z)) * frequency,
                                                       params.zoneOctaves, params.zoneSeed);
-            // [-1, 1] into one of four bands, by quarters. Even bands rather than
-            // tuned ones: a zone that covers a tenth of every map is a zone a
-            // player will never knowingly visit.
             const math::Fixed32 unit = (n + math::Fixed32::one()) * math::Fixed32::half();
             core::i32 band = (unit * math::Fixed32::fromInt(static_cast<core::i32>(LiminalZone::Count))).toInt();
             if (band < 0)
@@ -210,16 +207,11 @@ LiminalSpace generateLiminalChunk(const LiminalParams &params, ChunkCoord coord)
     if (params.width == 0u)
         return LiminalSpace{};
 
-    // The chunk's own seed, derived from the world seed and the coordinates. No
-    // running state: a sector is a pure function of where it is, which is what
-    // lets two players in opposite corners agree without a message.
     ChunkParams chunkParams;
     chunkParams.size = params.width;
     chunkParams.worldSeed = params.seed;
     const core::u32 seed = chunkSeed(chunkParams, coord);
 
-    // The zoning field is sampled at ABSOLUTE world coordinates, so a zone that
-    // straddles two sectors is one zone rather than two that happen to touch.
     LiminalParams local = params;
     local.depth = params.width;
     LiminalZoneMap zones{params.width, params.width, LiminalZone::Office};

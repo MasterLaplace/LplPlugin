@@ -73,39 +73,20 @@ inline constexpr core::u32 kMaxScatterRules = 8u;
  */
 inline constexpr core::u32 kMaxRoadsidePattern = 64u;
 
-// CaveKind moved to Dungeon.hpp, where the four generators it names are declared.
-// A document still spells it here through @ref caveKindName / @ref caveKindByName.
-
 namespace detail {
 
-/// Character-by-character equality. No libc: this module is freestanding.
-[[nodiscard]] constexpr bool sameName(const char *a, const char *b) noexcept
-{
-    if (a == nullptr || b == nullptr)
-        return false;
-    while (*a != '\0' && *a == *b)
-    {
-        ++a;
-        ++b;
-    }
-    return *a == *b;
-}
+/**
+ * @brief Character-by-character equality. No libc: this module is freestanding.
+ */
+[[nodiscard]] constexpr bool sameName(const char *a, const char *b) noexcept;
 
 } // namespace detail
 
-/// @return The word a document spells @p kind with.
-[[nodiscard]] constexpr const char *caveKindName(CaveKind kind) noexcept
-{
-    switch (kind)
-    {
-    case CaveKind::Cellular: return "cellular";
-    case CaveKind::Bsp: return "bsp";
-    case CaveKind::Dla: return "dla";
-    case CaveKind::Layered: return "layered";
-    case CaveKind::Auto: return "auto";
-    }
-    return "cellular";
-}
+/**
+ * @brief Spells a cave kind for a document.
+ * @return The word a document spells @p kind with.
+ */
+[[nodiscard]] constexpr const char *caveKindName(CaveKind kind) noexcept;
 
 /**
  * @brief Reads a cave kind from a document.
@@ -116,49 +97,22 @@ namespace detail {
  *
  * @param name The spelling, as @ref caveKindName produces it.
  * @param outKind Set on success.
- * @return false when the word is not one of the four.
+ * @return false when the word is not one of the five.
  */
-[[nodiscard]] constexpr bool caveKindByName(const char *name, CaveKind &outKind) noexcept
-{
-    for (core::u32 i = 0u; i <= static_cast<core::u32>(CaveKind::Auto); ++i)
-    {
-        const CaveKind kind = static_cast<CaveKind>(i);
-        if (detail::sameName(name, caveKindName(kind)))
-        {
-            outKind = kind;
-            return true;
-        }
-    }
-    return false;
-}
+[[nodiscard]] constexpr bool caveKindByName(const char *name, CaveKind &outKind) noexcept;
 
-/// @return The word a document spells @p metric with.
-[[nodiscard]] constexpr const char *distanceMetricName(DistanceMetric metric) noexcept
-{
-    switch (metric)
-    {
-    case DistanceMetric::Euclidean: return "euclidean";
-    case DistanceMetric::Manhattan: return "manhattan";
-    case DistanceMetric::Chebyshev: return "chebyshev";
-    }
-    return "euclidean";
-}
+/**
+ * @brief Spells a province distance metric for a document.
+ * @return The word a document spells @p metric with.
+ */
+[[nodiscard]] constexpr const char *distanceMetricName(DistanceMetric metric) noexcept;
 
-/// Reads a province distance metric from a document. See @ref caveKindByName for why
-/// it is a word.
-[[nodiscard]] constexpr bool distanceMetricByName(const char *name, DistanceMetric &outMetric) noexcept
-{
-    for (core::u32 i = 0u; i <= static_cast<core::u32>(DistanceMetric::Chebyshev); ++i)
-    {
-        const DistanceMetric metric = static_cast<DistanceMetric>(i);
-        if (detail::sameName(name, distanceMetricName(metric)))
-        {
-            outMetric = metric;
-            return true;
-        }
-    }
-    return false;
-}
+/**
+ * @brief Reads a province distance metric from a document.
+ *
+ * See @ref caveKindByName for why it is a word.
+ */
+[[nodiscard]] constexpr bool distanceMetricByName(const char *name, DistanceMetric &outMetric) noexcept;
 
 /**
  * @struct WorldRecipe
@@ -177,14 +131,14 @@ namespace detail {
  * with a different answer — see lpl/pack/GamePack.hpp.)
  */
 struct WorldRecipe {
-    core::u32 seed{1337u};    ///< Master seed; every pass derives its own stream.
-    core::u32 width{24u};     ///< Terrain cells along X.
-    core::u32 depth{24u};     ///< Terrain cells along Z.
-    core::f32 cellSize{0.5f}; ///< World units between two cells.
+    core::u32 seed{1337u};    /**< Master seed; every pass derives its own stream. */
+    core::u32 width{24u};     /**< Terrain cells along X. */
+    core::u32 depth{24u};     /**< Terrain cells along Z. */
+    core::f32 cellSize{0.5f}; /**< World units between two cells. */
 
-    NoiseParams terrain{};       ///< Base terrain layer.
-    core::f32 heightLow{-8.0f};  ///< Normalised range floor, when @ref normalizeTerrain.
-    core::f32 heightHigh{16.0f}; ///< Normalised range ceiling.
+    NoiseParams terrain{};       /**< Base terrain layer. */
+    core::f32 heightLow{-8.0f};  /**< Normalised range floor, when @ref normalizeTerrain. */
+    core::f32 heightHigh{16.0f}; /**< Normalised range ceiling. */
 
     /**
      * @brief Lowest the finished ground may sit, or 0 to leave the field where it fell.
@@ -208,24 +162,24 @@ struct WorldRecipe {
      */
     core::f32 groundClearance{0.0f};
 
-    ThermalErosionParams thermal{};     ///< Talus relaxation.
-    HydraulicErosionParams hydraulic{}; ///< Capacity-limited water erosion.
-    RiverParams rivers{};               ///< How much drainage becomes visible water.
-    MoistureParams climate{};           ///< Rainfall, wind, coastal reach.
-    ClimateParams axes{};               ///< The six climate axes' shaping.
-    BiomeParams biomes{};               ///< Sea, shore and summit thresholds.
-    VoronoiParams provinces{};          ///< Surface regions, when @ref partitionRegions.
-    CaveParams caves{};                 ///< Underground layer, when @ref caveKind is Cellular.
-    BspDungeonParams rooms{};           ///< Underground layer, when @ref caveKind is Bsp.
-    DlaParams aggregation{};            ///< Underground layer, when @ref caveKind is Dla.
-    CaveSystemParams caveSystem{};      ///< Underground layer, when @ref caveKind is Layered.
-    SettlementParams settlement{};      ///< Town layout.
-    BuildingGrammarParams buildings{};  ///< How a plot becomes a volume, when @ref raiseBuildings.
-    RoadParams roads{};                 ///< Road network grown over the town.
-    GateCriteria gate{};                ///< What the underground must satisfy.
+    ThermalErosionParams thermal{};     /**< Talus relaxation. */
+    HydraulicErosionParams hydraulic{}; /**< Capacity-limited water erosion. */
+    RiverParams rivers{};               /**< How much drainage becomes visible water. */
+    MoistureParams climate{};           /**< Rainfall, wind, coastal reach. */
+    ClimateParams axes{};               /**< The six climate axes' shaping. */
+    BiomeParams biomes{};               /**< Sea, shore and summit thresholds. */
+    VoronoiParams provinces{};          /**< Surface regions, when @ref partitionRegions. */
+    CaveParams caves{};                 /**< Underground layer, when @ref caveKind is Cellular. */
+    BspDungeonParams rooms{};           /**< Underground layer, when @ref caveKind is Bsp. */
+    DlaParams aggregation{};            /**< Underground layer, when @ref caveKind is Dla. */
+    CaveSystemParams caveSystem{};      /**< Underground layer, when @ref caveKind is Layered. */
+    SettlementParams settlement{};      /**< Town layout. */
+    BuildingGrammarParams buildings{};  /**< How a plot becomes a volume, when @ref raiseBuildings. */
+    RoadParams roads{};                 /**< Road network grown over the town. */
+    GateCriteria gate{};                /**< What the underground must satisfy. */
 
-    ScatterRule scatter[kMaxScatterRules]{}; ///< Prop rules, first @ref scatterCount used.
-    core::u32 scatterCount{0u};              ///< Rules actually in play.
+    ScatterRule scatter[kMaxScatterRules]{}; /**< Prop rules, first @ref scatterCount used. */
+    core::u32 scatterCount{0u};              /**< Rules actually in play. */
 
     /**
      * @brief Terrace steps, or 0 to leave the field smooth.
@@ -235,25 +189,22 @@ struct WorldRecipe {
      */
     core::u32 terraceSteps{0u};
 
-    /// Which underground generator runs. See @ref CaveKind.
-    CaveKind caveKind{CaveKind::Cellular};
+    CaveKind caveKind{CaveKind::Cellular}; /**< Which underground generator runs. See @ref CaveKind. */
 
-    /// The L-system the roadside decoration follows; empty leaves the verges bare.
-    char roadsidePattern[kMaxRoadsidePattern]{};
-    /// Voxel levels the roadside modules occupy; 0 also leaves them bare.
-    core::u32 roadsideLevels{0u};
+    char roadsidePattern[kMaxRoadsidePattern]{}; /**< Roadside decoration's L-system; empty leaves the verges bare. */
+    core::u32 roadsideLevels{0u};                /**< Voxel levels of the roadside modules; 0 also leaves them bare. */
 
-    bool normalizeTerrain{true};  ///< Rescale the field before any absolute threshold reads it.
-    bool erodeTerrain{true};      ///< Run both erosion models.
-    bool carveRivers{true};       ///< Route drainage and cut river beds.
-    bool classifyBiomes{true};    ///< Compute moisture and classify.
-    bool partitionRegions{false}; ///< Divide the surface into Voronoi provinces.
-    bool carveCaves{true};        ///< Generate the underground layer.
-    bool placeSettlement{true};   ///< Lay a town onto the terrain.
-    bool raiseBuildings{false};   ///< Extrude the plots with the shape grammar.
-    bool growRoads{true};         ///< Grow a road network over it.
-    bool materializeGround{true}; ///< Emit one entity per ground cell (off: props only).
-    bool checkPlayability{true};  ///< Judge the underground against @ref gate.
+    bool normalizeTerrain{true};  /**< Rescale the field before any absolute threshold reads it. */
+    bool erodeTerrain{true};      /**< Run both erosion models. */
+    bool carveRivers{true};       /**< Route drainage and cut river beds. */
+    bool classifyBiomes{true};    /**< Compute moisture and classify. */
+    bool partitionRegions{false}; /**< Divide the surface into Voronoi provinces. */
+    bool carveCaves{true};        /**< Generate the underground layer. */
+    bool placeSettlement{true};   /**< Lay a town onto the terrain. */
+    bool raiseBuildings{false};   /**< Extrude the plots with the shape grammar. */
+    bool growRoads{true};         /**< Grow a road network over it. */
+    bool materializeGround{true}; /**< Emit one entity per ground cell (off: props only). */
+    bool checkPlayability{true};  /**< Judge the underground against @ref gate. */
 };
 
 /**
@@ -271,21 +222,23 @@ struct WorldRecipe {
  * diverge between targets actually happens.
  */
 struct WorldRecipeResult {
-    core::u32 entityCount{0u};     ///< Entities materialised by all passes.
-    core::u32 stateSignature{0u};  ///< FNV-1a fold of authoritative Fixed32 entity state.
-    core::u32 heightSignature{0u}; ///< FNV-1a fold of the final height field.
-    core::u32 biomeSignature{0u};  ///< FNV-1a fold of the biome map.
-    core::u32 riverCells{0u};      ///< Cells carved as river.
-    core::u32 roadCells{0u};       ///< Cells the road network occupies.
-    core::u32 lakeCells{0u};       ///< Cells holding standing water.
-    core::u32 dungeonFloor{0u};    ///< Open cells in the underground layer.
-    core::u32 settlementPlots{0u}; ///< Building footprints laid out.
-    core::u32 gateReachable{0u};   ///< 1 if the underground's goal is reachable.
-    core::u32 gateVisited{0u};     ///< Cells the gate's flood actually reached.
-    core::u32 gatePathLength{0u};  ///< Steps from entrance to exit.
-    core::u32 ok{0u};              ///< 1 if the world is non-empty AND passes its gate.
+    core::u32 entityCount{0u};     /**< Entities materialised by all passes. */
+    core::u32 stateSignature{0u};  /**< FNV-1a fold of authoritative Fixed32 entity state. */
+    core::u32 heightSignature{0u}; /**< FNV-1a fold of the final height field. */
+    core::u32 biomeSignature{0u};  /**< FNV-1a fold of the biome map. */
+    core::u32 riverCells{0u};      /**< Cells carved as river. */
+    core::u32 roadCells{0u};       /**< Cells the road network occupies. */
+    core::u32 lakeCells{0u};       /**< Cells holding standing water. */
+    core::u32 dungeonFloor{0u};    /**< Open cells in the underground layer. */
+    core::u32 settlementPlots{0u}; /**< Building footprints laid out. */
+    core::u32 gateReachable{0u};   /**< 1 if the underground's goal is reachable. */
+    core::u32 gateVisited{0u};     /**< Cells the gate's flood actually reached. */
+    core::u32 gatePathLength{0u};  /**< Steps from entrance to exit. */
+    core::u32 ok{0u};              /**< 1 if the world is non-empty AND passes its gate. */
 
-    /** @brief Whether two bakes produced the same world, field for field. */
+    /**
+     * @brief Whether two bakes produced the same world, field for field.
+     */
     [[nodiscard]] bool operator==(const WorldRecipeResult &) const noexcept = default;
 };
 
@@ -304,58 +257,19 @@ struct WorldRecipeResult {
  * playability verdict. A gate that skips the interesting passes proves the
  * uninteresting ones.
  *
+ * Where it departs from the defaults, it says why:
+ *
+ * - Fewer erosion iterations than the desktop defaults: the shapes converge quickly
+ *   on a 24x24 field, and ring 0 pays for every pass in boot time.
+ * - Three road rewrite rounds: a 24x24 world is one district wide; three rewrite
+ *   rounds fill it without the turtle spending most of its string refused against
+ *   the border.
+ * - A milder gate: a 24x24 cave is small; the desktop defaults would reject most
+ *   seeds for being cramped rather than for being unplayable.
+ *
  * @return The parity recipe.
  */
-[[nodiscard]] constexpr WorldRecipe parityWorldRecipe() noexcept
-{
-    WorldRecipe recipe{};
-
-    recipe.seed = 1337u;
-    recipe.width = 24u;
-    recipe.depth = 24u;
-    recipe.cellSize = 0.5f;
-
-    recipe.terrain.seed = 1337u;
-    recipe.terrain.frequency = 0.15f;
-    recipe.terrain.amplitude = 12.0f;
-    recipe.terrain.octaves = 4u;
-    recipe.terrain.lacunarity = 2.0f;
-    recipe.terrain.persistence = 0.5f;
-    recipe.terrain.kind = NoiseKind::Fbm;
-
-    recipe.heightLow = -8.0f;
-    recipe.heightHigh = 16.0f;
-
-    // Fewer iterations than the desktop defaults: the shapes converge quickly on
-    // a 24x24 field, and ring 0 pays for every pass in boot time.
-    recipe.thermal.iterations = 8u;
-    recipe.hydraulic.iterations = 12u;
-
-    recipe.caves.width = 24u;
-    recipe.caves.depth = 24u;
-    recipe.caves.seed = 0xCA4Eu;
-    recipe.caves.minRegionSize = 12u;
-
-    recipe.settlement.districtSize = 8u;
-
-    // A 24x24 world is one district wide; three rewrite rounds fill it without
-    // the turtle spending most of its string refused against the border.
-    recipe.roads.iterations = 3u;
-    recipe.roads.stepLength = 2u;
-
-    // A 24x24 cave is small; the desktop defaults would reject most seeds for
-    // being cramped rather than for being unplayable.
-    recipe.gate.minPathLength = 4u;
-    recipe.gate.minWalkableCells = 16u;
-
-    recipe.scatter[0].biome = BiomeId::Grassland;
-    recipe.scatter[0].density = 0.06f;
-    recipe.scatter[0].halfExtent = 0.2f;
-    recipe.scatter[0].tag = 1u;
-    recipe.scatterCount = 1u;
-
-    return recipe;
-}
+[[nodiscard]] constexpr WorldRecipe parityWorldRecipe() noexcept;
 
 /**
  * @brief FNV-1a fold of every entity's authoritative Fixed32 state.
@@ -378,6 +292,55 @@ struct WorldRecipeResult {
  * wants a populated world calls @ref bakeWorld, which is this plus
  * materialisation.
  *
+ * It is not a style preference: two callers ordering erosion and rivers differently
+ * would produce two different worlds from the same recipe, and the parity gate would
+ * be comparing worlds that were never meant to match. It is a free function rather
+ * than a step inside @ref bakeWorld because a caller may want the GRIDS without the
+ * entities — a viewer draws a heightfield, it does not need one entity per ground
+ * cell. Before this existed the in-kernel viewer built its own pipeline by hand, which
+ * is exactly how a project ends up with two generators and a gate that exercises the
+ * one nothing else runs.
+ *
+ * The order, and why each pass sits where it does:
+ *
+ * - The terrain, then the measured relief when one is given, then the normalisation.
+ * - Terracing before erosion, because erosion is what softens the steps back into
+ *   something that looks cut rather than stamped. The other way round gives sharp
+ *   benches on a smooth hill, which reads as a rendering artefact.
+ * - Both erosions, then the rivers.
+ * - The ground clearance. The world is put in the frame the physics expects HERE —
+ *   after erosion and the rivers, because the lowest cell is not knowable before
+ *   them, and before a single entity exists, because moving the ground under things
+ *   already standing on it means chasing a list that only ever grows. See
+ *   @ref WorldRecipe::groundClearance.
+ * - Provinces before the climate block: the districting is a partition of the
+ *   SURFACE, so it belongs with the terrain that is now final, and a settlement laid
+ *   out later can be anchored on it.
+ * - The climate and the biomes, then the scatter.
+ * - The underground. @ref CaveKind::Auto is resolved here from evidence: the map that
+ *   has already been built, not a guess about it. The moisture field is computed by
+ *   the climate pass above, and whether people live here is a thing the recipe states
+ *   outright. Reading a field that exists is the difference between a procedural
+ *   default and one invented for the occasion. The switch that picks the generator
+ *   still names @c Auto, with no default, so a new kind cannot be added without the
+ *   compiler pointing at it.
+ * - The settlement, then its buildings: the grammar needs the plots the settlement
+ *   laid out, so it cannot run before one exists. Raising a town is what turns a
+ *   painted footprint into a silhouette.
+ * - The roads, after the settlement, never before: the road field is anchored on the
+ *   districts the town laid out, so growing first would steer the network by a town
+ *   that does not exist yet. And the verges after the roads they decorate.
+ * - The playability verdict.
+ *
+ * @warning **Measured ground displaces the LOWEST frequency, so it lands right after
+ *          the terrain and not later.** Erosion softening real relief is what makes a
+ *          survey read as terrain rather than as a photograph pasted onto one, and
+ *          normalising afterwards keeps the whole field in the frame the rest of the
+ *          recipe expects. Injected rather than named by the recipe, for the same
+ *          reason `ChunkParams::relief` is a pointer beside serialisable noise: a
+ *          recipe is a wire object and a survey is data that has to come from outside
+ *          it.
+ *
  * @param builder Destination builder, freshly constructed with the recipe's seed.
  * @param recipe  The passes to configure.
  * @return The vertical shift @ref WorldRecipe::groundClearance applied, 0 when none.
@@ -390,6 +353,10 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
 
 /**
  * @brief Runs every enabled pass of @p recipe into @p registry and folds it.
+ *
+ * A recipe that declines the check is trivially "not failing" it (@c gateReachable
+ * reads 1), so the ok flag stays a statement about the world, not about the gate.
+ *
  * @param registry Destination world (should be empty on entry).
  * @param recipe   The passes to run.
  * @return Entity count, the three signatures, and the playability verdict.
@@ -397,5 +364,7 @@ core::f32 applyRecipe(WorldBuilder &builder, const WorldRecipe &recipe, const Re
 WorldRecipeResult bakeWorld(ecs::Registry &registry, const WorldRecipe &recipe);
 
 } // namespace lpl::procgen
+
+#    include "WorldRecipe.inl"
 
 #endif // LPL_PROCGEN_WORLDRECIPE_HPP

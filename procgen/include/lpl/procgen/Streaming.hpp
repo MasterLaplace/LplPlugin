@@ -55,10 +55,10 @@ namespace lpl::procgen {
  * direction — normalised or not, only its sign structure matters.
  */
 struct GenerationSource {
-    math::Fixed32 x{};        ///< Position along X, in chunks.
-    math::Fixed32 z{};        ///< Position along Z, in chunks.
-    math::Fixed32 headingX{}; ///< Facing along X; zero means "no preference".
-    math::Fixed32 headingZ{}; ///< Facing along Z.
+    math::Fixed32 x{};        /**< Position along X, in chunks. */
+    math::Fixed32 z{};        /**< Position along Z, in chunks. */
+    math::Fixed32 headingX{}; /**< Facing along X; zero means "no preference". */
+    math::Fixed32 headingZ{}; /**< Facing along Z. */
 };
 
 /**
@@ -66,7 +66,7 @@ struct GenerationSource {
  * @brief Radii, weighting and per-tick budget.
  */
 struct StreamingParams {
-    core::u32 generateRadius{3u}; ///< Chunks around a source that should exist.
+    core::u32 generateRadius{3u}; /**< Chunks around a source that should exist. */
 
     /**
      * @brief Release radius as a multiple of @ref generateRadius, in sixteenths.
@@ -86,8 +86,8 @@ struct StreamingParams {
      */
     core::u32 directionWeight16{12u};
 
-    core::u32 maxGeneratePerTick{2u}; ///< Chunks scheduled per tick; 0 means no limit.
-    core::u32 maxReleasePerTick{4u};  ///< Chunks released per tick; 0 means no limit.
+    core::u32 maxGeneratePerTick{2u}; /**< Chunks scheduled per tick; 0 means no limit. */
+    core::u32 maxReleasePerTick{4u};  /**< Chunks released per tick; 0 means no limit. */
 };
 
 /**
@@ -95,8 +95,8 @@ struct StreamingParams {
  * @brief One chunk the plan wants built, and how badly.
  */
 struct StreamingRequest {
-    ChunkCoord coord{};     ///< Which chunk.
-    core::u32 priority{0u}; ///< Lower is more urgent.
+    ChunkCoord coord{};     /**< Which chunk. */
+    core::u32 priority{0u}; /**< Lower is more urgent. */
 };
 
 /**
@@ -104,10 +104,10 @@ struct StreamingRequest {
  * @brief What should happen this tick.
  */
 struct StreamingPlan {
-    lpl::pmr::vector<StreamingRequest> toGenerate; ///< Most urgent first.
-    lpl::pmr::vector<ChunkCoord> toRelease;        ///< Furthest first.
-    core::u32 wanted{0u};                          ///< Chunks that should exist, before the budget applied.
-    core::u32 resident{0u};                        ///< Chunks that already exist.
+    lpl::pmr::vector<StreamingRequest> toGenerate; /**< Most urgent first. */
+    lpl::pmr::vector<ChunkCoord> toRelease;        /**< In the order of the resident list. */
+    core::u32 wanted{0u};                          /**< Chunks that should exist, before the budget applied. */
+    core::u32 resident{0u};                        /**< Chunks that already exist. */
 };
 
 /**
@@ -116,6 +116,24 @@ struct StreamingPlan {
  * Pure: the same sources and the same resident set always give the same plan, on
  * any machine, in any order. That is what makes a streaming world reproducible
  * rather than merely convincing.
+ *
+ * No source means nothing should exist. Releasing everything is the right answer
+ * rather than a degenerate one: it is what happens when the last player
+ * disconnects.
+ *
+ * Otherwise the plan is built in this order:
+ *
+ * - What should exist. Each source's square is scanned in a fixed order, and
+ *   de-duplicated, so two sources whose regions overlap produce one request rather
+ *   than two — and always the same one. The requests are then insertion-sorted by
+ *   priority, ties broken by coordinate. The tie rule is not cosmetic: without it
+ *   two chunks of equal urgency would be ordered by the scan, and the scan depends
+ *   on which source was listed first.
+ * - What should go. The release radius is deliberately larger than the generate
+ *   radius. A source oscillating across a boundary otherwise generates and
+ *   releases the same chunk on alternate ticks forever, and the manager spends its
+ *   whole budget standing still.
+ * - The budget, counted in chunks.
  *
  * @param sources      Where the world should exist.
  * @param sourceCount  Entries in @p sources.
@@ -154,16 +172,19 @@ public:
 
     /**
      * @brief Returns a slot to the pool.
-     * @param slot Slot to release; out-of-range values are ignored.
+     * @param slot Slot to release; @c kNoSlot is ignored, and so is any slot while none is live.
      */
     void release(core::u32 slot);
 
     [[nodiscard]] core::u32 capacity() const noexcept { return static_cast<core::u32>(_free.size()) + _liveCount; }
     [[nodiscard]] core::u32 live() const noexcept { return _liveCount; }
-    /// @return How many acquisitions were served by a recycled slot.
+    /**
+     * @brief Counts the acquisitions served by a recycled slot.
+     * @return How many acquisitions were served by a recycled slot.
+     */
     [[nodiscard]] core::u32 recycled() const noexcept { return _recycled; }
 
-    /// Returned when no slot is available.
+    /** Returned when no slot is available. */
     static constexpr core::u32 kNoSlot = 0xFFFFFFFFu;
 
 private:

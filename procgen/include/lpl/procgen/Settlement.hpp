@@ -4,8 +4,8 @@
  *
  * A settlement is not scattered buildings: it is a road network with things
  * arranged along it. So the generation runs in that order — connect first,
- * subdivide second, build last — which is also why the result is walkable by
- * construction rather than by a repair pass.
+ * subdivide second, build last — and a final repair pass joins whatever pieces
+ * of the street network the order left apart, so the result is walkable.
  *
  * The three stages, each borrowing the tool that fits it:
  *
@@ -40,16 +40,16 @@
 
 namespace lpl::procgen {
 
-/// What a settlement cell is.
+/** What a settlement cell is. */
 enum class SettlementCell : core::u8 {
-    Empty = 0, ///< Nothing built here.
-    Road,      ///< Walkable street.
-    Plaza,     ///< Open space at a district centre.
-    Plot,      ///< A building footprint.
-    Blocked    ///< Unbuildable: too steep, or under water.
+    Empty = 0, /**< Nothing built here. */
+    Road,      /**< Walkable street. */
+    Plaza,     /**< Open space at a district centre. */
+    Plot,      /**< A building footprint. */
+    Blocked    /**< Unbuildable: too steep, or under water. */
 };
 
-/// A settlement layout.
+/** A settlement layout. */
 using SettlementMap = Grid<SettlementCell>;
 
 /**
@@ -57,11 +57,11 @@ using SettlementMap = Grid<SettlementCell>;
  * @brief One footprint, and which district it belongs to.
  */
 struct BuildingPlot {
-    core::u32 x{0u};        ///< Left edge.
-    core::u32 z{0u};        ///< Top edge.
-    core::u32 width{0u};    ///< Extent along X.
-    core::u32 depth{0u};    ///< Extent along Z.
-    core::u16 district{0u}; ///< Owning region.
+    core::u32 x{0u};        /**< Left edge. */
+    core::u32 z{0u};        /**< Top edge. */
+    core::u32 width{0u};    /**< Extent along X. */
+    core::u32 depth{0u};    /**< Extent along Z. */
+    core::u16 district{0u}; /**< Owning region. */
 };
 
 /**
@@ -69,17 +69,17 @@ struct BuildingPlot {
  * @brief Size, seed, and the shape of the town.
  */
 struct SettlementParams {
-    core::u32 width{96u};        ///< Map width.
-    core::u32 depth{96u};        ///< Map depth.
-    core::u32 seed{1337u};       ///< Determinism anchor.
-    core::u32 districtSize{16u}; ///< Voronoi coarse cell; larger means bigger blocks.
-    core::u32 roadWidth{1u};     ///< Street thickness.
-    core::u32 plazaRadius{2u};   ///< Open space carved at each district centre.
-    core::u32 minPlot{2u};       ///< Smallest building footprint edge.
-    core::u32 maxPlot{4u};       ///< Largest building footprint edge.
-    core::f32 plotDensity{0.6f}; ///< Chance an eligible road-facing spot is built on.
-    core::f32 maxSlope{1.5f};    ///< Steepest ground a settlement will occupy.
-    core::f32 minHeight{0.5f};   ///< Lowest ground it will occupy (keeps it out of water).
+    core::u32 width{96u};        /**< Map width. */
+    core::u32 depth{96u};        /**< Map depth. */
+    core::u32 seed{1337u};       /**< Determinism anchor. */
+    core::u32 districtSize{16u}; /**< Voronoi coarse cell; larger means bigger blocks. */
+    core::u32 roadWidth{1u};     /**< Street thickness. */
+    core::u32 plazaRadius{2u};   /**< Open space carved at each district centre. */
+    core::u32 minPlot{2u};       /**< Smallest building footprint edge. */
+    core::u32 maxPlot{4u};       /**< Largest building footprint edge. */
+    core::f32 plotDensity{0.6f}; /**< Chance an eligible road-facing spot is built on. */
+    core::f32 maxSlope{1.5f};    /**< Steepest ground a settlement will occupy. */
+    core::f32 minHeight{0.5f};   /**< Lowest ground it will occupy (keeps it out of water). */
 };
 
 /**
@@ -87,12 +87,12 @@ struct SettlementParams {
  * @brief What was laid out.
  */
 struct SettlementReport {
-    core::u32 districts{0u};    ///< Voronoi regions covering the area.
-    core::u32 roadCells{0u};    ///< Cells that became street.
-    core::u32 plazaCells{0u};   ///< Cells that became open space.
-    core::u32 plots{0u};        ///< Buildings placed.
-    core::u32 blockedCells{0u}; ///< Cells refused as unbuildable.
-    bool roadsConnected{false}; ///< Is the whole street network one piece?
+    core::u32 districts{0u};    /**< Voronoi regions covering the area. */
+    core::u32 roadCells{0u};    /**< Cells that became street. */
+    core::u32 plazaCells{0u};   /**< Cells that became open space. */
+    core::u32 plots{0u};        /**< Buildings placed. */
+    core::u32 blockedCells{0u}; /**< Cells refused as unbuildable. */
+    bool roadsConnected{false}; /**< Is the whole street network one piece? */
 };
 
 /**
@@ -126,7 +126,8 @@ struct SettlementReport {
 /**
  * @brief Is every road cell reachable from every other?
  * @param map Settlement to test.
- * @return true when the street network is a single connected piece.
+ * @return true when the street network is a single connected piece, or when it has
+ *         no cell at all: there is nothing to disconnect.
  */
 [[nodiscard]] bool areRoadsConnected(const SettlementMap &map);
 

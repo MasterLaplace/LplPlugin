@@ -1,12 +1,3 @@
-/**
- * @file Hydrology.cpp
- * @brief Implementation of depression filling, flow routing, rivers and moisture.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Hydrology.hpp>
 
 #include <lpl/math/FixedMath.hpp>
@@ -17,10 +8,10 @@ namespace lpl::procgen {
 
 namespace {
 
-/// One Q16.16 tick: the smallest rise that still makes a slope.
+/** One Q16.16 tick: the smallest rise that still makes a slope. */
 constexpr core::i32 kFillEpsilon = 1;
 
-/// A cell waiting its turn in the flood, keyed by the height it was reached at.
+/** A cell waiting its turn in the flood, keyed by the height it was reached at. */
 struct FloodEntry {
     core::i32 height;
     core::u32 cell;
@@ -103,6 +94,9 @@ private:
 /**
  * @brief Priority-Flood with an epsilon rise.
  *
+ * The border is where water leaves the map, so it is where the flood starts. Its
+ * cells keep their own height: nothing outside can hold them up.
+ *
  * @param field    Surface to fill in place.
  * @param outOrder Receives the cells in the order they were resolved, which is
  *                 ascending filled height. May be null.
@@ -126,8 +120,6 @@ core::u32 priorityFlood(Heightfield &field, lpl::pmr::vector<core::u32> *outOrde
         outOrder->reserve(count);
     }
 
-    // The border is where water leaves the map, so it is where the flood starts.
-    // Its cells keep their own height: nothing outside can hold them up.
     for (core::u32 x = 0u; x < width; ++x)
     {
         const core::u32 top = field.index(x, 0u);
@@ -177,9 +169,6 @@ core::u32 priorityFlood(Heightfield &field, lpl::pmr::vector<core::u32> *outOrde
                 continue;
 
             resolved[index] = 1u;
-            // Anything at or below where we came from is inside a depression:
-            // lift it one tick above, which both removes the sink and leaves a
-            // definite direction for water to follow out of the basin.
             const core::i32 spill = current.height + kFillEpsilon;
             if (field[index].raw() <= spill)
             {
@@ -202,9 +191,6 @@ DrainageNetwork computeDrainage(const Heightfield &field)
     if (field.empty())
         return network;
 
-    // Route over a filled copy: the caller's terrain keeps its basins (they are
-    // lakes, and a lake is a feature) while routing sees a surface where every
-    // cell has somewhere to send its water.
     network.filled = field;
     lpl::pmr::vector<core::u32> order;
     network.raisedCells = priorityFlood(network.filled, &order);
@@ -212,7 +198,6 @@ DrainageNetwork computeDrainage(const Heightfield &field)
     network.direction = FlowDirection{field.width(), field.depth(), kNoFlow};
     network.accumulation = FlowAccumulation{field.width(), field.depth(), 1u};
 
-    // ── Steepest-descent direction per cell, over eight neighbours ───────────
     for (core::u32 z = 0u; z < field.depth(); ++z)
     {
         for (core::u32 x = 0u; x < field.width(); ++x)
@@ -232,12 +217,7 @@ DrainageNetwork computeDrainage(const Heightfield &field)
                 if (drop.raw() <= 0)
                     continue;
 
-                // A diagonal step falls the same distance over a longer run, so
-                // comparing raw drops would bias every channel onto diagonals.
                 const math::Fixed32 slope = n < 4u ? drop : drop * math::kInvSqrt2;
-                // Strictly greater: the first of several equally steep
-                // neighbours wins, and kNeighbor8 order is fixed, so the choice
-                // is the same everywhere.
                 if (slope > steepest)
                 {
                     steepest = slope;
@@ -248,13 +228,6 @@ DrainageNetwork computeDrainage(const Heightfield &field)
         }
     }
 
-    // ── Accumulate, highest cell first ──────────────────────────────────────
-    //
-    // The flood already visited every cell in ascending filled height, and after
-    // filling a cell always drains to one strictly lower, so walking that order
-    // backwards is a topological order of the flow graph: a cell's own inflow is
-    // final before it passes water on. That is exactly what an explicit sort used
-    // to be for, at O(n) instead of O(n^2).
     for (core::u32 i = order.size(); i-- > 0u;)
     {
         const core::u32 cell = order[i];
@@ -281,10 +254,6 @@ Grid<core::u8> lakeMask(const DrainageNetwork &network, const Heightfield &origi
     if (network.filled.width() != original.width() || network.filled.depth() != original.depth())
         return Grid<core::u8>{};
 
-    // Deeper than minDepth, not merely raised. Priority-Flood lifts every cell of
-    // a basin by at least one tick, so "raised" includes the whole endorheic
-    // catchment down to films of water a Q16.16 tick deep — 20% of a measured
-    // 64x64 world. A lake is where water STANDS.
     const math::Fixed32 floor = math::Fixed32::fromFloat(minDepth);
     Grid<core::u8> mask{original.width(), original.depth(), 0u};
     for (core::u32 i = 0u; i < mask.cellCount(); ++i)
@@ -312,31 +281,16 @@ Grid<core::u8> riverMask(const DrainageNetwork &network, core::f32 density)
     if (network.maxAccumulation == 0u || mask.cellCount() == 0u)
         return mask;
 
-    // The threshold is a QUANTILE of the accumulation distribution, not a share
-    // of the largest flow. That distinction is the module's recurring bug in yet
-    // another costume: accumulation is heavy-tailed and its spread depends on how
-    // big the map is, so a fixed share of the maximum picks a wildly different
-    // share of the map at different sizes. Measured on the same recipe, a
-    // threshold of 2% of the maximum made 3.7% of a 128x128 world river and 34%
-    // of a 24x24 one — the small world read as a flooded plain. A quantile is
-    // scale-free by construction: ask for 4% of the cells and get 4%, at any size.
-    //
-    // Selected by counting sort rather than by sorting: accumulation is an
-    // integer bounded by the cell count, so a histogram walked from the top is
-    // O(cells) and has no comparison order to get wrong.
     const core::u32 cells = mask.cellCount();
     core::u32 target = static_cast<core::u32>(
         (static_cast<core::i64>(math::Fixed32::fromFloat(density).raw()) * static_cast<core::i64>(cells)) >> 16);
     if (target == 0u)
-        return mask; // a density of zero is a world without visible water
+        return mask;
 
     lpl::pmr::vector<core::u32> histogram(static_cast<core::usize>(network.maxAccumulation) + 1u, 0u);
     for (core::u32 i = 0u; i < cells; ++i)
         ++histogram[network.accumulation[i]];
 
-    // Walk down from the strongest flow until the target share is covered. Ties
-    // are kept whole: cutting inside a group of equal accumulations would make
-    // the result depend on visit order, which is exactly what must never happen.
     core::u32 threshold = network.maxAccumulation;
     core::u32 covered = 0u;
     for (core::u32 value = network.maxAccumulation; value > 0u; --value)
@@ -347,8 +301,6 @@ Grid<core::u8> riverMask(const DrainageNetwork &network, core::f32 density)
             break;
     }
 
-    // A river always means water actually converged, never merely existing: a
-    // flat or tiny map would otherwise call its every cell a river.
     if (threshold < 2u)
         threshold = 2u;
 
@@ -365,12 +317,6 @@ core::u32 carveRivers(Heightfield &field, const DrainageNetwork &network, const 
     const Grid<core::u8> mask = riverMask(network, params.density);
     const math::Fixed32 maxDepth = math::Fixed32::fromFloat(params.carveDepth);
 
-    // ── Stream power per river cell: sqrt(area) * channel slope ─────────────
-    //
-    // The slope is the fall to the cell's own downstream neighbour, so it is the
-    // slope of the channel rather than of the surrounding land. Held in 64-bit
-    // integers: sqrt(area) reaches a few thousand and a raw slope a few million,
-    // whose product leaves Fixed32's range long before it leaves i64's.
     lpl::pmr::vector<core::i64> power(field.cellCount(), core::i64{0});
     core::i64 maxPower = 0;
 
@@ -404,15 +350,13 @@ core::u32 carveRivers(Heightfield &field, const DrainageNetwork &network, const 
     }
 
     if (maxPower == 0)
-        return 0u; // the network exists but nothing in it has any fall to exploit
+        return 0u;
 
     core::u32 carved = 0u;
     for (core::u32 i = 0u; i < field.cellCount(); ++i)
     {
         if (power[i] == 0)
             continue;
-        // Normalise against the strongest cell, so carveDepth keeps meaning
-        // "how deep the strongest river cuts".
         const math::Fixed32 share = math::Fixed32::fromRaw(static_cast<core::i32>((power[i] << 16) / maxPower));
         field[i] = field[i] - maxDepth * share;
         ++carved;
@@ -452,8 +396,6 @@ Grid<core::u32> chamferDistance(const Grid<core::u8> &seeds)
             seaDistance.at(x, z) = candidate;
     };
 
-    // Forward sweep resolves distances coming from the west and north, backward
-    // sweep the other two. Two passes suffice for a 4-connected chamfer.
     for (core::u32 z = 0u; z < seeds.depth(); ++z)
         for (core::u32 x = 0u; x < seeds.width(); ++x)
         {
@@ -486,8 +428,6 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
     const math::Fixed32 coastWeight = math::Fixed32::fromFloat(params.coastWeight);
     const math::Fixed32 seaLevel = math::Fixed32::fromFloat(params.seaLevel);
 
-    // Map-relative scales. The longer axis is the reference, so a rectangular map
-    // gets belts of the same real width along both axes rather than stretched ones.
     const core::u32 longAxis = field.width() > field.depth() ? field.width() : field.depth();
     const math::Fixed32 axis = math::Fixed32::fromInt(static_cast<core::i32>(longAxis));
     const math::Fixed32 rainfallFrequency = math::Fixed32::fromFloat(params.rainfallBelts) / axis;
@@ -496,12 +436,6 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
     const core::u32 unreachedDistance = kUnreachedFromSea;
     const Grid<core::u32> seaDistance = distanceToSea(field, seaLevel);
 
-    // ── Rain shadow: carry the highest ground crossed along the wind ─────────
-    //
-    // Air arriving over a cell has already climbed whatever stood upwind of it.
-    // Sweeping against the wind and keeping a decaying maximum of the terrain
-    // behind gives, for each cell, how much higher the land upwind rose — which
-    // is how much water the air has already dropped before reaching it.
     Heightfield shadow{field.width(), field.depth(), math::Fixed32::zero()};
     const math::Fixed32 shadowStrength = math::Fixed32::fromFloat(params.rainShadow);
     if (shadowStrength.raw() > 0 && span.raw() != 0)
@@ -509,13 +443,8 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
         const core::u32 wind = params.windDirection % 4u;
         const core::i32 windX = kNeighbor4X[wind];
         const core::i32 windZ = kNeighbor4Z[wind];
-        // Each cell inherits nine tenths of its upwind neighbour's barrier, so a
-        // ridge's influence fades over roughly ten cells rather than forever.
         const math::Fixed32 decay = math::Fixed32::fromFloat(0.9f);
 
-        // Visit cells downwind-last, so a cell's upwind neighbour is already
-        // resolved when it is read. Which end each axis starts from is decided by
-        // the wind's sign on that axis; the other axis is free.
         for (core::u32 zi = 0u; zi < field.depth(); ++zi)
         {
             const core::u32 z = windZ < 0 ? field.depth() - 1u - zi : zi;
@@ -542,8 +471,6 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
         {
             const core::u32 i = field.index(x, z);
 
-            // Baseline rainfall: where it happens to rain, independently of the
-            // ground. Mapped from the noise's [-1, 1] into [0, 1].
             const math::Fixed32 rainfallTerm =
                 (ValueNoise2D::fbm(math::Fixed32::fromInt(static_cast<core::i32>(x)) * rainfallFrequency,
                                    math::Fixed32::fromInt(static_cast<core::i32>(z)) * rainfallFrequency,
@@ -551,11 +478,6 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
                  math::Fixed32::one()) *
                 math::Fixed32::half();
 
-            // Upstream drainage on a logarithmic scale. A square root is not enough
-            // compression: accumulation spans four orders of magnitude and its root
-            // still spans two, so all but the trunk cells land near zero. A logarithm
-            // is what the topographic wetness index uses, and it is what makes a
-            // modest stream read as wet instead of only the river mouth.
             math::Fixed32 flowTerm = math::Fixed32::zero();
             if (maxFlowLog.raw() > 0)
                 flowTerm = math::fixedLog2(network.accumulation[i]) / maxFlowLog;
@@ -574,8 +496,6 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
             math::Fixed32 wet = rainfallTerm * rainfallWeight + flowTerm * flowWeight + altitudeTerm * altitudeWeight +
                                 coastTerm * coastWeight;
 
-            // The shadow subtracts: land behind a high ridge gets what the air had
-            // left after climbing it.
             if (shadowStrength.raw() > 0 && span.raw() != 0)
             {
                 const math::Fixed32 barrier = (shadow[i] - field[i]) / span;
@@ -590,27 +510,8 @@ Heightfield computeMoisture(const Heightfield &field, const DrainageNetwork &net
             moisture[i] = wet;
         }
 
-    // Diffusion widens a channel's influence into its valley: vegetation does
-    // not stop at the water's edge.
     smoothHeights(moisture, params.smoothing);
 
-    // ── Rescale so that [0, 1] spans the moisture the LAND actually has ──────
-    //
-    // The weighted sum above never reaches the ends of its nominal range: the
-    // terms rarely peak together, and the ones that do peak together do so under
-    // water, where the classifier decides by altitude and never asks about
-    // climate. Measured over three map sizes the land moisture topped out between
-    // 0.61 and 0.71 and never fell below 0.10, and it drifted with the map's size
-    // because the drainage term is normalised against the largest flow — which
-    // grows with the map.
-    //
-    // So absolute thresholds elsewhere would be judging a moving scale, and a
-    // "wet" threshold of 0.6 sat above almost the whole land distribution: forest,
-    // rainforest and marsh were unreachable not because the classifier was wrong
-    // but because nothing could ever satisfy it. Stretching the land's own range
-    // onto [0, 1] is the same thing @ref normalizeHeights does for elevation, and
-    // for the same reason: a threshold can only mean something against a known
-    // range.
     math::Fixed32 landLow = math::Fixed32::max();
     math::Fixed32 landHigh = math::Fixed32::min();
     bool anyLand = false;

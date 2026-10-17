@@ -1,12 +1,3 @@
-/**
- * @file Heightfield.cpp
- * @brief Implementation of the terrain grid and its shaping passes.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Heightfield.hpp>
 
 #include <lpl/procgen/ValueNoise.hpp>
@@ -22,8 +13,6 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
 math::Fixed32 shapeTerrainValue(math::Fixed32 value, const NoiseParams &params)
 {
-    // Off by default: a shaping of zero must leave every existing world, every
-    // parity signature and every baked cartridge exactly as they were.
     if (params.plainsFlatten <= 0.0f)
         return value;
 
@@ -33,25 +22,12 @@ math::Fixed32 shapeTerrainValue(math::Fixed32 value, const NoiseParams &params)
     const math::Fixed32 gain = math::Fixed32::fromFloat(params.mountainGain);
     const math::Fixed32 kept = math::Fixed32::one() - flatten;
 
-    // Three bands, and EVERY join is continuous. That is not tidiness: a curve that
-    // stepped at a band boundary would draw a terrace at exactly that height right
-    // around the world, on every coast and every hillside at once. The first version
-    // of this function did precisely that on the ocean side — it returned the raw
-    // value below the lowland band while the band itself was compressed, so every
-    // shoreline in the world got the same cliff. Each band below therefore starts
-    // from where the previous one ENDED rather than from the raw value.
-
-    // The lowland band, compressed towards its own centre: the majority of the
-    // range becomes ground that can be walked across.
     if (value >= -plains && value < peak)
         return value * kept;
 
-    // Below it: the sea floor, continuing at the noise's own slope from where the
-    // lowland ended. Shelving rather than dropping, so a coast reads as a beach.
     if (value < -plains)
         return (-plains * kept) + (value + plains);
 
-    // Above it: mountains, expanded from where the lowland ended.
     return (peak * kept) + (value - peak) * gain;
 }
 
@@ -65,20 +41,13 @@ math::Fixed32 sampleNoiseAt(core::i32 worldX, core::i32 worldZ, const NoiseParam
 
     math::Fixed32 nx = math::Fixed32::fromInt(worldX);
     math::Fixed32 nz = math::Fixed32::fromInt(worldZ);
-    // Warp in cell space, before the frequency scaling, so warpStrength reads in
-    // cells rather than in whatever units the frequency happens to imply.
     ValueNoise2D::warp(nx, nz, params.seed, math::Fixed32::fromFloat(params.warpStrength), frequency);
     nx = nx * frequency;
     nz = nz * frequency;
 
     switch (params.kind)
     {
-    // Shaped BEFORE the amplitude is applied, on the normalised value. Reshaping
-    // metres instead would make every parameter depend on how tall the world
-    // happens to be, and a recipe tuned at one amplitude would be wrong at another.
     case NoiseKind::Ridged:
-        // Ridged and billow both return [0, 1); recentre them so a layer's mean
-        // stays near zero and layering one over another does not drift upward.
         return base +
                shapeTerrainValue((ValueNoise2D::ridged(nx, nz, params.octaves, params.seed, lacunarity, persistence) -
                                   math::Fixed32::half()) *
@@ -153,8 +122,6 @@ void normalizeHeights(Heightfield &field, math::Fixed32 low, math::Fixed32 high)
     const math::Fixed32 span = currentMax - currentMin;
     if (span.raw() == 0)
     {
-        // A flat field has no range to stretch; put it at the target floor
-        // rather than dividing by zero.
         field.fill(low);
         return;
     }
@@ -188,10 +155,6 @@ void terrace(Heightfield &field, core::u32 steps)
     if (span.raw() == 0)
         return;
 
-    // `steps` bands means `steps` distinct heights, so the top band is steps - 1
-    // and the mapping back divides by steps - 1. Dividing by `steps` instead
-    // leaves an extra level that only the single highest cell can reach — a
-    // one-cell plateau perched above the terrace below it.
     const math::Fixed32 bandCount = math::Fixed32::fromInt(static_cast<core::i32>(steps));
     const math::Fixed32 topBand = math::Fixed32::fromInt(static_cast<core::i32>(steps - 1u));
     for (core::u32 i = 0u; i < field.cellCount(); ++i)
@@ -211,8 +174,6 @@ void smoothHeights(Heightfield &field, core::u32 iterations)
     if (field.empty() || iterations == 0u)
         return;
 
-    // Double-buffered: smoothing in place would feed already-smoothed cells back
-    // into the average, which is a different (and direction-dependent) filter.
     Heightfield scratch{field.width(), field.depth(), math::Fixed32::zero()};
     const math::Fixed32 nine = math::Fixed32::fromInt(9);
 

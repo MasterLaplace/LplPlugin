@@ -28,14 +28,16 @@
 
 namespace lpl::procgen {
 
-/// How many upstream cells drain through each cell (itself included).
+/** How many upstream cells drain through each cell (itself included). */
 using FlowAccumulation = Grid<core::u32>;
 
-/// Index into @ref kNeighbor8X / @ref kNeighbor8Z of the cell each one drains
-/// to, or @ref kNoFlow where there is nowhere lower to go.
+/**
+ * Index into @ref kNeighbor8X / @ref kNeighbor8Z of the cell each one drains
+ * to, or @ref kNoFlow where there is nowhere lower to go.
+ */
 using FlowDirection = Grid<core::u8>;
 
-/// Marker in a @ref FlowDirection for a cell with nowhere lower to go.
+/** Marker in a @ref FlowDirection for a cell with nowhere lower to go. */
 inline constexpr core::u8 kNoFlow = 0xFFu;
 
 /**
@@ -43,11 +45,11 @@ inline constexpr core::u8 kNoFlow = 0xFFu;
  * @brief The full result of routing water over a heightfield.
  */
 struct DrainageNetwork {
-    FlowDirection direction;       ///< Downhill neighbour per cell (D8 index).
-    FlowAccumulation accumulation; ///< Upstream cell count per cell.
-    Heightfield filled;            ///< The depression-filled surface routing used.
-    core::u32 maxAccumulation{0u}; ///< Largest accumulation found (the river mouth).
-    core::u32 raisedCells{0u};     ///< Cells the fill lifted, i.e. the lake surface.
+    FlowDirection direction;       /**< Downhill neighbour per cell (D8 index). */
+    FlowAccumulation accumulation; /**< Upstream cell count per cell. */
+    Heightfield filled;            /**< The depression-filled surface routing used. */
+    core::u32 maxAccumulation{0u}; /**< Largest accumulation found (the river mouth). */
+    core::u32 raisedCells{0u};     /**< Cells the fill lifted, i.e. the lake surface. */
 };
 
 /**
@@ -66,8 +68,8 @@ struct RiverParams {
      * map and biome thresholds are applied after normalisation.
      */
     core::f32 density{0.04f};
-    core::f32 carveDepth{1.5f}; ///< How deep the strongest river cuts.
-    core::u32 smoothing{1u};    ///< Smoothing passes over the carved bed.
+    core::f32 carveDepth{1.5f}; /**< How deep the strongest river cuts. */
+    core::u32 smoothing{1u};    /**< Smoothing passes over the carved bed. */
 };
 
 /**
@@ -103,7 +105,15 @@ core::u32 fillDepressions(Heightfield &field);
  * Eight directions, not four. Four confines a channel to the cardinal axes, so
  * every river runs in visible right-angled staircases; eight halves the bias for
  * the cost of comparing diagonal drops against @c kInvSqrt2, since a diagonal
- * step covers more ground for the same fall.
+ * step covers more ground for the same fall. The steepest neighbour must be
+ * strictly steeper: the first of several equally steep neighbours wins, and
+ * kNeighbor8 order is fixed, so the choice is the same everywhere.
+ *
+ * Accumulation runs highest cell first. The flood already visited every cell in
+ * ascending filled height, and after filling a cell always drains to one strictly
+ * lower, so walking that order backwards is a topological order of the flow graph:
+ * a cell's own inflow is final before it passes water on. That is exactly what an
+ * explicit sort used to be for, at O(n) instead of O(n^2).
  *
  * @param field Terrain to route over.
  * @return The drainage network (empty grids when @p field is empty).
@@ -123,6 +133,12 @@ core::u32 fillDepressions(Heightfield &field);
  *
  * The strongest cell receives exactly @c carveDepth; everything else scales
  * against it, so the parameter keeps meaning what it says.
+ *
+ * The slope is the fall to the cell's own downstream neighbour, so it is the slope
+ * of the channel rather than of the surrounding land. The stream power is held in
+ * 64-bit integers: sqrt(area) reaches a few thousand and a raw slope a few million,
+ * whose product leaves Fixed32's range long before it leaves i64's. Nothing is
+ * carved when the network exists but nothing in it has any fall to exploit.
  *
  * @param field    Terrain to carve in place.
  * @param network  Drainage computed from @p field.
@@ -170,22 +186,42 @@ core::u32 carveRivers(Heightfield &field, const DrainageNetwork &network, const 
  * share of the map is covered. Ties are kept whole, so the result never depends
  * on visit order and the covered share can slightly exceed what was asked.
  *
+ * A quantile, not a share of the largest flow. That distinction is the module's
+ * recurring bug in yet another costume: accumulation is heavy-tailed and its spread
+ * depends on how big the map is, so a fixed share of the maximum picks a wildly
+ * different share of the map at different sizes. Measured on the same recipe, a
+ * threshold of 2% of the maximum made 3.7% of a 128x128 world river and 34% of a
+ * 24x24 one — the small world read as a flooded plain. A quantile is scale-free by
+ * construction: ask for 4% of the cells and get 4%, at any size.
+ *
+ * Selected by counting sort rather than by sorting: accumulation is an integer
+ * bounded by the cell count, so a histogram walked from the top is O(cells) and has
+ * no comparison order to get wrong.
+ *
+ * A river always means water actually converged, never merely existing: a flat or
+ * tiny map would otherwise call its every cell a river. A density of zero is a
+ * world without visible water.
+ *
  * @param network Drainage network.
  * @param density Share of cells to mark, in [0, 1].
  * @return A grid of 0/1 flags.
  */
 [[nodiscard]] Grid<core::u8> riverMask(const DrainageNetwork &network, core::f32 density);
 
-/// Value in a distance grid for a cell no seed can reach.
+/** Value in a distance grid for a cell no seed can reach. */
 inline constexpr core::u32 kUnreachedFromSea = 0xFFFFu;
 
 /**
  * @brief How many cells away the nearest marked cell is, everywhere.
  *
  * Two chamfer sweeps rather than a wavefront queue: cardinal distances come out
- * exact, diagonals land within the usual 3:4 approximation, and it costs one pass
- * each way instead of a queue the size of the map. Good enough for every falloff
- * in this module, and it is one implementation rather than one per caller.
+ * exact, a diagonal counts as two cardinal steps (the city-block distance), and it
+ * costs one pass each way instead of a queue the size of the map. Good enough for
+ * every falloff in this module, and it is one implementation rather than one per
+ * caller.
+ *
+ * The forward sweep resolves distances coming from the west and north, the
+ * backward sweep the other two. Two passes suffice for a 4-connected chamfer.
  *
  * @param seeds Non-zero marks a source cell (distance 0).
  * @return Cell distances, @ref kUnreachedFromSea where no source exists.
@@ -196,11 +232,11 @@ inline constexpr core::u32 kUnreachedFromSea = 0xFFFFu;
  * @brief How many cells inland every cell lies.
  *
  * Two chamfer sweeps rather than a wavefront queue: the cardinal distances come
- * out exact, diagonals land within the usual 3:4 approximation, and it costs one
- * pass each way instead of a queue the size of the map. Good enough for a falloff,
- * and it is the same number the moisture's coast term and the climate's
- * continentalness axis both need — so it is computed once, here, rather than
- * spelled out twice and left to drift apart.
+ * out exact, a diagonal counts as two cardinal steps (the city-block distance),
+ * and it costs one pass each way instead of a queue the size of the map. Good
+ * enough for a falloff, and it is the same number the moisture's coast term and
+ * the climate's continentalness axis both need — so it is computed once, here,
+ * rather than spelled out twice and left to drift apart.
  *
  * @param field    Terrain.
  * @param seaLevel Height at or below which a cell is sea (distance 0).
@@ -224,18 +260,18 @@ inline constexpr core::u32 kUnreachedFromSea = 0xFFFFu;
  *       biome bands and a player would cross a climate every few paces.
  */
 struct MoistureParams {
-    core::f32 rainfallWeight{0.4f};  ///< Contribution of the baseline rainfall field.
-    core::f32 flowWeight{0.3f};      ///< Contribution of upstream drainage.
-    core::f32 altitudeWeight{0.1f};  ///< Contribution of being low-lying.
-    core::f32 coastWeight{0.3f};     ///< Contribution of being near the sea.
-    core::f32 seaLevel{0.0f};        ///< Height at or below which a cell is sea.
-    core::f32 coastReach{0.25f};     ///< Share of the map's longer axis the sea's influence carries inland.
-    core::f32 rainShadow{0.55f};     ///< How much a windward ridge dries the land behind it, in [0, 1].
-    core::u32 windDirection{0u};     ///< Prevailing wind, as an index into kNeighbor4X/Z.
-    core::u32 smoothing{2u};         ///< Diffusion passes; 0 leaves moisture in the channels.
-    core::u32 rainfallSeed{0x2A17u}; ///< Seed of the baseline rainfall field.
-    core::f32 rainfallBelts{2.5f};   ///< Wet/dry belts across the map's longer axis.
-    core::u32 rainfallOctaves{3u};   ///< fBm octaves of the rainfall field.
+    core::f32 rainfallWeight{0.4f};  /**< Contribution of the baseline rainfall field. */
+    core::f32 flowWeight{0.3f};      /**< Contribution of upstream drainage. */
+    core::f32 altitudeWeight{0.1f};  /**< Contribution of being low-lying. */
+    core::f32 coastWeight{0.3f};     /**< Contribution of being near the sea. */
+    core::f32 seaLevel{0.0f};        /**< Height at or below which a cell is sea. */
+    core::f32 coastReach{0.25f};     /**< Share of the map's longer axis the sea's influence carries inland. */
+    core::f32 rainShadow{0.55f};     /**< How much a windward ridge dries the land behind it, in [0, 1]. */
+    core::u32 windDirection{0u};     /**< Prevailing wind, as an index into kNeighbor4X/Z. */
+    core::u32 smoothing{2u};         /**< Diffusion passes; 0 leaves moisture in the channels. */
+    core::u32 rainfallSeed{0x2A17u}; /**< Seed of the baseline rainfall field. */
+    core::f32 rainfallBelts{2.5f};   /**< Wet/dry belts across the map's longer axis. */
+    core::u32 rainfallOctaves{3u};   /**< fBm octaves of the rainfall field. */
 };
 
 /**
@@ -251,10 +287,15 @@ struct MoistureParams {
  *    consulted. Measured on a 128x128 world, that alone made forest, rainforest
  *    and marsh impossible whatever the thresholds were set to. It is also what
  *    decorrelates climate from elevation, so a desert and a forest can sit at the
- *    same height instead of the map reading as contour bands.
+ *    same height instead of the map reading as contour bands. Mapped from the
+ *    noise's [-1, 1] into [0, 1].
  *  - **Upstream drainage**, on a logarithmic scale. Accumulation is savagely
  *    skewed — a handful of trunk cells carry most of the map — so a linear term
- *    leaves everything but the trunk bone dry.
+ *    leaves everything but the trunk bone dry. A square root is not enough
+ *    compression: accumulation spans four orders of magnitude and its root still
+ *    spans two, so all but the trunk cells land near zero. A logarithm is what the
+ *    topographic wetness index uses, and it is what makes a modest stream read as
+ *    wet instead of only the river mouth.
  *  - **Altitude**, because air holds less water as it rises.
  *  - **Distance to the sea**, which is where the water comes from. A continental
  *    interior is dry however well it drains.
@@ -262,10 +303,37 @@ struct MoistureParams {
  *    face and arrives dry on the other side. Scanning along the wind and
  *    carrying a decaying "highest ground crossed so far" reproduces it, and it is
  *    what puts a desert immediately behind a mountain range instead of
- *    distributing deserts by latitude alone.
+ *    distributing deserts by latitude alone. Air arriving over a cell has already
+ *    climbed whatever stood upwind of it, so the decaying maximum gives, for each
+ *    cell, how much higher the land upwind rose — which is how much water the air
+ *    has already dropped before reaching it. Each cell inherits nine tenths of its
+ *    upwind neighbour's maximum, so a ridge's influence fades over roughly ten
+ *    cells rather than forever. Cells are visited downwind-last, so a cell's upwind
+ *    neighbour is already resolved when it is read; which end each axis starts
+ *    from is decided by the wind's sign on that axis, and the other axis is free.
+ *    The shadow subtracts: land behind a high ridge gets what the air had left
+ *    after climbing it.
  *
  * Smoothing afterwards turns a one-cell channel into a valley-wide wet band,
  * which is what a biome map needs — vegetation does not stop at the water's edge.
+ *
+ * Map-relative scales take the longer axis as the reference, so a rectangular map
+ * gets belts of the same real width along both axes rather than stretched ones.
+ *
+ * Last, the field is rescaled so that [0, 1] spans the moisture the LAND actually
+ * has. The weighted sum never reaches the ends of its nominal range: the terms
+ * rarely peak together, and the ones that do peak together do so under water,
+ * where the classifier decides by altitude and never asks about climate. Measured
+ * over three map sizes the land moisture topped out between 0.61 and 0.71 and
+ * never fell below 0.10, and it drifted with the map's size because the drainage
+ * term is normalised against the largest flow — which grows with the map.
+ *
+ * So absolute thresholds elsewhere would be judging a moving scale, and a "wet"
+ * threshold of 0.6 sat above almost the whole land distribution: forest,
+ * rainforest and marsh were unreachable not because the classifier was wrong but
+ * because nothing could ever satisfy it. Stretching the land's own range onto
+ * [0, 1] is the same thing @ref normalizeHeights does for elevation, and for the
+ * same reason: a threshold can only mean something against a known range.
  *
  * @param field   Terrain (for the altitude, coast and shadow terms).
  * @param network Drainage network (for the accumulation term).

@@ -1,19 +1,12 @@
-/**
- * @file Erosion.cpp
- * @brief Implementation of the thermal and hydraulic erosion passes.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Erosion.hpp>
 
 namespace lpl::procgen {
 
 namespace {
 
-/// Clamps a fraction parameter into [0, 1]; the models diverge outside it.
+/**
+ * @brief Clamps a fraction parameter into [0, 1]; the models diverge outside it.
+ */
 math::Fixed32 asFraction(core::f32 value)
 {
     math::Fixed32 f = math::Fixed32::fromFloat(value);
@@ -35,11 +28,6 @@ math::Fixed32 thermalErode(Heightfield &field, const ThermalErosionParams &param
     const math::Fixed32 carry = asFraction(params.carryFraction);
     math::Fixed32 moved = math::Fixed32::zero();
 
-    // Deltas accumulate into a separate buffer and are applied at the end of
-    // each pass. Writing back immediately would make a cell's fate depend on
-    // whether its neighbour had already been visited this pass, turning a
-    // symmetric physical rule into a scan-order artefact (visible as a diagonal
-    // grain across the terrain).
     Heightfield delta{field.width(), field.depth(), math::Fixed32::zero()};
 
     for (core::u32 pass = 0u; pass < params.iterations; ++pass)
@@ -52,7 +40,6 @@ math::Fixed32 thermalErode(Heightfield &field, const ThermalErosionParams &param
             {
                 const math::Fixed32 here = field.at(x, z);
 
-                // First sweep: how much excess is there, and where can it go?
                 math::Fixed32 totalExcess = math::Fixed32::zero();
                 math::Fixed32 largestExcess = math::Fixed32::zero();
                 math::Fixed32 excess[4] = {};
@@ -74,17 +61,6 @@ math::Fixed32 thermalErode(Heightfield &field, const ThermalErosionParams &param
                 if (totalExcess.raw() == 0)
                     continue;
 
-                // Second sweep: share the moved material in proportion to each
-                // neighbour's excess, so the steepest side receives the most.
-                //
-                // The amount is a fraction of the LARGEST excess, not of their
-                // sum. A peak with four steep sides has four excesses, and
-                // moving a fraction of the total would strip up to four times
-                // what any single slope justifies — enough to dig the peak below
-                // its neighbours and invert the slope it was supposed to relax.
-                // The terrain then flattens toward its mean instead of relaxing
-                // toward the talus angle, which measurably INCREASES roughness
-                // and leaves no gradient for water to follow.
                 const math::Fixed32 amount = largestExcess * carry;
                 for (core::u32 n = 0u; n < 4u; ++n)
                 {
@@ -128,16 +104,9 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
 
     for (core::u32 pass = 0u; pass < params.iterations; ++pass)
     {
-        // ── Rain ────────────────────────────────────────────────────────────
         for (core::u32 i = 0u; i < field.cellCount(); ++i)
             water[i] = water[i] + rain;
 
-        // ── Erode or deposit, according to the transport capacity ────────────
-        //
-        // C = Kc * |slope| * water. Below it the flow tears material out of the
-        // bed; above it the flow is saturated and lets material go. Both are
-        // rate-limited so the surface converges instead of oscillating between
-        // the two states on alternate passes.
         for (core::u32 z = 0u; z < field.depth(); ++z)
         {
             for (core::u32 x = 0u; x < field.width(); ++x)
@@ -147,9 +116,6 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
                     continue;
 
                 math::Fixed32 slope = slopeAt(field, x, z);
-                // A floor on the slope keeps standing water slightly erosive
-                // rather than perfectly inert, which is what stops a filled
-                // basin from becoming a permanent sediment trap.
                 if (slope < minSlope)
                     slope = minSlope;
 
@@ -171,7 +137,6 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
             }
         }
 
-        // ── Flow: water moves to lower neighbours, carrying its sediment ────
         waterDelta.fill(math::Fixed32::zero());
         sedimentDelta.fill(math::Fixed32::zero());
 
@@ -202,8 +167,6 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
                 if (totalDrop.raw() == 0)
                     continue;
 
-                // Never move more water than the cell holds, nor more than
-                // would level it with its neighbours: either would oscillate.
                 math::Fixed32 movable = water.at(x, z);
                 if (totalDrop < movable)
                     movable = totalDrop;
@@ -216,7 +179,6 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
                     const core::i32 nz = static_cast<core::i32>(z) + kNeighbor4Z[n];
                     const math::Fixed32 fraction = drops[n] / totalDrop;
                     const math::Fixed32 movedWater = movable * fraction;
-                    // Sediment travels with the water that carries it.
                     const math::Fixed32 movedSediment = water.at(x, z).raw() != 0 ?
                                                             sediment.at(x, z) * (movedWater / water.at(x, z)) :
                                                             math::Fixed32::zero();
@@ -238,17 +200,10 @@ math::Fixed32 hydraulicErode(Heightfield &field, const HydraulicErosionParams &p
             sediment[i] = sediment[i] + sedimentDelta[i];
         }
 
-        // ── Evaporate ───────────────────────────────────────────────────────
-        //
-        // Losing water lowers the capacity, so what the next pass finds above it
-        // is deposited then. Dropping the excess here as well would deposit twice
-        // per cycle and starve the erosion side of the equation.
         for (core::u32 i = 0u; i < field.cellCount(); ++i)
             water[i] = water[i] - water[i] * evaporation;
     }
 
-    // Any sediment still suspended when the rain stops settles where it is,
-    // otherwise the pass would quietly destroy material.
     for (core::u32 i = 0u; i < field.cellCount(); ++i)
         field[i] = field[i] + sediment[i];
 

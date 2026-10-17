@@ -45,7 +45,7 @@
 
 namespace lpl::procgen {
 
-/// Most layers a cave system may stack. Bounded so the volume stays predictable.
+/** Most layers a cave system may stack. Bounded so the volume stays predictable. */
 inline constexpr core::u32 kMaxCaveLayers = 8u;
 
 /**
@@ -53,12 +53,12 @@ inline constexpr core::u32 kMaxCaveLayers = 8u;
  * @brief How deep the system goes, and what each layer is like.
  */
 struct CaveSystemParams {
-    core::u32 width{64u};  ///< Cells along X.
-    core::u32 depth{64u};  ///< Cells along Z.
-    core::u32 seed{1337u}; ///< Determinism anchor.
+    core::u32 width{64u};  /**< Cells along X. */
+    core::u32 depth{64u};  /**< Cells along Z. */
+    core::u32 seed{1337u}; /**< Determinism anchor. */
 
-    core::u32 layers{3u};         ///< Stacked plans; clamped to @ref kMaxCaveLayers.
-    core::u32 levelsPerLayer{2u}; ///< Voxel levels each layer occupies.
+    core::u32 layers{3u};         /**< Stacked plans; clamped to @ref kMaxCaveLayers. */
+    core::u32 levelsPerLayer{2u}; /**< Voxel levels each layer occupies. */
 
     /**
      * @brief Fill probability of the shallowest layer.
@@ -69,13 +69,13 @@ struct CaveSystemParams {
      * gives the descent a direction.
      */
     core::f32 topFill{0.46f};
-    core::f32 deepFill{0.38f};     ///< Fill probability of the deepest layer.
-    core::u32 automatonSteps{5u};  ///< Smoothing steps per layer.
-    core::u32 minChamberSize{24u}; ///< Pockets smaller than this are filled in.
+    core::f32 deepFill{0.38f};     /**< Fill probability of the deepest layer. */
+    core::u32 automatonSteps{5u};  /**< Smoothing steps per layer. */
+    core::u32 minChamberSize{24u}; /**< Pockets smaller than this are filled in. */
 
-    core::u32 shaftsPerPair{3u};      ///< Shafts attempted between each pair of layers.
-    core::u32 entrances{2u};          ///< Shafts attempted through the surface.
-    core::f32 entranceMaxSlope{1.5f}; ///< Steepest ground an entrance may open on.
+    core::u32 shaftsPerPair{3u};      /**< Shafts attempted between each pair of layers. */
+    core::u32 entrances{2u};          /**< Shafts attempted through the surface. */
+    core::f32 entranceMaxSlope{1.5f}; /**< Steepest ground an entrance may open on. */
 
     /**
      * @brief Which generator fills a FLOOR.
@@ -102,15 +102,18 @@ struct CaveSystemParams {
      */
     bool mixLayerKinds{false};
 
-    // ── What the PLACE is like, for a mixed stack ───────────────────────────
-    //
-    // Two scalars rather than a callback, for the reason ITerrainQuery gives: a
-    // generator that took a lambda from its owner could not be given a fake in a test
-    // nor say in its own parameters what it depends on. Both are ignored unless
-    // @ref mixLayerKinds is set.
-
-    bool settled{false};     ///< People were here. People dig rooms, not fissures.
-    core::f32 wetness{0.5f}; ///< How much the ground dissolves; high ground branches.
+    /**
+     * @name What the PLACE is like, for a mixed stack
+     *
+     * Two scalars rather than a callback, for the reason ITerrainQuery gives: a
+     * generator that took a lambda from its owner could not be given a fake in a test
+     * nor say in its own parameters what it depends on. Both are ignored unless
+     * @ref mixLayerKinds is set.
+     * @{
+     */
+    bool settled{false};     /**< People were here. People dig rooms, not fissures. */
+    core::f32 wetness{0.5f}; /**< How much the ground dissolves; high ground branches. */
+    /** @} */
 };
 
 /**
@@ -122,12 +125,12 @@ struct CaveSystemParams {
  * evidence that has to be invented for the rule is not evidence.
  */
 struct CaveContext {
-    bool settled{false};      ///< A settlement stands within reach of this place.
-    core::f32 wetness{0.5f};  ///< Ground moisture in [0, 1].
-    core::u32 layerCount{1u}; ///< Floors the underground will have.
+    bool settled{false};      /**< A settlement stands within reach of this place. */
+    core::f32 wetness{0.5f};  /**< Ground moisture in [0, 1]. */
+    core::u32 layerCount{1u}; /**< Floors the underground will have. */
 };
 
-/// Moisture at or above which ground is taken to dissolve rather than fracture.
+/** Moisture at or above which ground is taken to dissolve rather than fracture. */
 inline constexpr core::f32 kKarstWetness = 0.58f;
 
 /**
@@ -141,8 +144,10 @@ inline constexpr core::f32 kKarstWetness = 0.58f;
  *  - wet ground DISSOLVES. Above @ref kKarstWetness the underground is karst, and
  *    karst branches — which is what diffusion-limited aggregation produces and why it
  *    is in this enum at all.
- *  - anything deep enough to have several floors has had time to become several
- *    things, so it gets the mixed stack.
+ *  - anything deep enough to have several floors, and both settled and wet, has had
+ *    time to become several things, and the mixed stack is the only answer that says
+ *    so. It is asked first, because it is a statement about the SHAPE of the
+ *    underground and the two above are statements about one floor's material.
  *  - otherwise the automaton, which is what the default has always been.
  *
  * A pure function of its argument: no seed, no clock, no global. Two targets asking
@@ -158,11 +163,11 @@ inline constexpr core::f32 kKarstWetness = 0.58f;
  * @brief A vertical link, and what it joins.
  */
 struct CaveShaft {
-    core::u32 x{0u};          ///< Column.
-    core::u32 z{0u};          ///< Row.
-    core::u32 upperLayer{0u}; ///< Shallower layer index.
-    core::u32 lowerLayer{0u}; ///< Deeper layer index.
-    bool surface{false};      ///< True when the shaft opens onto the world above.
+    core::u32 x{0u};          /**< Column. */
+    core::u32 z{0u};          /**< Row. */
+    core::u32 upperLayer{0u}; /**< Shallower layer index. */
+    core::u32 lowerLayer{0u}; /**< Deeper layer index. */
+    bool surface{false};      /**< True when the shaft opens onto the world above. */
 };
 
 /**
@@ -170,21 +175,37 @@ struct CaveShaft {
  * @brief A stack of plans, the shafts joining them, and the way in.
  */
 struct CaveSystem {
-    DungeonMap layer[kMaxCaveLayers]; ///< Plan per layer, shallowest first.
-    core::u32 layerCount{0u};         ///< Layers actually generated.
+    DungeonMap layer[kMaxCaveLayers]; /**< Plan per layer, shallowest first. */
+    core::u32 layerCount{0u};         /**< Layers actually generated. */
 
-    lpl::pmr::vector<CaveShaft> shafts; ///< Every vertical link, entrances included.
-    core::u32 entranceCount{0u};        ///< Shafts that pierce the surface.
-    core::u32 hollowCells{0u};          ///< Open cells across every layer.
-    core::u32 reachableCells{0u};       ///< Open cells reachable from an entrance.
-    core::u32 repairedCells{0u};        ///< Cells the reachability repair had to open.
+    lpl::pmr::vector<CaveShaft> shafts; /**< Every vertical link, entrances included. */
+    core::u32 entranceCount{0u};        /**< Shafts that pierce the surface. */
+    core::u32 hollowCells{0u};          /**< Open cells across every layer. */
+    core::u32 reachableCells{0u};       /**< Open cells reachable from an entrance. */
+    core::u32 repairedCells{0u};        /**< Cells the reachability repair had to open or fill in. */
 
-    /// @return Whether every hollow cell can be reached from an entrance.
+    /**
+     * @brief Says whether the system is fully reachable.
+     * @return Whether every hollow cell can be reached from an entrance.
+     */
     [[nodiscard]] bool fullyReachable() const noexcept { return hollowCells != 0u && reachableCells == hollowCells; }
 };
 
 /**
  * @brief Generates a layered cave system under a terrain.
+ *
+ * The stack is built in this order, before the reachability repair:
+ *
+ * - Layers, told to open out with depth.
+ * - Shafts between layers. A shaft is valid only where BOTH layers are hollow at the
+ *   same (x, z). That is the whole reason this cannot be done inside a layer
+ *   generator: it is the one fact a single plan does not contain. Candidates are
+ *   gathered first and drawn from, rather than rejection-sampled, so a stack whose
+ *   layers barely overlap still gets its shafts instead of silently getting none.
+ * - Entrances: shafts that pierce the surface. Without these the system is a sealed
+ *   void. An entrance needs hollow ground beneath it AND ground above it a body could
+ *   stand on — steep rock and the sea floor are both places a cave mouth does not
+ *   belong.
  *
  * @param params  Layer count, fill and shaft budget.
  * @param surface Terrain the entrances must break through; may be empty, in which
@@ -197,18 +218,6 @@ struct CaveSystem {
 [[nodiscard]] CaveSystem generateCaveSystem(const CaveSystemParams &params, const Heightfield &surface,
                                             const BiomeMap *biomes = nullptr);
 
-/**
- * @brief Opens walls until every hollow cell is reachable from an entrance.
- *
- * Runs in three dimensions over the stack, so a chamber sealed on its own layer
- * can be joined by a new shaft as readily as by a doorway. Without this the
- * layering makes the old problem worse rather than better: more layers means more
- * places to be sealed in.
- *
- * @param system System to repair in place.
- * @param seed   Stream for tie-breaking.
- * @return Number of cells opened.
- */
 /**
  * @brief Judges a stack the way @ref evaluateLevel judges one plan.
  *
@@ -230,11 +239,44 @@ struct CaveSystem {
  *   @ref GateCriteria::minPathLength keeps its meaning: reject a system whose bottom
  *   is one step from daylight.
  *
+ * A cell at the bottom of a shaft with one corridor off it is a junction of two, not
+ * a dead end — which is the whole difference between judging a stack and judging
+ * each of its floors on its own.
+ *
  * @param system The stack to measure; an empty one measures as all zeroes.
  * @return The measurements, for @ref passesGate.
  */
 [[nodiscard]] LevelQuality evaluateCaveSystem(const CaveSystem &system);
 
+/**
+ * @brief Opens walls until every hollow cell is reachable from an entrance.
+ *
+ * Runs in three dimensions over the stack, so a chamber sealed on its own layer
+ * can be joined by a new shaft as readily as by a doorway. Without this the
+ * layering makes the old problem worse rather than better: more layers means more
+ * places to be sealed in.
+ *
+ * Each round finds an unreached hollow cell adjacent — horizontally or vertically —
+ * to a reached one, and opens the way. Vertically means cutting a shaft, which is
+ * the move a flat repair cannot make and the reason this is not just
+ * @ref forceConnectivity run per layer.
+ *
+ * When no unreached cell touches a reached one on any axis, nothing short of
+ * tunnelling would join them, and a tunnel through solid rock between two unrelated
+ * chambers reads worse than a sealed pocket — so the orphans are filled in instead,
+ * and counted.
+ *
+ * Bounded to as many rounds as a layer has cells, and each round joins at least one
+ * component. The bound is what stops a pathological stack from spinning here
+ * forever — which matters because this runs at world build.
+ *
+ * A system with no entrance is left as it is: there is nothing to be reachable
+ * FROM, and the caller wanted a sealed system.
+ *
+ * @param system System to repair in place.
+ * @param seed   Stream for tie-breaking.
+ * @return Number of cells opened, plus the orphans filled in.
+ */
 core::u32 repairCaveReachability(CaveSystem &system, core::u32 seed);
 
 /**
@@ -261,6 +303,10 @@ void recountCaveReachability(CaveSystem &system);
  * the volume reads the way the world does rather than the way the array is
  * indexed.
  *
+ * Shafts punch through the rock between the layers they join, otherwise the link
+ * exists in the graph and not in the geometry — and a player would walk into a
+ * ceiling the pathfinder swears is a hole.
+ *
  * @param system  The system.
  * @param params  For @c levelsPerLayer.
  * @param rock    Material id for solid rock; 0 leaves it empty.
@@ -268,7 +314,9 @@ void recountCaveReachability(CaveSystem &system);
  */
 [[nodiscard]] VoxelVolume caveVolume(const CaveSystem &system, const CaveSystemParams &params, core::u8 rock);
 
-/// @brief FNV-1a fold of every layer and every shaft, for determinism checks.
+/**
+ * @brief FNV-1a fold of every layer and every shaft, for determinism checks.
+ */
 [[nodiscard]] core::u32 foldCaveSystem(const CaveSystem &system);
 
 } // namespace lpl::procgen

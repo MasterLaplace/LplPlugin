@@ -1,12 +1,3 @@
-/**
- * @file Voronoi.cpp
- * @brief Implementation of the jittered-grid Voronoi partition.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Voronoi.hpp>
 
 #include <lpl/procgen/ValueNoise.hpp>
@@ -25,14 +16,15 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
  * stream: a site must be computable from its own coordinates alone, so that two
  * chunks generated independently agree about the sites they share. That is the
  * same property that makes the noise seamless.
+ *
+ * Fractional offsets in [0, 1), scaled by the jitter and centred so a jitter of 0
+ * puts the site exactly at the coarse cell's middle.
  */
 VoronoiSite siteOf(core::i32 cellX, core::i32 cellZ, const VoronoiParams &params, math::Fixed32 jitter)
 {
     const core::u32 hx = ValueNoise2D::hash2(cellX, cellZ, params.seed);
     const core::u32 hz = ValueNoise2D::hash2(cellX, cellZ, params.seed ^ 0x5F356495u);
 
-    // Fractional offsets in [0, 1), scaled by the jitter and centred so a jitter
-    // of 0 puts the site exactly at the coarse cell's middle.
     const math::Fixed32 offsetX =
         (math::Fixed32::fromRaw(static_cast<core::i32>(hx & 0xFFFFu)) - math::Fixed32::half()) * jitter;
     const math::Fixed32 offsetZ =
@@ -78,12 +70,6 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
     const core::i32 coarseWidth = static_cast<core::i32>((params.width + params.cellSize - 1u) / params.cellSize);
     const core::i32 coarseDepth = static_cast<core::i32>((params.depth + params.cellSize - 1u) / params.cellSize);
 
-    // One region per coarse cell, indexed in scan order so a region id is
-    // reproducible from its coarse coordinates alone.
-    //
-    // A region id is a u16 and 0xFFFF means "no region", so a partition finer than
-    // that would wrap ids into the sentinel and silently mark cells unclaimed.
-    // Refusing outright beats producing a diagram whose region 65535 is invisible.
     const core::u32 requested = static_cast<core::u32>(coarseWidth) * static_cast<core::u32>(coarseDepth);
     if (requested >= static_cast<core::u32>(kNoRegion))
         return diagram;
@@ -103,10 +89,6 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
     diagram.regions = RegionMap{params.width, params.depth, kNoRegion};
 
     const math::Fixed32 warpStrength = math::Fixed32::fromFloat(params.warpStrength);
-    // The warp displaces the query point, so a warped point can land outside its
-    // own coarse cell and the 3x3 block stops being a sufficient search. Widening
-    // the block by however many coarse cells the displacement can cross restores
-    // the guarantee.
     const core::i32 warpReach =
         warpStrength.raw() <= 0 ?
             0 :
@@ -128,9 +110,6 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
             math::Fixed32 best = math::Fixed32::max();
             core::u16 bestRegion = kNoRegion;
 
-            // The block around the home coarse cell is enough: a jittered site
-            // never leaves its own cell, so no site outside the block can be
-            // closer than the nearest one inside it.
             for (core::i32 dz = -reach; dz <= reach; ++dz)
             {
                 for (core::i32 dx = -reach; dx <= reach; ++dx)
@@ -141,8 +120,6 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
                         continue;
                     const core::u32 region = static_cast<core::u32>(cz * coarseWidth + cx);
                     const math::Fixed32 distance = metricDistance(px, pz, diagram.sites[region], params.metric);
-                    // Strictly less: ties go to the first in scan order, so the
-                    // partition is the same on every target.
                     if (distance < best)
                     {
                         best = distance;

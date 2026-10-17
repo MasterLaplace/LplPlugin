@@ -38,66 +38,45 @@ namespace lpl::procgen {
 struct ValueNoise2D {
     using Fixed32 = math::Fixed32;
 
-    /// Integer hash of a lattice cell (bit-mixed multiply-xor), seed-salted.
-    [[nodiscard]] static core::u32 hash2(core::i32 x, core::i32 z, core::u32 seed) noexcept
-    {
-        core::u32 h = seed * 0x9E3779B1u;
-        h ^= static_cast<core::u32>(x) * 73856093u;
-        // The rotate is what makes the two coordinates non-interchangeable, and
-        // it is not decoration. Folding both in with plain XOR looks symmetric
-        // and is: negating both coordinates leaves the result unchanged, so
-        // (1, -1) and (-1, 1) hashed identically — and so did every other pair
-        // related that way. Measured over a 129x129 block of coordinates, that
-        // XOR-only form collided on **2732 of 16641** inputs, 16 percent. Two
-        // chunks diagonally opposite the origin generated the same terrain, and
-        // the noise lattice itself carried the same duplication. With one
-        // rotation between the two folds: zero collisions over the same block.
-        h = (h << 5) | (h >> 27);
-        h ^= static_cast<core::u32>(z) * 19349663u;
-        h ^= h >> 13;
-        h *= 0x85EBCA6Bu;
-        h ^= h >> 16;
-        return h;
-    }
+    /**
+     * @brief Integer hash of a lattice cell (bit-mixed multiply-xor), seed-salted.
+     *
+     * The rotate between the two coordinate folds is what makes the two
+     * coordinates non-interchangeable, and it is not decoration. Folding both in
+     * with plain XOR looks symmetric and is: negating both coordinates leaves the
+     * result unchanged, so (1, -1) and (-1, 1) hashed identically — and so did
+     * every other pair related that way. Measured over a 129x129 block of
+     * coordinates, that XOR-only form collided on **2732 of 16641** inputs, 16
+     * percent. Two chunks diagonally opposite the origin generated the same
+     * terrain, and the noise lattice itself carried the same duplication. With one
+     * rotation between the two folds: zero collisions over the same block.
+     */
+    [[nodiscard]] static core::u32 hash2(core::i32 x, core::i32 z, core::u32 seed) noexcept;
 
-    /// Pseudo-random lattice value in [-1, 1) as Fixed32 (17 hash bits → Q16.16).
-    [[nodiscard]] static Fixed32 latticeValue(core::i32 x, core::i32 z, core::u32 seed) noexcept
-    {
-        const core::u32 h = hash2(x, z, seed);
-        const core::i32 raw = static_cast<core::i32>(h & 0x1FFFFu) - 0x10000; // [-65536, 65535]
-        return Fixed32::fromRaw(raw);
-    }
+    /**
+     * @brief Pseudo-random lattice value in [-1, 1) as Fixed32 (17 hash bits → Q16.16).
+     *
+     * The low 17 bits of the hash, offset to the raw range [-65536, 65535].
+     */
+    [[nodiscard]] static Fixed32 latticeValue(core::i32 x, core::i32 z, core::u32 seed) noexcept;
 
-    /// Smoothstep 3t² − 2t³ (Fixed32); t in [0, 1).
-    [[nodiscard]] static Fixed32 smoothstep(Fixed32 t) noexcept
-    {
-        const Fixed32 three = Fixed32::fromInt(3);
-        const Fixed32 two = Fixed32::fromInt(2);
-        return t * t * (three - two * t);
-    }
+    /**
+     * @brief Smoothstep 3t² − 2t³ (Fixed32); t in [0, 1).
+     */
+    [[nodiscard]] static Fixed32 smoothstep(Fixed32 t) noexcept;
 
-    /// Linear interpolation a + (b − a)·t (Fixed32).
+    /**
+     * @brief Linear interpolation a + (b − a)·t (Fixed32).
+     */
     [[nodiscard]] static Fixed32 lerp(Fixed32 a, Fixed32 b, Fixed32 t) noexcept { return a + (b - a) * t; }
 
-    /// Coherent value noise at (x, z) for @p seed, in [-1, 1).
-    [[nodiscard]] static Fixed32 sample(Fixed32 x, Fixed32 z, core::u32 seed) noexcept
-    {
-        const core::i32 x0 = x.raw() >> 16; // floor (arithmetic shift)
-        const core::i32 z0 = z.raw() >> 16;
-        const Fixed32 fx = Fixed32::fromRaw(x.raw() & 0xFFFF); // fractional part in [0,1)
-        const Fixed32 fz = Fixed32::fromRaw(z.raw() & 0xFFFF);
-        const Fixed32 ux = smoothstep(fx);
-        const Fixed32 uz = smoothstep(fz);
-
-        const Fixed32 v00 = latticeValue(x0, z0, seed);
-        const Fixed32 v10 = latticeValue(x0 + 1, z0, seed);
-        const Fixed32 v01 = latticeValue(x0, z0 + 1, seed);
-        const Fixed32 v11 = latticeValue(x0 + 1, z0 + 1, seed);
-
-        const Fixed32 a = lerp(v00, v10, ux);
-        const Fixed32 b = lerp(v01, v11, ux);
-        return lerp(a, b, uz);
-    }
+    /**
+     * @brief Coherent value noise at (x, z) for @p seed, in [-1, 1).
+     *
+     * The lattice cell is the floor of each coordinate, taken by an arithmetic
+     * shift of the raw value, and the fraction in [0, 1) is its low 16 bits.
+     */
+    [[nodiscard]] static Fixed32 sample(Fixed32 x, Fixed32 z, core::u32 seed) noexcept;
 
     /**
      * @brief Largest frequency an octave may reach before the sum is abandoned.
@@ -123,23 +102,7 @@ struct ValueNoise2D {
      */
     [[nodiscard]] static Fixed32 fbm(Fixed32 x, Fixed32 z, core::u32 octaves, core::u32 seed,
                                      Fixed32 lacunarity = Fixed32::fromInt(2),
-                                     Fixed32 persistence = Fixed32::half()) noexcept
-    {
-        Fixed32 sum = Fixed32::zero();
-        Fixed32 norm = Fixed32::zero();
-        Fixed32 amp = Fixed32::one();
-        Fixed32 freq = Fixed32::one();
-        for (core::u32 o = 0; o < octaves; ++o)
-        {
-            sum = sum + amp * sample(x * freq, z * freq, seed + o);
-            norm = norm + amp;
-            amp = amp * persistence;
-            freq = freq * lacunarity;
-            if (freq.raw() > kMaxOctaveFrequencyRaw || amp.raw() == 0)
-                break;
-        }
-        return (norm == Fixed32::zero()) ? Fixed32::zero() : sum / norm;
-    }
+                                     Fixed32 persistence = Fixed32::half()) noexcept;
 
     /**
      * @brief Ridged multifractal: fBm folded so its zero crossings become crests.
@@ -155,24 +118,7 @@ struct ValueNoise2D {
      */
     [[nodiscard]] static Fixed32 ridged(Fixed32 x, Fixed32 z, core::u32 octaves, core::u32 seed,
                                         Fixed32 lacunarity = Fixed32::fromInt(2),
-                                        Fixed32 persistence = Fixed32::half()) noexcept
-    {
-        Fixed32 sum = Fixed32::zero();
-        Fixed32 norm = Fixed32::zero();
-        Fixed32 amp = Fixed32::one();
-        Fixed32 freq = Fixed32::one();
-        for (core::u32 o = 0; o < octaves; ++o)
-        {
-            const Fixed32 folded = Fixed32::one() - sample(x * freq, z * freq, seed + o).abs();
-            sum = sum + amp * (folded * folded);
-            norm = norm + amp;
-            amp = amp * persistence;
-            freq = freq * lacunarity;
-            if (freq.raw() > kMaxOctaveFrequencyRaw || amp.raw() == 0)
-                break;
-        }
-        return (norm == Fixed32::zero()) ? Fixed32::zero() : sum / norm;
-    }
+                                        Fixed32 persistence = Fixed32::half()) noexcept;
 
     /**
      * @brief Billow noise: fBm rectified, so its zero crossings become creases.
@@ -185,23 +131,7 @@ struct ValueNoise2D {
      */
     [[nodiscard]] static Fixed32 billow(Fixed32 x, Fixed32 z, core::u32 octaves, core::u32 seed,
                                         Fixed32 lacunarity = Fixed32::fromInt(2),
-                                        Fixed32 persistence = Fixed32::half()) noexcept
-    {
-        Fixed32 sum = Fixed32::zero();
-        Fixed32 norm = Fixed32::zero();
-        Fixed32 amp = Fixed32::one();
-        Fixed32 freq = Fixed32::one();
-        for (core::u32 o = 0; o < octaves; ++o)
-        {
-            sum = sum + amp * sample(x * freq, z * freq, seed + o).abs();
-            norm = norm + amp;
-            amp = amp * persistence;
-            freq = freq * lacunarity;
-            if (freq.raw() > kMaxOctaveFrequencyRaw || amp.raw() == 0)
-                break;
-        }
-        return (norm == Fixed32::zero()) ? Fixed32::zero() : sum / norm;
-    }
+                                        Fixed32 persistence = Fixed32::half()) noexcept;
 
     /**
      * @brief Displaces a sample point by a second noise field (domain warping).
@@ -212,6 +142,9 @@ struct ValueNoise2D {
      * what turns straight-ish boundaries into the swirled, folded ones real
      * geology and real coastlines show.
      *
+     * Two independent offsets: one field would displace both axes identically
+     * and merely shear the domain instead of folding it.
+     *
      * @param x        Abscissa to displace, modified in place.
      * @param z        Ordinate to displace, modified in place.
      * @param seed     Determinism anchor for the displacement field.
@@ -219,21 +152,11 @@ struct ValueNoise2D {
      * @param frequency Scale of the displacement field.
      */
     static void warp(Fixed32 &x, Fixed32 &z, core::u32 seed, Fixed32 strength,
-                     Fixed32 frequency = Fixed32::half()) noexcept
-    {
-        if (strength.raw() == 0)
-            return;
-        const Fixed32 wx = x * frequency;
-        const Fixed32 wz = z * frequency;
-        // Two independent offsets: one field would displace both axes identically
-        // and merely shear the domain instead of folding it.
-        const Fixed32 offsetX = fbm(wx, wz, 3u, seed ^ 0x7F4A7C15u) * strength;
-        const Fixed32 offsetZ = fbm(wx, wz, 3u, seed ^ 0x2545F491u) * strength;
-        x = x + offsetX;
-        z = z + offsetZ;
-    }
+                     Fixed32 frequency = Fixed32::half()) noexcept;
 };
 
 } // namespace lpl::procgen
+
+#    include "ValueNoise.inl"
 
 #endif // LPL_PROCGEN_VALUENOISE_HPP
