@@ -46,10 +46,10 @@
 
 namespace lpl::ai {
 
-/// A room's index in the abstract graph.
+/** A room's index in the abstract graph. */
 using RoomId = core::u32;
 
-/// Value meaning "no room".
+/** Value meaning "no room". */
 inline constexpr RoomId kNoRoom = 0xFFFFFFFFu;
 
 /**
@@ -61,11 +61,11 @@ inline constexpr RoomId kNoRoom = 0xFFFFFFFFu;
  * lossless rather than lossy.
  */
 struct AbstractCreature {
-    core::u32 id{0u};       ///< Identity, and the seed of everything derived.
-    core::u32 species{0u};  ///< Species salt.
-    RoomId room{kNoRoom};   ///< Where it currently is.
-    core::u32 energy{100u}; ///< Coarse condition, ticked even while abstract.
-    bool realised{false};   ///< Whether a body currently exists for it.
+    core::u32 id{0u};       /**< Identity, and the seed of everything derived. */
+    core::u32 species{0u};  /**< Species salt. */
+    RoomId room{kNoRoom};   /**< Where it currently is. */
+    core::u32 energy{100u}; /**< Coarse condition, ticked even while abstract. */
+    bool realised{false};   /**< Whether a body currently exists for it. */
 };
 
 /**
@@ -73,10 +73,10 @@ struct AbstractCreature {
  * @brief A node of the world graph, and what the budget needs to know about it.
  */
 struct AbstractRoom {
-    lpl::pmr::vector<RoomId> exits;  ///< Adjacent rooms.
-    core::u32 lastVisitTick{0u};     ///< When a focus was last here.
-    core::u32 changesSinceVisit{0u}; ///< Room transitions elsewhere since then.
-    bool realised{false};            ///< Whether this room's creatures have bodies.
+    lpl::pmr::vector<RoomId> exits;  /**< Adjacent rooms. */
+    core::u32 lastVisitTick{0u};     /**< When a focus was last here. */
+    core::u32 changesSinceVisit{0u}; /**< Room transitions elsewhere since then. */
+    bool realised{false};            /**< Whether this room's creatures have bodies. */
 };
 
 /**
@@ -84,11 +84,11 @@ struct AbstractRoom {
  * @brief The constants of the deletion score, and the cap it enforces.
  */
 struct RealizationBudget {
-    core::u32 maxRealisedRooms{6u}; ///< Rooms allowed a body at once.
-    core::u32 changeWeight{4u};     ///< @f$k@f$: weight of room changes since the visit.
-    core::u32 adjacentBonus{100u};  ///< Protection for a room next to the focus.
-    core::u32 predictedBonus{200u}; ///< Protection for the room the focus is heading to.
-    core::u32 unlikelyPenalty{20u}; ///< Extra ageing for a room the focus is moving away from.
+    core::u32 maxRealisedRooms{6u}; /**< Rooms allowed a body at once. */
+    core::u32 changeWeight{4u};     /**< @f$k@f$: weight of room changes since the visit. */
+    core::u32 adjacentBonus{100u};  /**< Protection for a room next to the focus. */
+    core::u32 predictedBonus{200u}; /**< Protection for the room the focus is heading to. */
+    core::u32 unlikelyPenalty{20u}; /**< Extra ageing for a room the focus is moving away from. */
 };
 
 /**
@@ -119,7 +119,14 @@ public:
      */
     core::u32 addCreature(core::u32 id, core::u32 species, RoomId room);
 
-    /// @brief Moves a creature, and ages every room's "changes since visit".
+    /**
+     * @brief Moves a creature, and ages every room's "changes since visit".
+     *
+     * Every room's "changes since the focus was here" grows on any transition
+     * anywhere. That is what makes the score age: a room the player left ten
+     * moves ago is staler than one they left one move ago, even if the same
+     * number of ticks passed.
+     */
     void moveCreature(core::u32 index, RoomId destination);
 
     /**
@@ -132,6 +139,14 @@ public:
 
     /**
      * @brief The deletion score of a realised room. Higher means "drop this one".
+     *
+     * Age, in ticks and in transitions. Two clocks because they measure different
+     * kinds of staleness: one says "long ago", the other says "far away in the
+     * player's journey", and a room can be one without the other. The room being
+     * looked at scores -1000000: it is never a candidate. A room that is not where
+     * the focus is going is aged faster, which is what frees the budget in front
+     * of a moving player rather than behind them.
+     *
      * @param room   Room to score.
      * @param budget The constants.
      * @param tick   Current tick.
@@ -147,6 +162,14 @@ public:
      * in one call, because doing them separately lets the count overshoot between
      * them.
      *
+     * Ties go to the lower room id — the same tie rule the rest of the engine
+     * uses, and the reason two machines abstract the same room. When no realised
+     * room is left but the focus's own, the cap cannot be met and abstraction stops.
+     *
+     * Creature bodies then follow their room's state. Keeping the two in one place
+     * means a creature can never be realised in an abstract room, which would be
+     * a body with no physics around it.
+     *
      * @param budget The constants and the cap.
      * @param tick   Current tick.
      * @return Number of rooms whose realisation state changed.
@@ -161,6 +184,13 @@ public:
      * genuinely changed when the player returns — the illusion of a world that
      * does not wait.
      *
+     * Condition drains whether or not anyone is watching. Only an abstract
+     * creature migrates here: a realised one is driven by the full simulation.
+     * Migration is keyed to the creature's id and the tick — no running state, so
+     * an abstract creature's history is a pure function of when it was last
+     * looked at. The personality's energy trait scales the urge to move, which is
+     * what makes two creatures of the same species migrate at different rates.
+     *
      * @param tick Current tick.
      * @return Number of creatures that moved.
      */
@@ -171,10 +201,14 @@ public:
     [[nodiscard]] core::u32 realisedRoomCount() const noexcept;
     [[nodiscard]] core::u32 realisedCreatureCount() const noexcept;
 
-    /// @brief The personality of a creature, derived rather than stored.
+    /**
+     * @brief The personality of a creature, derived rather than stored.
+     */
     [[nodiscard]] PersonalityTraits personality(core::u32 index) const;
 
-    /// @brief FNV-1a fold of every creature's state, for determinism checks.
+    /**
+     * @brief FNV-1a fold of every creature's state, for determinism checks.
+     */
     [[nodiscard]] core::u32 fold() const;
 
 private:

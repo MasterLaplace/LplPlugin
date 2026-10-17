@@ -36,6 +36,10 @@ namespace lpl::ai {
 /**
  * @class ScentWindow
  * @brief A stigmergy field on absolute world coordinates, recentred with slack.
+ *
+ * The window is consumed header-only, in the freestanding kernel as well as on
+ * the host, so its definitions live in a `.inl` rather than in a translation unit
+ * neither kernel build path lists.
  */
 class ScentWindow {
 public:
@@ -57,7 +61,9 @@ public:
     [[nodiscard]] core::i32 originX() const noexcept { return _originX; }
     [[nodiscard]] core::i32 originZ() const noexcept { return _originZ; }
 
-    /** @brief Centres the window on a world cell, dropping what falls outside. */
+    /**
+     * @brief Centres the window on a world cell, dropping what falls outside.
+     */
     void centreOn(core::i32 worldX, core::i32 worldZ);
 
     /**
@@ -66,7 +72,9 @@ public:
      */
     bool follow(core::i32 focusX, core::i32 focusZ);
 
-    /** @brief World cell to a cell of the window, when it is inside it. */
+    /**
+     * @brief World cell to a cell of the window, when it is inside it.
+     */
     [[nodiscard]] bool toWindow(core::i32 worldX, core::i32 worldZ, core::u32 &outX, core::u32 &outZ) const noexcept;
 
 private:
@@ -80,9 +88,6 @@ private:
 
 } // namespace lpl::ai
 
-// Out-of-line definitions: the window is consumed header-only, the freestanding
-// kernel included, so they live in a .inl rather than a .cpp that neither kernel
-// build path lists.
-#    include <lpl/ai/ScentWindow.inl>
+#    include "ScentWindow.inl"
 
 #endif // LPL_AI_SCENT_WINDOW_HPP

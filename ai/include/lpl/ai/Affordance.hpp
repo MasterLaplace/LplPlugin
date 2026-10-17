@@ -40,13 +40,13 @@ namespace lpl::ai {
  */
 enum class AffordanceKind : core::u16 {
     None = 0,
-    Eat = 1u << 0,     ///< Food: a plant, a corpse, a prey animal.
-    Drink = 1u << 1,   ///< Water.
-    Shelter = 1u << 2, ///< A den, a burrow, cover from weather.
-    Nest = 1u << 3,    ///< Somewhere to breed.
-    Danger = 1u << 4,  ///< A place to avoid — a town, a predator's territory.
-    Perch = 1u << 5,   ///< High ground, a vantage point.
-    Block = 1u << 6    ///< Impassable.
+    Eat = 1u << 0,     /**< Food: a plant, a corpse, a prey animal. */
+    Drink = 1u << 1,   /**< Water. */
+    Shelter = 1u << 2, /**< A den, a burrow, cover from weather. */
+    Nest = 1u << 3,    /**< Somewhere to breed. */
+    Danger = 1u << 4,  /**< A place to avoid — a town, a predator's territory. */
+    Perch = 1u << 5,   /**< High ground, a vantage point. */
+    Block = 1u << 6    /**< Impassable. */
 };
 
 [[nodiscard]] constexpr core::u16 operator|(AffordanceKind a, AffordanceKind b) noexcept
@@ -59,10 +59,10 @@ enum class AffordanceKind : core::u16 {
  * @brief One advertisement, at one place.
  */
 struct Affordance {
-    core::u32 cell{0u};    ///< Flat cell index it applies at.
-    core::u16 kinds{0u};   ///< Mask of @ref AffordanceKind.
-    core::u16 radius{1u};  ///< Cells it reaches.
-    math::Fixed32 value{}; ///< How good an offer it is; ordering only.
+    core::u32 cell{0u};    /**< Flat cell index it applies at. */
+    core::u16 kinds{0u};   /**< Mask of @ref AffordanceKind. */
+    core::u16 radius{1u};  /**< Cells it reaches. */
+    math::Fixed32 value{}; /**< How good an offer it is; ordering only. */
 
     /**
      * @brief Need below which this offer is ignored.
@@ -96,6 +96,8 @@ public:
     /**
      * @brief The best offer of a kind near a cell, for a seeker with a given need.
      *
+     * Ties go to the earlier entry.
+     *
      * @param kinds    Mask of what the seeker is looking for.
      * @param x        Seeker column.
      * @param z        Seeker row.
@@ -105,41 +107,14 @@ public:
      * @return true when something was found.
      */
     [[nodiscard]] bool best(core::u16 kinds, core::u32 x, core::u32 z, core::u32 width, math::Fixed32 need,
-                            core::u32 &outIndex) const
-    {
-        bool found = false;
-        math::Fixed32 bestValue{};
-        for (core::u32 i = 0u; i < _offers.size(); ++i)
-        {
-            const Affordance &offer = _offers[i];
-            if ((offer.kinds & kinds) == 0u)
-                continue;
-            if (need < offer.requiredNeed)
-                continue; // Not desperate enough to accept this one.
-
-            const core::u32 ox = offer.cell % width;
-            const core::u32 oz = offer.cell / width;
-            const core::u32 dx = ox > x ? ox - x : x - ox;
-            const core::u32 dz = oz > z ? oz - z : z - oz;
-            if ((dx > dz ? dx : dz) > offer.radius)
-                continue;
-
-            // Strictly greater, so ties go to the earlier entry — a total order
-            // that does not depend on how the registry was filled.
-            if (!found || offer.value > bestValue)
-            {
-                found = true;
-                bestValue = offer.value;
-                outIndex = i;
-            }
-        }
-        return found;
-    }
+                            core::u32 &outIndex) const;
 
 private:
     lpl::pmr::vector<Affordance> _offers;
 };
 
 } // namespace lpl::ai
+
+#    include "Affordance.inl"
 
 #endif // LPL_AI_AFFORDANCE_HPP

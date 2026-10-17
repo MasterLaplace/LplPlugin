@@ -16,8 +16,9 @@
  *
  * **This is authoritative.** Chunk positions decide collisions, so this is
  * Fixed32 like everything else the simulation depends on — which rules out the
- * usual `acos` in the two-bone solve. The angle comes from CORDIC, and the one
- * square root is the hardware instruction the determinism contract permits.
+ * usual `acos` in the two-bone solve. It needs no angle: the elbow is projected
+ * onto the reach, and the one square root is the hardware instruction the
+ * determinism contract permits.
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -45,7 +46,7 @@ struct BodyChunk {
     math::Fixed32 vx{};
     math::Fixed32 vz{};
     math::Fixed32 radius{math::Fixed32::half()};
-    math::Fixed32 inverseMass{math::Fixed32::one()}; ///< 0 pins the chunk in place.
+    math::Fixed32 inverseMass{math::Fixed32::one()}; /**< 0 pins the chunk in place. */
 };
 
 /**
@@ -56,7 +57,7 @@ struct BodyChunkConnection {
     core::u32 a{0u};
     core::u32 b{0u};
     math::Fixed32 restLength{math::Fixed32::one()};
-    math::Fixed32 stiffness{math::Fixed32::half()}; ///< In [0, 1]; 1 is rigid.
+    math::Fixed32 stiffness{math::Fixed32::half()}; /**< In [0, 1]; 1 is rigid. */
 };
 
 /**
@@ -64,10 +65,10 @@ struct BodyChunkConnection {
  * @brief Global forces and the integrator's damping.
  */
 struct SpringBodyParams {
-    math::Fixed32 damping{math::Fixed32::fromRaw(0xF333)}; ///< Velocity retained per step (~0.95).
-    math::Fixed32 gravityZ{};                              ///< Constant pull; zero for a top-down world.
-    core::u32 relaxations{4u};                             ///< Constraint iterations per step.
-    math::Fixed32 maxSpeed{math::Fixed32::fromInt(4)};     ///< Clamp, so a stiff spring cannot explode.
+    math::Fixed32 damping{math::Fixed32::fromRaw(0xF333)}; /**< Velocity retained per step (~0.95). */
+    math::Fixed32 gravityZ{};                              /**< Constant pull; zero for a top-down world. */
+    core::u32 relaxations{4u};                             /**< Constraint iterations per step. */
+    math::Fixed32 maxSpeed{math::Fixed32::fromInt(4)};     /**< Clamp, so a stiff spring cannot explode. */
 };
 
 /**
@@ -76,10 +77,17 @@ struct SpringBodyParams {
  */
 class SpringBody {
 public:
-    /// @brief Adds a chunk and returns its index.
+    /**
+     * @brief Adds a chunk and returns its index.
+     */
     core::u32 addChunk(const BodyChunk &chunk);
 
-    /// @brief Joins two chunks with a spring at their current separation.
+    /**
+     * @brief Joins two chunks with a spring at their current separation.
+     *
+     * Rest length is the CURRENT separation: a body is defined by the pose it was
+     * built in, so assembling one never starts it fighting itself.
+     */
     void connect(core::u32 a, core::u32 b, math::Fixed32 stiffness);
 
     /**
@@ -89,6 +97,16 @@ public:
      * relaxed a fixed number of times. Relaxation rather than force accumulation
      * because a stiff force-based spring needs a small timestep to stay stable,
      * and a body that explodes when the frame rate changes is not authoritative.
+     *
+     * The speed is clamped on the Chebyshev norm: no square root, and a stiff
+     * spring that has just received a large correction cannot fling a chunk
+     * across the world. The iteration count is fixed rather than "until
+     * converged": a variable iteration count makes the cost of a tick depend on
+     * the configuration, and a real-time budget cannot absorb that. Each
+     * relaxation applies Hooke as a positional correction split by inverse mass —
+     * so a pinned chunk (inverse mass 0) takes none of it and the moving one
+     * takes all, which is the same convention the physics solver uses for
+     * immovable bodies.
      *
      * @param params Damping, gravity and iteration count.
      */
@@ -121,7 +139,9 @@ public:
      */
     [[nodiscard]] math::Fixed32 strainEnergy() const;
 
-    /// @brief FNV-1a fold of every chunk, for determinism checks.
+    /**
+     * @brief FNV-1a fold of every chunk, for determinism checks.
+     */
     [[nodiscard]] core::u32 fold() const;
 
 private:
@@ -136,7 +156,7 @@ private:
 struct TwoBoneSolution {
     math::Fixed32 jointX{};
     math::Fixed32 jointZ{};
-    bool reachable{false}; ///< False when the target is beyond the limb's extent.
+    bool reachable{false}; /**< False when the target is beyond the limb's extent. */
 };
 
 /**
@@ -150,6 +170,20 @@ struct TwoBoneSolution {
  *
  * An unreachable target is REPORTED, not clamped silently. A limb quietly
  * snapping to full extension is how a creature ends up standing on nothing.
+ * The joint returned for it is still the straightest plausible one, so a caller
+ * that ignores the flag gets a limb pointing at the target rather than at the
+ * origin.
+ *
+ * With d the root-target distance, u and l the bone lengths:
+ *
+ *     a = (d² + u² − l²) / 2d      distance from root to the joint's projection
+ *     h = sqrt(u² − a²)            offset perpendicular to the root-target line
+ *
+ * A negative u² − a² is rounding at the reach limit, not a failure, and counts
+ * as zero. The perpendicular is (-nz, nx); flipping it picks the mirror
+ * solution, which is the difference between a knee that bends forward and one
+ * that bends back. Exposed rather than chosen, because which one is correct
+ * depends on the creature.
  *
  * @param rootX   Hip position.
  * @param rootZ   Hip position.

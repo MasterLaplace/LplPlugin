@@ -1,23 +1,7 @@
-/**
- * @file AntColony.inl
- * @brief Out-of-line definitions for ai::AntColony.
- *
- * A `.inl` rather than a `.cpp` on purpose: every source in `ai/src/` is compiled
- * into the kernel image by both build paths, and ring 0 has no use for a forage
- * colony. Header-defined, it costs nothing to a target that does not include it.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-08-04
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_AI_ANT_COLONY_INL
-#    define LPL_AI_ANT_COLONY_INL
+#define LPL_AI_ANT_COLONY_INL
 
-#    include <lpl/procgen/Heightfield.hpp>
+#include <lpl/procgen/Heightfield.hpp>
 
 namespace lpl::ai {
 
@@ -38,10 +22,6 @@ inline void AntColony::reset(StigmergyField &field, core::u32 width, core::u32 d
     if (width == 0u || depth == 0u)
         return;
 
-    // Every agent starts ON the nest. Scattering them would look livelier and would
-    // destroy the claim being made: a trail that forms from a single origin is
-    // evidence the field converged, one that starts spread out is evidence of
-    // nothing.
     for (core::u32 i = 0u; i < _params.agents; ++i)
     {
         _x.push_back(_nestX);
@@ -76,9 +56,6 @@ inline void AntColony::step(StigmergyField &field)
             }
         }
 
-        // An agent that wandered far enough goes home. Without it the colony
-        // diffuses outward forever and the trail never closes into a route, which is
-        // the difference between a pheromone field and a stain.
         const core::i32 dx = static_cast<core::i32>(_x[i]) - static_cast<core::i32>(_nestX);
         const core::i32 dz = static_cast<core::i32>(_z[i]) - static_cast<core::i32>(_nestZ);
         const core::i32 range = static_cast<core::i32>(_params.forageRange);
@@ -89,8 +66,6 @@ inline void AntColony::step(StigmergyField &field)
             ++_returns;
         }
 
-        // Deposited AFTER the homing check, so a returning agent marks the nest
-        // rather than the far cell it just left: the trail then has both ends.
         const core::u32 cell = _z[i] * _width + _x[i];
         field.depositTrail(_params.ants.channel, &cell, 1u, _params.ants.depositQuality);
     }

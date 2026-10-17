@@ -40,12 +40,12 @@ namespace lpl::ai {
  * @brief The archetype of one creature's opinion of another.
  */
 enum class Attitude : core::u8 {
-    Ignores = 0, ///< No opinion.
-    Eats,        ///< Prey.
-    Afraid,      ///< Predator, or something that hurt it.
-    Antagonises, ///< Rival, worth harassing but not killing.
-    Pack,        ///< Kin or ally.
-    Attacks      ///< Actively hostile.
+    Ignores = 0, /**< No opinion. */
+    Eats,        /**< Prey. */
+    Afraid,      /**< Predator, or something that hurt it. */
+    Antagonises, /**< Rival, worth harassing but not killing. */
+    Pack,        /**< Kin or ally. */
+    Attacks      /**< Actively hostile. */
 };
 
 /**
@@ -53,9 +53,9 @@ enum class Attitude : core::u8 {
  * @brief What A thinks of B, and how sure it is.
  */
 struct Opinion {
-    core::u32 subject{0u}; ///< Who this is about.
+    core::u32 subject{0u}; /**< Who this is about. */
     Attitude attitude{Attitude::Ignores};
-    math::Fixed32 intensity{}; ///< Strength of the attitude, in [0, 1].
+    math::Fixed32 intensity{}; /**< Strength of the attitude, in [0, 1]. */
 
     /**
      * @brief How much the model is still trusted, in [0, 1].
@@ -66,8 +66,8 @@ struct Opinion {
      */
     math::Fixed32 confidence{};
 
-    core::u32 lastSeenCell{0u}; ///< Where it was last observed.
-    math::Fixed32 lastVx{};     ///< Its velocity then; the extrapolation's basis.
+    core::u32 lastSeenCell{0u}; /**< Where it was last observed. */
+    math::Fixed32 lastVx{};     /**< Its velocity then; the extrapolation's basis. */
     math::Fixed32 lastVz{};
 };
 
@@ -79,6 +79,10 @@ class RelationshipTracker {
 public:
     /**
      * @brief Records a sighting, creating or refreshing the model.
+     *
+     * Seeing something again reinforces the opinion rather than replacing it.
+     * Replacing would make a creature's view of another swing on a single
+     * glance, which is exactly the memoryless behaviour this exists to avoid.
      *
      * @param observer Who is looking.
      * @param subject  What was seen.
@@ -143,6 +147,12 @@ public:
      * Same memory, different behaviour — which is the point of having both
      * systems rather than one.
      *
+     * Personality modulates, never overrides. A creature that remembers you as
+     * prey does not become afraid of you because it is timid — it becomes
+     * reluctant, which is `Antagonises`: the honest name for "wants it, will not
+     * commit". Bravery does not remove fear, it raises the threshold at which
+     * fear wins. A brave creature stands its ground against a weak impression.
+     *
      * @param remembered What the model says.
      * @param traits     The creature's temperament.
      * @param intensity  How strongly it is felt.
@@ -153,7 +163,9 @@ public:
 
     [[nodiscard]] core::u32 modelCount() const noexcept { return static_cast<core::u32>(_models.size()); }
 
-    /// @brief FNV-1a fold of every model and reputation, for determinism checks.
+    /**
+     * @brief FNV-1a fold of every model and reputation, for determinism checks.
+     */
     [[nodiscard]] core::u32 fold() const;
 
 private:

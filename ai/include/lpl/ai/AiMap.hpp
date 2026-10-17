@@ -44,11 +44,11 @@ namespace lpl::ai {
  */
 enum class Locomotion : core::u8 {
     None = 0,
-    Walk = 1u << 0,  ///< Ordinary ground.
-    Swim = 1u << 1,  ///< Water.
-    Climb = 1u << 2, ///< Vertical surface.
-    Crawl = 1u << 3, ///< A gap too tight to stand in.
-    Fly = 1u << 4    ///< Open air.
+    Walk = 1u << 0,  /**< Ordinary ground. */
+    Swim = 1u << 1,  /**< Water. */
+    Climb = 1u << 2, /**< Vertical surface. */
+    Crawl = 1u << 3, /**< A gap too tight to stand in. */
+    Fly = 1u << 4    /**< Open air. */
 };
 
 [[nodiscard]] constexpr core::u8 operator|(Locomotion a, Locomotion b) noexcept
@@ -56,7 +56,7 @@ enum class Locomotion : core::u8 {
     return static_cast<core::u8>(static_cast<core::u8>(a) | static_cast<core::u8>(b));
 }
 
-/// Direction count: the eight neighbours, plus "arrived from nowhere" for a start.
+/** Direction count: the eight neighbours, plus "arrived from nowhere" for a start. */
 inline constexpr core::u32 kDirectionCount = 8u;
 inline constexpr core::u32 kNoIncoming = 8u;
 
@@ -65,8 +65,8 @@ inline constexpr core::u32 kNoIncoming = 8u;
  * @brief What each kind of move costs.
  */
 struct AiMapParams {
-    core::u32 baseCost{16u};     ///< Cost of a cardinal step.
-    core::u32 diagonalCost{23u}; ///< Cost of a diagonal step (16 * sqrt(2), rounded).
+    core::u32 baseCost{16u};     /**< Cost of a cardinal step. */
+    core::u32 diagonalCost{23u}; /**< Cost of a diagonal step (16 * sqrt(2), rounded). */
 
     /**
      * @brief Extra cost for reversing the direction of arrival.
@@ -78,7 +78,7 @@ struct AiMapParams {
      */
     core::u32 reverseCost{160u};
 
-    core::u32 turnCost{4u}; ///< Small penalty per change of heading, so paths are smooth.
+    core::u32 turnCost{4u}; /**< Small penalty per change of heading, so paths are smooth. */
 };
 
 /**
@@ -100,13 +100,21 @@ public:
     [[nodiscard]] core::u32 depth() const noexcept { return _capability.depth(); }
     [[nodiscard]] bool empty() const noexcept { return _capability.empty(); }
 
-    /// @brief Sets which locomotion modes a cell admits.
+    /**
+     * @brief Sets which locomotion modes a cell admits.
+     */
     void setCapability(core::u32 x, core::u32 z, core::u8 mask);
 
-    /// @return The cell's capability mask, or 0 when out of range.
+    /**
+     * @brief The locomotion modes a cell admits.
+     * @return The cell's capability mask, or 0 when out of range.
+     */
     [[nodiscard]] core::u8 capability(core::u32 x, core::u32 z) const;
 
-    /// @return Whether a body with @p mask may occupy the cell.
+    /**
+     * @brief Whether a cell admits a body.
+     * @return Whether a body with @p mask may occupy the cell.
+     */
     [[nodiscard]] bool passable(core::u32 x, core::u32 z, core::u8 mask) const
     {
         return (capability(x, z) & mask) != 0u;
@@ -119,6 +127,12 @@ public:
      * distance scaled by @c baseCost, which never overestimates because no step
      * costs less than that — so the result is a genuine shortest path under the
      * cost model rather than a plausible one.
+     *
+     * The search holds one entry per (cell, incoming) pair, plus the start's
+     * "arrived from nowhere" state, which must exist or the first step would be
+     * charged a reversal against an arbitrary direction. The goal may be reached
+     * through any incoming direction: the search stops at the first arrival it
+     * expands, and if it never expands one, every arrival is checked.
      *
      * @param startX  Start column.
      * @param startZ  Start row.
@@ -133,7 +147,7 @@ public:
                                      core::u8 mask, const AiMapParams &params,
                                      lpl::pmr::vector<core::u32> &outPath) const;
 
-    /// Returned by @ref findPath when no route exists.
+    /** Returned by @ref findPath when no route exists. */
     static constexpr core::u32 kNoPath = 0xFFFFFFFFu;
 
 private:
