@@ -1,15 +1,3 @@
-/**
- * @file main.cpp
- * @brief LplPlugin benchmark entry-point: defines the individual benchmark
- *        cases and runs them. The measurement machinery (timing, statistics,
- *        DCE barriers) and host introspection live in the lpl::bench module.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/bench/Harness.hpp>
 #include <lpl/bench/JsonRows.hpp>
 #include <lpl/bench/RingBench.hpp>
@@ -58,18 +46,16 @@
 #include <utility>
 #include <vector>
 
-using namespace lpl;
-
 namespace {
 
 void benchmarkArena()
 {
-    memory::ArenaAllocator arena{4 * 1024 * 1024};
-    bench::run("ArenaAllocator 10k allocs", [&]() {
+    lpl::memory::ArenaAllocator arena{4 * 1024 * 1024};
+    lpl::bench::run("ArenaAllocator 10k allocs", [&]() {
         for (int i = 0; i < 10000; ++i)
         {
             void *p = arena.allocate(128, 16);
-            bench::doNotOptimize(p);
+            lpl::bench::doNotOptimize(p);
         }
         arena.reset();
     });
@@ -77,160 +63,163 @@ void benchmarkArena()
 
 void benchmarkFixedMath()
 {
-    bench::run("Fixed32 mul 1M ops", []() {
-        math::Fixed32 a = math::Fixed32::fromFloat(3.14159f);
-        math::Fixed32 b = math::Fixed32::fromFloat(2.71828f);
-        math::Fixed32 r{0};
+    lpl::bench::run("Fixed32 mul 1M ops", []() {
+        lpl::math::Fixed32 a = lpl::math::Fixed32::fromFloat(3.14159f);
+        lpl::math::Fixed32 b = lpl::math::Fixed32::fromFloat(2.71828f);
+        lpl::math::Fixed32 r{0};
         for (int i = 0; i < 1000000; ++i)
         {
             r = a * b;
             a = r;
             // TODO(#361): one raw unit (1/65536), or math::Fixed32::one()?
-            b = b + math::Fixed32::fromRaw(1);
+            b = b + lpl::math::Fixed32::fromRaw(1);
         }
-        bench::doNotOptimize(r);
+        lpl::bench::doNotOptimize(r);
     });
 }
 
 void benchmarkMorton()
 {
-    bench::run("Morton encode3D 1M", []() {
-        for (core::u32 i = 0; i < 1000000; ++i)
+    lpl::bench::run("Morton encode3D 1M", []() {
+        for (lpl::core::u32 i = 0; i < 1000000; ++i)
         {
-            auto code = math::morton::encode3D(static_cast<core::i32>(i), static_cast<core::i32>(i + 1),
-                                               static_cast<core::i32>(i + 2));
-            bench::doNotOptimize(code);
+            auto code = lpl::math::morton::encode3D(static_cast<lpl::core::i32>(i), static_cast<lpl::core::i32>(i + 1),
+                                                    static_cast<lpl::core::i32>(i + 2));
+            lpl::bench::doNotOptimize(code);
         }
     });
 }
 
-// ---------------------------------------------------------------------------
-// Trigonometry: CORDIC (fixed-point, shift-add only) vs std::sin (double,
-// libm). Reports throughput for both AND the numerical accuracy of the CORDIC
-// approximation — a speed number for an approximate function is meaningless
-// without its error, so we measure max-absolute and RMS error over [-π, π].
-// ---------------------------------------------------------------------------
+/**
+ * @brief Trigonometry: CORDIC (fixed-point, shift-add only) vs std::sin (double, libm).
+ *
+ * Reports throughput for both AND the numerical accuracy of the CORDIC approximation — a speed
+ * number for an approximate function is meaningless without its error, so we measure max-absolute
+ * and RMS error, against libm as ground truth. Both run over [-π/2, π/2]: `angleAt` maps t∈[0,1]
+ * to that domain.
+ */
 void benchmarkTrigonometry()
 {
     constexpr int kN = 1'000'000;
-    constexpr core::f64 kPi = 3.141592653589793;
-    // This CORDIC has no argument range reduction, so it only converges within
-    // the rotation range (≈ ±1.74 rad). We benchmark over the reduced domain
-    // [-π/2, π/2] — the range a real caller would fold angles into — for a fair
-    // speed/accuracy comparison against libm.
-    const auto angleAt = [](core::f64 t) { return (t - 0.5) * kPi; }; // t∈[0,1] → [-π/2, π/2]
+    constexpr lpl::core::f64 kPi = 3.141592653589793;
+    const auto angleAt = [](lpl::core::f64 t) { return (t - 0.5) * kPi; };
 
     std::printf("\n  --- Trigonometry: CORDIC (Fixed32) vs std::sin (double), domain [-π/2, π/2] ---\n");
 
-    bench::run("CORDIC sin 1M", [&]() {
-        math::Fixed32 acc{0};
+    lpl::bench::run("CORDIC sin 1M", [&]() {
+        lpl::math::Fixed32 acc{0};
         for (int i = 0; i < kN; ++i)
         {
-            const float ang = static_cast<float>(angleAt(static_cast<core::f64>(i) / kN));
-            acc = acc + math::Cordic::sin(math::Fixed32::fromFloat(ang));
+            const float ang = static_cast<float>(angleAt(static_cast<lpl::core::f64>(i) / kN));
+            acc = acc + lpl::math::Cordic::sin(lpl::math::Fixed32::fromFloat(ang));
         }
-        bench::doNotOptimize(acc);
+        lpl::bench::doNotOptimize(acc);
     });
 
-    bench::run("std::sin 1M (double, libm)", [&]() {
-        core::f64 acc = 0.0;
+    lpl::bench::run("std::sin 1M (double, libm)", [&]() {
+        lpl::core::f64 acc = 0.0;
         for (int i = 0; i < kN; ++i)
         {
-            acc += std::sin(angleAt(static_cast<core::f64>(i) / kN));
+            acc += std::sin(angleAt(static_cast<lpl::core::f64>(i) / kN));
         }
-        bench::doNotOptimize(acc);
+        lpl::bench::doNotOptimize(acc);
     });
 
-    // Accuracy sweep — compare CORDIC against libm as ground truth.
     constexpr int kSamples = 200000;
-    core::f64 maxErr = 0.0;
-    core::f64 sumSq = 0.0;
+    lpl::core::f64 maxErr = 0.0;
+    lpl::core::f64 sumSq = 0.0;
     for (int i = 0; i < kSamples; ++i)
     {
-        const core::f64 ang = angleAt(static_cast<core::f64>(i) / kSamples);
-        const core::f64 ref = std::sin(ang);
-        const core::f64 got = math::Cordic::sin(math::Fixed32::fromFloat(static_cast<float>(ang))).toDouble();
-        const core::f64 e = std::fabs(got - ref);
+        const lpl::core::f64 ang = angleAt(static_cast<lpl::core::f64>(i) / kSamples);
+        const lpl::core::f64 ref = std::sin(ang);
+        const lpl::core::f64 got =
+            lpl::math::Cordic::sin(lpl::math::Fixed32::fromFloat(static_cast<float>(ang))).toDouble();
+        const lpl::core::f64 e = std::fabs(got - ref);
         maxErr = std::max(maxErr, e);
         sumSq += e * e;
     }
-    const core::f64 rms = std::sqrt(sumSq / kSamples);
+    const lpl::core::f64 rms = std::sqrt(sumSq / kSamples);
     std::printf("    -> CORDIC accuracy vs libm: max abs err %.3e, RMS %.3e (over %d samples in [-π/2, π/2])\n", maxErr,
                 rms, kSamples);
 }
 
+/**
+ * @brief The registry's entity creation and destruction.
+ *
+ * Create/destroy is net-zero per iteration, so the shared registry stays balanced across
+ * repetitions. Batch creation accumulates entities, so each repetition builds (and discards) its
+ * own registry — the construction cost is dwarfed by 100k creations and this keeps the measurement
+ * repeatable.
+ */
 void benchmarkRegistry()
 {
-    ecs::Archetype arch;
-    arch.add(ecs::ComponentId::Position);
+    lpl::ecs::Archetype arch;
+    arch.add(lpl::ecs::ComponentId::Position);
 
-    // create/destroy is net-zero per iteration, so the shared registry stays
-    // balanced across repetitions.
-    ecs::Registry reg;
-    bench::run("Registry create/destroy 10k entities", [&]() {
+    lpl::ecs::Registry reg;
+    lpl::bench::run("Registry create/destroy 10k entities", [&]() {
         for (int i = 0; i < 10000; ++i)
         {
             auto e = reg.createEntity(arch);
             if (e)
             {
                 auto r = reg.destroyEntity(e.value());
-                bench::doNotOptimize(r);
+                lpl::bench::doNotOptimize(r);
             }
         }
     });
 
-    // Batch creation accumulates entities, so each repetition builds (and
-    // discards) its own registry — the construction cost is dwarfed by 100k
-    // creations and this keeps the measurement repeatable.
-    bench::run("Registry create 100k entities", [&]() {
-        ecs::Registry local;
+    lpl::bench::run("Registry create 100k entities", [&]() {
+        lpl::ecs::Registry local;
         for (int i = 0; i < 100000; ++i)
         {
             auto e = local.createEntity(arch);
-            bench::doNotOptimize(e);
+            lpl::bench::doNotOptimize(e);
         }
     });
 }
 
-// Builds a physics archetype (Position, Velocity, Mass, AABB) and populates a
-// registry with @p count entities, then returns an initialised CPU physics
-// backend ready to step. The backend runs the real integrate → collide → sleep
-// pipeline over the ECS chunks — unlike WorldPartition::step(), whose CPU path
-// is only a GPU-dispatch gateway and does no integration work.
-static ecs::Archetype makePhysicsArchetype()
+/**
+ * @brief Builds a physics archetype (Position, Velocity, Mass, AABB).
+ */
+static lpl::ecs::Archetype makePhysicsArchetype()
 {
-    ecs::Archetype arch;
-    arch.add(ecs::ComponentId::Position);
-    arch.add(ecs::ComponentId::Velocity);
-    arch.add(ecs::ComponentId::Mass);
-    arch.add(ecs::ComponentId::AABB);
+    lpl::ecs::Archetype arch;
+    arch.add(lpl::ecs::ComponentId::Position);
+    arch.add(lpl::ecs::ComponentId::Velocity);
+    arch.add(lpl::ecs::ComponentId::Mass);
+    arch.add(lpl::ecs::ComponentId::AABB);
     return arch;
 }
 
-// Writes spread-out positions, unit masses, small AABB half-extents and a
-// small initial velocity into the freshly-created entities, so the physics
-// step exercises a realistic distribution rather than a pathological pile of
-// coincident bodies at the origin.
-static void seedPhysicsComponents(ecs::Registry &reg, core::u32 count)
+/**
+ * @brief Writes spread-out positions, unit masses, small AABB half-extents and a
+ *        small initial velocity into the freshly-created entities, so the physics
+ *        step exercises a realistic distribution rather than a pathological pile of
+ *        coincident bodies at the origin.
+ *
+ * The positions fill a cube whose side scales with the cube root of @p count, so density stays
+ * roughly constant as count grows.
+ */
+static void seedPhysicsComponents(lpl::ecs::Registry &reg, lpl::core::u32 count)
 {
-    core::u32 seed = 2166136261u;
+    lpl::core::u32 seed = 2166136261u;
     auto nextRand = [&seed]() -> float {
         seed = seed * 1664525u + 1013904223u;
         return static_cast<float>((seed >> 8) & 0xFFFF) / 65535.0f;
     };
-    // Cube side scaled so density stays ~constant as count grows.
     const float extent = std::cbrt(static_cast<float>(count)) * 4.0f;
 
     for (const auto &partition : reg.partitions())
     {
         for (const auto &chunk : partition->chunks())
         {
-            const core::u32 n = chunk->count();
-            auto *pos = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Position));
-            auto *vel = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::Velocity));
-            auto *mass = static_cast<float *>(chunk->writeComponent(ecs::ComponentId::Mass));
-            auto *aabb = static_cast<math::Vec3<float> *>(chunk->writeComponent(ecs::ComponentId::AABB));
-            for (core::u32 i = 0; i < n; ++i)
+            const lpl::core::u32 n = chunk->count();
+            auto *pos = static_cast<lpl::math::Vec3<float> *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+            auto *vel = static_cast<lpl::math::Vec3<float> *>(chunk->writeComponent(lpl::ecs::ComponentId::Velocity));
+            auto *mass = static_cast<float *>(chunk->writeComponent(lpl::ecs::ComponentId::Mass));
+            auto *aabb = static_cast<lpl::math::Vec3<float> *>(chunk->writeComponent(lpl::ecs::ComponentId::AABB));
+            for (lpl::core::u32 i = 0; i < n; ++i)
             {
                 if (pos)
                     pos[i] = {(nextRand() - 0.5f) * extent, (nextRand() - 0.5f) * extent, (nextRand() - 0.5f) * extent};
@@ -246,48 +235,55 @@ static void seedPhysicsComponents(ecs::Registry &reg, core::u32 count)
     (void) count;
 }
 
+/**
+ * @brief One step of the CPU physics backend over 10k bodies.
+ *
+ * The backend runs the real integrate → collide → sleep pipeline over the ECS chunks — unlike
+ * WorldPartition::step(), whose CPU path is only a GPU-dispatch gateway and does no integration
+ * work. The pipeline (sleep buffers, caches) is warmed up before timing.
+ */
 void benchmarkPhysics()
 {
-    ecs::Registry reg;
-    const ecs::Archetype arch = makePhysicsArchetype();
+    lpl::ecs::Registry reg;
+    const lpl::ecs::Archetype arch = makePhysicsArchetype();
     for (int i = 0; i < 10000; ++i)
     {
         [[maybe_unused]] auto e = reg.createEntity(arch);
     }
     seedPhysicsComponents(reg, 10000);
 
-    physics::CpuPhysicsBackend backend{reg};
+    lpl::physics::CpuPhysicsBackend backend{reg};
     [[maybe_unused]] auto ok = backend.init();
 
-    // Warm up the pipeline (sleep buffers, caches) before timing.
     for (int i = 0; i < 5; ++i) [[maybe_unused]]
         auto r = backend.step(0.0166f);
 
-    bench::run("Physics step (10k, integrate+collide+sleep)",
-               [&]() { [[maybe_unused]] auto r = backend.step(0.0166f); });
+    lpl::bench::run("Physics step (10k, integrate+collide+sleep)",
+                    [&]() { [[maybe_unused]] auto r = backend.step(0.0166f); });
 }
 
+/**
+ * @brief The CPU physics step over 1k to 20k bodies.
+ *
+ * Fewer repetitions for the heavier counts keep total runtime sane.
+ */
 void benchmarkPhysicsScalability()
 {
-    // The CPU collision pass is O(n²) per chunk, so this sweep is deliberately
-    // capped: it exists to *show* the quadratic wall that motivates the octree
-    // / GPU broadphase, not to claim a headline number at 100k coincident
-    // bodies. Fewer repetitions for the heavier counts keep total runtime sane.
-    constexpr core::u32 kCounts[] = {1000, 2000, 5000, 10000, 20000};
+    constexpr lpl::core::u32 kCounts[] = {1000, 2000, 5000, 10000, 20000};
 
     std::printf("\n  --- Physics Scalability Sweep (CPU backend: integrate + O(n²) collide + sleep) ---\n");
 
-    for (core::u32 count : kCounts)
+    for (lpl::core::u32 count : kCounts)
     {
-        ecs::Registry reg;
-        const ecs::Archetype arch = makePhysicsArchetype();
-        for (core::u32 i = 0; i < count; ++i)
+        lpl::ecs::Registry reg;
+        const lpl::ecs::Archetype arch = makePhysicsArchetype();
+        for (lpl::core::u32 i = 0; i < count; ++i)
         {
             [[maybe_unused]] auto e = reg.createEntity(arch);
         }
         seedPhysicsComponents(reg, count);
 
-        physics::CpuPhysicsBackend backend{reg};
+        lpl::physics::CpuPhysicsBackend backend{reg};
         [[maybe_unused]] auto ok = backend.init();
         for (int i = 0; i < 3; ++i) [[maybe_unused]]
             auto r = backend.step(0.0166f);
@@ -295,35 +291,44 @@ void benchmarkPhysicsScalability()
         char label[64];
         std::snprintf(label, sizeof(label), "Physics step (%uk entities)", count / 1000);
 
-        bench::Config cfg;
+        lpl::bench::Config cfg;
         cfg.minReps = 5;
         cfg.maxReps = 200;
         cfg.targetTotalMs = 400.0;
-        const bench::Result r = bench::run(label, [&]() { [[maybe_unused]] auto s = backend.step(0.0166f); }, cfg);
+        const lpl::bench::Result r =
+            lpl::bench::run(label, [&]() { [[maybe_unused]] auto s = backend.step(0.0166f); }, cfg);
 
-        const core::f64 ms = r.medianNs / 1e6;
-        const core::f64 entPerSec = static_cast<core::f64>(count) / (r.medianNs / 1e9);
-        std::printf("    -> Throughput: %.2e ent/sec  [%s]\n", entPerSec, bench::frameRateVerdict(ms));
+        const lpl::core::f64 ms = r.medianNs / 1e6;
+        const lpl::core::f64 entPerSec = static_cast<lpl::core::f64>(count) / (r.medianNs / 1e9);
+        std::printf("    -> Throughput: %.2e ent/sec  [%s]\n", entPerSec, lpl::bench::frameRateVerdict(ms));
     }
 }
 
+/**
+ * @brief Building and populating a WorldPartition with 10k entities.
+ *
+ * Placement uses a deterministic LCG, so it is reproducible. Build + populate is self-contained
+ * per repetition (state accumulates). This measures the spatial-index insertion path (Morton keying
+ * + cell assignment); the actual physics integration is benchmarked separately via
+ * CpuPhysicsBackend, since WorldPartition::step()'s CPU path is only a GPU-dispatch gateway and does
+ * no integration work.
+ */
 void benchmarkWorldPartition()
 {
     static constexpr int kEntityCount = 10000;
 
     auto makeArchetype = []() {
-        ecs::Archetype arch;
-        arch.add(ecs::ComponentId::Position);
-        arch.add(ecs::ComponentId::Velocity);
-        arch.add(ecs::ComponentId::Mass);
-        arch.add(ecs::ComponentId::AABB);
-        arch.add(ecs::ComponentId::Health);
+        lpl::ecs::Archetype arch;
+        arch.add(lpl::ecs::ComponentId::Position);
+        arch.add(lpl::ecs::ComponentId::Velocity);
+        arch.add(lpl::ecs::ComponentId::Mass);
+        arch.add(lpl::ecs::ComponentId::AABB);
+        arch.add(lpl::ecs::ComponentId::Health);
         return arch;
     };
 
-    // Deterministic LCG for reproducible placement.
-    auto placeAll = [](ecs::Registry &reg, ecs::WorldPartition &world, const ecs::Archetype &arch) {
-        core::u32 seed = 12345;
+    auto placeAll = [](lpl::ecs::Registry &reg, lpl::ecs::WorldPartition &world, const lpl::ecs::Archetype &arch) {
+        lpl::core::u32 seed = 12345;
         auto nextRand = [&seed]() -> float {
             seed = seed * 1103515245u + 12345u;
             return static_cast<float>((seed >> 16) & 0x7FFF) / 32767.0f;
@@ -337,99 +342,97 @@ void benchmarkWorldPartition()
             const float px = (nextRand() - 0.5f) * 10000.0f;
             const float py = nextRand() * 100.0f;
             const float pz = (nextRand() - 0.5f) * 10000.0f;
-            const math::Vec3<math::Fixed32> fixedPos{math::Fixed32::fromFloat(px), math::Fixed32::fromFloat(py),
-                                                     math::Fixed32::fromFloat(pz)};
+            const lpl::math::Vec3<lpl::math::Fixed32> fixedPos{lpl::math::Fixed32::fromFloat(px),
+                                                               lpl::math::Fixed32::fromFloat(py),
+                                                               lpl::math::Fixed32::fromFloat(pz)};
             [[maybe_unused]] auto r = world.insertOrUpdate(entityId, fixedPos);
         }
     };
 
-    const ecs::Archetype arch = makeArchetype();
+    const lpl::ecs::Archetype arch = makeArchetype();
 
-    // Build + populate is self-contained per repetition (state accumulates).
-    // This measures the spatial-index insertion path (Morton keying + cell
-    // assignment); the actual physics integration is benchmarked separately
-    // via CpuPhysicsBackend, since WorldPartition::step()'s CPU path is only a
-    // GPU-dispatch gateway and does no integration work.
-    bench::run("WorldPartition build+insert 10k entities", [&]() {
-        ecs::Registry reg;
-        ecs::WorldPartition world(math::Fixed32::fromFloat(10.0f));
+    lpl::bench::run("WorldPartition build+insert 10k entities", [&]() {
+        lpl::ecs::Registry reg;
+        lpl::ecs::WorldPartition world(lpl::math::Fixed32::fromFloat(10.0f));
         placeAll(reg, world, arch);
-        bench::doNotOptimize(world);
+        lpl::bench::doNotOptimize(world);
     });
 }
 
+/**
+ * @brief FlatAtomicHashMap's insert, get, forEach, forEachParallel and churn over 16k keys.
+ *
+ * The churn run inserts every key, removes half and re-inserts them, which tests pool recycling.
+ */
 void benchmarkFlatAtomicHashMap()
 {
-    static constexpr core::u32 kPoolCap = 16384;
+    static constexpr lpl::core::u32 kPoolCap = 16384;
 
-    bench::run("FlatAtomicHashMap insert 16k", []() {
-        container::FlatAtomicHashMap<int> map(kPoolCap);
-        for (core::u32 i = 0; i < kPoolCap; ++i)
+    lpl::bench::run("FlatAtomicHashMap insert 16k", []() {
+        lpl::container::FlatAtomicHashMap<int> map(kPoolCap);
+        for (lpl::core::u32 i = 0; i < kPoolCap; ++i)
         {
-            auto *v = map.insert(static_cast<core::u64>(i + 1));
-            bench::doNotOptimize(v);
+            auto *v = map.insert(static_cast<lpl::core::u64>(i + 1));
+            lpl::bench::doNotOptimize(v);
         }
     });
 
-    bench::run("FlatAtomicHashMap get 16k", []() {
-        container::FlatAtomicHashMap<int> map(kPoolCap);
-        for (core::u32 i = 0; i < kPoolCap; ++i)
-            map.insert(static_cast<core::u64>(i + 1));
-        for (core::u32 i = 0; i < kPoolCap; ++i)
+    lpl::bench::run("FlatAtomicHashMap get 16k", []() {
+        lpl::container::FlatAtomicHashMap<int> map(kPoolCap);
+        for (lpl::core::u32 i = 0; i < kPoolCap; ++i)
+            map.insert(static_cast<lpl::core::u64>(i + 1));
+        for (lpl::core::u32 i = 0; i < kPoolCap; ++i)
         {
-            auto *v = map.get(static_cast<core::u64>(i + 1));
-            bench::doNotOptimize(v);
+            auto *v = map.get(static_cast<lpl::core::u64>(i + 1));
+            lpl::bench::doNotOptimize(v);
         }
     });
 
-    bench::run("FlatAtomicHashMap forEach 16k", []() {
-        container::FlatAtomicHashMap<int> map(kPoolCap);
-        for (core::u32 i = 0; i < kPoolCap; ++i)
+    lpl::bench::run("FlatAtomicHashMap forEach 16k", []() {
+        lpl::container::FlatAtomicHashMap<int> map(kPoolCap);
+        for (lpl::core::u32 i = 0; i < kPoolCap; ++i)
         {
-            auto *v = map.insert(static_cast<core::u64>(i + 1));
+            auto *v = map.insert(static_cast<lpl::core::u64>(i + 1));
             if (v)
                 *v = static_cast<int>(i);
         }
-        core::u64 sum = 0;
-        map.forEach([&sum](int &val) { sum += static_cast<core::u64>(val); });
-        bench::doNotOptimize(sum);
+        lpl::core::u64 sum = 0;
+        map.forEach([&sum](int &val) { sum += static_cast<lpl::core::u64>(val); });
+        lpl::bench::doNotOptimize(sum);
     });
 
-    bench::run("FlatAtomicHashMap forEachParallel 16k", []() {
-        container::FlatAtomicHashMap<int> map(kPoolCap);
-        for (core::u32 i = 0; i < kPoolCap; ++i)
+    lpl::bench::run("FlatAtomicHashMap forEachParallel 16k", []() {
+        lpl::container::FlatAtomicHashMap<int> map(kPoolCap);
+        for (lpl::core::u32 i = 0; i < kPoolCap; ++i)
         {
-            auto *v = map.insert(static_cast<core::u64>(i + 1));
+            auto *v = map.insert(static_cast<lpl::core::u64>(i + 1));
             if (v)
                 *v = static_cast<int>(i);
         }
-        concurrency::ThreadPool pool{4};
-        std::atomic<core::u64> sum{0};
+        lpl::concurrency::ThreadPool pool{4};
+        std::atomic<lpl::core::u64> sum{0};
         map.forEachParallel(
-            pool, [&sum](int &val) { sum.fetch_add(static_cast<core::u64>(val), std::memory_order_relaxed); });
-        bench::doNotOptimize(sum);
+            pool, [&sum](int &val) { sum.fetch_add(static_cast<lpl::core::u64>(val), std::memory_order_relaxed); });
+        lpl::bench::doNotOptimize(sum);
     });
 
-    bench::run("FlatAtomicHashMap insert/remove churn 16k", []() {
-        container::FlatAtomicHashMap<int> map(kPoolCap);
-        // Insert all
-        for (core::u32 i = 0; i < kPoolCap; ++i)
-            map.insert(static_cast<core::u64>(i + 1));
-        // Remove half
-        for (core::u32 i = 0; i < kPoolCap / 2; ++i)
-            map.remove(static_cast<core::u64>(i + 1));
-        // Re-insert (tests pool recycling)
-        for (core::u32 i = 0; i < kPoolCap / 2; ++i)
-            map.insert(static_cast<core::u64>(i + 1));
+    lpl::bench::run("FlatAtomicHashMap insert/remove churn 16k", []() {
+        lpl::container::FlatAtomicHashMap<int> map(kPoolCap);
+        for (lpl::core::u32 i = 0; i < kPoolCap; ++i)
+            map.insert(static_cast<lpl::core::u64>(i + 1));
+        for (lpl::core::u32 i = 0; i < kPoolCap / 2; ++i)
+            map.remove(static_cast<lpl::core::u64>(i + 1));
+        for (lpl::core::u32 i = 0; i < kPoolCap / 2; ++i)
+            map.insert(static_cast<lpl::core::u64>(i + 1));
     });
 }
 
 void benchmarkThreadPool()
 {
-    concurrency::ThreadPool pool{4};
+    lpl::concurrency::ThreadPool pool{4};
 
-    bench::run("ThreadPool dispatch 10k tasks", [&]() {
-        std::atomic<core::u64> counter{0};
+    lpl::bench::run("ThreadPool dispatch 10k tasks", [&]() {
+        std::atomic<lpl::core::u64> counter{0};
         std::vector<std::future<void>> futures;
         futures.reserve(10000);
         for (int i = 0; i < 10000; ++i)
@@ -438,70 +441,73 @@ void benchmarkThreadPool()
         }
         for (auto &f : futures)
             f.get();
-        bench::doNotOptimize(counter);
+        lpl::bench::doNotOptimize(counter);
     });
 }
 
-// ---------------------------------------------------------------------------
-// Allocator throughput: the engine's custom allocators vs the system malloc.
-// Same workload (N fixed-size blocks) through three strategies:
-//   * Arena  — bump-pointer allocate, then a single O(1) mass reset;
-//   * Pool   — intrusive free-list, per-block acquire then per-block release;
-//   * malloc — the libc baseline, per-block malloc then free.
-// This is the quantitative justification for shipping custom allocators.
-// ---------------------------------------------------------------------------
+/**
+ * @brief Allocator throughput: the engine's custom allocators vs the system malloc.
+ *
+ * Same workload (N fixed-size blocks) through three strategies:
+ *   - Arena  — bump-pointer allocate, then a single O(1) mass reset;
+ *   - Pool   — intrusive free-list, per-block acquire then per-block release;
+ *   - malloc — the libc baseline, per-block malloc then free.
+ *
+ * This is the quantitative justification for shipping custom allocators.
+ */
 void benchmarkAllocators()
 {
     constexpr int kN = 100000;
     struct alignas(16) Block64 {
-        core::u64 data[8];
+        lpl::core::u64 data[8];
     };
 
     std::printf("\n  --- Allocator throughput (%dk x 64-byte blocks) ---\n", kN / 1000);
 
-    std::vector<void *> ptrs(static_cast<core::usize>(kN), nullptr);
+    std::vector<void *> ptrs(static_cast<lpl::core::usize>(kN), nullptr);
 
-    bench::run("Arena  bump-alloc + reset", [&]() {
-        memory::ArenaAllocator arena{static_cast<core::usize>(kN) * sizeof(Block64) + 4096};
+    lpl::bench::run("Arena  bump-alloc + reset", [&]() {
+        lpl::memory::ArenaAllocator arena{static_cast<lpl::core::usize>(kN) * sizeof(Block64) + 4096};
         for (int i = 0; i < kN; ++i)
         {
             void *p = arena.allocate(sizeof(Block64), 16);
-            bench::doNotOptimize(p);
+            lpl::bench::doNotOptimize(p);
         }
         arena.reset();
     });
 
-    bench::run("Pool   acquire + release", [&]() {
-        memory::PoolAllocator<Block64> pool{static_cast<core::usize>(kN)};
+    lpl::bench::run("Pool   acquire + release", [&]() {
+        lpl::memory::PoolAllocator<Block64> pool{static_cast<lpl::core::usize>(kN)};
         for (int i = 0; i < kN; ++i)
-            ptrs[static_cast<core::usize>(i)] = pool.acquire();
+            ptrs[static_cast<lpl::core::usize>(i)] = pool.acquire();
         for (int i = 0; i < kN; ++i)
-            pool.release(static_cast<Block64 *>(ptrs[static_cast<core::usize>(i)]));
-        bench::doNotOptimize(ptrs.data());
+            pool.release(static_cast<Block64 *>(ptrs[static_cast<lpl::core::usize>(i)]));
+        lpl::bench::doNotOptimize(ptrs.data());
     });
 
-    bench::run("malloc + free (libc baseline)", [&]() {
+    lpl::bench::run("malloc + free (libc baseline)", [&]() {
         for (int i = 0; i < kN; ++i)
         {
-            ptrs[static_cast<core::usize>(i)] = std::malloc(sizeof(Block64));
-            bench::doNotOptimize(ptrs[static_cast<core::usize>(i)]);
+            ptrs[static_cast<lpl::core::usize>(i)] = std::malloc(sizeof(Block64));
+            lpl::bench::doNotOptimize(ptrs[static_cast<lpl::core::usize>(i)]);
         }
         for (int i = 0; i < kN; ++i)
-            std::free(ptrs[static_cast<core::usize>(i)]);
+            std::free(ptrs[static_cast<lpl::core::usize>(i)]);
     });
 }
 
-// ---------------------------------------------------------------------------
-// SoA vs AoS memory layout benchmark
-//   Demonstrates the cache-miss penalty of Array-of-Structs vs Structure-of-
-//   Arrays when iterating over a single component (x-coordinate only).
-// ---------------------------------------------------------------------------
+/**
+ * @brief SoA vs AoS memory layout benchmark.
+ *
+ * Demonstrates the cache-miss penalty of Array-of-Structs vs Structure-of-Arrays when iterating
+ * over a single component (x-coordinate only): the AoS element stores (x,y,z) interleaved, the SoA
+ * layout keeps three contiguous float arrays.
+ */
 void benchmarkSoA_vs_AoS()
 {
     constexpr int kN = 1'000'000;
     std::printf("\n  --- SoA vs AoS layout (%dM elements, sum-x) ---\n", kN / 1'000'000);
 
-    // AoS: each element stores (x,y,z) interleaved
     struct AoS_Vec3 {
         float x, y, z;
     };
@@ -509,7 +515,6 @@ void benchmarkSoA_vs_AoS()
     for (int i = 0; i < kN; ++i)
         aos[i] = {static_cast<float>(i), 1.0f, 2.0f};
 
-    // SoA: three contiguous float arrays
     std::vector<float> xs(kN), ys(kN), zs(kN);
     for (int i = 0; i < kN; ++i)
     {
@@ -518,63 +523,64 @@ void benchmarkSoA_vs_AoS()
         zs[i] = 2.0f;
     }
 
-    bench::run("Sum-x AoS (Vec3[]) 1M", [&]() {
+    lpl::bench::run("Sum-x AoS (Vec3[]) 1M", [&]() {
         double acc = 0.0;
         for (int i = 0; i < kN; ++i)
             acc += static_cast<double>(aos[i].x);
-        bench::doNotOptimize(acc);
+        lpl::bench::doNotOptimize(acc);
     });
 
-    bench::run("Sum-x SoA (float[]) 1M", [&]() {
+    lpl::bench::run("Sum-x SoA (float[]) 1M", [&]() {
         double acc = 0.0;
         for (int i = 0; i < kN; ++i)
             acc += static_cast<double>(xs[i]);
-        bench::doNotOptimize(acc);
+        lpl::bench::doNotOptimize(acc);
     });
 }
 
-// ---------------------------------------------------------------------------
-// Entity lookup latency: sparse set O(1) vs linear scan O(n)
-// ---------------------------------------------------------------------------
+/**
+ * @brief Entity lookup latency: sparse set O(1) vs linear scan O(n).
+ *
+ * The slots are 14-bit. The lookups ask for the LAST 1000 slots inserted, to stress the worst case
+ * of the linear scan.
+ */
 void benchmarkEntityLookup()
 {
-    constexpr core::u32 kN = 10000;
+    constexpr lpl::core::u32 kN = 10000;
     std::printf("\n  --- Entity lookup: SparseSet O(1) vs linear scan O(n) ---\n");
 
-    // Build a SparseSet and a plain vector
-    container::SparseSet<core::u32> sparseSet{1u << 14};
-    std::vector<core::u32> denseVec;
+    lpl::container::SparseSet<lpl::core::u32> sparseSet{1u << 14};
+    std::vector<lpl::core::u32> denseVec;
     denseVec.reserve(kN);
 
-    core::u32 seed = 42;
-    for (core::u32 i = 0; i < kN; ++i)
+    lpl::core::u32 seed = 42;
+    for (lpl::core::u32 i = 0; i < kN; ++i)
     {
         seed = seed * 6364136223846793005u + 1442695040888963407u;
-        const core::u32 slot = seed & 0x3FFF; // 14-bit slot
+        const lpl::core::u32 slot = seed & 0x3FFF;
         sparseSet.insert(slot, i);
         denseVec.push_back(slot);
     }
 
-    // Look up the LAST 1000 slots to stress worst-case for linear
     constexpr int kLookups = 1000;
 
-    bench::run("SparseSet lookup 1k slots", [&]() {
-        core::u32 sink = 0;
+    lpl::bench::run("SparseSet lookup 1k slots", [&]() {
+        lpl::core::u32 sink = 0;
         for (int i = 0; i < kLookups; ++i)
         {
-            const core::u32 slot = denseVec[kN - 1 - static_cast<core::u32>(i) % kN];
-            if (const core::u32 *p = sparseSet.find(slot))
+            const lpl::core::u32 slot = denseVec[kN - 1 - static_cast<lpl::core::u32>(i) % kN];
+            if (const lpl::core::u32 *p = sparseSet.find(slot))
                 sink = *p;
         }
-        bench::doNotOptimize(sink);
+        lpl::bench::doNotOptimize(sink);
     });
 
-    bench::run("Linear scan lookup 1k slots in 10k vec", [&]() {
-        core::u32 sink = 0;
+    lpl::bench::run("Linear scan lookup 1k slots in 10k vec", [&]() {
+        lpl::core::u32 sink = 0;
         for (int i = 0; i < kLookups; ++i)
         {
-            const core::u32 target = denseVec[kN - 1 - static_cast<core::u32>(i) % kN];
-            for (core::u32 j = 0; j < kN; ++j)
+            const lpl::core::u32 target = denseVec[kN - 1 - static_cast<lpl::core::u32>(i) % kN];
+            for (lpl::core::u32 j = 0; j < kN; ++j)
             {
                 if (denseVec[j] == target)
                 {
@@ -583,24 +589,25 @@ void benchmarkEntityLookup()
                 }
             }
         }
-        bench::doNotOptimize(sink);
+        lpl::bench::doNotOptimize(sink);
     });
 }
 
-// ---------------------------------------------------------------------------
-// Collision detection: N² brute-force vs broad-phase (WorldPartition cells)
-// ---------------------------------------------------------------------------
+/**
+ * @brief Collision detection: N² brute-force vs broad-phase (WorldPartition cells).
+ *
+ * The broad-phase is WorldPartition::queryRadius over the same boxes.
+ */
 void benchmarkCollisionBroadphase()
 {
     constexpr int kN = 2000;
     std::printf("\n  --- Collision N\u00b2 vs broad-phase (%d entities) ---\n", kN);
 
-    // Simple AABB for N² test
     struct AABB {
         float xmin, xmax, ymin, ymax, zmin, zmax;
     };
     std::vector<AABB> boxes(kN);
-    core::u32 rng = 99999;
+    lpl::core::u32 rng = 99999;
     for (int i = 0; i < kN; ++i)
     {
         rng ^= rng << 13;
@@ -618,7 +625,7 @@ void benchmarkCollisionBroadphase()
         boxes[i] = {cx - 0.5f, cx + 0.5f, cy - 0.5f, cy + 0.5f, cz - 0.5f, cz + 0.5f};
     }
 
-    bench::run("N\u00b2 AABB collision check (2k)", [&]() {
+    lpl::bench::run("N\u00b2 AABB collision check (2k)", [&]() {
         int pairs = 0;
         for (int a = 0; a < kN; ++a)
             for (int b = a + 1; b < kN; ++b)
@@ -626,64 +633,58 @@ void benchmarkCollisionBroadphase()
                     boxes[a].ymax >= boxes[b].ymin && boxes[b].ymax >= boxes[a].ymin &&
                     boxes[a].zmax >= boxes[b].zmin && boxes[b].zmax >= boxes[a].zmin)
                     ++pairs;
-        bench::doNotOptimize(pairs);
+        lpl::bench::doNotOptimize(pairs);
     });
 
-    // Broad-phase via WorldPartition queryRadius
-    ecs::WorldPartition world(math::Fixed32::fromFloat(10.0f));
-    ecs::Registry reg;
-    ecs::Archetype arch;
-    arch.add(ecs::ComponentId::Position);
-    arch.add(ecs::ComponentId::AABB);
+    lpl::ecs::WorldPartition world(lpl::math::Fixed32::fromFloat(10.0f));
+    lpl::ecs::Registry reg;
+    lpl::ecs::Archetype arch;
+    arch.add(lpl::ecs::ComponentId::Position);
+    arch.add(lpl::ecs::ComponentId::AABB);
 
     for (int i = 0; i < kN; ++i)
     {
         if (auto e = reg.createEntity(arch))
         {
-            math::Vec3<math::Fixed32> pos{math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
-                                          math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
-                                          math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
+            lpl::math::Vec3<lpl::math::Fixed32> pos{lpl::math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
+                                                    lpl::math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
+                                                    lpl::math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
             [[maybe_unused]] auto r = world.insertOrUpdate(e.value(), pos);
         }
     }
 
-    bench::run("Broad-phase queryRadius (2k, r=10)", [&]() {
-        core::u32 total = 0;
+    lpl::bench::run("Broad-phase queryRadius (2k, r=10)", [&]() {
+        lpl::core::u32 total = 0;
         for (int i = 0; i < kN; ++i)
         {
-            std::vector<ecs::EntityId> hits;
-            const math::Vec3<math::Fixed32> center{math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
-                                                   math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
-                                                   math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
-            world.queryRadius(center, math::Fixed32::fromFloat(10.0f), hits);
-            total += static_cast<core::u32>(hits.size());
+            std::vector<lpl::ecs::EntityId> hits;
+            const lpl::math::Vec3<lpl::math::Fixed32> center{lpl::math::Fixed32::fromFloat(boxes[i].xmin + 0.5f),
+                                                             lpl::math::Fixed32::fromFloat(boxes[i].ymin + 0.5f),
+                                                             lpl::math::Fixed32::fromFloat(boxes[i].zmin + 0.5f)};
+            world.queryRadius(center, lpl::math::Fixed32::fromFloat(10.0f), hits);
+            total += static_cast<lpl::core::u32>(hits.size());
         }
-        bench::doNotOptimize(total);
+        lpl::bench::doNotOptimize(total);
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Networking: the two load walls of chapter 6.2.10, measured on this machine.
-// The point is not a headline number but to *show* the O(N²) send wall of a full
-// broadcast, and how interest management turns it into O(N·k). A byte-counting
-// transport stands in for the socket, so this measures the serialiser and the
-// bandwidth it produces, independent of loopback noise.
-// ─────────────────────────────────────────────────────────────────────────────
-
-class CountingTransport final : public net::transport::ITransport {
+class CountingTransport final : public lpl::net::transport::ITransport {
 public:
-    std::atomic<core::u64> bytes{0};
-    std::atomic<core::u64> packets{0};
+    std::atomic<lpl::core::u64> bytes{0};
+    std::atomic<lpl::core::u64> packets{0};
 
-    core::Expected<void> open() override { return {}; }
+    lpl::core::Expected<void> open() override { return {}; }
     void close() override {}
     const char *name() const noexcept override { return "CountingTransport"; }
-    core::Expected<core::u32> receive(std::span<core::byte>, net::Endpoint *) override { return core::u32{0}; }
-    core::Expected<core::u32> send(std::span<const core::byte> d, const net::Endpoint *) override
+    lpl::core::Expected<lpl::core::u32> receive(std::span<lpl::core::byte>, lpl::net::Endpoint *) override
+    {
+        return lpl::core::u32{0};
+    }
+    lpl::core::Expected<lpl::core::u32> send(std::span<const lpl::core::byte> d, const lpl::net::Endpoint *) override
     {
         bytes.fetch_add(d.size(), std::memory_order_relaxed);
         packets.fetch_add(1, std::memory_order_relaxed);
-        return static_cast<core::u32>(d.size());
+        return static_cast<lpl::core::u32>(d.size());
     }
     void reset()
     {
@@ -692,24 +693,30 @@ public:
     }
 };
 
-// Places @p n entities on a square grid and returns their ids; the first @p
-// clients of them are also bound as session avatars, each with its own endpoint.
 struct NetWorld {
-    ecs::Registry registry;
-    ecs::WorldPartition world;
-    net::session::SessionManager sessions;
-    std::vector<ecs::EntityId> ids;
+    lpl::ecs::Registry registry;
+    lpl::ecs::WorldPartition world;
+    lpl::net::session::SessionManager sessions;
+    std::vector<lpl::ecs::EntityId> ids;
 
-    explicit NetWorld(math::Fixed32 cell) : world{cell, 1u << 20} {}
+    explicit NetWorld(lpl::math::Fixed32 cell) : world{cell, 1u << 20} {}
 };
 
-void seedNetWorld(NetWorld &nw, core::u32 n, core::u32 clients, float spacing)
+/**
+ * @brief Places @p n entities on a square grid and records their ids in @p nw; the first @p
+ *        clients of them are also bound as session avatars, each with its own endpoint.
+ *
+ * The avatars are spread across the whole grid so each client's radius sees a different local
+ * neighbourhood, not all the same cluster.
+ */
+void seedNetWorld(NetWorld &nw, lpl::core::u32 n, lpl::core::u32 clients, float spacing)
 {
-    const ecs::ComponentId comps[] = {ecs::ComponentId::Position, ecs::ComponentId::AABB, ecs::ComponentId::Health};
-    const ecs::Archetype arch{comps};
-    const auto side = static_cast<core::u32>(std::sqrt(static_cast<double>(n))) + 1;
+    const lpl::ecs::ComponentId comps[] = {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::AABB,
+                                           lpl::ecs::ComponentId::Health};
+    const lpl::ecs::Archetype arch{comps};
+    const auto side = static_cast<lpl::core::u32>(std::sqrt(static_cast<double>(n))) + 1;
 
-    for (core::u32 i = 0; i < n; ++i)
+    for (lpl::core::u32 i = 0; i < n; ++i)
     {
         auto e = nw.registry.createEntity(arch);
         if (!e)
@@ -719,17 +726,17 @@ void seedNetWorld(NetWorld &nw, core::u32 n, core::u32 clients, float spacing)
 
         const float x = static_cast<float>(i % side) * spacing;
         const float z = static_cast<float>(i / side) * spacing;
-        using Vec = math::Vec3<math::Fixed32>;
-        const Vec pos{math::Fixed32::fromFloat(x), math::Fixed32::zero(), math::Fixed32::fromFloat(z)};
-        const Vec one{math::Fixed32::one(), math::Fixed32::one(), math::Fixed32::one()};
+        using Vec = lpl::math::Vec3<lpl::math::Fixed32>;
+        const Vec pos{lpl::math::Fixed32::fromFloat(x), lpl::math::Fixed32::zero(), lpl::math::Fixed32::fromFloat(z)};
+        const Vec one{lpl::math::Fixed32::one(), lpl::math::Fixed32::one(), lpl::math::Fixed32::one()};
 
         auto ref = nw.registry.resolve(id);
         auto &part = nw.registry.getOrCreatePartition(arch);
         auto &chunk = *part.chunks()[ref.value().chunkIndex];
-        const core::u32 li = ref.value().localIndex;
-        for (auto which : {ecs::ComponentId::Position, ecs::ComponentId::AABB})
+        const lpl::core::u32 li = ref.value().localIndex;
+        for (auto which : {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::AABB})
         {
-            const Vec v = (which == ecs::ComponentId::Position) ? pos : one;
+            const Vec v = (which == lpl::ecs::ComponentId::Position) ? pos : one;
             if (auto *w = static_cast<Vec *>(chunk.writeComponent(which)))
                 w[li] = v;
             if (auto *r = const_cast<Vec *>(static_cast<const Vec *>(chunk.readComponent(which))))
@@ -738,137 +745,147 @@ void seedNetWorld(NetWorld &nw, core::u32 n, core::u32 clients, float spacing)
         [[maybe_unused]] auto s = nw.world.insertOrUpdate(id, pos);
     }
 
-    for (core::u32 c = 0; c < clients && c < nw.ids.size(); ++c)
+    for (lpl::core::u32 c = 0; c < clients && c < nw.ids.size(); ++c)
     {
         auto joined = nw.sessions.connect(c + 1);
         if (!joined)
             continue;
         auto *sess = joined.value();
-        sess->setAddress(net::Endpoint::fromOctets(10, 0, static_cast<core::u8>(c >> 8),
-                                                   static_cast<core::u8>(c & 0xFF),
-                                                   static_cast<core::u16>(40000 + (c & 0x3FFF))));
-        // Spread avatars across the whole grid so each client's radius sees a
-        // different local neighbourhood, not all the same cluster.
-        sess->bindEntity(nw.ids[(static_cast<core::u64>(c) * nw.ids.size() / clients) % nw.ids.size()]);
+        sess->setAddress(lpl::net::Endpoint::fromOctets(10, 0, static_cast<lpl::core::u8>(c >> 8),
+                                                        static_cast<lpl::core::u8>(c & 0xFF),
+                                                        static_cast<lpl::core::u16>(40000 + (c & 0x3FFF))));
+        sess->bindEntity(nw.ids[(static_cast<lpl::core::u64>(c) * nw.ids.size() / clients) % nw.ids.size()]);
     }
 }
 
+/**
+ * @brief Networking: the two load walls of chapter 6.2.10, measured on this machine.
+ *
+ * The point is not a headline number but to *show* the O(N²) send wall of a full broadcast, and
+ * how interest management turns it into O(N·k). A byte-counting transport stands in for the
+ * socket, so this measures the serialiser and the bandwidth it produces, independent of loopback
+ * noise.
+ *
+ * A sparse map: 1000 entities on a ~790-unit grid (spacing 25), interest radius 40 → each client
+ * sees only a handful of neighbours (k ≪ N), the regime interest management is actually for. A
+ * dense map where the radius covers half the world would make AOI both marginal on bandwidth and
+ * far slower than a flat broadcast — the parameters matter, and are reported.
+ *
+ * The interest-managed pass runs one warmup tick so per-client interest sets exist, then measures
+ * a tick where every entity is a fresh full send (a keyframe interval of 1 → worst-case AOI). At
+ * ~32 bytes per entity on the wire, the bytes a tick sends give the average neighbours each client
+ * received.
+ *
+ * Receive wall: how fast one thread parses + dispatches inbound INPUT packets — what a server
+ * actually decodes from clients (a small WASD + neural payload), not the heavy state snapshots it
+ * sends. The §6.1 policy caps a single thread at 256 pkt/tick x 144 Hz = 36,864 pkt/s; this is the
+ * CPU ceiling underneath that cap. The payload is the entity id (u32), 4 key events (u16 count,
+ * then a u16 key and a bool each: WASD), 0 axes (u8), the neural alpha, beta and concentration
+ * (three floats) and the blink (bool).
+ */
 void benchmarkNetworking()
 {
     std::printf("\n  --- Networking: broadcast send wall vs interest management (§6.2.10) ---\n");
-    constexpr core::u32 kTickRate = 144;
-    constexpr core::u32 kEntities = 1000;
-    constexpr core::u32 kClientCounts[] = {10, 50, 100, 500, 1000};
+    constexpr lpl::core::u32 kTickRate = 144;
+    constexpr lpl::core::u32 kEntities = 1000;
+    constexpr lpl::core::u32 kClientCounts[] = {10, 50, 100, 500, 1000};
     const float dt = 1.0f / static_cast<float>(kTickRate);
 
-    // A sparse map: 1000 entities on a ~790-unit grid (spacing 25), interest
-    // radius 40 → each client sees only a handful of neighbours (k ≪ N), the
-    // regime interest management is actually for. A dense map where the radius
-    // covers half the world would make AOI both marginal on bandwidth and far
-    // slower than a flat broadcast — the parameters matter, and are reported.
     constexpr float kSpacing = 25.0f;
 
     std::printf("    %6s | %10s | %12s | %10s\n", "clients", "bytes/tick", "out Gbit/s", "us/tick");
     std::printf("    Full broadcast (every entity to every client — O(clients x N)):\n");
-    for (core::u32 c : kClientCounts)
+    for (lpl::core::u32 c : kClientCounts)
     {
-        NetWorld nw{math::Fixed32::fromFloat(10.0f)};
+        NetWorld nw{lpl::math::Fixed32::fromFloat(10.0f)};
         seedNetWorld(nw, kEntities, c, kSpacing);
         auto tr = std::make_shared<CountingTransport>();
-        engine::systems::BroadcastSystem full{nw.sessions, tr, nw.world, nw.registry};
+        lpl::engine::systems::BroadcastSystem full{nw.sessions, tr, nw.world, nw.registry};
 
         tr->reset();
         full.execute(dt);
-        const core::u64 bytesPerTick = tr->bytes.load();
+        const lpl::core::u64 bytesPerTick = tr->bytes.load();
         const double gbit = static_cast<double>(bytesPerTick) * 8.0 * kTickRate / 1e9;
 
-        bench::Config cfg;
+        lpl::bench::Config cfg;
         cfg.minReps = 3;
         cfg.maxReps = 100;
         cfg.targetTotalMs = 300.0;
         const std::string label = std::format("full-broadcast {} clients", c);
-        const bench::Result r = bench::run(label.c_str(), [&]() { full.execute(dt); }, cfg);
+        const lpl::bench::Result r = lpl::bench::run(label.c_str(), [&]() { full.execute(dt); }, cfg);
         std::printf("    %6u | %10llu | %11.2f | %10.1f\n", c, static_cast<unsigned long long>(bytesPerTick), gbit,
                     r.medianNs / 1e3);
     }
 
     std::printf("    Interest-managed (each client only its neighbours — O(clients x k)):\n");
     std::printf("    %6s | %10s | %12s | %10s | %8s\n", "clients", "bytes/tick", "out Gbit/s", "us/tick", "k (ent/cl)");
-    const auto radius = math::Fixed32::fromFloat(40.0f);
-    for (core::u32 c : kClientCounts)
+    const auto radius = lpl::math::Fixed32::fromFloat(40.0f);
+    for (lpl::core::u32 c : kClientCounts)
     {
-        NetWorld nw{math::Fixed32::fromFloat(10.0f)};
+        NetWorld nw{lpl::math::Fixed32::fromFloat(10.0f)};
         seedNetWorld(nw, kEntities, c, kSpacing);
         auto tr = std::make_shared<CountingTransport>();
-        engine::systems::AoiBroadcastSystem aoi{nw.sessions, tr, nw.world, nw.registry, radius, /*keyframe*/ 1};
+        lpl::engine::systems::AoiBroadcastSystem aoi{nw.sessions, tr, nw.world, nw.registry, radius, 1};
 
-        // One warmup tick so per-client interest sets exist; then measure a tick
-        // where every entity is a fresh full send (keyframe=1 → worst-case AOI).
         aoi.execute(dt);
         tr->reset();
         aoi.execute(dt);
-        const core::u64 bytesPerTick = tr->bytes.load();
+        const lpl::core::u64 bytesPerTick = tr->bytes.load();
         const double gbit = static_cast<double>(bytesPerTick) * 8.0 * kTickRate / 1e9;
-        // ~32 bytes/entity on the wire → average neighbours each client received.
         const double k = static_cast<double>(bytesPerTick) / static_cast<double>(c) / 32.0;
 
-        bench::Config cfg;
+        lpl::bench::Config cfg;
         cfg.minReps = 3;
         cfg.maxReps = 100;
         cfg.targetTotalMs = 300.0;
         const std::string label = std::format("aoi-broadcast {} clients", c);
-        const bench::Result r = bench::run(label.c_str(), [&]() { aoi.execute(dt); }, cfg);
+        const lpl::bench::Result r = lpl::bench::run(label.c_str(), [&]() { aoi.execute(dt); }, cfg);
         std::printf("    %6u | %10llu | %11.2f | %10.1f | %8.1f\n", c, static_cast<unsigned long long>(bytesPerTick),
                     gbit, r.medianNs / 1e3, k);
     }
 
-    // Receive wall: how fast one thread parses + dispatches inbound INPUT packets
-    // — what a server actually decodes from clients (a small WASD + neural
-    // payload), not the heavy state snapshots it sends. The §6.1 policy caps a
-    // single thread at 256 pkt/tick x 144 Hz = 36,864 pkt/s; this is the CPU
-    // ceiling underneath that cap.
     std::printf("    Receive/decode throughput (single thread, small InputPayload packets):\n");
     {
-        net::protocol::Bitstream stream;
-        stream.writeU32(1); // entityId
-        stream.writeU16(4); // 4 key events (WASD)
+        lpl::net::protocol::Bitstream stream;
+        stream.writeU32(1);
+        stream.writeU16(4);
         for (int k = 0; k < 4; ++k)
         {
-            stream.writeU16(static_cast<core::u16>('W' + k));
+            stream.writeU16(static_cast<lpl::core::u16>('W' + k));
             stream.writeBool(true);
         }
-        stream.writeU8(0);       // 0 axes
-        stream.writeFloat(0.3f); // neural alpha / beta / concentration + blink
+        stream.writeU8(0);
+        stream.writeFloat(0.3f);
         stream.writeFloat(0.5f);
         stream.writeFloat(0.7f);
         stream.writeBool(false);
 
-        std::vector<core::byte> datagram(sizeof(net::protocol::PacketHeader) + stream.data().size());
-        auto &h = *reinterpret_cast<net::protocol::PacketHeader *>(datagram.data());
-        h.magic = net::protocol::kProtocolMagic;
-        h.version = net::protocol::kProtocolVersion;
-        h.type = net::protocol::PacketType::InputPayload;
+        std::vector<lpl::core::byte> datagram(sizeof(lpl::net::protocol::PacketHeader) + stream.data().size());
+        auto &h = *reinterpret_cast<lpl::net::protocol::PacketHeader *>(datagram.data());
+        h.magic = lpl::net::protocol::kProtocolMagic;
+        h.version = lpl::net::protocol::kProtocolVersion;
+        h.type = lpl::net::protocol::PacketType::InputPayload;
         h.flags = 0;
         h.padding = 0;
         h.sequence = 0;
-        h.payloadSize = static_cast<core::u32>(stream.data().size());
+        h.payloadSize = static_cast<lpl::core::u32>(stream.data().size());
         std::memcpy(datagram.data() + sizeof(h), stream.data().data(), stream.data().size());
 
-        const net::Endpoint from = net::Endpoint::fromOctets(10, 0, 0, 1, 40000);
-        bench::Config cfg;
+        const lpl::net::Endpoint from = lpl::net::Endpoint::fromOctets(10, 0, 0, 1, 40000);
+        lpl::bench::Config cfg;
         cfg.minReps = 5;
         cfg.maxReps = 500;
         cfg.targetTotalMs = 300.0;
-        const bench::Result r = bench::run(
+        const lpl::bench::Result r = lpl::bench::run(
             "decode-10k-input-packets",
             [&]() {
-                engine::EventQueues q;
+                lpl::engine::EventQueues q;
                 for (int p = 0; p < 10000; ++p)
                 {
-                    net::protocol::PacketHeader ph{};
-                    std::span<const core::byte> payload;
-                    if (engine::detail::parsePacket(datagram, ph, payload))
-                        engine::detail::dispatchPacket(ph, payload, from, q);
+                    lpl::net::protocol::PacketHeader ph{};
+                    std::span<const lpl::core::byte> payload;
+                    if (lpl::engine::detail::parsePacket(datagram, ph, payload))
+                        lpl::engine::detail::dispatchPacket(ph, payload, from, q);
                 }
             },
             cfg);
@@ -884,23 +901,23 @@ struct Section {
 };
 
 constexpr std::array kSections{
-    Section{"arena",       benchmarkArena              },
-    Section{"fixed",       benchmarkFixedMath          },
-    Section{"morton",      benchmarkMorton             },
-    Section{"allocators",  benchmarkAllocators         },
-    Section{"trig",        benchmarkTrigonometry       },
-    Section{"registry",    benchmarkRegistry           },
-    Section{"physics",     benchmarkPhysics            },
-    Section{"scalability", benchmarkPhysicsScalability },
-    Section{"partition",   benchmarkWorldPartition     },
-    Section{"hashmap",     benchmarkFlatAtomicHashMap  },
-    Section{"threadpool",  benchmarkThreadPool         },
-    Section{"ring",        bench::runRingBenchmarks    },
-    Section{"soa",         benchmarkSoA_vs_AoS         },
-    Section{"lookup",      benchmarkEntityLookup       },
-    Section{"broadphase",  benchmarkCollisionBroadphase},
-    Section{"net",         benchmarkNetworking         },
-    Section{"voxel",       bench::runVoxelBenchmarks   },
+    Section{"arena",       benchmarkArena                },
+    Section{"fixed",       benchmarkFixedMath            },
+    Section{"morton",      benchmarkMorton               },
+    Section{"allocators",  benchmarkAllocators           },
+    Section{"trig",        benchmarkTrigonometry         },
+    Section{"registry",    benchmarkRegistry             },
+    Section{"physics",     benchmarkPhysics              },
+    Section{"scalability", benchmarkPhysicsScalability   },
+    Section{"partition",   benchmarkWorldPartition       },
+    Section{"hashmap",     benchmarkFlatAtomicHashMap    },
+    Section{"threadpool",  benchmarkThreadPool           },
+    Section{"ring",        lpl::bench::runRingBenchmarks },
+    Section{"soa",         benchmarkSoA_vs_AoS           },
+    Section{"lookup",      benchmarkEntityLookup         },
+    Section{"broadphase",  benchmarkCollisionBroadphase  },
+    Section{"net",         benchmarkNetworking           },
+    Section{"voxel",       lpl::bench::runVoxelBenchmarks},
 };
 
 [[nodiscard]] bool isSectionName(std::string_view name)
@@ -938,7 +955,7 @@ void printWrapped(std::FILE *stream, std::size_t indent, std::string_view text)
 consteval std::size_t longestRowFieldKey()
 {
     std::size_t longest = 0;
-    for (const bench::JsonRowField &field : bench::kJsonRowFields)
+    for (const lpl::bench::JsonRowField &field : lpl::bench::kJsonRowFields)
         longest = std::max(longest, field.key.size());
     return longest;
 }
@@ -962,7 +979,7 @@ void printUsage(std::FILE *stream)
 
     constexpr std::size_t kKeyWidth = longestRowFieldKey();
     std::fputs("\nFields of a JSON row, one object per line, in this order:\n", stream);
-    for (const bench::JsonRowField &field : bench::kJsonRowFields)
+    for (const lpl::bench::JsonRowField &field : lpl::bench::kJsonRowFields)
     {
         std::fprintf(stream, "  %-*.*s  ", static_cast<int>(kKeyWidth), static_cast<int>(field.key.size()),
                      field.key.data());
@@ -1015,18 +1032,19 @@ struct Arguments {
     return arguments;
 }
 
-[[nodiscard]] std::expected<std::optional<bench::JsonRowFile>, std::string>
-openRowsFile(std::optional<std::string_view> path, const bench::SystemInfo &system)
+[[nodiscard]] std::expected<std::optional<lpl::bench::JsonRowFile>, std::string>
+openRowsFile(std::optional<std::string_view> path, const lpl::bench::SystemInfo &system)
 {
     if (!path)
-        return std::optional<bench::JsonRowFile>{};
-    std::expected<bench::JsonRowFile, std::string> file = bench::JsonRowFile::create(std::string{*path}, system);
+        return std::optional<lpl::bench::JsonRowFile>{};
+    std::expected<lpl::bench::JsonRowFile, std::string> file =
+        lpl::bench::JsonRowFile::create(std::string{*path}, system);
     if (!file)
         return std::unexpected(std::move(file.error()));
-    return std::optional<bench::JsonRowFile>{*std::move(file)};
+    return std::optional<lpl::bench::JsonRowFile>{*std::move(file)};
 }
 
-[[nodiscard]] int reportRows(const std::optional<bench::JsonRowFile> &rowsFile)
+[[nodiscard]] int reportRows(const std::optional<lpl::bench::JsonRowFile> &rowsFile)
 {
     if (!rowsFile)
     {
@@ -1040,8 +1058,13 @@ openRowsFile(std::optional<std::string_view> path, const bench::SystemInfo &syst
     return 1;
 }
 
-} // anonymous namespace
+} // namespace
 
+/**
+ * @brief LplPlugin benchmark entry-point: defines the individual benchmark
+ *        cases and runs them. The measurement machinery (timing, statistics,
+ *        DCE barriers) and host introspection live in the lpl::bench module.
+ */
 int main(int argc, char *argv[])
 {
     const std::expected<Arguments, std::string> arguments = parseArguments(argc, argv);
@@ -1059,26 +1082,27 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    const bench::SystemInfo system = bench::collectSystemInfo();
-    std::expected<std::optional<bench::JsonRowFile>, std::string> rowsFile = openRowsFile(arguments->jsonPath, system);
+    const lpl::bench::SystemInfo system = lpl::bench::collectSystemInfo();
+    std::expected<std::optional<lpl::bench::JsonRowFile>, std::string> rowsFile =
+        openRowsFile(arguments->jsonPath, system);
     if (!rowsFile)
     {
         std::fprintf(stderr, "lpl-benchmark: --json: %s\n", rowsFile.error().c_str());
         return 2;
     }
     if (*rowsFile)
-        bench::writeRowsTo(&**rowsFile);
+        lpl::bench::writeRowsTo(&**rowsFile);
 
-    core::Log::info("=== LplPlugin Benchmark ===");
+    lpl::core::Log::info("=== LplPlugin Benchmark ===");
     std::printf("\n");
 
-    bench::printSystemInfo(system);
-    bench::printLegend();
+    lpl::bench::printSystemInfo(system);
+    lpl::bench::printLegend();
 
     for (const Section &section : kSections)
         if (!arguments->onlySection || *arguments->onlySection == section.name)
             section.run();
 
-    bench::writeRowsTo(nullptr);
+    lpl::bench::writeRowsTo(nullptr);
     return reportRows(*rowsFile);
 }

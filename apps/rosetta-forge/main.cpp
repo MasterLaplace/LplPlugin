@@ -1,22 +1,3 @@
-/**
- * @file main.cpp
- * @brief Lay out an artifact that carries the specification of its own reader.
- *
- * A cartridge assumes a reader compiled from this repository. A Rosetta artifact
- * assumes nothing but an observer with a microscope — so the specification is
- * engraved with the payload, the bootstrap is duplicated at the corners, and the
- * whole thing is verified by decoding it with nothing but the reference
- * interpreter. If that verification needs anything else, the artifact is a lie.
- *
- * The verification is not a formality here. It is the ONLY thing that separates this
- * from writing a blob and hoping: the plate is read back with a machine rebuilt from
- * the bytes the plate itself carries, and the tool refuses to write a file it could
- * not open that way.
- *
- * @author MasterLaplace
- * @copyright MIT License
- */
-
 #include <lpl/codec/ReedSolomon.hpp>
 #include <lpl/rosetta/Bootstrap.hpp>
 #include <lpl/rosetta/Engraving.hpp>
@@ -72,10 +53,23 @@ void describe(const lpl::core::u8 *specification, lpl::core::u32 size)
 
 } // namespace
 
+/**
+ * @brief Lay out an artifact that carries the specification of its own reader.
+ *
+ * A cartridge assumes a reader compiled from this repository. A Rosetta artifact
+ * assumes nothing but an observer with a microscope — so the specification is
+ * engraved with the payload, the bootstrap is duplicated at the corners, and the
+ * whole thing is verified by decoding it with nothing but the reference
+ * interpreter. If that verification needs anything else, the artifact is a lie.
+ *
+ * The verification is not a formality here. It is the ONLY thing that separates this
+ * from writing a blob and hoping: the plate is read back with a machine rebuilt from
+ * the bytes the plate itself carries, and the tool refuses to write a file it could
+ * not open that way. That is the only honest test: rebuild the reader from what was
+ * engraved, and open the artifact with that and nothing else.
+ */
 int main(int argc, char **argv)
 {
-    using namespace lpl;
-
     if (argc < 2)
     {
         std::fprintf(stderr,
@@ -87,7 +81,7 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    std::vector<core::u8> payload;
+    std::vector<lpl::core::u8> payload;
     if (!readFile(argv[1], payload) || payload.empty())
     {
         std::fprintf(stderr, "lpl-rosetta-forge: cannot read %s\n", argv[1]);
@@ -97,53 +91,52 @@ int main(int argc, char **argv)
     std::printf("== lpl-rosetta-forge ==\n\n");
     std::printf("  payload : %zu bytes from %s\n", payload.size(), argv[1]);
 
-    const rosetta::Bootstrap bootstrap = rosetta::standardBootstrap();
+    const lpl::rosetta::Bootstrap bootstrap = lpl::rosetta::standardBootstrap();
     std::printf("  bootstrap : %u bytes across four levels\n", bootstrap.totalBytes());
-    for (core::u32 i = 0u; i < static_cast<core::u32>(rosetta::BootstrapLevel::Count) - 1u; ++i)
-        std::printf("    %-12s %zu bytes\n", rosetta::bootstrapLevelName(static_cast<rosetta::BootstrapLevel>(i)),
+    for (lpl::core::u32 i = 0u; i < static_cast<lpl::core::u32>(lpl::rosetta::BootstrapLevel::Count) - 1u; ++i)
+        std::printf("    %-12s %zu bytes\n",
+                    lpl::rosetta::bootstrapLevelName(static_cast<lpl::rosetta::BootstrapLevel>(i)),
                     bootstrap.level[i].size());
 
-    rosetta::Engraving plate;
-    plate.setMedium(rosetta::Medium::FusedQuartz);
+    lpl::rosetta::Engraving plate;
+    plate.setMedium(lpl::rosetta::Medium::FusedQuartz);
     plate.setParityShare(200u);
-    if (!plate.engrave(bootstrap, payload.data(), static_cast<core::u32>(payload.size())))
+    if (!plate.engrave(bootstrap, payload.data(), static_cast<lpl::core::u32>(payload.size())))
     {
         std::fprintf(stderr, "lpl-rosetta-forge: the plate could not be laid out\n");
         return 1;
     }
     std::printf("\n  plate   : %zu bytes, %u copies of the bootstrap, a fifth of the area parity\n",
-                plate.image().size(), rosetta::kBootstrapCopies);
+                plate.image().size(), lpl::rosetta::kBootstrapCopies);
 
-    // The only honest test: rebuild the reader from what was engraved, and open the
-    // artifact with that and nothing else.
-    lpl::pmr::vector<core::u8> working;
-    for (core::usize i = 0u; i < plate.image().size(); ++i)
+    lpl::pmr::vector<lpl::core::u8> working;
+    for (lpl::core::usize i = 0u; i < plate.image().size(); ++i)
         working.push_back(plate.image()[i]);
 
-    lpl::pmr::vector<core::u8> engravedSpec;
-    lpl::pmr::vector<core::u8> recovered;
-    rosetta::EngravingReport report{};
-    if (!rosetta::Engraving::read(working.data(), static_cast<core::u32>(working.size()), engravedSpec, recovered,
-                                  report))
+    lpl::pmr::vector<lpl::core::u8> engravedSpec;
+    lpl::pmr::vector<lpl::core::u8> recovered;
+    lpl::rosetta::EngravingReport report{};
+    if (!lpl::rosetta::Engraving::read(working.data(), static_cast<lpl::core::u32>(working.size()), engravedSpec,
+                                       recovered, report))
     {
         std::fprintf(stderr, "lpl-rosetta-forge: the plate does not read back — refusing to write it\n");
         return 1;
     }
 
     std::printf("\n-- read back with nothing but what was engraved --\n");
-    std::printf("  replicas intact : %u of %u\n", report.replicasIntact, rosetta::kBootstrapCopies);
-    describe(engravedSpec.data(), static_cast<core::u32>(engravedSpec.size()));
+    std::printf("  replicas intact : %u of %u\n", report.replicasIntact, lpl::rosetta::kBootstrapCopies);
+    describe(engravedSpec.data(), static_cast<lpl::core::u32>(engravedSpec.size()));
 
-    rosetta::Interpreter rebuilt;
-    if (!rosetta::Interpreter::fromSpecification(engravedSpec.data(), static_cast<core::u32>(engravedSpec.size()),
-                                                 rebuilt))
+    lpl::rosetta::Interpreter rebuilt;
+    if (!lpl::rosetta::Interpreter::fromSpecification(engravedSpec.data(),
+                                                      static_cast<lpl::core::u32>(engravedSpec.size()), rebuilt))
     {
         std::fprintf(stderr, "lpl-rosetta-forge: no reader could be built from the engraving\n");
         return 1;
     }
 
     bool identical = recovered.size() == payload.size();
-    for (core::usize i = 0u; identical && i < recovered.size(); ++i)
+    for (lpl::core::usize i = 0u; identical && i < recovered.size(); ++i)
         identical = recovered[i] == payload[i];
     if (!identical)
     {

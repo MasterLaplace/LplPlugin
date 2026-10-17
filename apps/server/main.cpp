@@ -1,13 +1,3 @@
-/**
- * @file main.cpp
- * @brief LplPlugin dedicated server entry-point.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/core/Types.hpp>
 #include <lpl/engine/Config.hpp>
@@ -19,11 +9,16 @@
 
 #include <cstring>
 
+/**
+ * @brief LplPlugin dedicated server entry-point.
+ *
+ * Picks the netcode preset from `--game <type>` (default: MMORPG / FullDive), and surfaces any contradictory
+ * switches of the configuration before they fail silently at runtime.
+ */
 int main(int argc, char *argv[])
 {
     lpl::core::Log::info("=== LplPlugin Server ===");
 
-    // Pick the netcode preset from `--game <type>` (default: MMORPG / FullDive).
     auto profile = lpl::engine::GameProfile::Mmorpg;
     for (int i = 1; i < argc; ++i)
     {
@@ -46,7 +41,6 @@ int main(int argc, char *argv[])
     lpl::engine::applyGameProfile(builder, profile);
     auto config = builder.build();
 
-    // Surface any contradictory switches before they fail silently at runtime.
     lpl::engine::forEachConfigWarning(config, [](const char *msg) { lpl::core::Log::warn("config: {}", msg); });
 
     lpl::engine::Engine engine{config, lpl::pmr::make_unique<lpl::samples::NetworkDemoWorld>()};

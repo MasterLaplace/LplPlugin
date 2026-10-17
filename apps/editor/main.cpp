@@ -1,20 +1,3 @@
-/**
- * @file main.cpp
- * @brief `lpl-editor` — a REPL over the editor command stream.
- *
- * Reads one JSON command (or batch array) per line from stdin, runs it against a
- * live ECS world through @c editor::CommandProcessor, and prints the JSON report.
- * It is the human-facing twin of the Caine AI bridge: whatever the model would
- * emit, you can type here. A leading `#` line is a comment; the bare word
- * `save`, `count`, or `quit` are shortcuts. Piping a file of commands in
- * replays a whole scene recipe deterministically.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-16
- * @copyright MIT License
- */
-
 #include <cstdio>
 #include <string>
 
@@ -43,6 +26,16 @@ std::string trim(const std::string &s)
 
 } // namespace
 
+/**
+ * @brief `lpl-editor` — a REPL over the editor command stream.
+ *
+ * Reads one JSON command (or batch array) per line from stdin, runs it against a
+ * live ECS world through @c editor::CommandProcessor, and prints the JSON report.
+ * It is the human-facing twin of the Caine AI bridge: whatever the model would
+ * emit, you can type here. A leading `#` line is a comment; the bare word
+ * `save`, `count`, or `quit` are shortcuts. Piping a file of commands in
+ * replays a whole scene recipe deterministically.
+ */
 int main()
 {
     printBanner();
