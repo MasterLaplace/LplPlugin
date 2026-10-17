@@ -1,12 +1,3 @@
-/**
- * @file Swarm.cpp
- * @brief Implementation of boids and the ant-colony move policy.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ai/Swarm.hpp>
 
 #include <lpl/math/FixedMath.hpp>
@@ -23,10 +14,6 @@ void stepBoids(Boid *boids, core::u32 count, const BoidParams &params, math::Fix
     const math::Fixed32 cohesionWeight = math::Fixed32::fromFloat(params.cohesionWeight);
     const math::Fixed32 maxSpeed = math::Fixed32::fromFloat(params.maxSpeed);
 
-    // A snapshot of the flock as it was at the start of the tick. Steering off
-    // partially-updated neighbours makes the result depend on the iteration
-    // order, which on a deterministic simulation is a desynchronisation and not
-    // a stylistic choice.
     lpl::pmr::vector<Boid> before(count, Boid{});
     for (core::u32 i = 0u; i < count; ++i)
         before[i] = boids[i];
@@ -52,9 +39,6 @@ void stepBoids(Boid *boids, core::u32 count, const BoidParams &params, math::Fix
             const math::Fixed32 dx = other.x - self.x;
             const math::Fixed32 dz = other.z - self.z;
 
-            // Chebyshev radius: no square root, and the neighbourhood is a box,
-            // which is what a spatial hash returns anyway — so the test agrees
-            // with the query rather than trimming its results.
             const math::Fixed32 adx = dx.abs();
             const math::Fixed32 adz = dz.abs();
             const math::Fixed32 distance = adx > adz ? adx : adz;
@@ -70,10 +54,6 @@ void stepBoids(Boid *boids, core::u32 count, const BoidParams &params, math::Fix
 
             if (distance < params.separationRadius && distance.raw() != 0)
             {
-                // Repulsion falls off with distance, so a boid pushes hardest
-                // against whatever is closest. Dividing by the distance rather
-                // than its square keeps the force finite at contact — an inverse
-                // square here launches overlapping boids across the map.
                 const math::Fixed32 push = (params.separationRadius - distance) / params.separationRadius;
                 sepX = sepX - dx * push;
                 sepZ = sepZ - dz * push;
@@ -101,13 +81,9 @@ void stepBoids(Boid *boids, core::u32 count, const BoidParams &params, math::Fix
             az = az + sepZ * separationWeight;
         }
 
-        // Steering is an ACCELERATION, so it is scaled by the step as well: a flock
-        // that turns as hard per tick as per second changes shape with the tick rate.
         math::Fixed32 vx = self.vx + ax * dt;
         math::Fixed32 vz = self.vz + az * dt;
 
-        // Speed cap on the Chebyshev norm, for the same reason as above: no
-        // square root in an authoritative path.
         const math::Fixed32 speed = vx.abs() > vz.abs() ? vx.abs() : vz.abs();
         if (speed > maxSpeed && speed.raw() != 0)
         {
@@ -125,8 +101,6 @@ void stepBoids(Boid *boids, core::u32 count, const BoidParams &params, math::Fix
 core::u32 chooseAntMove(const StigmergyField &field, const AntParams &params, core::u32 x, core::u32 z,
                         core::u32 &stream, bool &outExplored)
 {
-    // Advance the caller's stream in place: the agent owns its randomness, so two
-    // agents stepping in a different order still each get their own sequence.
     stream ^= stream << 13;
     stream ^= stream >> 17;
     stream ^= stream << 5;
@@ -138,9 +112,6 @@ core::u32 chooseAntMove(const StigmergyField &field, const AntParams &params, co
 
     if (outExplored)
     {
-        // An explorer ignores the field completely. Not "prefers a weaker trail" —
-        // ignores it, because a weighted choice still concentrates on whatever the
-        // colony already believes, and the point is to look where nobody has.
         return (stream >> 8) % 8u;
     }
     return field.gradientDirection(params.channel, x, z, true);
@@ -162,11 +133,6 @@ void seedPheromoneField(StigmergyField &field, core::u32 channel, const core::u3
     {
         for (core::u32 x = 0u; x < width; ++x)
         {
-            // Nearest goal by Chebyshev distance, then a linear falloff. Linear
-            // rather than inverse-square: this is a hint about where to start
-            // looking, and a sharp falloff would pin the colony to the goal's
-            // immediate surroundings — which is the search it was supposed to
-            // avoid having to do.
             core::u32 nearest = longAxis;
             for (core::u32 g = 0u; g < count; ++g)
             {

@@ -1,21 +1,5 @@
-/**
- * @file ScentWindow.inl
- * @brief Out-of-line definitions for ai::ScentWindow.
- *
- * Included at the end of ScentWindow.hpp. The window is consumed header-only, in
- * the freestanding kernel as well as on the host, so its definitions go here rather
- * than into a translation unit neither kernel build path lists.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-28
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_AI_SCENT_WINDOW_INL
-#    define LPL_AI_SCENT_WINDOW_INL
+#define LPL_AI_SCENT_WINDOW_INL
 
 namespace lpl::ai {
 

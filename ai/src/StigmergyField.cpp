@@ -1,12 +1,3 @@
-/**
- * @file StigmergyField.cpp
- * @brief Implementation of the shared stigmergy substrate.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ai/StigmergyField.hpp>
 
 namespace lpl::ai {
@@ -53,7 +44,7 @@ void StigmergyField::deposit(core::u32 channel, core::u32 x, core::u32 z, math::
     if (channel >= _channels || x >= _width || z >= _depth)
         return;
     if (_blocked[z * _width + x] != 0u)
-        return; // Nothing stands inside a wall, so nothing deposits there.
+        return;
     _cells[index(channel, x, z)] = _cells[index(channel, x, z)] + amount;
 }
 
@@ -62,9 +53,6 @@ void StigmergyField::depositTrail(core::u32 channel, const core::u32 *cells, cor
     if (channel >= _channels || cells == nullptr || count == 0u)
         return;
 
-    // Q / L. The whole of "shorter is better" lives on this line: a route half as
-    // long lays twice the trail per cell, so the field prefers it after enough
-    // traversals without any agent ever comparing two routes.
     const math::Fixed32 perCell = quality / math::Fixed32::fromInt(static_cast<core::i32>(count));
     for (core::u32 i = 0u; i < count; ++i)
     {
@@ -89,25 +77,17 @@ void StigmergyField::step(const StigmergyParams &params)
 
     for (core::u32 c = 0u; c < _channels; ++c)
     {
-        // ── Evaporate, into the scratch buffer ──────────────────────────────
         for (core::u32 z = 0u; z < _depth; ++z)
             for (core::u32 x = 0u; x < _width; ++x)
             {
                 math::Fixed32 v = _cells[index(c, x, z)] * retain;
                 if (v > ceiling)
                     v = ceiling;
-                // The floor. Without it a value walks down to one Q16.16 tick and
-                // stays there forever, so a stale trail never actually clears.
                 if (v < floor)
                     v = math::Fixed32::zero();
                 _scratch[index(c, x, z)] = v;
             }
 
-        // ── Diffuse, reading scratch and writing cells ──────────────────────
-        //
-        // Two buffers, always. A stencil done in place reads neighbours the same
-        // sweep has already updated, so the answer depends on whether the loop
-        // ran left-to-right — which is a desynchronisation, not a rounding error.
         for (core::u32 z = 0u; z < _depth; ++z)
         {
             for (core::u32 x = 0u; x < _width; ++x)
@@ -128,10 +108,6 @@ void StigmergyField::step(const StigmergyParams &params)
                     const core::i32 nz = static_cast<core::i32>(z) + procgen::kNeighbor4Z[n];
                     const bool inside = nx >= 0 && nz >= 0 && static_cast<core::u32>(nx) < _width &&
                                         static_cast<core::u32>(nz) < _depth;
-                    // A wall blocks in BOTH directions: nothing flows in from it,
-                    // and nothing flows out into it. Letting it absorb would make
-                    // walls into sinks, so a corridor would read as less scented
-                    // than an open room carrying the same traffic.
                     const bool open =
                         inside && _blocked[static_cast<core::u32>(nz) * _width + static_cast<core::u32>(nx)] == 0u;
                     if (!open)
@@ -178,9 +154,6 @@ core::u32 StigmergyField::gradientDirection(core::u32 channel, core::u32 x, core
             continue;
 
         const math::Fixed32 v = _cells[index(channel, static_cast<core::u32>(nx), static_cast<core::u32>(nz))];
-        // Strictly better, so a plateau leaves the agent where it is rather than
-        // letting the neighbour order decide — the same tie rule the rest of the
-        // engine uses, and the reason two targets agree.
         const bool better = uphill ? v > bestValue : v < bestValue;
         if (better)
         {
@@ -196,9 +169,6 @@ core::u32 StigmergyField::palateDirection(const ScentPalate &palate, core::u32 x
     if (palate.count == 0u || x >= _width || z >= _depth)
         return kNoDirection;
 
-    // Scores a cell against everything this animal cares about. Attraction and
-    // repulsion are the same sum with opposite signs, which is why a wolf and a
-    // deer can share one field and one line of code.
     const auto score = [&](core::u32 cx, core::u32 cz) {
         math::Fixed32 total{};
         for (core::u32 t = 0u; t < palate.count; ++t)
@@ -223,9 +193,6 @@ core::u32 StigmergyField::palateDirection(const ScentPalate &palate, core::u32 x
         if (_blocked[static_cast<core::u32>(nz) * _width + static_cast<core::u32>(nx)] != 0u)
             continue;
 
-        // Strictly better, so a plateau leaves the agent where it is rather than
-        // letting the neighbour order decide — the same tie rule gradientDirection
-        // uses, and the reason two targets agree.
         if (const math::Fixed32 v = score(static_cast<core::u32>(nx), static_cast<core::u32>(nz)); v > bestValue)
         {
             bestValue = v;

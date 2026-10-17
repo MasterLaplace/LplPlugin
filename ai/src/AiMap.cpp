@@ -1,35 +1,32 @@
-/**
- * @file AiMap.cpp
- * @brief Implementation of directional, capability-aware pathfinding.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ai/AiMap.hpp>
 
 namespace lpl::ai {
 
 namespace {
 
-/// The index of the direction opposite @p d, in kNeighbor8 order.
-///
-/// kNeighbor8X/Z is {E, W, S, N, SE, NE, SW, NW}, so opposites pair up as
-/// (0,1) (2,3) (4,7) (5,6). Written as a table rather than derived, because
-/// deriving it from the offsets at runtime would be three lines that are wrong
-/// the day the neighbour order changes and nothing would say so.
+/**
+ * @brief The index of the direction opposite @p d, in kNeighbor8 order.
+ *
+ * kNeighbor8X/Z is {E, W, S, N, SE, NE, SW, NW}, so opposites pair up as
+ * (0,1) (2,3) (4,7) (5,6). Written as a table rather than derived, because
+ * deriving it from the offsets at runtime would be three lines that are wrong
+ * the day the neighbour order changes and nothing would say so.
+ */
 constexpr core::u32 kOpposite[8] = {1u, 0u, 3u, 2u, 7u, 6u, 5u, 4u};
 
-/// A node in the open set: (cell, incoming direction) with its cost so far.
+/** A node in the open set: (cell, incoming direction) with its cost so far. */
 struct SearchNode {
     core::u32 cell;
     core::u32 incoming;
-    core::u32 estimate; ///< g + h, the ordering key.
+    core::u32 estimate; /**< g + h, the ordering key. */
 };
 
-/// Binary min-heap over @ref SearchNode. Hand-rolled: no std:: freestanding, and
-/// the comparison must be exactly this one for the search to be reproducible.
+/**
+ * @brief Binary min-heap over @ref SearchNode.
+ *
+ * Hand-rolled: no std:: freestanding, and the comparison must be exactly this
+ * one for the search to be reproducible.
+ */
 class SearchHeap {
 public:
     void push(SearchNode node)
@@ -78,9 +75,12 @@ public:
     }
 
 private:
-    /// Estimate first, then cell, then incoming direction. The two tiebreaks are
-    /// what make the expansion order a function of the map alone rather than of
-    /// the heap's internal layout.
+    /**
+     * @brief Estimate first, then cell, then incoming direction.
+     *
+     * The two tiebreaks are what make the expansion order a function of the map
+     * alone rather than of the heap's internal layout.
+     */
     static constexpr bool precedes(const SearchNode &a, const SearchNode &b) noexcept
     {
         if (a.estimate != b.estimate)
@@ -124,9 +124,6 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
     const core::u32 start = startZ * width + startX;
     const core::u32 goal = goalZ * width + goalX;
 
-    // One entry per (cell, incoming) pair. The extra slot is the start's "arrived
-    // from nowhere" state, which must exist or the first step would be charged a
-    // reversal against an arbitrary direction.
     lpl::pmr::vector<core::u32> cost(states, kNoPath);
     lpl::pmr::vector<core::u32> cameFrom(states, kNoPath);
 
@@ -142,8 +139,6 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
         const core::i32 dz = z - static_cast<core::i32>(goalZ);
         const core::u32 adx = static_cast<core::u32>(dx < 0 ? -dx : dx);
         const core::u32 adz = static_cast<core::u32>(dz < 0 ? -dz : dz);
-        // Chebyshev times the cheapest step: admissible, because no move costs
-        // less than baseCost and a diagonal covers one Chebyshev unit.
         return (adx > adz ? adx : adz) * params.baseCost;
     };
 
@@ -158,7 +153,7 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
         const SearchNode current = open.pop();
         const core::u32 state = stateOf(current.cell, current.incoming);
         if (cost[state] == kNoPath || current.estimate < cost[state])
-            continue; // Lazy deletion: a better route to this state was queued later.
+            continue;
 
         if (current.cell == goal)
         {
@@ -183,9 +178,6 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
 
             if (current.incoming != kNoIncoming)
             {
-                // The reversal charge: stepping back the way we came. This is the
-                // one line that makes a long body prefer walking on to a junction
-                // over folding through itself.
                 if (n == kOpposite[current.incoming])
                     step += params.reverseCost;
                 else if (n != current.incoming)
@@ -206,8 +198,6 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
 
     if (bestGoalState == kNoPath)
     {
-        // The goal may have been reached through any incoming direction; the loop
-        // above stops at the first, but if it never did, check every arrival.
         core::u32 best = kNoPath;
         for (core::u32 d = 0u; d <= kDirectionCount; ++d)
         {
@@ -224,7 +214,6 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
     for (core::u32 state = bestGoalState; state != kNoPath; state = cameFrom[state])
         outPath.push_back(state / (kDirectionCount + 1u));
 
-    // Reverse in place: the walk above went goal to start.
     for (core::u32 i = 0u, j = static_cast<core::u32>(outPath.size()); i + 1u < j; ++i, --j)
     {
         const core::u32 swap = outPath[i];

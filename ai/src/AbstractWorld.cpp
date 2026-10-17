@@ -1,12 +1,3 @@
-/**
- * @file AbstractWorld.cpp
- * @brief Implementation of the abstract/realised split and its budget.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ai/AbstractWorld.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -53,10 +44,6 @@ void AbstractWorld::moveCreature(core::u32 index, RoomId destination)
         return;
     _creatures[index].room = destination;
 
-    // Every room's "changes since the focus was here" grows on any transition
-    // anywhere. That is what makes the score age: a room the player left ten
-    // moves ago is staler than one they left one move ago, even if the same
-    // number of ticks passed.
     for (core::u32 r = 0u; r < _rooms.size(); ++r)
         ++_rooms[r].changesSinceVisit;
 }
@@ -78,22 +65,17 @@ core::i32 AbstractWorld::deletionScore(RoomId room, const RealizationBudget &bud
         return 0;
     const AbstractRoom &node = _rooms[room];
 
-    // Age, in ticks and in transitions. Two clocks because they measure different
-    // kinds of staleness: one says "long ago", the other says "far away in the
-    // player's journey", and a room can be one without the other.
     core::i32 score = static_cast<core::i32>(tick - node.lastVisitTick);
     score += static_cast<core::i32>(budget.changeWeight * node.changesSinceVisit);
 
     if (_focus < _rooms.size())
     {
         if (room == _focus)
-            return -1000000; // The room being looked at is never a candidate.
+            return -1000000;
 
         for (core::u32 i = 0u; i < _rooms[_focus].exits.size(); ++i)
             if (_rooms[_focus].exits[i] == room)
             {
-                // Adjacent to the focus: protected, so a threat waiting at the
-                // door does not evaporate the instant the door closes.
                 score -= static_cast<core::i32>(budget.adjacentBonus);
                 break;
             }
@@ -103,8 +85,6 @@ core::i32 AbstractWorld::deletionScore(RoomId room, const RealizationBudget &bud
         score -= static_cast<core::i32>(budget.predictedBonus);
     else if (_predicted < _rooms.size() && _focus < _rooms.size())
     {
-        // Not where the focus is going: aged faster, which is what frees the
-        // budget in front of a moving player rather than behind them.
         score += static_cast<core::i32>(budget.unlikelyPenalty);
     }
     return score;
@@ -114,7 +94,6 @@ core::u32 AbstractWorld::enforceBudget(const RealizationBudget &budget, core::u3
 {
     core::u32 changes = 0u;
 
-    // ── Realise what must exist ─────────────────────────────────────────────
     const auto realise = [&](RoomId room) {
         if (room >= _rooms.size() || _rooms[room].realised)
             return;
@@ -131,7 +110,6 @@ core::u32 AbstractWorld::enforceBudget(const RealizationBudget &budget, core::u3
     if (_predicted < _rooms.size())
         realise(_predicted);
 
-    // ── Abstract until under budget ─────────────────────────────────────────
     for (;;)
     {
         core::u32 realised = realisedRoomCount();
@@ -145,9 +123,6 @@ core::u32 AbstractWorld::enforceBudget(const RealizationBudget &budget, core::u3
             if (!_rooms[r].realised || r == _focus)
                 continue;
             const core::i32 score = deletionScore(r, budget, tick);
-            // Strictly greater, so ties go to the lower room id — the same tie
-            // rule the rest of the engine uses, and the reason two machines
-            // abstract the same room.
             if (worst == kNoRoom || score > worstScore)
             {
                 worst = r;
@@ -155,15 +130,12 @@ core::u32 AbstractWorld::enforceBudget(const RealizationBudget &budget, core::u3
             }
         }
         if (worst == kNoRoom)
-            break; // Everything realised is protected; the cap cannot be met.
+            break;
 
         _rooms[worst].realised = false;
         ++changes;
     }
 
-    // Creature bodies follow their room's state. Keeping the two in one place
-    // means a creature can never be realised in an abstract room, which would be
-    // a body with no physics around it.
     for (core::u32 i = 0u; i < _creatures.size(); ++i)
     {
         const AbstractCreature &creature = _creatures[i];
@@ -183,23 +155,15 @@ core::u32 AbstractWorld::tickAbstract(core::u32 tick)
         if (creature.room >= _rooms.size())
             continue;
 
-        // Condition drains whether or not anyone is watching. This is the line
-        // that makes the world not wait for the player.
         if (creature.energy > 0u)
             --creature.energy;
 
         if (_rooms[creature.room].realised)
-            continue; // A realised creature is driven by the full simulation.
+            continue;
 
-        // Migration, keyed to the creature's id and the tick — no running state,
-        // so an abstract creature's history is a pure function of when it was
-        // last looked at.
         const PersonalityTraits traits = personalityOf(creature.id, creature.species);
         math::Random random{creature.id ^ (tick * 0x9E3779B1u)};
 
-        // Energy scales the urge to move: a well-fed creature wanders, a starving
-        // one is driven. Personality scales it again — this is what makes two
-        // creatures of the same species migrate at different rates.
         const core::u32 restlessness =
             static_cast<core::u32>((traits.energy * math::Fixed32::fromInt(64)).toInt()) + 8u;
         if (random.below(1024u) >= restlessness)
