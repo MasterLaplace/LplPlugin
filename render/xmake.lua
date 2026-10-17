@@ -37,6 +37,7 @@ if has_config("renderer") then
         set_kind("static")
         set_group("modules")
         add_deps("lpl-shaders")  -- compile shaders before linking any consumer
+        add_headerfiles("include/(lpl/render/**.hpp)", "include/(lpl/render/**.inl)")
         add_includedirs("include", {public = true})
 
         -- Expose the internal headers of the Vulkan implementation specifically to the render module itself
@@ -59,6 +60,7 @@ else
     target("lpl-render")
         set_kind("headeronly")
         set_group("modules")
+        add_headerfiles("include/(lpl/render/**.hpp)", "include/(lpl/render/**.inl)")
         add_includedirs("include", {public = true})
         add_deps("lpl-core", "lpl-math", "lpl-image")
     target_end()

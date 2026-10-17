@@ -19,7 +19,7 @@
  * @date 2024-10-15
  **************************************************************************/
 
-// clang-format off
+/* clang-format off */
 #ifndef EXPORT_H_
     #define EXPORT_H_
 
@@ -35,4 +35,4 @@
 #endif
 
 #endif /* !EXPORT_H_ */
-// clang-format on
+/* clang-format on */

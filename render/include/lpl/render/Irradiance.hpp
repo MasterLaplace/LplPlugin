@@ -38,7 +38,7 @@
 #ifndef LPL_RENDER_IRRADIANCE_HPP
 #    define LPL_RENDER_IRRADIANCE_HPP
 
-#    include <lpl/render/OrbitCamera.hpp> // inverseSqrtNewton
+#    include <lpl/render/OrbitCamera.hpp>
 #    include <lpl/render/Pbr.hpp>
 #    include <lpl/render/Sky.hpp>
 
@@ -55,37 +55,33 @@ namespace lpl::render {
 struct IrradianceProbe {
     Vec3f coefficient[9];
 
-    /** @brief A probe that reproduces one flat colour, for a caller with no sky. */
-    static IrradianceProbe uniform(const Vec3f &radiance) noexcept
-    {
-        IrradianceProbe probe{};
-        // Y00 = 0.282095, and the l=0 convolution weight is pi. The band-0 term of a
-        // constant environment L is L / Y00, so that E = pi * L00 * Y00 = pi * L.
-        probe.coefficient[0] = Vec3f(radiance.x / 0.282095f, radiance.y / 0.282095f, radiance.z / 0.282095f);
-        return probe;
-    }
+    /**
+     * @brief A probe that reproduces one flat colour, for a caller with no sky.
+     *
+     * Y00 = 0.282095, and the l=0 convolution weight is pi. The band-0 term of a
+     * constant environment L is L / Y00, so that E = pi * L00 * Y00 = pi * L.
+     */
+    static IrradianceProbe uniform(const Vec3f &radiance) noexcept;
 };
 
 namespace detail {
 
-/** @brief The nine real spherical-harmonic basis functions at a direction. */
-inline void shBasis(core::f32 x, core::f32 y, core::f32 z, core::f32 *out) noexcept
-{
-    out[0] = 0.282095f;
-    out[1] = 0.488603f * y;
-    out[2] = 0.488603f * z;
-    out[3] = 0.488603f * x;
-    out[4] = 1.092548f * x * y;
-    out[5] = 1.092548f * y * z;
-    out[6] = 0.315392f * (3.0f * z * z - 1.0f);
-    out[7] = 1.092548f * x * z;
-    out[8] = 0.546274f * (x * x - y * y);
-}
+/**
+ * @brief The nine real spherical-harmonic basis functions at a direction.
+ */
+inline void shBasis(core::f32 x, core::f32 y, core::f32 z, core::f32 *out) noexcept;
 
 } // namespace detail
 
 /**
  * @brief Projects the sky onto an irradiance probe.
+ *
+ * Each cube face is sampled at its texel centres, face coordinates in [-1, 1].
+ * A texel is weighted by its solid angle, the Jacobian of the cube-to-sphere map
+ * (step^2 / |d|^3): uniform weights would pull the whole integral towards the
+ * corners, where a texel subtends barely a third of what a centre one does. The
+ * cube's texel weights sum to 4*pi only in the limit; normalising by what was
+ * actually accumulated keeps a coarse resolution from darkening the result.
  *
  * @param resolution Texels per cube-face edge. Eight is plenty: the target is a
  *                   band-2 projection, and everything finer than a band-2 lobe is
@@ -93,101 +89,7 @@ inline void shBasis(core::f32 x, core::f32 y, core::f32 z, core::f32 *out) noexc
  *                   faces at eight squared is 384 sky evaluations, once per frame.
  */
 [[nodiscard]] inline IrradianceProbe projectSky(const SunState &sun, const SkyParams &params,
-                                                core::u32 resolution = 8u) noexcept
-{
-    IrradianceProbe probe{};
-    if (resolution == 0u)
-        resolution = 1u;
-
-    const core::f32 step = 2.0f / static_cast<core::f32>(resolution);
-    core::f32 totalWeight = 0.0f;
-
-    for (core::u32 face = 0u; face < 6u; ++face)
-        for (core::u32 v = 0u; v < resolution; ++v)
-            for (core::u32 u = 0u; u < resolution; ++u)
-            {
-                // Face coordinates at texel centres, in [-1, 1].
-                const core::f32 a = -1.0f + (static_cast<core::f32>(u) + 0.5f) * step;
-                const core::f32 b = -1.0f + (static_cast<core::f32>(v) + 0.5f) * step;
-
-                core::f32 dx = 0.0f;
-                core::f32 dy = 0.0f;
-                core::f32 dz = 0.0f;
-                switch (face)
-                {
-                case 0u:
-                    dx = 1.0f;
-                    dy = -b;
-                    dz = -a;
-                    break;
-                case 1u:
-                    dx = -1.0f;
-                    dy = -b;
-                    dz = a;
-                    break;
-                case 2u:
-                    dx = a;
-                    dy = 1.0f;
-                    dz = b;
-                    break;
-                case 3u:
-                    dx = a;
-                    dy = -1.0f;
-                    dz = -b;
-                    break;
-                case 4u:
-                    dx = a;
-                    dy = -b;
-                    dz = 1.0f;
-                    break;
-                default:
-                    dx = -a;
-                    dy = -b;
-                    dz = -1.0f;
-                    break;
-                }
-
-                // Solid angle of the texel: the Jacobian of the cube-to-sphere map.
-                // Uniform weights would pull the whole integral towards the corners,
-                // where a texel subtends barely a third of what a centre one does.
-                const core::f32 lengthSquared = dx * dx + dy * dy + dz * dz;
-                const core::f32 inverse = inverseSqrtNewton(lengthSquared);
-                const core::f32 weight = step * step * inverse * inverse * inverse;
-
-                const core::f32 nx = dx * inverse;
-                const core::f32 ny = dy * inverse;
-                const core::f32 nz = dz * inverse;
-
-                const core::u32 packed = skyColour(nx, ny, nz, sun, params);
-                const Vec3f radiance(static_cast<core::f32>((packed >> 16) & 0xFFu) / 255.0f,
-                                     static_cast<core::f32>((packed >> 8) & 0xFFu) / 255.0f,
-                                     static_cast<core::f32>(packed & 0xFFu) / 255.0f);
-
-                core::f32 basis[9];
-                detail::shBasis(nx, ny, nz, basis);
-                for (core::u32 i = 0u; i < 9u; ++i)
-                {
-                    probe.coefficient[i].x += radiance.x * basis[i] * weight;
-                    probe.coefficient[i].y += radiance.y * basis[i] * weight;
-                    probe.coefficient[i].z += radiance.z * basis[i] * weight;
-                }
-                totalWeight += weight;
-            }
-
-    // The cube's texel weights sum to 4*pi only in the limit; normalising by what
-    // was actually accumulated keeps a coarse resolution from darkening the result.
-    if (totalWeight > 0.0f)
-    {
-        const core::f32 correction = 12.566370614f / totalWeight;
-        for (core::u32 i = 0u; i < 9u; ++i)
-        {
-            probe.coefficient[i].x *= correction;
-            probe.coefficient[i].y *= correction;
-            probe.coefficient[i].z *= correction;
-        }
-    }
-    return probe;
-}
+                                                core::u32 resolution = 8u) noexcept;
 
 /**
  * @brief Irradiance arriving at a surface with a given normal, divided by pi.
@@ -199,37 +101,16 @@ inline void shBasis(core::f32 x, core::f32 y, core::f32 z, core::f32 *out) noexc
  * The three constants are the cosine kernel's own spherical-harmonic coefficients.
  * Band 0 passes through, band 1 is attenuated to two thirds, band 2 to a quarter,
  * and band 3 vanishes — which is the reason the projection stops at nine.
+ *
+ * A band-limited reconstruction can dip below zero where the environment has a
+ * sharp edge — the horizon is exactly such an edge. Negative light is not a
+ * subtlety to preserve, it is black pixels on the shaded side: it is clamped to 0.
  */
 [[nodiscard]] inline Vec3f evaluateIrradiance(const IrradianceProbe &probe, core::f32 nx, core::f32 ny,
-                                              core::f32 nz) noexcept
-{
-    constexpr core::f32 kBand0 = 3.141592654f;
-    constexpr core::f32 kBand1 = 2.094395102f;
-    constexpr core::f32 kBand2 = 0.785398163f;
-    constexpr core::f32 kWeight[9] = {kBand0, kBand1, kBand1, kBand1, kBand2, kBand2, kBand2, kBand2, kBand2};
-
-    core::f32 basis[9];
-    detail::shBasis(nx, ny, nz, basis);
-
-    Vec3f irradiance(0.0f, 0.0f, 0.0f);
-    for (core::u32 i = 0u; i < 9u; ++i)
-    {
-        const core::f32 term = kWeight[i] * basis[i];
-        irradiance.x += probe.coefficient[i].x * term;
-        irradiance.y += probe.coefficient[i].y * term;
-        irradiance.z += probe.coefficient[i].z * term;
-    }
-
-    // A band-limited reconstruction can dip below zero where the environment has a
-    // sharp edge — the horizon is exactly such an edge. Negative light is not a
-    // subtlety to preserve, it is black pixels on the shaded side.
-    constexpr core::f32 kInversePi = 0.318309886f;
-    irradiance.x = irradiance.x > 0.0f ? irradiance.x * kInversePi : 0.0f;
-    irradiance.y = irradiance.y > 0.0f ? irradiance.y * kInversePi : 0.0f;
-    irradiance.z = irradiance.z > 0.0f ? irradiance.z * kInversePi : 0.0f;
-    return irradiance;
-}
+                                              core::f32 nz) noexcept;
 
 } // namespace lpl::render
+
+#    include "Irradiance.inl"
 
 #endif // LPL_RENDER_IRRADIANCE_HPP

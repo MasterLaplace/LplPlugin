@@ -46,11 +46,11 @@ namespace lpl::render {
  * reflection ends up lagging a frame behind the camera.
  */
 struct ReflectionProbe {
-    core::f32 planeY{0.0f};            ///< Height of the mirror plane.
-    math::Mat4<core::f32> mirrorMvp{}; ///< Matrix the probe was rendered with.
+    core::f32 planeY{0.0f};            /**< Height of the mirror plane. */
+    math::Mat4<core::f32> mirrorMvp{}; /**< Matrix the probe was rendered with. */
     core::u32 width{0u};
     core::u32 height{0u};
-    bool valid{false}; ///< False until something has been rendered into it.
+    bool valid{false}; /**< False until something has been rendered into it. */
 };
 
 /**
@@ -62,33 +62,20 @@ struct ReflectionProbe {
  * mirror that is also left-right flipped, which reads as a reflection until
  * something asymmetric appears in it.
  */
-[[nodiscard]] inline CameraBasis mirrorBasisAboutPlane(const CameraBasis &basis, core::f32 planeY) noexcept
-{
-    CameraBasis mirrored = basis;
-    mirrored.eye.y = 2.0f * planeY - basis.eye.y;
-    mirrored.forward.y = -basis.forward.y;
-    mirrored.up.y = -basis.up.y;
-    return mirrored;
-}
+[[nodiscard]] inline CameraBasis mirrorBasisAboutPlane(const CameraBasis &basis, core::f32 planeY) noexcept;
 
 /**
  * @brief View-projection for the mirrored camera.
+ *
+ * Up is flipped, so the handedness of the mirrored view is inverted — which is
+ * exactly why the rasterizer's double-sided fills are needed for this pass.
  *
  * @param aspect Aspect ratio of the PROBE target, which need not match the frame:
  *               a reflection carries far less detail than the view that shows it,
  *               so the probe is rendered small on purpose.
  */
 [[nodiscard]] inline math::Mat4<core::f32> mirrorViewProjection(const CameraBasis &mirrored, core::f32 aspect,
-                                                                const CameraLens &lens) noexcept
-{
-    const math::Vec3<core::f32> target(mirrored.eye.x + mirrored.forward.x, mirrored.eye.y + mirrored.forward.y,
-                                       mirrored.eye.z + mirrored.forward.z);
-    // Up is flipped, so the handedness of the mirrored view is inverted — which is
-    // exactly why the rasterizer's double-sided fills are needed for this pass.
-    const auto view = math::Mat4<core::f32>::lookAt(
-        mirrored.eye, target, math::Vec3<core::f32>(0.0f, mirrored.up.y < 0.0f ? -1.0f : 1.0f, 0.0f));
-    return perspectiveFov(math::Fixed32::fromFloat(lens.fovRadians), aspect, lens.nearPlane, lens.farPlane) * view;
-}
+                                                                const CameraLens &lens) noexcept;
 
 /**
  * @brief Samples a probe at a world point, or reports that it cannot.
@@ -99,24 +86,10 @@ struct ReflectionProbe {
  * the classic planar-reflection artefact and looks worse than no reflection.
  */
 [[nodiscard]] inline bool sampleProbe(const ReflectionProbe &probe, const Texture &pixels, core::f32 worldX,
-                                      core::f32 worldY, core::f32 worldZ, core::u32 &outColour) noexcept
-{
-    if (!probe.valid || probe.width == 0u || probe.height == 0u)
-        return false;
-
-    const detail::ClipVertex clip = detail::toClip(probe.mirrorMvp, worldX, worldY, worldZ);
-    if (clip.w < kNearPlaneEpsilon)
-        return false;
-    const core::f32 invW = 1.0f / clip.w;
-    const core::f32 u = clip.x * invW * 0.5f + 0.5f;
-    const core::f32 v = 0.5f - clip.y * invW * 0.5f;
-    if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f)
-        return false;
-
-    outColour = pixels.sampleBilinear(static_cast<core::u32>(u * 65535.0f), static_cast<core::u32>(v * 65535.0f));
-    return true;
-}
+                                      core::f32 worldY, core::f32 worldZ, core::u32 &outColour) noexcept;
 
 } // namespace lpl::render
+
+#    include "Reflection.inl"
 
 #endif // LPL_RENDER_REFLECTION_HPP

@@ -75,38 +75,25 @@ public:
         const VkAllocationCallbacks *allocator;
     };
 
-    static inline void CreateInstance(const CreateInfo &info)
-    {
-        if (_instance == nullptr)
-            _instance = std::make_unique<GUI>(info);
-    }
+    static inline void CreateInstance(const CreateInfo &info);
 
-    static inline void DestroyInstance()
-    {
-        if (_instance != nullptr)
-            _instance.reset();
-    }
+    static inline void DestroyInstance();
 
-    static inline GUI &GetInstance()
-    {
-        if (!_instance)
-        {
-            ::lpl::core::Log::fatal("GUI instance not created!");
-            std::abort();
-        }
-        return *_instance;
-    }
+    static inline GUI &GetInstance();
 
     /**
-     * @brief Protected GUI constructor.
+     * @brief GUI constructor.
      *
-     * This ensures that the GUI class can only be instantiated through
-     * the CreateInstance method.
+     * Public, as std::make_unique needs it; the instance is meant to be made
+     * through the CreateInstance method. Sets up the Dear ImGui context with
+     * keyboard and gamepad navigation, its dark style, and its GLFW and Vulkan
+     * backends, with two swap chain images (MinImageCount >= 2 and ImageCount
+     * >= MinImageCount).
      */
     GUI(const CreateInfo &info);
 
     /**
-     * @brief Protected GUI destructor.
+     * @brief GUI destructor.
      *
      * This ensures that the GUI class can be properly destroyed.
      */
@@ -146,5 +133,7 @@ private:
 };
 
 } // namespace lpl::render::vk
+
+#include "GUI.inl"
 
 #endif /* !GUI_HPP_ */

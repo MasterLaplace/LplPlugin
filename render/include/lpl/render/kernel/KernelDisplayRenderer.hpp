@@ -43,18 +43,42 @@ class KernelDisplayRenderer final : public IRenderer {
 public:
     explicit KernelDisplayRenderer(platform::IDisplayBackend &display) noexcept;
 
-    /** @brief Advance the rotation angle by one fixed tick (call from fixedUpdate). */
+    /**
+     * @brief Advance the rotation angle by one fixed tick (call from fixedUpdate).
+     *
+     * The angle wraps at 2π by subtraction, to avoid accumulated drift.
+     */
     void tick() noexcept;
 
-    // IRenderer
+    /**
+     * @name IRenderer
+     * @{
+     */
     [[nodiscard]] core::Expected<void> init(core::u32 width, core::u32 height) override;
     void beginFrame() override;
     void endFrame() override;
     void resize(core::u32 width, core::u32 height) override;
     void shutdown() override;
     [[nodiscard]] const char *name() const noexcept override;
+    /** @} */
 
 private:
+    /**
+     * @brief Rotates, projects and fills every triangle of the mesh.
+     *
+     * Rotation authority is Fixed32 (CORDIC, deterministic). The sin/cos values
+     * are converted to float once and applied to the float model-space vertices
+     * — float is confined to the non-authoritative rasterisation path, and no
+     * float result ever flows back into Fixed32.
+     *
+     * The index buffer is a triangle list. Each triangle is projected with Y
+     * flipped, bounded by its box clamped to the surface, and filled by
+     * barycentric edge functions normalised by its total area. Both windings are
+     * accepted: a pixel is inside when all three weights have the sign of the
+     * area. The corner colours, indexed by the mesh vertex id and wrapped to the
+     * 3-entry palette so any triangle list still shades, are blended by the
+     * barycentric weights.
+     */
     void drawMesh() noexcept;
 
     platform::IDisplayBackend &_display;
