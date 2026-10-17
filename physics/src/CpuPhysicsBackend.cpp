@@ -659,7 +659,7 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         {
             _impl->fileBoxes();
             bool listsHold = true;
-            for (core::u32 j = 0; j < count && listsHold; ++j)
+            for (core::u32 j = 0; iter != 0u && j < count && listsHold; ++j)
                 listsHold = _impl->stillListed(j);
 
             Octree &octree = *_impl->broadPhase;
