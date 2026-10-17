@@ -21,40 +21,52 @@
 #    include <stddef.h>
 #    include <stdint.h>
 
-/* ── Userspace memory barriers (match kernel smp_*) ─────────────────────── */
+/**
+ * @name Userspace memory barriers (match kernel smp_*)
+ * @{
+ */
 #    define smp_load_acquire(p)     __atomic_load_n(p, __ATOMIC_ACQUIRE)
 #    define smp_store_release(p, v) __atomic_store_n(p, v, __ATOMIC_RELEASE)
+/** @} */
 #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ─── Device constants ──────────────────────────────────────────────────── */
-
+/**
+ * @name Device constants
+ * @{
+ */
 #define LPL_DEVICE_NAME "lpl0"
 #define LPL_DEVICE_PATH "/dev/lpl0"
 #define LPL_CLASS_NAME  "lpl"
-#define LPL_MAGIC       0x4C504C00U /* "LPL\0" */
+#define LPL_MAGIC       0x4C504C00U /**< "LPL\0" */
 #define LPL_PORT        7777U
+/** @} */
 
-/* ─── Ring buffer sizing ────────────────────────────────────────────────── */
-
+/**
+ * @name Ring buffer sizing
+ * @{
+ */
 #define LPL_MAX_PACKET_SIZE 256U
-#define LPL_RING_SLOTS      4096U /* Power-of-2 for mask-based indexing */
+#define LPL_RING_SLOTS      4096U /**< Power-of-2 for mask-based indexing */
 #define LPL_RING_MASK       (LPL_RING_SLOTS - 1U)
+/** @} */
 
-/* ─── ioctl commands ────────────────────────────────────────────────────── */
-
+/**
+ * @name ioctl commands
+ * @{
+ */
 #define LPL_IOC_MAGIC 'L'
 
 #define LPL_IOCTL_RESET     _IO(LPL_IOC_MAGIC, 0)
 #define LPL_IOCTL_GET_STATS _IOR(LPL_IOC_MAGIC, 1, struct lpl_stats)
 #define LPL_IOCTL_SET_PRIO  _IOW(LPL_IOC_MAGIC, 2, uint32_t)
 #define LPL_IOCTL_KICK_TX   _IO(LPL_IOC_MAGIC, 3)
+/** @} */
 
-/* ─── Component IDs (dynamic packet format) ─────────────────────────────── */
-
+/** Component IDs (dynamic packet format). */
 typedef enum {
     LPL_COMP_TRANSFORM = 1,
     LPL_COMP_HEALTH = 2,
@@ -63,8 +75,7 @@ typedef enum {
     LPL_COMP_SIZE = 5
 } LplComponentId;
 
-/* ─── Packet types ──────────────────────────────────────────────────────── */
-
+/** Packet types. */
 enum lpl_packet_type {
     LPL_PKT_CONNECT_REQ = 0x01,
     LPL_PKT_CONNECT_ACK = 0x02,
@@ -76,11 +87,15 @@ enum lpl_packet_type {
     LPL_PKT_NEURAL_INPUT = 0x30,
 };
 
-/* Legacy aliases for compatibility */
+/**
+ * @name Legacy aliases for compatibility
+ * @{
+ */
 #define MSG_CONNECT LPL_PKT_CONNECT_REQ
 #define MSG_WELCOME LPL_PKT_CONNECT_ACK
 #define MSG_STATE   LPL_PKT_STATE_FULL
 #define MSG_INPUTS  LPL_PKT_INPUT
+/** @} */
 
 #ifdef __cplusplus
 #    define LPL_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
@@ -88,8 +103,7 @@ enum lpl_packet_type {
 #    define LPL_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
 
-/* ─── Wire header — 16 bytes ────────────────────────────────────────────── */
-
+/** Wire header — 16 bytes. */
 struct lpl_packet_header {
     uint32_t magic;
     uint16_t version;
@@ -102,7 +116,10 @@ struct lpl_packet_header {
 
 LPL_STATIC_ASSERT(sizeof(struct lpl_packet_header) == 16, "lpl_packet_header must be exactly 16 bytes");
 
-/* ─── Ring buffer structures (lockless, mmap-shared) ────────────────────── */
+/**
+ * @name Ring buffer structures (lockless, mmap-shared)
+ * @{
+ */
 
 /** Version of the layout below. The module writes it in LplSharedHeader; KernelTransport refuses another. */
 #define LPL_PROTOCOL_VERSION 3U
@@ -213,15 +230,15 @@ LPL_STATIC_ASSERT(offsetof(LplRxRing, packets) % LPL_RING_INTERFERENCE_SIZE == 0
                       offsetof(LplTxRing, packets) % LPL_RING_INTERFERENCE_SIZE == 0,
                   "the slots never share a span with the indices");
 
-/* ─── Simple ring slot (for non-mmap fallback path) ─────────────────────── */
+/** @} */
 
+/** Simple ring slot. */
 struct lpl_ring_slot {
     uint32_t length;
     uint8_t data[LPL_MAX_PACKET_SIZE];
 };
 
-/* ─── Stats reported via ioctl ──────────────────────────────────────────── */
-
+/** Stats reported via ioctl. */
 struct lpl_stats {
     uint64_t tx_packets;
     uint64_t rx_packets;
