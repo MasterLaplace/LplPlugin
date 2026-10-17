@@ -42,58 +42,26 @@ public:
      * @brief Push an element to the front of the list.
      * @param element Pointer to the element (must outlive the list entry).
      */
-    void pushFront(T *element)
-    {
-        element->next = _head;
-        _head = element;
-        ++_size;
-    }
+    void pushFront(T *element);
 
     /**
      * @brief Remove an element from the list.
      * @param element Pointer to the element to remove.
      * @return True if the element was found and removed.
      */
-    bool remove(T *element)
-    {
-        IntrusiveNode **pp = &_head;
-        while (*pp)
-        {
-            if (*pp == element)
-            {
-                *pp = element->next;
-                element->next = nullptr;
-                --_size;
-                return true;
-            }
-            pp = &((*pp)->next);
-        }
-        return false;
-    }
+    bool remove(T *element);
 
     /**
      * @brief Invoke a callable on each element.
      * @tparam Fn Callable taking T&.
      * @param fn  Visitor.
      */
-    template <typename Fn> void forEach(Fn &&fn)
-    {
-        auto *node = _head;
-        while (node)
-        {
-            fn(*static_cast<T *>(node));
-            node = node->next;
-        }
-    }
+    template <typename Fn> void forEach(Fn &&fn);
 
     [[nodiscard]] bool empty() const { return _head == nullptr; }
     [[nodiscard]] core::usize size() const { return _size; }
 
-    void clear()
-    {
-        _head = nullptr;
-        _size = 0;
-    }
+    void clear();
 
 private:
     IntrusiveNode *_head = nullptr;
@@ -101,5 +69,7 @@ private:
 };
 
 } // namespace lpl::memory
+
+#    include "IntrusiveList.inl"
 
 #endif // LPL_MEMORY_INTRUSIVE_LIST_HPP
