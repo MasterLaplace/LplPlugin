@@ -34,13 +34,17 @@ enum class GpuMemoryFlags : core::u32 {
     kHostCoherent = 1u << 1,
 };
 
-/** @brief Bitwise OR of allocation flags. */
+/**
+ * @brief Bitwise OR of allocation flags.
+ */
 [[nodiscard]] constexpr GpuMemoryFlags operator|(GpuMemoryFlags lhs, GpuMemoryFlags rhs) noexcept
 {
     return static_cast<GpuMemoryFlags>(static_cast<core::u32>(lhs) | static_cast<core::u32>(rhs));
 }
 
-/** @brief Test whether @p flags contains @p query. */
+/**
+ * @brief Test whether @p flags contains @p query.
+ */
 [[nodiscard]] constexpr bool hasFlag(GpuMemoryFlags flags, GpuMemoryFlags query) noexcept
 {
     return (static_cast<core::u32>(flags) & static_cast<core::u32>(query)) != 0u;
@@ -55,10 +59,10 @@ enum class GpuMemoryFlags : core::u32 {
  * list rather than assume one contiguous range.
  */
 struct GpuAllocation {
-    void *virtualAddress = nullptr;               ///< CPU-visible base pointer.
-    core::u32 physicalAddress = 0u;               ///< Physical base of the first page.
-    core::u32 sizeBytes = 0u;                     ///< Allocation size in bytes.
-    GpuMemoryFlags flags = GpuMemoryFlags::kNone; ///< Flags it was created with.
+    void *virtualAddress = nullptr;               /**< CPU-visible base pointer. */
+    core::u32 physicalAddress = 0u;               /**< Physical base of the first page. */
+    core::u32 sizeBytes = 0u;                     /**< Allocation size in bytes. */
+    GpuMemoryFlags flags = GpuMemoryFlags::kNone; /**< Flags it was created with. */
 };
 
 /**
@@ -72,13 +76,19 @@ class IGpuMemoryBackend {
 public:
     virtual ~IGpuMemoryBackend() = default;
 
-    /** @brief Allocate @p sizeBytes of graphics memory with @p flags. */
+    /**
+     * @brief Allocate @p sizeBytes of graphics memory with @p flags.
+     */
     [[nodiscard]] virtual core::Expected<GpuAllocation> allocate(core::u32 sizeBytes, GpuMemoryFlags flags) = 0;
 
-    /** @brief Release an allocation obtained from allocate(). */
+    /**
+     * @brief Release an allocation obtained from allocate().
+     */
     virtual void free(const GpuAllocation &allocation) = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

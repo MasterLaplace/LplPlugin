@@ -34,6 +34,9 @@ namespace lpl::platform::linux_host {
 
 /**
  * @brief Tick / timestamp backend over std::chrono::steady_clock + rdtsc.
+ *
+ * The tick base is a millisecond (1000 Hz), with a 64-bit rdtsc for sub-tick timing. These values are
+ * OBSERVABILITY only and never feed the deterministic Fixed32 authority.
  */
 class LinuxClockBackend final : public IClockBackend {
 public:
@@ -50,6 +53,8 @@ private:
 
 /**
  * @brief Software-LFB display backend over a host-memory framebuffer.
+ *
+ * The host has no physical addresses: the surface reports a physical address of 0.
  */
 class LinuxDisplayBackend final : public IDisplayBackend {
 public:
@@ -58,7 +63,12 @@ public:
     [[nodiscard]] bool querySurface(SurfaceDescriptor &outDescriptor) const noexcept override;
     void clear(core::u32 colorRgb) override;
     [[nodiscard]] core::u32 readPixel(core::u32 x, core::u32 y) const noexcept override;
+
+    /**
+     * @brief Does nothing: the host software-LFB renders straight into the backing buffer.
+     */
     void present() override;
+
     [[nodiscard]] const char *name() const noexcept override { return "LinuxDisplay(software-LFB)"; }
 
 private:
@@ -108,6 +118,9 @@ public:
 
 /**
  * @brief Graphics-memory backend over aligned host allocation.
+ *
+ * The host has no physical addresses: an allocation reports the low 32 bits of its virtual address in their
+ * place.
  */
 class LinuxGpuMemoryBackend final : public IGpuMemoryBackend {
 public:
@@ -131,7 +144,9 @@ public:
     [[nodiscard]] IGpuMemoryBackend &gpuMemory() noexcept override { return _gpuMemory; }
     [[nodiscard]] const char *name() const noexcept override { return "LinuxPlatform"; }
 
-    /** @brief Access the concrete input backend to feed decoded characters. */
+    /**
+     * @brief Access the concrete input backend to feed decoded characters.
+     */
     [[nodiscard]] LinuxInputBackend &inputBackend() noexcept { return _input; }
 
 private:
