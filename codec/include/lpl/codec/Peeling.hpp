@@ -73,6 +73,8 @@ struct DecodeReport {
  * @param droplets    What arrived. Order is respected, so two runs of the same bag
  *                    fold identically.
  * @param table       The distribution the encoder used; the seeds mean nothing else.
+ *                    Built for @p blockCount blocks: its draws index the blocks, so
+ *                    a table of another size is refused before anything is read.
  * @param blockCount  K.
  * @param blockBytes  Bytes per block.
  * @param outBlocks   Receives K * blockBytes bytes.
