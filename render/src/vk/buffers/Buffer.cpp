@@ -136,7 +136,6 @@ void Buffers::CreateTextureBuffer(const VkDevice &device, const VkPhysicalDevice
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture.GetMipLevels());
 
     CopyBufferToImage(device, commandPool, graphicsQueue, stagingBuffer, texture);
-    // transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
 
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -147,7 +146,6 @@ void Buffers::CreateTextureBuffer(const VkDevice &device, const VkPhysicalDevice
 void Buffers::GenerateMipmaps(const VkDevice &device, const VkPhysicalDevice &physicalDevice,
                               const VkCommandPool &commandPool, const VkQueue &graphicsQueue, Texture &texture) const
 {
-    // Check if image format supports linear blitting
     VkFormatProperties formatProperties;
     vkGetPhysicalDeviceFormatProperties(physicalDevice, VK_FORMAT_R8G8B8A8_SRGB, &formatProperties);
 

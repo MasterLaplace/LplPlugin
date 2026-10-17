@@ -31,11 +31,7 @@ namespace lpl::render {
  */
 class AssetCache {
 public:
-    static AssetCache &instance()
-    {
-        static AssetCache s_instance;
-        return s_instance;
-    }
+    static AssetCache &instance();
 
     core::FlyweightCache<std::string, Mesh> meshes;
     core::FlyweightCache<std::string, Shader> shaders;
@@ -50,5 +46,7 @@ private:
 };
 
 } // namespace lpl::render
+
+#    include "AssetCache.inl"
 
 #endif // LPL_RENDER_ASSETCACHE_HPP

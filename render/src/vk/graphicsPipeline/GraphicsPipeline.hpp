@@ -44,6 +44,10 @@ public:
      * @brief Creates a graphics pipeline.
      *
      * This function creates a graphics pipeline from the device and the render pass.
+     * Its rasterizer fills polygons (VK_POLYGON_MODE_LINE or VK_POLYGON_MODE_POINT
+     * are the alternatives) with lines 1.0 wide (wider requires the wideLines
+     * feature), and leaves depth clamping and depth bias off, which shadow maps
+     * require on.
      *
      * @param device  The Vulkan device.
      * @param renderPass  The render pass.

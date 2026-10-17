@@ -30,25 +30,39 @@ class Camera {
 public:
     Camera() noexcept = default;
 
-    /** @brief Sets the field-of-view in radians. */
+    /**
+     * @brief Sets the field-of-view in radians.
+     */
     void setFov(core::f32 fovRadians) noexcept;
 
-    /** @brief Sets the aspect ratio (width / height). */
+    /**
+     * @brief Sets the aspect ratio (width / height).
+     */
     void setAspect(core::f32 aspect) noexcept;
 
-    /** @brief Sets near/far clipping planes. */
+    /**
+     * @brief Sets near/far clipping planes.
+     */
     void setClipPlanes(core::f32 nearPlane, core::f32 farPlane) noexcept;
 
-    /** @brief Sets position and orientation. */
+    /**
+     * @brief Sets position and orientation.
+     */
     void setTransform(const math::Vec3<core::f32> &position, const math::Quat<core::f32> &orientation) noexcept;
 
-    /** @brief Returns the view matrix. */
+    /**
+     * @brief Returns the view matrix.
+     */
     [[nodiscard]] math::Mat4<core::f32> viewMatrix() const noexcept;
 
-    /** @brief Returns the projection matrix. */
+    /**
+     * @brief Returns the projection matrix.
+     */
     [[nodiscard]] math::Mat4<core::f32> projectionMatrix() const noexcept;
 
-    /** @brief Returns the combined view-projection matrix. */
+    /**
+     * @brief Returns the combined view-projection matrix.
+     */
     [[nodiscard]] math::Mat4<core::f32> viewProjectionMatrix() const noexcept;
 
     [[nodiscard]] const math::Vec3<core::f32> &position() const noexcept { return _position; }

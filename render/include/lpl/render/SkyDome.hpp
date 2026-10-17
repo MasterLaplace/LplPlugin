@@ -35,48 +35,15 @@ namespace lpl::render {
  * matrix nobody needs is work nobody should do. The depth buffer is set to far,
  * so everything drawn afterwards wins against the sky by construction.
  *
+ * One evaluation per block, written to every pixel of it. The sky is the
+ * smoothest thing on screen — over two pixels it changes by less than one step
+ * of an 8-bit channel — so a block of 2 or 3 is free in appearance and divides
+ * the cost by its area.
+ *
  * @param tanHalfFov Tangent of half the vertical field of view.
  */
 inline void drawSky(const RenderTarget &rt, const CameraBasis &basis, const SunState &sun, const SkyParams &params,
-                    core::f32 tanHalfFov = 0.5773502692f, core::u32 block = 1u) noexcept
-{
-    const core::f32 aspect = static_cast<core::f32>(rt.width) / static_cast<core::f32>(rt.height);
-    const core::u32 step = block == 0u ? 1u : block;
-
-    for (core::u32 y = 0u; y < rt.height; y += step)
-    {
-        const core::f32 ndcY = 1.0f - 2.0f * (static_cast<core::f32>(y) + 0.5f) / static_cast<core::f32>(rt.height);
-        for (core::u32 x = 0u; x < rt.width; x += step)
-        {
-            const core::f32 ndcX = 2.0f * (static_cast<core::f32>(x) + 0.5f) / static_cast<core::f32>(rt.width) - 1.0f;
-            const core::f32 h = ndcX * tanHalfFov * aspect;
-            const core::f32 v = ndcY * tanHalfFov;
-
-            core::f32 dx = basis.forward.x + basis.right.x * h + basis.up.x * v;
-            core::f32 dy = basis.forward.y + basis.right.y * h + basis.up.y * v;
-            core::f32 dz = basis.forward.z + basis.right.z * h + basis.up.z * v;
-            const core::f32 inverse = inverseSqrtNewton(dx * dx + dy * dy + dz * dz);
-            dx *= inverse;
-            dy *= inverse;
-            dz *= inverse;
-
-            const core::u32 colour = skyColour(dx, dy, dz, sun, params);
-
-            // One evaluation per block, written to every pixel of it. The sky is
-            // the smoothest thing on screen — over two pixels it changes by less
-            // than one step of an 8-bit channel — so a block of 2 or 3 is free in
-            // appearance and divides the cost by its area.
-            const core::u32 maxY = (y + step) < rt.height ? (y + step) : rt.height;
-            const core::u32 maxX = (x + step) < rt.width ? (x + step) : rt.width;
-            for (core::u32 by = y; by < maxY; ++by)
-                for (core::u32 bx = x; bx < maxX; ++bx)
-                {
-                    rt.color[by * rt.width + bx] = colour;
-                    rt.depth[by * rt.width + bx] = 1.0e30f;
-                }
-        }
-    }
-}
+                    core::f32 tanHalfFov = 0.5773502692f, core::u32 block = 1u) noexcept;
 
 /**
  * @brief The haze distant geometry fades into: the sky along the horizon.
@@ -90,5 +57,7 @@ inline void drawSky(const RenderTarget &rt, const CameraBasis &basis, const SunS
 }
 
 } // namespace lpl::render
+
+#    include "SkyDome.inl"
 
 #endif // LPL_RENDER_SKY_DOME_HPP

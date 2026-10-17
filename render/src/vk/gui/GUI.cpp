@@ -4,7 +4,6 @@ namespace lpl::render::vk {
 
 void GUI::Render(const glm::vec4 &clear_color, const VkCommandBuffer &commandBuffer)
 {
-    // Start the Dear ImGui frame
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -16,17 +15,16 @@ void GUI::Render(const glm::vec4 &clear_color, const VkCommandBuffer &commandBuf
         static float f = 0.0f;
         static int counter = 0;
 
-        ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!" and append into it.
+        ImGui::Begin("Hello, world!");
 
-        ImGui::Text("This is some useful text.");           // Display some text (you can use a format strings too)
-        ImGui::Checkbox("Demo Window", &_show_demo_window); // Edit bools storing our window open/close state
+        ImGui::Text("This is some useful text.");
+        ImGui::Checkbox("Demo Window", &_show_demo_window);
         ImGui::Checkbox("Another Window", &_show_another_window);
 
-        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);              // Edit 1 float using a slider from 0.0f to 1.0f
-        ImGui::ColorEdit3("clear color", (float *) &clear_color); // Edit 3 floats representing a color
+        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
+        ImGui::ColorEdit3("clear color", (float *) &clear_color);
 
-        if (ImGui::Button(
-                "Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
+        if (ImGui::Button("Button"))
             counter++;
         ImGui::SameLine();
         ImGui::Text("counter = %d", counter);
@@ -37,9 +35,7 @@ void GUI::Render(const glm::vec4 &clear_color, const VkCommandBuffer &commandBuf
 
     if (_show_another_window)
     {
-        ImGui::Begin("Another Window",
-                     &_show_another_window); // Pass a pointer to our bool variable (the window will have a closing
-                                             // button that will clear the bool when clicked)
+        ImGui::Begin("Another Window", &_show_another_window);
         ImGui::Text("Hello from another window!");
         if (ImGui::Button("Close Me"))
             _show_another_window = false;
@@ -66,18 +62,14 @@ void GUI::check_vk_result(VkResult err)
 
 GUI::GUI(const CreateInfo &info)
 {
-    // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     _io = &ImGui::GetIO();
-    _io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    _io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
+    _io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    _io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-    // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    // ImGui::StyleColorsLight();
 
-    // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForVulkan(info.window, true);
     ImGui_ImplVulkan_InitInfo init_info = {};
     init_info.Instance = info.instance;
@@ -89,8 +81,8 @@ GUI::GUI(const CreateInfo &info)
     init_info.DescriptorPool = info.descriptorPool;
     init_info.PipelineInfoMain.RenderPass = info.renderPass;
     init_info.PipelineInfoMain.Subpass = 0;
-    init_info.MinImageCount = 2; // >= 2
-    init_info.ImageCount = 2;    // >= MinImageCount
+    init_info.MinImageCount = 2;
+    init_info.ImageCount = 2;
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.Allocator = info.allocator;
     init_info.CheckVkResultFn = GUI::check_vk_result;

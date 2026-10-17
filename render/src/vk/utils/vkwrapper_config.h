@@ -11,7 +11,7 @@
  * distribute it under the terms of the MIT License, provided this copyright
  * notice and the permission notice are kept. See the LICENSE file.
  *
- * @file vkwrapper_config.h.h
+ * @file vkwrapper_config.h
  * @brief Compile-Time Configuration Parameters for VkWrapper.
  *
  * @author @MasterLaplace
@@ -19,8 +19,7 @@
  * @date 2024-10-15
  **************************************************************************/
 
-// clang-format off
-// NOSONAR: Suppress all SonarQube warnings in this file
+/* clang-format off */
 #ifndef VKWRAPPER_CONFIG_H_
     #define VKWRAPPER_CONFIG_H_
 
@@ -38,71 +37,76 @@
 #ifndef VKWRAPPER_DISTRIBUTION_H_
     #define VKWRAPPER_DISTRIBUTION_H_
 
-////////////////////////////////////////////////////////////
-// Identify the Compiler
-////////////////////////////////////////////////////////////
+/**
+ * @name Identify the Compiler
+ * @{
+ */
 #if defined(_MSC_VER) || defined(_MSVC_LANG)
     #define VKWRAPPER_COMPILER_MSVC
-    #define VKWRAPPER_COMPILER_STRING "MSVC" // NOSONAR
+    #define VKWRAPPER_COMPILER_STRING "MSVC"
 #elif defined(__GNUC__) || defined(__GNUG__)
     #define VKWRAPPER_COMPILER_GCC
-    #define VKWRAPPER_COMPILER_STRING "GCC" // NOSONAR
+    #define VKWRAPPER_COMPILER_STRING "GCC"
 #elif defined(__clang__) || defined(__llvm__)
     #define VKWRAPPER_COMPILER_CLANG
-    #define VKWRAPPER_COMPILER_STRING "Clang" // NOSONAR
+    #define VKWRAPPER_COMPILER_STRING "Clang"
 #elif defined(__MINGW32__) || defined(__MINGW64__)
     #define VKWRAPPER_COMPILER_MINGW
-    #define VKWRAPPER_COMPILER_STRING "MinGW" // NOSONAR
+    #define VKWRAPPER_COMPILER_STRING "MinGW"
 #elif defined(__CYGWIN__)
     #define VKWRAPPER_COMPILER_CYGWIN
-    #define VKWRAPPER_COMPILER_STRING "Cygwin" // NOSONAR
+    #define VKWRAPPER_COMPILER_STRING "Cygwin"
 #else
     #error [Config@Distribution]: This compiler is not supported by VKWRAPPER library.
 #endif
+/** @} */
 
 
-////////////////////////////////////////////////////////////
-// Identify the Operating System
-////////////////////////////////////////////////////////////
+/**
+ * @name Identify the Operating System
+ *
+ * Android is based on the Linux VKWRAPPER, so it has to appear before Linux.
+ * @{
+ */
 #if defined(_WIN32) || defined(__WIN32__) || defined(VKWRAPPER_COMPILER_MINGW) || defined(VKWRAPPER_COMPILER_CYGWIN)
 
     #define VKWRAPPER_SYSTEM_WINDOWS
-    #define VKWRAPPER_SYSTEM_STRING "Windows" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "Windows"
 
-// Android is based on the Linux VKWRAPPER, so it has to appear before Linux
 #elif defined(__ANDROID__)
 
     #define VKWRAPPER_SYSTEM_ANDROID
-    #define VKWRAPPER_SYSTEM_STRING "Android" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "Android"
 
 #elif defined(linux) || defined(__linux)
 
     #define VKWRAPPER_SYSTEM_LINUX
-    #define VKWRAPPER_SYSTEM_STRING "Linux" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "Linux"
 
 #elif defined(__unix) || defined(__unix__)
 
     #define VKWRAPPER_SYSTEM_UNIX
-    #define VKWRAPPER_SYSTEM_STRING "Unix" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "Unix"
 
 #elif defined(__APPLE__) || defined(MACOSX) || defined(macintosh) || defined(Macintosh)
 
     #define VKWRAPPER_SYSTEM_MACOS
-    #define VKWRAPPER_SYSTEM_STRING "MacOS" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "MacOS"
 
 #elif defined(__FreeBSD__) || defined(__FreeBSD_VKWRAPPER__)
 
     #define VKWRAPPER_SYSTEM_FREEBSD
-    #define VKWRAPPER_SYSTEM_STRING "FreeBSD" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "FreeBSD"
 
 #elif defined(LAPLACE_KERNEL_PANIC)
 
     #define VKWRAPPER_SYSTEM_KERNEL
-    #define VKWRAPPER_SYSTEM_STRING "Laplace Kernel" // NOSONAR
+    #define VKWRAPPER_SYSTEM_STRING "Laplace Kernel"
 
 #else
     #error [Config@Distribution]: This operating system is not supported by VKWRAPPER library.
 #endif
+/** @} */
 
 #ifdef __cplusplus
     #define VKWRAPPER_EXTERN_C extern "C"
@@ -158,16 +162,16 @@
         #define VKWRAPPER_CPP99(_)
     #endif
 
-    ////////////////////////////////////////////////////////////
-    // Define a macro to handle cpp features compatibility
-    ////////////////////////////////////////////////////////////
-    /** Usage:
+    /**
+     * Define a macro to handle cpp features compatibility.
+     *
+     * Usage:
      * @example
      * void func() VKWRAPPER_CPP14([[deprecated]]);
      *
      * @example
      * void func() VKWRAPPER_CPP([[deprecated]], 14);
-    \**********************************************************/
+     */
     #define VKWRAPPER_CPP(_, version) VKWRAPPER_CPP##version(_)
 
 #else
@@ -182,78 +186,89 @@
     #define VKWRAPPER_CPP(_, version)
 #endif
 
-////////////////////////////////////////////////////////////
-// Define helpers to create portable import / export macros for each module
-////////////////////////////////////////////////////////////
+/**
+ * @name Define helpers to create portable import / export macros for each module
+ *
+ * Windows compilers need specific (and different) keywords for export and import;
+ * for Visual C++ compilers, we also need to turn off this annoying C4251 warning.
+ * GCC 4 has special keywords for showing/hidding symbols, the same keyword is used
+ * for both importing and exporting; GCC < 4 has no mechanism to explicitely hide
+ * symbols, everything's exported.
+ * @{
+ */
 #if defined(VKWRAPPER_SYSTEM_WINDOWS)
 
-    // Windows compilers need specific (and different) keywords for export and import
     #define VKWRAPPER_API_EXPORT extern "C" __declspec(dllexport)
     #define VKWRAPPER_API_IMPORT VKWRAPPER_EXTERN_C __declspec(dllimport)
 
-    // For Visual C++ compilers, we also need to turn off this annoying C4251 warning
     #ifdef _MSC_VER
 
         #pragma warning(disable : 4251)
 
     #endif
 
-#else // Linux, FreeBSD, Mac OS X
+#else
 
     #if __GNUC__ >= 4
 
-        // GCC 4 has special keywords for showing/hidding symbols,
-        // the same keyword is used for both importing and exporting
         #define VKWRAPPER_API_EXPORT extern "C" __attribute__ ((__visibility__ ("default")))
         #define VKWRAPPER_API_IMPORT VKWRAPPER_EXTERN_C __attribute__ ((__visibility__ ("default")))
 
     #else
 
-        // GCC < 4 has no mechanism to explicitely hide symbols, everything's exported
         #define VKWRAPPER_API_EXPORT extern "C"
         #define VKWRAPPER_API_IMPORT VKWRAPPER_EXTERN_C
 
     #endif
 
 #endif
+/** @} */
 
 
+/**
+ * @name Portable main functions
+ *
+ * Windows compilers use a different name for the main function, Android doesn't
+ * need a main function, on MacOS X we use a Unix main function, and other
+ * platforms should use the standard main function.
+ * @{
+ */
 #ifdef VKWRAPPER_SYSTEM_WINDOWS
 
-    // Windows compilers use a different name for the main function
     #define VKWRAPPER_GUI_MAIN(hInstance, hPrevInstance, lpCmdLine, nCmdShow) WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
     #define VKWRAPPER_MAIN(ac, av, env) main(int ac, char *av[], char *env[])
 
 #elif defined(VKWRAPPER_SYSTEM_ANDROID)
 
-    // Android doesn't need a main function
     #define VKWRAPPER_GUI_MAIN(app) android_main(struct android_app* app)
     #define VKWRAPPER_MAIN
 
 #elif defined(VKWRAPPER_SYSTEM_MACOS)
 
-    // On MacOS X, we use a Unix main function
     #define VKWRAPPER_MAIN(ac, av, env, apple) main(int ac, char *av[], char *env[], char *apple[])
 
 #else
 
-    // Other platforms should use the standard main function
     #define VKWRAPPER_MAIN(ac, av, env) main(int ac, char *av[], char *env[])
 #endif
+/** @} */
 
-////////////////////////////////////////////////////////////
-// Define portable NULL pointer using C++11 nullptr keyword
-////////////////////////////////////////////////////////////
+/**
+ * @name Define portable NULL pointer using C++11 nullptr keyword
+ * @{
+ */
 #ifdef __cplusplus
 #elif !defined(NULL)
     #define nullptr ((void*)0)
 #else
     #define nullptr NULL
 #endif
+/** @} */
 
-////////////////////////////////////////////////////////////
-// Define boolean type and values
-////////////////////////////////////////////////////////////
+/**
+ * @name Define boolean type and values
+ * @{
+ */
 #if defined(__cplusplus)
 #elif !defined(__bool_true_false_are_defined)
     #define bool _Bool
@@ -261,18 +276,21 @@
     #define false 0
     #define __bool_true_false_are_defined 1
 #endif
+/** @} */
 
-////////////////////////////////////////////////////////////
-// Define a portable debug macro
-////////////////////////////////////////////////////////////
+/**
+ * @name Define a portable debug macro
+ * @{
+ */
 #if (defined(_DEBUG) || defined(DEBUG)) && !defined(NDEBUG)
 
     #define VKWRAPPER_DEBUG
-    #define VKWRAPPER_DEBUG_STRING "Debug" // NOSONAR
+    #define VKWRAPPER_DEBUG_STRING "Debug"
 
 #else
-    #define VKWRAPPER_DEBUG_STRING "Release" // NOSONAR
+    #define VKWRAPPER_DEBUG_STRING "Release"
 #endif
+/** @} */
 
 
 #if defined __GNUC__ && defined __GNUC_MINOR__
@@ -282,10 +300,10 @@
 # define __GNUC_PREREQ(maj, min) 0
 #endif
 
-////////////////////////////////////////////////////////////
-// Define a portable way to declare a function as deprecated
-////////////////////////////////////////////////////////////
-/** Usage:
+/**
+ * @name Define a portable way to declare a function as deprecated
+ *
+ * Usage:
  * @example "for functions"
  *   VKWRAPPER_DEPRECATED void func();
  * @example "for structs"
@@ -299,7 +317,8 @@
  *   };
  * @example "for classes"
  *   class VKWRAPPER_DEPRECATED MyClass { ... };
-\**********************************************************/
+ * @{
+ */
 #ifdef VKWRAPPER_DISABLE_DEPRECATION
 
     #define VKWRAPPER_DEPRECATED
@@ -373,12 +392,13 @@
     #define VKWRAPPER_DEPRECATED_MSG(message)
     #define VKWRAPPER_DEPRECATED_VMSG(version, message)
 #endif
+/** @} */
 
 
-////////////////////////////////////////////////////////////
-// Define a portable way for packing structures
-////////////////////////////////////////////////////////////
-/** Usage:
+/**
+ * @name Define a portable way for packing structures
+ *
+ * Usage:
  * @example
  * PACKED(struct MyStruct
  * {
@@ -386,7 +406,8 @@
  *     char b;
  *     ...
  * });
-\**********************************************************/
+ * @{
+ */
 #if defined(__GNUC__) || defined(__GNUG__)
     #define PACKED( __Declaration__ ) __Declaration__ __attribute__((__packed__))
 #elif _MSC_VER
@@ -394,6 +415,7 @@
 #else
     #define PACKED( __Declaration__ ) __Declaration__
 #endif
+/** @} */
 
 #endif /* !VKWRAPPER_DISTRIBUTION_H_ */
 
@@ -401,36 +423,36 @@
 #ifndef VKWRAPPER_VERSION_H_
     #define VKWRAPPER_VERSION_H_
 
-////////////////////////////////////////////////////////////
-// Define the VKWRAPPER version
-////////////////////////////////////////////////////////////
+/**
+ * @name Define the VKWRAPPER version
+ * @{
+ */
 #ifdef FLAG_VERSION_MAJOR
     #define VKWRAPPER_VERSION_MAJOR FLAG_VERSION_MAJOR
 #else
-    #define VKWRAPPER_VERSION_MAJOR 0 // NOSONAR
+    #define VKWRAPPER_VERSION_MAJOR 0
 #endif
 
 #ifdef FLAG_VERSION_MINOR
     #define VKWRAPPER_VERSION_MINOR FLAG_VERSION_MINOR
 #else
-    #define VKWRAPPER_VERSION_MINOR 0 // NOSONAR
+    #define VKWRAPPER_VERSION_MINOR 0
 #endif
 
 #ifdef FLAG_VERSION_PATCH
     #define VKWRAPPER_VERSION_PATCH FLAG_VERSION_PATCH
 #else
-    #define VKWRAPPER_VERSION_PATCH 4 // NOSONAR
+    #define VKWRAPPER_VERSION_PATCH 4
 #endif
 
 #ifdef FLAG_VERSION_TWEAK
     #define VKWRAPPER_VERSION_TWEAK FLAG_VERSION_TWEAK
 #else
-    #define VKWRAPPER_VERSION_TWEAK 0 // NOSONAR
+    #define VKWRAPPER_VERSION_TWEAK 0
 #endif
+/** @} */
 
-////////////////////////////////////////////////////////////
-// Define the VKWRAPPER version number
-////////////////////////////////////////////////////////////
+/** Define the VKWRAPPER version number. */
 #define VKWRAPPER_VERSION \
         (VKWRAPPER_VERSION_MAJOR * 1000000 + \
         VKWRAPPER_VERSION_MINOR * 10000 + \
@@ -439,19 +461,19 @@
 
 #define VKWRAPPER_PREREQ_VERSION(maj, min, pat) (VKWRAPPER_VERSION >= (maj * 1000000 + min * 10000 + pat * 100))
 
-////////////////////////////////////////////////////////////
-// Define the VKWRAPPER version concatenated
-////////////////////////////////////////////////////////////
+/** Define the VKWRAPPER version concatenated. */
 #define VKWRAPPER_VERSION_CCT VKWRAPPER_VERSION_MAJOR##_##VKWRAPPER_VERSION_MINOR##_##VKWRAPPER_VERSION_PATCH##_##VKWRAPPER_VERSION_TWEAK
 
 
-////////////////////////////////////////////////////////////
-// Define the VKWRAPPER version string
-////////////////////////////////////////////////////////////
-// Helper macro to convert a macro to a string
+/**
+ * @name Helper macro to convert a macro to a string
+ * @{
+ */
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
+/** @} */
 
+/** Define the VKWRAPPER version string. */
 #define VKWRAPPER_VERSION_STRING \
         TOSTRING(VKWRAPPER_VERSION_MAJOR) "." \
         TOSTRING(VKWRAPPER_VERSION_MINOR) "." \
@@ -461,9 +483,7 @@
 #endif /* !VKWRAPPER_VERSION_H_ */
 
 
-////////////////////////////////////////////////////////////
-// Compile-Time Configuration Parameters
-////////////////////////////////////////////////////////////
+/** Compile-Time Configuration Parameters. */
 #define VKWRAPPER_CONFIG_STRING \
         "VKWRAPPER_VERSION=" VKWRAPPER_VERSION_STRING "\n" \
         "VKWRAPPER_SYSTEM=" VKWRAPPER_SYSTEM_STRING "\n" \
@@ -471,4 +491,4 @@
         "VKWRAPPER_DEBUG=" VKWRAPPER_DEBUG_STRING "\n"
 
 #endif /* !VKWRAPPER_CONFIG_H_ */
-// clang-format on
+/* clang-format on */

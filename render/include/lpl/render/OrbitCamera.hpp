@@ -53,7 +53,7 @@ struct CameraBasis {
  * @brief What the projection needs, kept apart from where the camera is.
  */
 struct CameraLens {
-    core::f32 fovRadians{1.04719755f}; ///< 60 degrees.
+    core::f32 fovRadians{1.04719755f}; /**< 60 degrees. */
     core::f32 nearPlane{0.4f};
     core::f32 farPlane{600.0f};
 };
@@ -69,43 +69,43 @@ struct CameraLens {
  */
 class OrbitCamera {
 public:
-    /** @brief Turns left/right. */
+    /**
+     * @brief Turns left/right.
+     */
     void turn(core::f32 radians) noexcept { _yaw += radians; }
 
-    /** @brief Tilts up/down, clamped short of straight up and straight down. */
+    /**
+     * @brief Tilts up/down, clamped short of straight up and straight down.
+     */
     void tilt(core::f32 radians) noexcept { _pitch = clamp(_pitch + radians, -1.35f, 1.45f); }
 
-    /** @brief Pulls out / pushes in, clamped to a usable range. */
+    /**
+     * @brief Pulls out / pushes in, clamped to a usable range.
+     */
     void zoom(core::f32 factor, core::f32 minimum = 1.6f, core::f32 maximum = 240.0f) noexcept
     {
         _distance = clamp(_distance * factor, minimum, maximum);
     }
 
-    /** @brief Moves the focus along the heading. Positive walks forward. */
-    void walk(core::f32 amount) noexcept
-    {
-        _focusX -= amount * sinOf(_yaw);
-        _focusZ -= amount * cosOf(_yaw);
-    }
+    /**
+     * @brief Moves the focus along the heading. Positive walks forward.
+     */
+    void walk(core::f32 amount) noexcept;
 
-    /** @brief Moves the focus along the heading rotated a quarter turn. */
-    void strafe(core::f32 amount) noexcept
-    {
-        _focusX += amount * cosOf(_yaw);
-        _focusZ -= amount * sinOf(_yaw);
-    }
+    /**
+     * @brief Moves the focus along the heading rotated a quarter turn.
+     */
+    void strafe(core::f32 amount) noexcept;
 
-    void setFocus(core::f32 x, core::f32 z) noexcept
-    {
-        _focusX = x;
-        _focusZ = z;
-    }
+    void setFocus(core::f32 x, core::f32 z) noexcept;
 
     void setYaw(core::f32 radians) noexcept { _yaw = radians; }
     void setPitch(core::f32 radians) noexcept { _pitch = radians; }
     void setDistance(core::f32 distance) noexcept { _distance = distance; }
 
-    /** @brief Height of the look-at target above the sampled ground. */
+    /**
+     * @brief Height of the look-at target above the sampled ground.
+     */
     void setEyeHeight(core::f32 height) noexcept { _eyeHeight = height; }
 
     [[nodiscard]] core::f32 yaw() const noexcept { return _yaw; }
@@ -131,63 +131,33 @@ public:
     /**
      * @brief Builds the view matrix and the frame that goes with it.
      *
+     * The direction built from yaw and pitch points from the look target BACK
+     * towards the eye, which is what makes the two modes one expression:
+     * orbiting pushes the eye along it, standing puts the eye at the focus and
+     * the target one step against it.
+     *
      * @param groundHeight Terrain height under the focus, so the target sits on
      *                     the ground instead of at an arbitrary altitude.
      */
-    [[nodiscard]] CameraBasis frame(core::f32 groundHeight, math::Mat4<core::f32> &outView) const noexcept
-    {
-        const core::f32 cp = cosOf(_pitch);
-        const core::f32 dirX = cp * sinOf(_yaw);
-        const core::f32 dirY = sinOf(_pitch);
-        const core::f32 dirZ = cp * cosOf(_yaw);
-        const math::Vec3<core::f32> stand(_focusX, groundHeight + _eyeHeight, _focusZ);
+    [[nodiscard]] CameraBasis frame(core::f32 groundHeight, math::Mat4<core::f32> &outView) const noexcept;
 
-        // @c dir points from the look target BACK towards the eye, which is what
-        // makes the two modes one expression: orbiting pushes the eye along it,
-        // standing puts the eye at the focus and the target one step against it.
-        math::Vec3<core::f32> eye = stand;
-        math::Vec3<core::f32> target(stand.x - dirX, stand.y - dirY, stand.z - dirZ);
-        if (!_firstPerson)
-        {
-            target = stand;
-            eye = math::Vec3<core::f32>(stand.x + _distance * dirX, stand.y + _distance * dirY,
-                                        stand.z + _distance * dirZ);
-        }
-
-        outView = math::Mat4<core::f32>::lookAt(eye, target, math::Vec3<core::f32>(0.0f, 1.0f, 0.0f));
-
-        CameraBasis basis{};
-        basis.eye = eye;
-        basis.forward = math::Vec3<core::f32>(-dirX, -dirY, -dirZ);
-        basis.right = math::Vec3<core::f32>(outView(0, 0), outView(0, 1), outView(0, 2));
-        basis.up = math::Vec3<core::f32>(outView(1, 0), outView(1, 1), outView(1, 2));
-        return basis;
-    }
-
-    /** @brief View-projection for a target of the given aspect ratio. */
+    /**
+     * @brief View-projection for a target of the given aspect ratio.
+     */
     [[nodiscard]] math::Mat4<core::f32> viewProjection(core::f32 groundHeight, core::f32 aspect, const CameraLens &lens,
-                                                       CameraBasis &outBasis) const noexcept
-    {
-        math::Mat4<core::f32> view{};
-        outBasis = frame(groundHeight, view);
-        return perspectiveFov(math::Fixed32::fromFloat(lens.fovRadians), aspect, lens.nearPlane, lens.farPlane) * view;
-    }
+                                                       CameraBasis &outBasis) const noexcept;
 
-    /// sin/cos through CORDIC: no libm here, and the camera basis and any
-    /// heading derived from it must come from the same place.
-    [[nodiscard]] static core::f32 sinOf(core::f32 angle) noexcept
-    {
-        math::Fixed32 s{}, c{};
-        math::Cordic::sincos(math::Fixed32::fromFloat(angle), s, c);
-        return s.toFloat();
-    }
+    /**
+     * @name Sine and cosine
+     *
+     * sin/cos through CORDIC: no libm here, and the camera basis and any
+     * heading derived from it must come from the same place.
+     * @{
+     */
+    [[nodiscard]] static core::f32 sinOf(core::f32 angle) noexcept;
 
-    [[nodiscard]] static core::f32 cosOf(core::f32 angle) noexcept
-    {
-        math::Fixed32 s{}, c{};
-        math::Cordic::sincos(math::Fixed32::fromFloat(angle), s, c);
-        return c.toFloat();
-    }
+    [[nodiscard]] static core::f32 cosOf(core::f32 angle) noexcept;
+    /** @} */
 
     [[nodiscard]] static core::f32 clamp(core::f32 value, core::f32 low, core::f32 high) noexcept
     {
@@ -220,33 +190,14 @@ private:
  * exponent in the bit pattern — the classic trick, correct for every positive
  * float, after which two passes are plenty.
  */
-[[nodiscard]] inline core::f32 inverseSqrtNewton(core::f32 value, core::u32 passes = 2u) noexcept
-{
-    if (value <= 0.0f)
-        return 0.0f;
-
-    core::u32 bits = 0u;
-    __builtin_memcpy(&bits, &value, sizeof(bits));
-    bits = 0x5F3759DFu - (bits >> 1u); // exponent halved, mantissa approximated
-    core::f32 inverse = 0.0f;
-    __builtin_memcpy(&inverse, &bits, sizeof(inverse));
-
-    for (core::u32 i = 0u; i < passes; ++i)
-        inverse = inverse * (1.5f - 0.5f * value * inverse * inverse);
-    return inverse;
-}
+[[nodiscard]] inline core::f32 inverseSqrtNewton(core::f32 value, core::u32 passes = 2u) noexcept;
 
 /**
  * @brief Cheap 2D length: max plus a fraction of min, within about 4% of exact.
  *
  * Exact enough to sort by distance or to blend fog, and it costs no square root.
  */
-[[nodiscard]] inline core::f32 approximateLength(core::f32 dx, core::f32 dz) noexcept
-{
-    const core::f32 ax = dx < 0.0f ? -dx : dx;
-    const core::f32 az = dz < 0.0f ? -dz : dz;
-    return ax > az ? ax + 0.42f * az : az + 0.42f * ax;
-}
+[[nodiscard]] inline core::f32 approximateLength(core::f32 dx, core::f32 dz) noexcept;
 
 /**
  * @brief True when an axis-aligned box cannot cover a single pixel.
@@ -266,35 +217,10 @@ private:
  */
 [[nodiscard]] inline bool boxOutsideFrustum(const math::Mat4<core::f32> &mvp, core::f32 centreX, core::f32 centreY,
                                             core::f32 centreZ, core::f32 halfX, core::f32 halfY, core::f32 halfZ,
-                                            core::u32 targetWidth, core::u32 targetHeight) noexcept
-{
-    bool anyInFront = false;
-    bool allLeft = true;
-    bool allRight = true;
-    bool allAbove = true;
-    bool allBelow = true;
-
-    for (core::u32 corner = 0u; corner < 8u; ++corner)
-    {
-        const core::f32 x = centreX + ((corner & 1u) != 0u ? halfX : -halfX);
-        const core::f32 z = centreZ + ((corner & 2u) != 0u ? halfZ : -halfZ);
-        const core::f32 y = centreY + ((corner & 4u) != 0u ? halfY : -halfY);
-        const auto projected = detail::projectVertex(mvp, x, y, z, targetWidth, targetHeight);
-        if (!projected.valid)
-        {
-            allLeft = allRight = allAbove = allBelow = false;
-            continue;
-        }
-        anyInFront = true;
-        allLeft = allLeft && projected.x < 0.0f;
-        allRight = allRight && projected.x > static_cast<core::f32>(targetWidth);
-        allAbove = allAbove && projected.y < 0.0f;
-        allBelow = allBelow && projected.y > static_cast<core::f32>(targetHeight);
-    }
-
-    return anyInFront && (allLeft || allRight || allAbove || allBelow);
-}
+                                            core::u32 targetWidth, core::u32 targetHeight) noexcept;
 
 } // namespace lpl::render
+
+#    include "OrbitCamera.inl"
 
 #endif // LPL_RENDER_ORBIT_CAMERA_HPP

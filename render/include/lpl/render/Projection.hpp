@@ -43,11 +43,7 @@ namespace lpl::render {
  * @param eyeDistance    Distance from the eye to the screen, same unit as
  *                       screenHeight, must be > 0.
  */
-[[nodiscard]] inline math::Fixed32 fovFromScreen(math::Fixed32 screenHeight, math::Fixed32 eyeDistance) noexcept
-{
-    const math::Fixed32 halfHeight = screenHeight / math::Fixed32::fromInt(2);
-    return math::Fixed32::fromInt(2) * math::Cordic::atan2(halfHeight, eyeDistance);
-}
+[[nodiscard]] inline math::Fixed32 fovFromScreen(math::Fixed32 screenHeight, math::Fixed32 eyeDistance) noexcept;
 
 /**
  * @brief Builds a perspective projection matrix from a Fixed32 field-of-view.
@@ -58,41 +54,17 @@ namespace lpl::render {
  * @param farPlane    Far clip distance (> near).
  */
 [[nodiscard]] inline math::Mat4<core::f32> perspectiveFov(math::Fixed32 fovRad, core::f32 aspect, core::f32 nearPlane,
-                                                          core::f32 farPlane) noexcept
-{
-    math::Fixed32 halfSin{math::Fixed32::fromInt(0)};
-    math::Fixed32 halfCos{math::Fixed32::fromInt(0)};
-    math::Cordic::sincos(fovRad / math::Fixed32::fromInt(2), halfSin, halfCos);
-    const core::f32 tanHalf = (halfSin / halfCos).toFloat();
-
-    math::Mat4<core::f32> r;
-    r.m.fill(0.0f);
-    r(0, 0) = 1.0f / (aspect * tanHalf);
-    r(1, 1) = 1.0f / tanHalf;
-    r(2, 2) = -(farPlane + nearPlane) / (farPlane - nearPlane);
-    r(2, 3) = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
-    r(3, 2) = -1.0f;
-    return r;
-}
+                                                          core::f32 farPlane) noexcept;
 
 /**
  * @brief Builds an orthographic projection matrix (no transcendentals).
  */
 [[nodiscard]] inline math::Mat4<core::f32> orthographic(core::f32 left, core::f32 right, core::f32 bottom,
-                                                        core::f32 top, core::f32 nearPlane, core::f32 farPlane) noexcept
-{
-    math::Mat4<core::f32> r;
-    r.m.fill(0.0f);
-    r(0, 0) = 2.0f / (right - left);
-    r(1, 1) = 2.0f / (top - bottom);
-    r(2, 2) = -2.0f / (farPlane - nearPlane);
-    r(0, 3) = -(right + left) / (right - left);
-    r(1, 3) = -(top + bottom) / (top - bottom);
-    r(2, 3) = -(farPlane + nearPlane) / (farPlane - nearPlane);
-    r(3, 3) = 1.0f;
-    return r;
-}
+                                                        core::f32 top, core::f32 nearPlane,
+                                                        core::f32 farPlane) noexcept;
 
 } // namespace lpl::render
+
+#    include "Projection.inl"
 
 #endif // LPL_RENDER_PROJECTION_HPP

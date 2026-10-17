@@ -39,10 +39,14 @@ public:
     Mesh() = default;
     ~Mesh() = default;
 
-    /** @brief Sets vertex data. */
+    /**
+     * @brief Sets vertex data.
+     */
     void setVertices(pmr::vector<Vertex> vertices) { _vertices = std::move(vertices); }
 
-    /** @brief Sets index data (triangle list). */
+    /**
+     * @brief Sets index data (triangle list).
+     */
     void setIndices(pmr::vector<core::u32> indices) { _indices = std::move(indices); }
 
     [[nodiscard]] const pmr::vector<Vertex> &vertices() const noexcept { return _vertices; }

@@ -1,10 +1,3 @@
-/*
-** EPITECH PROJECT, 2025
-** VkWrapper-Test [WSL : Ubuntu]
-** File description:
-** Texture
-*/
-
 #include "buffers/Texture.hpp"
 #include <cstdlib>
 #include <lpl/core/Log.hpp>
