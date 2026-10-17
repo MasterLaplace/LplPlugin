@@ -52,7 +52,7 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
     outReport.dropletsUsed = static_cast<core::u32>(droplets.size());
 
     outBlocks.clear();
-    if (blockCount == 0u || blockBytes == 0u)
+    if (blockCount == 0u || blockBytes == 0u || table.degrees() != blockCount)
         return false;
     outBlocks.resize(static_cast<core::usize>(blockCount) * blockBytes, core::u8{0});
 
