@@ -62,7 +62,7 @@ private:
     char *_memory = nullptr;
     core::usize _capacity = 0;
     core::usize _offset = 0;
-    bool _ownsMemory = true; ///< False when the block came from the platform.
+    bool _ownsMemory = true; /**< False when the block came from the platform. */
 };
 
 } // namespace lpl::memory

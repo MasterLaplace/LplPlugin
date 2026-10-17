@@ -1,12 +1,3 @@
-/**
- * @file StackAllocator.cpp
- * @brief Implementation of the LIFO stack allocator.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
 #include "lpl/memory/StackAllocator.hpp"
 
 #include <cstdint>

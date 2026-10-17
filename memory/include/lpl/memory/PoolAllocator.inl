@@ -1,9 +1,3 @@
-/**
- * @file PoolAllocator.inl
- * @brief Template implementation of PoolAllocator.
- * @see   PoolAllocator.hpp
- */
-
 #ifndef LPL_MEMORY_POOL_ALLOCATOR_INL
 #define LPL_MEMORY_POOL_ALLOCATOR_INL
 

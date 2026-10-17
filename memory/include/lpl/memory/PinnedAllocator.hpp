@@ -40,29 +40,15 @@ template <typename T> struct PinnedAllocator {
 
     template <typename U> PinnedAllocator([[maybe_unused]] const PinnedAllocator<U> &) noexcept {}
 
-    [[nodiscard]] T *allocate(core::usize n)
-    {
-        T *ptr = nullptr;
-#    ifdef __CUDACC__
-        cudaHostAlloc(&ptr, n * sizeof(T), cudaHostAllocMapped | cudaHostAllocPortable);
-#    else
-        ptr = static_cast<T *>(lpl::pmr::malloc(n * sizeof(T)));
-#    endif
-        return ptr;
-    }
+    [[nodiscard]] T *allocate(core::usize n);
 
-    void deallocate(T *ptr, [[maybe_unused]] core::usize n) noexcept
-    {
-#    ifdef __CUDACC__
-        cudaFreeHost(ptr);
-#    else
-        lpl::pmr::free(ptr);
-#    endif
-    }
+    void deallocate(T *ptr, [[maybe_unused]] core::usize n) noexcept;
 
     template <typename U> bool operator==([[maybe_unused]] const PinnedAllocator<U> &) const noexcept { return true; }
 };
 
 } // namespace lpl::memory
+
+#    include "PinnedAllocator.inl"
 
 #endif // LPL_MEMORY_PINNED_ALLOCATOR_HPP
