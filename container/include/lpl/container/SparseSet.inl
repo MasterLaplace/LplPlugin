@@ -1,9 +1,3 @@
-/**
- * @file SparseSet.inl
- * @brief Template implementation of the generational sparse set.
- * @see   SparseSet.hpp
- */
-
 #ifndef LPL_CONTAINER_SPARSE_SET_INL
 #define LPL_CONTAINER_SPARSE_SET_INL
 

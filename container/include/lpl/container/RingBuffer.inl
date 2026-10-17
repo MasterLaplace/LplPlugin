@@ -1,9 +1,3 @@
-/**
- * @file RingBuffer.inl
- * @brief Template implementation of the SPSC lock-free ring buffer.
- * @see   RingBuffer.hpp
- */
-
 #ifndef LPL_CONTAINER_RING_BUFFER_INL
 #define LPL_CONTAINER_RING_BUFFER_INL
 

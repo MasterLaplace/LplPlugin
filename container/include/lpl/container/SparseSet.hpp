@@ -1,9 +1,8 @@
 /**
  * @file SparseSet.hpp
- * @brief Generational sparse set with O(1) lookup and swap-and-pop removal.
+ * @brief Sparse set with O(1) lookup and swap-and-pop removal.
  *
- * Maps public entity IDs to dense storage indices.  Each ID has a
- * generation counter to detect stale references.  The dense array is
+ * Maps public entity IDs to dense storage indices.  The dense array is
  * always compact, enabling cache-friendly iteration.
  *
  * @tparam T Payload type stored in the dense array.
@@ -27,7 +26,7 @@
 namespace lpl::container {
 
 /**
- * @brief Generational sparse set.
+ * @brief Sparse set.
  * @tparam T Dense-stored payload type.
  */
 template <typename T> class SparseSet final {
