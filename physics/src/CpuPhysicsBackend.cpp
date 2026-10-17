@@ -320,16 +320,15 @@ struct CpuPhysicsBackend::Impl {
         if (!broadPhase)
             return false;
         const core::u32 count = static_cast<core::u32>(filedBoxes.size());
-        const core::u64 reach = static_cast<core::u64>((kNeighbourMargin + kNeighbourMargin).raw());
-        core::u64 widest[3] = {1u, 1u, 1u};
+        core::u32 extents[3] = {0u, 0u, 0u};
         for (const auto &box : filedBoxes)
         {
-            const core::u64 reaches[3] = {
-                static_cast<core::u32>(box.max.x.raw()) - static_cast<core::u32>(box.min.x.raw()) + reach,
-                static_cast<core::u32>(box.max.y.raw()) - static_cast<core::u32>(box.min.y.raw()) + reach,
-                static_cast<core::u32>(box.max.z.raw()) - static_cast<core::u32>(box.min.z.raw()) + reach};
-            for (core::u32 axis = 0u; axis < 3u; ++axis)
-                widest[axis] = reaches[axis] > widest[axis] ? reaches[axis] : widest[axis];
+            const core::u32 x = static_cast<core::u32>(box.max.x.raw()) - static_cast<core::u32>(box.min.x.raw());
+            const core::u32 y = static_cast<core::u32>(box.max.y.raw()) - static_cast<core::u32>(box.min.y.raw());
+            const core::u32 z = static_cast<core::u32>(box.max.z.raw()) - static_cast<core::u32>(box.min.z.raw());
+            extents[0] = x > extents[0] ? x : extents[0];
+            extents[1] = y > extents[1] ? y : extents[1];
+            extents[2] = z > extents[2] ? z : extents[2];
         }
 
         const math::AABB<math::Fixed32> span = filedSpan();
@@ -340,11 +339,12 @@ struct CpuPhysicsBackend::Impl {
         core::u32 widths[3];
         core::u32 cells[3];
         core::u64 cellCount = 1u;
+        const core::u32 reach = static_cast<core::u32>((kNeighbourMargin + kNeighbourMargin).raw());
         for (core::u32 axis = 0u; axis < 3u; ++axis)
         {
-            if (widest[axis] > 0x7FFFFFFFu)
+            if (extents[axis] > 0x7FFFFFFFu - reach)
                 return false;
-            widths[axis] = static_cast<core::u32>(widest[axis]);
+            widths[axis] = extents[axis] + reach;
             cells[axis] = (highs[axis] - lows[axis]) / widths[axis] + 1u;
             cellCount *= cells[axis];
             if (cellCount > static_cast<core::u64>(count) * kMostGridCellsPerBody)
