@@ -698,8 +698,8 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
         return;
     }
 
-    const math::Fixed32 kZero = math::Fixed32::zero();
-    const math::Fixed32 kOne = math::Fixed32::one();
+    static constexpr math::Fixed32 kZero = math::Fixed32::zero();
+    static constexpr math::Fixed32 kOne = math::Fixed32::one();
     bool anyOverlap = false;
 
     auto resolveCollision = [&](core::u32 a, core::u32 b) {
