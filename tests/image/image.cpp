@@ -175,6 +175,18 @@ LPL_TEST(ppm_reader_skips_a_comment)
                "a one-pixel red PPM with a comment line reads as red");
 }
 
+LPL_TEST(ppm_reader_refuses_pixels_the_buffer_does_not_hold)
+{
+    const lpl::core::u8 twoByTwo[] = {'P', '6', '\n', '2', ' ', '2', '\n', '2', '5', '5', '\n',
+                                      1u,  2u,  3u,   4u,  5u,  6u,  7u,   8u,  9u,  10u, 11u};
+    lpl::image::Image refused(1u, 1u);
+
+    test.check(!lpl::image::readPpm(twoByTwo, sizeof(twoByTwo), refused),
+               "a 2x2 PPM one byte short of its pixels is refused");
+    test.check(refused.width() == 1u && refused.height() == 1u, "and the image it was given is left as it was");
+    test.check(!lpl::image::readPpm(twoByTwo, sizeof(twoByTwo) - 3u, refused), "and so is one a whole pixel short");
+}
+
 /**
  * @brief Gate P4 image: the parity scene, painted with integer rasterisers, folds the same on both
  *        targets, before and after a PPM round trip.
