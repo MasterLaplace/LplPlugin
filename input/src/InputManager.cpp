@@ -1,17 +1,3 @@
-/**
- * @file InputManager.cpp
- * @brief InputManager implementation with per-entity neural features.
- *
- * Ported from legacy engine/InputManager.hpp. Implements per-entity input
- * maps, neural speed modulation, rising-edge blink detection, and
- * grounded-state tracking.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/input/InputManager.hpp>
 
@@ -20,9 +6,15 @@
 
 namespace lpl::input {
 
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
+/**
+ * @name Key constants matching legacy WASD
+ * @{
+ */
+static constexpr core::u16 KEY_W = 87;
+static constexpr core::u16 KEY_A = 65;
+static constexpr core::u16 KEY_S = 83;
+static constexpr core::u16 KEY_D = 68;
+/** @} */
 
 struct InputManager::Impl {
     pmr::vector<pmr::unique_ptr<IInputSource>> sources;
@@ -30,10 +22,6 @@ struct InputManager::Impl {
     NeuralInputState neuralState{};
     pmr::unordered_map<core::u32, PerEntityInput> entityStates;
 };
-
-// ========================================================================== //
-//  Source management                                                         //
-// ========================================================================== //
 
 InputManager::InputManager() : _impl{pmr::make_unique<Impl>()} {}
 
@@ -76,16 +64,6 @@ void InputManager::shutdown()
     }
 }
 
-// ========================================================================== //
-//  Per-entity state (ported from legacy engine/InputManager.hpp)             //
-// ========================================================================== //
-
-// Key constants matching legacy WASD
-static constexpr core::u16 KEY_W = 87;
-static constexpr core::u16 KEY_A = 65;
-static constexpr core::u16 KEY_S = 83;
-static constexpr core::u16 KEY_D = 68;
-
 void InputManager::setKeyState(core::u32 entityId, core::u16 key, bool pressed)
 {
     getOrCreate(entityId).setKey(key, pressed);
@@ -100,19 +78,13 @@ void InputManager::setNeural(core::u32 entityId, float alpha, float beta, float 
 {
     auto &state = getOrCreate(entityId);
 
-    // Rising-edge blink detection: only trigger if previous was false, current is true
-    // This is idempotent — repeated calls with blink=true won't re-trigger
     state.neural.alpha = alpha;
     state.neural.beta = beta;
     state.neural.concentration = concentration;
 
-    // blinkPrev tracks previous state for rising-edge detection in computeMovementVelocity
-    // We don't update blinkPrev here — that's done in computeMovementVelocity
-    // Instead, we store the current blink state in the axis system
     if (blink && !state.blinkPrev)
     {
-        // Rising edge: mark blink detected
-        state.setAxis(15, 1.0f); // Axis 15 = blink trigger
+        state.setAxis(15, 1.0f);
     }
     state.blinkPrev = blink;
 }
@@ -154,8 +126,6 @@ InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<math::Fixed
         return currentVel;
     }
 
-    // WASD movement direction. Integral by construction: a key is down or it is
-    // not, so nothing here needs a float to be exact.
     math::Fixed32 dx{};
     math::Fixed32 dz{};
 
@@ -168,41 +138,28 @@ InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<math::Fixed
     if (state->getKey(KEY_D))
         dx = dx + math::Fixed32::one();
 
-    // Neural speed modulation: concentration [0..1] → scale [0.70x..1.30x].
-    //
-    // THE ingestion point. Concentration is a measurement from outside the
-    // simulation and arrives as a float; it is quantised here, exactly once, and
-    // everything downstream of this line is fixed-point. Quantising later — as
-    // the caller used to — put a float on the authoritative path.
     math::Fixed32 neuralScale = math::Fixed32::one();
     const math::Fixed32 concentration = math::Fixed32::fromFloat(state->neural.concentration);
 
     if (concentration > math::Fixed32::fromFloat(0.001f))
     {
-        // Linear interpolation: 0.0 → 0.70, 0.5 → 1.00, 1.0 → 1.30
         neuralScale = math::Fixed32::fromFloat(0.70f) + concentration * math::Fixed32::fromFloat(0.60f);
     }
 
     const math::Fixed32 finalSpeed = speed * neuralScale;
 
-    // Apply movement
     currentVel.x = dx * finalSpeed;
     currentVel.z = dz * finalSpeed;
 
-    // Blink-based jump (rising-edge, grounded only)
     if (state->getAxis(15) > 0.5f && state->isGrounded)
     {
-        currentVel.y = math::Fixed32::fromInt(15); // Jump impulse
+        currentVel.y = math::Fixed32::fromInt(15);
         state->isGrounded = false;
     }
-    state->setAxis(15, 0.0f); // Clear blink trigger
+    state->setAxis(15, 0.0f);
 
     return currentVel;
 }
-
-// ========================================================================== //
-//  Global state                                                              //
-// ========================================================================== //
 
 const InputState &InputManager::currentState() const noexcept { return _impl->state; }
 

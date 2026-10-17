@@ -60,27 +60,25 @@ struct PerEntityInput {
 
     NeuralControl neural{};
 
-    /** @brief Previous blink state for rising-edge detection. */
-    bool blinkPrev = false;
-    /** @brief Whether the entity is currently on the ground. */
-    bool isGrounded = false;
+    bool blinkPrev = false;  /**< Previous blink state for rising-edge detection. */
+    bool isGrounded = false; /**< Whether the entity is currently on the ground. */
 
-    /** @brief Gets key state. */
+    /**
+     * @brief Gets key state.
+     */
     [[nodiscard]] bool getKey(core::u16 key) const noexcept { return key < kMaxKeys && keys[key]; }
-    /** @brief Sets key state. */
-    void setKey(core::u16 key, bool pressed) noexcept
-    {
-        if (key < kMaxKeys)
-            keys[key] = pressed;
-    }
-    /** @brief Gets axis value. */
+    /**
+     * @brief Sets key state.
+     */
+    void setKey(core::u16 key, bool pressed) noexcept;
+    /**
+     * @brief Gets axis value.
+     */
     [[nodiscard]] float getAxis(core::u8 axisId) const noexcept { return axisId < kMaxAxes ? axes[axisId] : 0.f; }
-    /** @brief Sets axis value. */
-    void setAxis(core::u8 axisId, float value) noexcept
-    {
-        if (axisId < kMaxAxes)
-            axes[axisId] = value;
-    }
+    /**
+     * @brief Sets axis value.
+     */
+    void setAxis(core::u8 axisId, float value) noexcept;
 };
 
 /**
@@ -100,34 +98,54 @@ public:
     InputManager();
     ~InputManager();
 
-    // --------------------------------------------------------------------- //
-    //  Source management                                                      //
-    // --------------------------------------------------------------------- //
-
-    /** @brief Registers a new input source. */
+    /**
+     * @name Source management
+     * @{
+     */
+    /**
+     * @brief Registers a new input source.
+     */
     void addSource(pmr::unique_ptr<IInputSource> source);
 
-    /** @brief Initializes all registered sources. */
+    /**
+     * @brief Initializes all registered sources.
+     */
     [[nodiscard]] core::Expected<void> init();
 
-    /** @brief Polls all sources and produces the current-tick snapshot. */
+    /**
+     * @brief Polls all sources and produces the current-tick snapshot.
+     */
     [[nodiscard]] core::Expected<void> poll();
 
-    /** @brief Shuts down all sources. */
+    /**
+     * @brief Shuts down all sources.
+     */
     void shutdown();
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Per-entity state (ported from legacy)                                  //
-    // --------------------------------------------------------------------- //
-
-    /** @brief Sets key state for an entity. */
+    /**
+     * @name Per-entity state (ported from legacy)
+     * @{
+     */
+    /**
+     * @brief Sets key state for an entity.
+     */
     void setKeyState(core::u32 entityId, core::u16 key, bool pressed);
 
-    /** @brief Sets axis value for an entity. */
+    /**
+     * @brief Sets axis value for an entity.
+     */
     void setAxis(core::u32 entityId, core::u8 axisId, float value);
 
     /**
      * @brief Sets neural control data for an entity.
+     *
+     * Blink detection is on the rising edge: a blink counts only when the
+     * previous call reported none, so repeated calls with @p blink true trigger
+     * it once. The edge sets axis 15, the blink trigger, which
+     * computeMovementVelocity reads and clears; blinkPrev keeps @p blink for
+     * the next call.
+     *
      * @param entityId Entity to update.
      * @param alpha    Alpha band power.
      * @param beta     Beta band power.
@@ -136,19 +154,29 @@ public:
      */
     void setNeural(core::u32 entityId, float alpha, float beta, float concentration, bool blink);
 
-    /** @brief Returns input state for an entity (nullptr if not found). */
+    /**
+     * @brief Returns input state for an entity (nullptr if not found).
+     */
     [[nodiscard]] const PerEntityInput *getState(core::u32 entityId) const;
 
-    /** @brief Returns mutable input state for an entity (nullptr if not found). */
+    /**
+     * @brief Returns mutable input state for an entity (nullptr if not found).
+     */
     [[nodiscard]] PerEntityInput *getStateMut(core::u32 entityId);
 
-    /** @brief Returns or creates input state for an entity. */
+    /**
+     * @brief Returns or creates input state for an entity.
+     */
     [[nodiscard]] PerEntityInput &getOrCreate(core::u32 entityId);
 
-    /** @brief Removes an entity from the input manager. */
+    /**
+     * @brief Removes an entity from the input manager.
+     */
     void removeEntity(core::u32 entityId);
 
-    /** @brief Tests whether an entity has input state. */
+    /**
+     * @brief Tests whether an entity has input state.
+     */
     [[nodiscard]] bool hasEntity(core::u32 entityId) const;
 
     /**
@@ -166,6 +194,13 @@ public:
      * - concentration [0..1] → speed scale [0.70x..1.30x]
      * - Blink detection (rising-edge) triggers jump if grounded
      *
+     * The WASD direction is integral by construction: a key is down or it is
+     * not, so nothing needs a float to be exact. Above a concentration of 0.001
+     * the scale interpolates linearly (0.0 → 0.70, 0.5 → 1.00, 1.0 → 1.30); at
+     * 0.001 or below it stays 1. A jump sets the vertical velocity to an
+     * impulse of 15 and the entity is no longer grounded. It then clears the
+     * blink trigger, axis 15, whether the entity jumped or not.
+     *
      * **Fixed32 in, Fixed32 out.** This used to take and return floats, and the
      * caller quantised the result — so a player's velocity, which is authoritative
      * state, passed through a float on one link of the chain. Input is an
@@ -182,16 +217,22 @@ public:
     [[nodiscard]] math::Vec3<math::Fixed32> computeMovementVelocity(core::u32 entityId,
                                                                     math::Vec3<math::Fixed32> currentVel,
                                                                     math::Fixed32 speed = math::Fixed32::fromInt(50));
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Global state                                                           //
-    // --------------------------------------------------------------------- //
-
-    /** @brief Returns the latest classical input state (global, not per-entity). */
+    /**
+     * @name Global state
+     * @{
+     */
+    /**
+     * @brief Returns the latest classical input state (global, not per-entity).
+     */
     [[nodiscard]] const InputState &currentState() const noexcept;
 
-    /** @brief Returns the latest neural input state (global, not per-entity). */
+    /**
+     * @brief Returns the latest neural input state (global, not per-entity).
+     */
     [[nodiscard]] const NeuralInputState &currentNeuralState() const noexcept;
+    /** @} */
 
 private:
     struct Impl;
@@ -199,5 +240,7 @@ private:
 };
 
 } // namespace lpl::input
+
+#    include "InputManager.inl"
 
 #endif // LPL_INPUT_INPUTMANAGER_HPP
