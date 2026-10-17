@@ -1,12 +1,3 @@
-/**
- * @file Codec.cpp
- * @brief blosc and zstd, when the build has them.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/zarr/Codec.hpp>
 
 #include <cstring>
@@ -70,12 +61,7 @@ core::usize decodeChunk(Codec codec, std::span<const core::u8> in, std::span<cor
 
     case Codec::Blosc: {
 #if defined(LPL_ZARR_HAS_BLOSC)
-        // The blosc container names its own sub-codec in its header, so nothing here has to know
-        // whether the writer chose zstd, lz4 or blosclz -- which is exactly why a corpus can
-        // change its mind between volumes without breaking a reader.
         core::usize nbytes = 0u;
-        // The decompressor reads as many bytes as the header announces and is never told how many
-        // arrived, so a short download would decode whatever lies after it in the buffer.
         if (blosc_cbuffer_validate(in.data(), in.size(), &nbytes) != 0 || nbytes == 0u || nbytes > out.size())
             return 0u;
         constexpr int threads = 1;

@@ -29,13 +29,15 @@ namespace lpl::zarr {
  * @brief How a chunk's bytes are packed.
  */
 enum class Codec : core::u8 {
-    Raw = 0,     ///< `"compressor": null`. Real volumes ship this way; it is also the fastest path.
-    Blosc,       ///< The blosc container, whatever sub-codec it declares in its own header.
-    Zstd,        ///< Bare zstd.
-    Unsupported, ///< Named in the metadata and not implemented. Refused, never guessed.
+    Raw = 0,     /**< `"compressor": null`. Real volumes ship this way; it is also the fastest path. */
+    Blosc,       /**< The blosc container, whatever sub-codec it declares in its own header. */
+    Zstd,        /**< Bare zstd. */
+    Unsupported, /**< Named in the metadata and not implemented. Refused, never guessed. */
 };
 
-/// @return Whether this build can unpack @p codec.
+/**
+ * @return Whether this build can unpack @p codec.
+ */
 [[nodiscard]] bool codecAvailable(Codec codec) noexcept;
 
 /**
@@ -43,10 +45,18 @@ enum class Codec : core::u8 {
  * @return Bytes produced, or 0 when @p in is empty or rejected by the codec (blosc also when it is
  * shorter than its header announces), the result does not fit @p out, or this build lacks
  * @p codec. A count other than 0 does not prove the bytes intact: Raw copies a short input as it is.
+ *
+ * The blosc container names its own sub-codec in its header, so nothing here has to know whether the
+ * writer chose zstd, lz4 or blosclz -- which is exactly why a corpus can change its mind between
+ * volumes without breaking a reader. Its decompressor reads as many bytes as the header announces and
+ * is never told how many arrived, so the header is validated against @p in first: a short download
+ * would otherwise decode whatever lies after it in the buffer.
  */
 [[nodiscard]] core::usize decodeChunk(Codec codec, std::span<const core::u8> in, std::span<core::u8> out) noexcept;
 
-/// @return Human-readable name, for a log line that has to say what it could not open.
+/**
+ * @return Human-readable name, for a log line that has to say what it could not open.
+ */
 [[nodiscard]] const char *codecName(Codec codec) noexcept;
 
 } // namespace lpl::zarr
