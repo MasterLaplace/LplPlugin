@@ -1,19 +1,3 @@
-/**
- * @file LivingRecipe.cpp
- * @brief The living parity run.
- *
- * One function, and its whole job is to be boring in a very specific way: every
- * loop visits in a fixed order, every random draw comes from a stream seeded from
- * the recipe, and nothing consults a clock, a container's address or an
- * iteration order that depends on hashing. Those are the four ways a simulation
- * usually stops being reproducible, and each of them has cost this project a day
- * at some point.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/ecology/LivingRecipe.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -27,7 +11,9 @@ namespace {
 constexpr core::u32 kFnvOffset = 0x811C9DC5u;
 constexpr core::u32 kFnvPrime = 0x01000193u;
 
-/// Folds one 32-bit word, byte by byte, exactly as every other gate does.
+/**
+ * @brief Folds one 32-bit word, byte by byte, exactly as every other gate does.
+ */
 void foldWord(core::u32 &hash, core::u32 word) noexcept
 {
     for (core::u32 byte = 0u; byte < 4u; ++byte)
@@ -37,7 +23,9 @@ void foldWord(core::u32 &hash, core::u32 word) noexcept
     }
 }
 
-/// Folds a Fixed32 by its RAW Q16.16 word — never by a decimal rendering of it.
+/**
+ * @brief Folds a Fixed32 by its RAW Q16.16 word — never by a decimal rendering of it.
+ */
 void foldFixed(core::u32 &hash, math::Fixed32 value) noexcept { foldWord(hash, static_cast<core::u32>(value.raw())); }
 
 } // namespace
@@ -49,12 +37,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
     if (recipe.width == 0u || recipe.depth == 0u || recipe.channels == 0u || recipe.rooms == 0u)
         return result;
 
-    // ── The trophic web ──────────────────────────────────────────────────────
-    //
-    // Four levels, each eating the one below, so the cascade the module exists to
-    // produce is actually in the run: remove the top and the mesopredator is
-    // released. A two-species web would fold just as deterministically and prove
-    // a tenth as much.
     TrophicWeb web;
     core::u32 primary = 0u;
     {
@@ -62,9 +44,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
         for (core::u32 i = 0u; i < declared; ++i)
             (void) web.add(recipe.species[i].params, recipe.species[i].initial, recipe.species[i].preyIndex);
 
-        // The heredity pass reads the pressure on the first CONSUMER, which is
-        // what its collapse threshold is relative to. With no consumer declared
-        // it falls back to species 0, so a producer-only web still runs.
         for (core::u32 i = 0u; i < declared; ++i)
             if (recipe.species[i].preyIndex != Species::kNoPrey)
             {
@@ -75,7 +54,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
     if (web.species.empty())
         return result;
 
-    // ── The breeding population ──────────────────────────────────────────────
     lpl::pmr::vector<Genome> population;
     population.reserve(recipe.genomes);
     core::u32 heredityStream = recipe.seed ^ 0x5EED0001u;
@@ -85,7 +63,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
             population.push_back(mutate(founder, 8u, 0.20f, heredityStream));
     }
 
-    // ── The field and the agents on it ───────────────────────────────────────
     ai::StigmergyField field{recipe.width, recipe.depth, recipe.channels};
 
     lpl::pmr::vector<core::u32> antX;
@@ -101,12 +78,9 @@ LivingResult runLiving(const LivingRecipe &recipe)
         }
     }
 
-    // One nest cell, so the trails have somewhere to converge on rather than
-    // wandering into a uniform field forever.
     const core::u32 nest = (recipe.depth / 2u) * recipe.width + (recipe.width / 2u);
     ai::seedPheromoneField(field, 0u, &nest, 1u, math::Fixed32::fromInt(40));
 
-    // ── The flock ────────────────────────────────────────────────────────────
     lpl::pmr::vector<ai::Boid> flock;
     flock.reserve(recipe.boids);
     {
@@ -122,11 +96,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
         }
     }
 
-    // ── The abstract world ───────────────────────────────────────────────────
-    //
-    // A ring with chords: every room has at least two exits, so a creature never
-    // sits in a dead end for the whole run and the migration count stays a real
-    // measure rather than a constant.
     ai::AbstractWorld abstractWorld;
     for (core::u32 i = 0u; i < recipe.rooms; ++i)
         (void) abstractWorld.addRoom();
@@ -140,7 +109,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
             (void) abstractWorld.addCreature(i + 1u, i % 3u, spread.below(recipe.rooms));
     }
 
-    // ── The social layer ─────────────────────────────────────────────────────
     lpl::pmr::vector<PackMember> members;
     members.reserve(recipe.packMembers);
     for (core::u32 i = 0u; i < recipe.packMembers; ++i)
@@ -153,20 +121,14 @@ LivingResult runLiving(const LivingRecipe &recipe)
     }
     core::u32 socialStream = recipe.seed ^ 0x50C10505u;
 
-    // ── The run ──────────────────────────────────────────────────────────────
     core::u32 antStream = recipe.seed ^ 0xA57E0606u;
     lpl::pmr::vector<core::u32> trail;
     trail.reserve(recipe.ticks);
 
     for (core::u32 tick = 0u; tick < recipe.ticks; ++tick)
     {
-        // 1. Populations. Lotka-Volterra with a carrying capacity and a refuge
-        //    floor, so a collapse bottoms out instead of going negative.
         web.step(1u);
 
-        // 2. Heredity. The whole population breeds once per tick, each pair drawn
-        //    from the same stream, so a generation is a deterministic function of
-        //    the previous one.
         {
             const math::Fixed32 local = web.species[primary].population;
             const math::Fixed32 capacity = web.species[primary].params.capacity;
@@ -182,10 +144,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
             population = next;
         }
 
-        // 3. The field: agents walk it, deposit behind them, then it evaporates.
-        //    In that order — evaporating first would erase the trail the agents
-        //    just laid, which is the classic way to make an ACO field look like
-        //    noise.
         for (core::u32 i = 0u; i < antX.size(); ++i)
         {
             bool explored = false;
@@ -209,25 +167,19 @@ LivingResult runLiving(const LivingRecipe &recipe)
         }
         field.step(recipe.stigmergy);
 
-        // 4. The flock.
         if (!flock.empty())
             ai::stepBoids(&flock[0], static_cast<core::u32>(flock.size()), recipe.flock, recipe.stepSeconds);
 
-        // 5. The abstract world. The focus walks the ring, so the realisation
-        //    budget is genuinely exercised: a stationary focus would realise the
-        //    same four rooms for forty-eight ticks and never abstract one.
         const ai::RoomId focus = tick % recipe.rooms;
         abstractWorld.observe(focus, (focus + 1u) % recipe.rooms, tick);
         (void) abstractWorld.enforceBudget(recipe.budget, tick);
         result.migrations += abstractWorld.tickAbstract(tick);
 
-        // 6. The social layer.
         const PackEvents events =
             stepPacks(&members[0], static_cast<core::u32>(members.size()), recipe.packs, socialStream);
         result.alphaChanges += events.alphaChanges;
     }
 
-    // ── The folds ────────────────────────────────────────────────────────────
     result.populationSignature = web.fold();
     result.stigmergySignature = field.fold();
 
@@ -242,15 +194,8 @@ LivingResult runLiving(const LivingRecipe &recipe)
     }
     result.genomeSignature = genomeHash;
 
-    // The social signature covers both halves of the social state: the abstract
-    // world's own fold, then every pack member. Folding only the first would let
-    // the pack layer diverge silently, which is precisely the failure mode the
-    // separate signatures exist to prevent.
     core::u32 socialHash = kFnvOffset;
     foldWord(socialHash, abstractWorld.fold());
-    // The flock, folded rather than merely stepped. It was run by this recipe from
-    // the start and folded by nothing, which is the emptiest kind of coverage: the
-    // gate paid for the computation and would not have noticed the result diverging.
     for (core::u32 i = 0u; i < flock.size(); ++i)
     {
         foldFixed(socialHash, flock[i].x);
@@ -269,7 +214,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
     }
     result.socialSignature = socialHash;
 
-    // ── The counters ─────────────────────────────────────────────────────────
     for (core::u32 i = 0u; i < web.species.size(); ++i)
         if (web.species[i].population <= web.species[i].params.refuge)
             ++result.extinctions;
@@ -289,9 +233,6 @@ LivingResult runLiving(const LivingRecipe &recipe)
                 if (field.value(c, x, z) > floorValue)
                     ++result.trailCells;
 
-    // "Well formed" is not "nothing went wrong" — a collapse is a legitimate
-    // outcome. It is the weaker claim that the run actually ran: the field holds
-    // a trail, the population survived, and the budget did its job.
     result.ok = (result.trailCells != 0u && !population.empty() && result.realisedRooms != 0u &&
                  result.realisedRooms <= recipe.budget.maxRealisedRooms) ?
                     1u :
