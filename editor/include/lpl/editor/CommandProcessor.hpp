@@ -19,6 +19,8 @@
  *  - @c load_scene      {scene:"<.lplscene text>"}
  *  - @c save_scene      {}                       → report carries the document
  *  - @c count           {}                       → report carries the entity count
+ *  - @c spawn_from_template, @c clear_world, @c get_world_stats, @c query_entities and
+ *    @c diff_scenes, whose arguments lpl/agent/Tool.hpp declares
  *
  * @author MasterLaplace
  * @version 0.1.0
@@ -62,7 +64,9 @@ private:
     ecs::Registry &registry_;
 };
 
-/// Number of live entities across every partition of @p registry.
+/**
+ * @brief Number of live entities across every partition of @p registry.
+ */
 [[nodiscard]] core::u32 entityCount(const ecs::Registry &registry);
 
 /**

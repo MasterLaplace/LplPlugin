@@ -1,12 +1,3 @@
-/**
- * @file CommandJournal.cpp
- * @brief Implementation of the replay-based command journal.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/editor/CommandJournal.hpp>
 
 #include <lpl/editor/CommandProcessor.hpp>
@@ -18,14 +9,20 @@ namespace {
 
 constexpr const char *kJournalFormat = "lplcommands/1";
 
-/// Commands that only read. Running one changes nothing, so recording it would
-/// make an undo depend on how often somebody looked at the world.
+/**
+ * @brief Whether @p cmd only reads.
+ *
+ * Running such a command changes nothing, so recording it would make an undo
+ * depend on how often somebody looked at the world.
+ */
 bool isInspectionCommand(std::string_view cmd)
 {
     return cmd == "count" || cmd == "get_world_stats" || cmd == "query_entities" || cmd == "save_scene";
 }
 
-/// True when every command in @p root (object or array) is read-only.
+/**
+ * @brief True when every command in @p root (object or array) is read-only.
+ */
 bool isPurelyInspection(const detail::JVal &root)
 {
     const auto commandName = [](const detail::JVal &object) -> std::string_view {
@@ -47,8 +44,6 @@ bool isPurelyInspection(const detail::JVal &root)
 
 core::Expected<std::string> CommandJournal::execute(std::string_view json)
 {
-    // Parse before running: a malformed command must not land in the journal,
-    // or every later replay would fail on it.
     bool ok = false;
     const detail::JVal root = detail::parse(json, &ok);
     if (!ok)
@@ -62,8 +57,6 @@ core::Expected<std::string> CommandJournal::execute(std::string_view json)
     if (!isPurelyInspection(root))
     {
         _entries.emplace_back(json);
-        // A new action invalidates the redo branch, as in every editor: the
-        // future you had undone is no longer reachable from here.
         _undone.clear();
     }
     return report;
@@ -97,8 +90,6 @@ bool CommandJournal::redo()
     _entries.emplace_back(std::move(_undone.back()));
     _undone.pop_back();
 
-    // Only the newly restored command needs running: the world already reflects
-    // every entry before it.
     CommandProcessor processor{_registry};
     (void) processor.execute(_entries.back());
     return true;
@@ -113,9 +104,6 @@ std::string CommandJournal::toJson() const
     {
         if (i != 0u)
             out += ",";
-        // Entries are stored as the JSON text they arrived as, so they embed
-        // verbatim — no re-encoding, hence no chance of a round-trip changing
-        // a number and therefore the world it rebuilds.
         out += _entries[i];
     }
     out += "]}";
@@ -139,8 +127,6 @@ core::Expected<core::u32> CommandJournal::replay(std::string_view json)
 
     reset();
 
-    // Re-serialise each element rather than slicing the source text: the parser
-    // does not record byte spans, and a command must be replayable on its own.
     for (const detail::JVal &element : commands->arr)
         _entries.emplace_back(detail::emit(element));
 

@@ -1,13 +1,3 @@
-/**
- * @file CommandProcessor.cpp
- * @brief Implementation of the JSON command interface.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-16
- * @copyright MIT License
- */
-
 #include <lpl/editor/CommandProcessor.hpp>
 
 #include <lpl/core/Error.hpp>
@@ -28,7 +18,9 @@ namespace lpl::editor {
 
 namespace {
 
-// Escapes a string for embedding as a JSON string value.
+/**
+ * @brief Escapes a string for embedding as a JSON string value.
+ */
 void appendEscaped(std::string &out, std::string_view s)
 {
     for (const char c : s)
@@ -54,7 +46,7 @@ std::string reportError(std::string_view cmd, std::string_view msg)
     return out;
 }
 
-/// Aggregate the inspection commands report on.
+/** @brief Aggregate the inspection commands report on. */
 struct WorldStats {
     core::u32 entityCount{0u};
     core::u32 archetypeCount{0u};
@@ -117,7 +109,7 @@ WorldStats collectWorldStats(const ecs::Registry &registry)
     return stats;
 }
 
-/// One named divergence between two documents.
+/** @brief One named divergence between two documents. */
 struct Difference {
     std::string path;
     std::string a;
@@ -132,6 +124,12 @@ struct Difference {
  * from parseSceneRecipe on the first field anybody added. This one knows nothing
  * about worlds — it compares JSON — so it stays correct as the format grows, and
  * it names paths (`procedural.terrain.frequency`) a caller can act on.
+ *
+ * A member missing on one side is reported as `null` on that side rather than as
+ * a word: the report must stay valid JSON, and a caller reading `"b": null` at a
+ * named path knows the key is gone. Members only the second document has are
+ * differences too; without them, a diff would report nothing when b merely ADDED
+ * a block.
  */
 void collectDifferences(const detail::JVal &a, const detail::JVal &b, const std::string &path,
                         std::vector<Difference> &out)
@@ -149,14 +147,10 @@ void collectDifferences(const detail::JVal &a, const detail::JVal &b, const std:
             const detail::JVal *other = b.find(member.first);
             const std::string child = path.empty() ? member.first : path + "." + member.first;
             if (other == nullptr)
-                // "null" rather than a word: the report must stay valid JSON, and a
-                // caller reading `"b": null` at a named path knows the key is gone.
                 out.push_back({child, detail::emit(member.second), "null"});
             else
                 collectDifferences(member.second, *other, child, out);
         }
-        // Members only the second document has are differences too; without this
-        // half, a diff would report nothing when b merely ADDED a block.
         for (const auto &member : b.obj)
             if (a.find(member.first) == nullptr)
                 out.push_back(
@@ -187,7 +181,49 @@ void collectDifferences(const detail::JVal &a, const detail::JVal &b, const std:
     }
 }
 
-// Executes a single command object; always returns a JSON report object.
+/**
+ * @brief Executes a single command object.
+ *
+ * `generate_world` is one command for the whole pipeline, because a world IS one
+ * pipeline: erosion needs the terrain it erodes, moisture needs the drainage the
+ * rivers left, biomes need the moisture. Exposing them as separate verbs would
+ * only let a caller ask for them in an order that cannot work, and the per-pass
+ * "enabled" switches already give the same control. The command object IS a
+ * "procedural" block, so it is read by the very reader a `.lplscene` goes
+ * through — one schema, not a parallel one that drifts. Anything an editor can
+ * build, a document can carry.
+ *
+ * `spawn_from_template` is the pointwise counterpart of the procedural passes
+ * (§5.3): it places `count` instances (one by default) of a named prefab, with
+ * optional per-instance overrides merged field-wise like any entity. It hands
+ * SceneSerializer a document of those entities rather than taking a second
+ * instantiation path, so template chains, field overrides and validation behave
+ * identically here and when a whole scene loads.
+ *
+ * The inspection commands are what the report calls "la moitié oubliée par tous
+ * les designs": a caller that can only mutate is flying blind. They are also the
+ * first calls an AI bridge needs — look before you act — which is why they belong
+ * to the plan rather than to the agentic phase. `get_world_stats` reports its
+ * bounds in raw Q16.16: the wire stays integral, so a reader reconstructs the
+ * exact same box the engine measured.
+ *
+ * `query_entities` filters on an optional component name every match must carry,
+ * plus an optional axis-aligned box in human units; an absent filter matches
+ * everything. An absent bound means "unbounded on that side", and the sentinel
+ * for that is the raw Q16.16 extreme — NOT a huge float. Fixed32 only reaches
+ * about +-32767, so fromFloat(1e9) does not mean "very large", it means whatever
+ * the conversion happens to land on. Same trap as the Fixed32{10} raw-vs-value
+ * confusion. A dump of every match would be unbounded, and the report's CCR note
+ * is explicit that bulky tool returns must be skimmed, not streamed whole. So:
+ * always the count, and at most `limit` sample indices.
+ *
+ * `diff_scenes` answers "what did that change" without a human reading two
+ * documents side by side — the question a correction loop asks after every edit.
+ * It is bounded like query_entities: a whole-document dump is exactly the bulky
+ * return the CCR note says must be skimmed rather than streamed.
+ *
+ * @return A JSON report object, always.
+ */
 std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
 {
     const detail::JVal *cmdVal = cmdObj.find("cmd");
@@ -197,15 +233,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
 
     if (cmd == "generate_world")
     {
-        // One command for the whole pipeline, because a world IS one pipeline:
-        // erosion needs the terrain it erodes, moisture needs the drainage the
-        // rivers left, biomes need the moisture. Exposing them as separate verbs
-        // would only let a caller ask for them in an order that cannot work, and
-        // the per-pass "enabled" switches already give the same control.
-        //
-        // The command object IS a "procedural" block, so it is read by the very
-        // reader a `.lplscene` goes through — one schema, not a parallel one that
-        // drifts. Anything an editor can build, a document can carry.
         procgen::WorldRecipe recipe{};
         if (const auto parsed = parseProceduralBlock(detail::emit(cmdObj), recipe); !parsed)
             return reportError("generate_world", "the recipe is not valid");
@@ -250,11 +277,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
     }
     if (cmd == "spawn_from_template")
     {
-        // The pointwise counterpart of the procedural passes (§5.3): place one
-        // instance of a named prefab. Implemented by handing SceneSerializer a
-        // one-entity document rather than by a second instantiation path, so
-        // template chains, field overrides and validation behave identically
-        // here and when a whole scene loads.
         const detail::JVal *templates = cmdObj.find("templates");
         const detail::JVal *name = cmdObj.find("name");
         if (name == nullptr || name->t != detail::JVal::T::Str)
@@ -265,7 +287,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         detail::JVal entity;
         entity.t = detail::JVal::T::Obj;
         entity.obj.emplace_back("$use", *name);
-        // Optional per-instance overrides, merged field-wise like any entity.
         if (const detail::JVal *overrides = cmdObj.find("overrides");
             overrides != nullptr && overrides->t == detail::JVal::T::Obj)
         {
@@ -303,11 +324,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         std::snprintf(buf, sizeof(buf), "{\"cmd\":\"clear_world\",\"ok\":true,\"destroyed\":%u}", removed);
         return buf;
     }
-    // ── Inspection ──────────────────────────────────────────────────────────
-    // The report calls this "la moitié oubliée par tous les designs": a caller
-    // that can only mutate is flying blind. These are also the first calls an
-    // AI bridge needs — look before you act — which is why they belong to the
-    // plan rather than to the agentic phase.
     if (cmd == "get_world_stats")
     {
         WorldStats stats = collectWorldStats(registry);
@@ -318,8 +334,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         out += ",\"stateSignature\":" + std::to_string(procgen::foldWorldState(registry));
         if (stats.entityCount != 0u)
         {
-            // Bounds in raw Q16.16: the wire stays integral, so a reader
-            // reconstructs the exact same box the engine measured.
             out += ",\"boundsMinRaw\":{\"x\":" + std::to_string(stats.minX.raw()) +
                    ",\"y\":" + std::to_string(stats.minY.raw()) + ",\"z\":" + std::to_string(stats.minZ.raw()) + "}";
             out += ",\"boundsMaxRaw\":{\"x\":" + std::to_string(stats.maxX.raw()) +
@@ -344,14 +358,11 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
     }
     if (cmd == "query_entities")
     {
-        // Filter: an optional component name every match must carry, plus an
-        // optional axis-aligned box in human units. Absent filter = everything.
         ecs::ComponentId required = ecs::ComponentId::Position;
         bool hasRequired = false;
         if (const detail::JVal *withComponent = cmdObj.find("with");
             withComponent != nullptr && withComponent->t == detail::JVal::T::Str)
         {
-            // componentIdByName returns ComponentId::Count for an unknown name.
             const ecs::ComponentId resolved = ecs::componentIdByName(withComponent->str);
             if (resolved == ecs::ComponentId::Count)
                 return reportError("query_entities", "unknown component in \"with\"");
@@ -363,11 +374,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
                             cmdObj.find("minY") != nullptr || cmdObj.find("maxY") != nullptr ||
                             cmdObj.find("minZ") != nullptr || cmdObj.find("maxZ") != nullptr;
 
-        // An absent bound means "unbounded on that side", and the sentinel for
-        // that is the raw Q16.16 extreme — NOT a huge float. Fixed32 saturates
-        // around +-32767, so fromFloat(1e9) does not mean "very large", it means
-        // whatever the conversion happens to land on. Same trap as the
-        // Fixed32{10} raw-vs-value confusion.
         const auto bound = [&cmdObj](const char *key, math::Fixed32 fallback) {
             const detail::JVal *value = cmdObj.find(key);
             if (value == nullptr || value->t != detail::JVal::T::Num)
@@ -383,9 +389,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         const math::Fixed32 minZ = bound("minZ", kLowest);
         const math::Fixed32 maxZ = bound("maxZ", kHighest);
 
-        // A dump of every match would be unbounded, and the report's CCR note
-        // is explicit that bulky tool returns must be skimmed, not streamed
-        // whole. So: always the count, and at most `limit` sample indices.
         const core::u32 limit = static_cast<core::u32>(cmdObj.numOr("limit", 16.0));
 
         core::u32 matched = 0u;
@@ -432,8 +435,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
     }
     if (cmd == "diff_scenes")
     {
-        // Answers "what did that change" without a human reading two documents
-        // side by side — the question a correction loop asks after every edit.
         const detail::JVal *left = cmdObj.find("a");
         const detail::JVal *right = cmdObj.find("b");
         if (left == nullptr || left->t != detail::JVal::T::Str || right == nullptr || right->t != detail::JVal::T::Str)
@@ -449,8 +450,6 @@ std::string executeOne(ecs::Registry &registry, const detail::JVal &cmdObj)
         std::vector<Difference> differences;
         collectDifferences(parsedLeft, parsedRight, "", differences);
 
-        // Bounded, like query_entities: a whole-document dump is exactly the
-        // bulky return the CCR note says must be skimmed rather than streamed.
         const core::u32 limit = static_cast<core::u32>(cmdObj.numOr("limit", 32.0));
         std::string out = "{\"cmd\":\"diff_scenes\",\"ok\":true,\"identical\":";
         out += differences.empty() ? "true" : "false";

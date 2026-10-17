@@ -1,13 +1,3 @@
-/**
- * @file SceneSerializer.cpp
- * @brief Implementation of reflection-driven `.lplscene` (de)serialization.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-16
- * @copyright MIT License
- */
-
 #include <lpl/editor/SceneSerializer.hpp>
 
 #include <lpl/core/Error.hpp>
@@ -26,8 +16,6 @@
 namespace lpl::editor {
 
 namespace {
-
-// --- Byte helpers ---------------------------------------------------------- //
 
 core::i32 getI32(const core::byte *p)
 {
@@ -51,8 +39,6 @@ double laneOr(const detail::JVal *o, const char *k, double d)
     const detail::JVal *v = o->find(k);
     return v != nullptr ? v->num : d;
 }
-
-// --- Reflection-driven field emit / read ----------------------------------- //
 
 void emitField(std::string &out, const ecs::FieldDesc &f, const core::byte *comp)
 {
@@ -155,10 +141,10 @@ void emitComponent(std::string &out, const ecs::ComponentSchema &schema, const c
     out += '}';
 }
 
-// --- Template (prefab) resolution ------------------------------------------ //
-
-// Overlays entity component @p src onto @p dst at the field level: fields present
-// in @p src replace those in @p dst, other fields keep the template's value.
+/**
+ * @brief Overlays entity component @p src onto @p dst at the field level: fields present
+ *        in @p src replace those in @p dst, other fields keep the template's value.
+ */
 void overlayComponent(detail::JVal &dst, const detail::JVal &src)
 {
     if (dst.t != detail::JVal::T::Obj || src.t != detail::JVal::T::Obj)
@@ -182,7 +168,9 @@ void overlayComponent(detail::JVal &dst, const detail::JVal &src)
     }
 }
 
-// Merges every component of @p source into @p target, field-wise.
+/**
+ * @brief Merges every component of @p source into @p target, field-wise.
+ */
 void overlayEntity(detail::JVal &target, const detail::JVal &source)
 {
     for (const auto &comp : source.obj)
@@ -203,15 +191,19 @@ void overlayEntity(detail::JVal &target, const detail::JVal &source)
     }
 }
 
-// Flattens a template, following its own "$use" first so a template can extend
-// another — the prefab GRAPH the report asks for (§5.2), generalising
-// Flakkari's Involve/Bullet cross-references. Resolution is depth-first from the
-// root of the chain, so the most-derived template wins field by field.
-//
-// A chain can be malformed in two ways that must not hang or blow the stack: a
-// cycle (a -> b -> a) and a chain long enough to exhaust it. `visiting` catches
-// the first, the depth cap the second; both simply stop resolving further,
-// leaving whatever was merged so far rather than failing the whole document.
+/**
+ * @brief Flattens a template, following its own "$use" first so a template can extend
+ *        another — the prefab GRAPH the report asks for (§5.2), generalising
+ *        Flakkari's Involve/Bullet cross-references.
+ *
+ * Resolution is depth-first from the root of the chain, so the most-derived
+ * template wins field by field.
+ *
+ * A chain can be malformed in two ways that must not hang or blow the stack: a
+ * cycle (a -> b -> a) and a chain long enough to exhaust it. `visiting` catches
+ * the first, the depth cap the second; both simply stop resolving further,
+ * leaving whatever was merged so far rather than failing the whole document.
+ */
 void resolveTemplateInto(detail::JVal &target, std::string_view name, const detail::JVal *templates,
                          std::vector<std::string_view> &visiting)
 {
@@ -221,7 +213,7 @@ void resolveTemplateInto(detail::JVal &target, std::string_view name, const deta
         return;
     for (const std::string_view seen : visiting)
         if (seen == name)
-            return; // cycle
+            return;
 
     const detail::JVal *tmpl = templates->find(name);
     if (tmpl == nullptr || tmpl->t != detail::JVal::T::Obj)
@@ -236,8 +228,10 @@ void resolveTemplateInto(detail::JVal &target, std::string_view name, const deta
     visiting.pop_back();
 }
 
-// Produces the effective component map for @p entity: the flattened chain of
-// templates it references, with its own components overriding field by field.
+/**
+ * @brief Produces the effective component map for @p entity: the flattened chain of
+ *        templates it references, with its own components overriding field by field.
+ */
 detail::JVal resolveEntity(const detail::JVal &entity, const detail::JVal *templates)
 {
     detail::JVal eff;
@@ -315,7 +309,6 @@ core::Expected<core::u32> fromLplScene(std::string_view text, ecs::Registry &reg
     if (entities == nullptr || entities->t != detail::JVal::T::Arr)
         return core::makeError(core::ErrorCode::kDeserializationFailed, lpl::pmr::string{"missing entities array"});
 
-    // Optional prefab graph: entities may reference these by "$use" and override.
     const detail::JVal *templates = root.find("templates");
     if (templates != nullptr && templates->t != detail::JVal::T::Obj)
         templates = nullptr;
@@ -326,10 +319,8 @@ core::Expected<core::u32> fromLplScene(std::string_view text, ecs::Registry &reg
         if (rawEnt.t != detail::JVal::T::Obj)
             continue;
 
-        // Flatten any "$use" template reference into a concrete component map.
         const detail::JVal ent = resolveEntity(rawEnt, templates);
 
-        // Build the archetype from the component names present on this entity.
         std::vector<ecs::ComponentId> ids;
         ids.reserve(ent.obj.size());
         for (const auto &[name, val] : ent.obj)
@@ -365,8 +356,6 @@ core::Expected<core::u32> fromLplScene(std::string_view text, ecs::Registry &reg
             const core::u32 size = ecs::computeLayout(schema).size;
             const std::size_t byteOffset = static_cast<std::size_t>(ref.localIndex) * size;
 
-            // Write both buffers: the write (back) buffer the integrator uses and
-            // the read (front) buffer some systems read (e.g. Mass).
             if (auto *wb = static_cast<core::byte *>(chunk.writeComponent(id)))
                 for (const ecs::FieldDesc &f : schema.fields)
                     readField(*compObj, f, wb + byteOffset);

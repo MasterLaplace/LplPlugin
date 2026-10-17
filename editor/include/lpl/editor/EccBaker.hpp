@@ -32,8 +32,8 @@ namespace lpl::editor {
  * up to two rows wide — a sixteenth of the image — anywhere in it.
  */
 struct EccPolicy {
-    core::u32 dataShards{32u};  ///< Rows the protected span is cut into.
-    core::u32 parityShards{4u}; ///< Parity symbols per column.
+    core::u32 dataShards{32u};  /**< Rows the protected span is cut into. */
+    core::u32 parityShards{4u}; /**< Parity symbols per column. */
 };
 
 /**
@@ -45,6 +45,18 @@ struct EccPolicy {
  *
  * The header is rewritten afterwards — total size, section count and content hash —
  * so the result is a valid pack rather than a valid pack with a tail.
+ *
+ * The span to protect runs from the end of the header to the end of the image as
+ * it stands, plus the entry this call inserts into the table. That entry shifts
+ * every payload by exactly one entry's worth, which is why the whole image is
+ * rebuilt rather than patched. The new content is built first: the parity has to
+ * be taken over the bytes as they will actually be stored, not over the ones they
+ * were before the table grew. It is transversal, from codec/: one codeword down
+ * each column of the row-major span.
+ *
+ * The locator (eccOffset, eccSize) lives in the header, outside the span the
+ * parity protects. Without it a burst on the section table takes the parity's own
+ * address with it.
  *
  * @param image  A pack image as bakeGamePack produced it.
  * @param policy How many rows and how much parity.

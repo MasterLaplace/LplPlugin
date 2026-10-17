@@ -43,6 +43,12 @@ namespace lpl::editor {
  * Absent fields keep the default from lpl::procgen::WorldRecipe, so a document
  * only has to state what it changes.
  *
+ * The cave kind is read as a WORD: an index would mean whatever the enumeration
+ * was on the day the document was written. A roadside pattern longer than a
+ * recipe may carry is refused rather than truncated: a clipped L-system is a
+ * different grammar, and it would grow a different verge on every reload with
+ * nothing to say why.
+ *
  * @param document  The `.lplscene` text.
  * @param outRecipe Filled on success.
  * @return An error when the document is malformed or carries no
@@ -67,6 +73,13 @@ namespace lpl::editor {
 
 /**
  * @brief Emits a `"procedural"` block for @p recipe, as it appears in a scene.
+ *
+ * The cave kind is written as a word: one of the four generators, or "auto" (see
+ * procgen::caveKindName). The roadside pattern is written unescaped: the grammar's
+ * own alphabet is letters, digits, brackets, commas, colons and stars — nothing
+ * JSON needs escaped. A quote or a backslash reaching it would mean the pattern
+ * came from somewhere it should not have, and is dropped.
+ *
  * @param recipe The recipe to serialise.
  * @return The JSON object text, without a trailing comma or newline.
  */
@@ -95,6 +108,15 @@ namespace lpl::editor {
 
 /**
  * @brief Reads the optional "living" block of a scene object.
+ *
+ * Starts from the engine defaults, so a document states only what it changes —
+ * the same rule the procedural block follows, and the reason a default that moves
+ * moves both sides together instead of silently splitting them.
+ *
+ * The food web is an ordered table, and `"eats"` is an INDEX into it. It is read
+ * as given: nothing here checks it, and the pack codec only refuses an index past
+ * the table, so a species may name one declared after it, or itself.
+ *
  * @param scene   Parsed scene (or document root, for the flat form).
  * @param outLiving Receives the recipe when the block is present.
  * @return true when the document declared one.
@@ -103,6 +125,11 @@ namespace lpl::editor {
 
 /**
  * @brief Emits a living recipe as the JSON a `.lplscene` carries.
+ *
+ * Every field, not only the ones that differ from the defaults: a document that
+ * emits a subset is not a round trip, it is a lossy save that looks like one
+ * until a default moves under it.
+ *
  * @param living The recipe.
  * @return Its "living" object, every field written out.
  */
@@ -115,6 +142,17 @@ namespace lpl::editor {
  * one-section image is byte-for-byte what this produced before either extension
  * existed. That is the property that makes sections, rather than a grown recipe
  * struct, the way this format grows.
+ *
+ * Sections separate things that are OPTIONAL and independently consumed — what
+ * lives on a world, what it looks like — not halves of one description. Every
+ * pass of the pipeline is in the recipe section, because every pass is the
+ * recipe.
+ *
+ * The content is built first: the header carries a hash over everything that
+ * follows it, so it can only be finalised once the content exists. Payloads
+ * follow in table order, so an offset is always ahead of the entry naming it.
+ * The header's eccOffset is zero: there is no parity section unless attachEcc
+ * adds one.
  *
  * @param recipe The world.
  * @param living The ecosystem, or nullptr.
@@ -129,6 +167,20 @@ namespace lpl::editor {
  *
  * Wire form rather than engine form on purpose: translating a sky needs render
  * types, and this module bakes bytes. engine::toEngineView does that half.
+ *
+ * The defaults are the ENGINE's, restated here as literals rather than read from
+ * render::SkyParams — this module is the host-side baker and must not drag in
+ * anything that draws, which is the same rule that keeps pack/ readable from
+ * ring 0. test-view-profile checks several of them against the engine's values,
+ * written as literals: a default that moves here fails there, one that moves in
+ * render/ does not. The horizon curvature defaults off, exactly as the swell
+ * does, and the swell defaults off, exactly as render::WaterParams does: a
+ * document that says nothing about a horizon or a sea gets the flat infinite
+ * plate and the flat rippling water it has always got.
+ *
+ * An ABSENT palette and an EMPTY one are different documents: absent keeps the
+ * host's colours, empty would paint the world black. The flag is what carries the
+ * difference across the wire, so it is only set when the array is there.
  *
  * @param scene   Parsed scene (or document root, for the flat form).
  * @param outView Receives the profile when the block is present.
@@ -145,6 +197,12 @@ namespace lpl::editor {
 
 /**
  * @brief Convenience: parse a `.lplscene` document and bake it in one step.
+ *
+ * A four-stage document holds its recipe inside the scene it starts on, so the
+ * document model is read first; it reads a flat document as one implicit scene.
+ * When that fails, or the start scene carries no recipe, parseSceneRecipe reads
+ * the root's `"procedural"` block, and its error is the one returned.
+ *
  * @param document The `.lplscene` text.
  * @return The pack image, or the parse error.
  */
