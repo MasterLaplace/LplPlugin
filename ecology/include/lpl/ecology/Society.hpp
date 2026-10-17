@@ -46,7 +46,7 @@
 
 namespace lpl::ecology {
 
-/// Value meaning "no pack".
+/** Value meaning "no pack". */
 inline constexpr core::u32 kSolitary = 0xFFFFFFFFu;
 
 /**
@@ -54,10 +54,10 @@ inline constexpr core::u32 kSolitary = 0xFFFFFFFFu;
  * @brief One animal, as the social layer sees it.
  */
 struct PackMember {
-    core::u32 id{0u};          ///< Identity; also the tie-break for every ranking.
-    core::u32 lineage{0u};     ///< Family. Kin recognition works on this.
-    core::u32 pack{kSolitary}; ///< Current pack.
-    math::Fixed32 fitness{};   ///< What the alpha contest is decided on.
+    core::u32 id{0u};          /**< Identity; also the tie-break for every ranking. */
+    core::u32 lineage{0u};     /**< Family. Kin recognition works on this. */
+    core::u32 pack{kSolitary}; /**< Current pack. */
+    math::Fixed32 fitness{};   /**< What the alpha contest is decided on. */
     bool alpha{false};
     bool alive{true};
 };
@@ -67,10 +67,10 @@ struct PackMember {
  * @brief When a pack forms, splits, and falls apart.
  */
 struct PackParams {
-    core::u32 maxSize{8u};              ///< Above this the pack buds.
-    core::u32 minSize{2u};              ///< Below this it stops being a pack.
-    core::u32 dissolutionChance16{10u}; ///< Chance of shattering when the alpha dies, in sixteenths.
-    bool adoptStrays{true};             ///< Whether lone kin may join an existing pack.
+    core::u32 maxSize{8u};              /**< Above this the pack buds. */
+    core::u32 minSize{2u};              /**< Below this it stops being a pack. */
+    core::u32 dissolutionChance16{10u}; /**< Chance of shattering when the alpha dies, in sixteenths. */
+    bool adoptStrays{true};             /**< Whether lone kin may join an existing pack. */
 };
 
 /**
@@ -83,7 +83,7 @@ struct PackEvents {
     core::u32 dissolved{0u};
     core::u32 adopted{0u};
     core::u32 alphaChanges{0u};
-    core::u32 scattered{0u}; ///< Members turned solitary by a dissolution.
+    core::u32 scattered{0u}; /**< Members turned solitary by a dissolution. */
 };
 
 /**
@@ -94,10 +94,23 @@ struct PackEvents {
  * clones, and without it the leader would be whichever member the loop reached
  * first — so two machines would crown different animals and diverge.
  *
+ * A step runs four phases, in this order:
+ *
+ * - Formation: lone kin band together. A stray looks for an existing pack of its
+ *   lineage first — adoption is cheaper than founding, ecologically and
+ *   computationally — and otherwise founds one with another stray of the same
+ *   lineage.
+ * - Budding: a pack that outgrows its territory splits. The splinter is led by
+ *   the SECOND best — the ambitious beta who will never inherit. Taking the
+ *   weakest members instead would make budding a cull; taking the strongest
+ *   would decapitate the parent pack.
+ * - Alpha election.
+ * - Dissolution: a pack too small to be one.
+ *
  * @param members Population, updated in place.
  * @param count   Entries in @p members.
  * @param params  Thresholds.
- * @param stream  Random stream state, advanced in place.
+ * @param stream  Random stream state; no step draws from it yet, so it is left as it was.
  * @return What happened.
  */
 PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &params, core::u32 &stream);
@@ -107,6 +120,11 @@ PackEvents stepPacks(PackMember *members, core::u32 count, const PackParams &par
  *
  * Separate from ordinary death because killing the ALPHA is the interesting case,
  * and a caller should not have to know that.
+ *
+ * The consequence a trophy hunter does not price in. A pack that loses its leader
+ * may hold together under the next in line — or shatter into solitary aggressive
+ * animals with no territory, which is how a profitable hunt turns into a problem
+ * on the trade roads a week later.
  *
  * @param members Population.
  * @param count   Entries in @p members.
@@ -131,10 +149,10 @@ struct IslandParams {
      */
     core::f32 isolationShare{0.05f};
 
-    core::f32 pressure{0.02f};      ///< Share of the gap closed per generation.
-    core::f32 giantTarget{2.5f};    ///< Size a small species converges toward when isolated.
-    core::f32 dwarfTarget{0.4f};    ///< Size a large species converges toward.
-    core::f32 smallThreshold{1.0f}; ///< Below this a species counts as small.
+    core::f32 pressure{0.02f};      /**< Share of the gap closed per generation. */
+    core::f32 giantTarget{2.5f};    /**< Size a small species converges toward when isolated. */
+    core::f32 dwarfTarget{0.4f};    /**< Size a large species converges toward. */
+    core::f32 smallThreshold{1.0f}; /**< Below this a species counts as small. */
 };
 
 /**
@@ -144,14 +162,20 @@ struct IslandParams {
  * absence, not to be watched happening. A step that converged immediately would
  * turn a biogeographic law into a light switch.
  *
+ * Body size is not a cosmetic gene: a bigger animal hits harder and moves less
+ * nimbly, so strength scales with the size ratio and speed by its inverse.
+ * Letting size drift without its consequences would make the island rule a
+ * visual effect.
+ *
  * @warning The direction is decided by @p ancestralSize, the size the species had
  *          when it arrived — NOT by its current size. Reading the current size
  *          makes the threshold an unstable equilibrium: a small species grows
  *          until it crosses it, is reclassified as large, and is pushed back
  *          down. Measured, a species starting at 0.5 and one starting at 3.0 both
- *          converged on 1.0 and sat there, which is the opposite of the rule —
- *          it says isolation drives species APART. Foster's rule is about what a
- *          lineage was when it was cut off, and the code has to remember that.
+ *          converged on 1.0 (0.996 and 1.003 after two hundred generations) and
+ *          sat there, which is the opposite of the rule — it says isolation
+ *          drives species APART. Foster's rule is about what a lineage was when
+ *          it was cut off, and the code has to remember that.
  *
  * @param genome        Genome to push.
  * @param ancestralSize Body size of the founding population.
@@ -192,7 +216,7 @@ struct OverflowParams {
      */
     core::f32 starvingBelow{0.25f};
 
-    core::f32 overcrowdedAbove{0.90f}; ///< Share of carrying capacity that starts the starvation.
+    core::f32 overcrowdedAbove{0.90f}; /**< Share of carrying capacity that starts the starvation. */
 };
 
 /**
@@ -202,12 +226,17 @@ struct OverflowParams {
 struct OverflowState {
     bool overcrowded{false};
     bool raiding{false};
-    math::Fixed32 pressure{}; ///< How far past capacity, in [0, 1+].
-    core::u32 starving{0u};   ///< Animals below the starvation threshold.
+    math::Fixed32 pressure{}; /**< How far past capacity, in [0, 1+]. */
+    core::u32 starving{0u};   /**< Animals below the starvation threshold. */
 };
 
 /**
  * @brief Evaluates a region's overflow pressure.
+ *
+ * The raid condition is deliberately not "the region decided to attack". It is:
+ * too many animals, and at least one of them hungry enough to stop caring about
+ * the thing that used to keep it away.
+ *
  * @param population Current head count.
  * @param capacity   What the region supports.
  * @param energies   Per-animal energy share, in [0, 1].
@@ -240,6 +269,10 @@ void seedInvasion(const Genome &ancestor, core::u32 count, core::f32 spread, cor
  *
  * The number a player's analysts would report. A native population scores high; a
  * fresh invasion scores near zero.
+ *
+ * The coefficient of variation is the standard deviation over the mean. Dividing
+ * by the mean is what makes it comparable between a species whose strength is 5
+ * and one whose strength is 500.
  *
  * @param genomes Population.
  * @param count   Entries in @p genomes.

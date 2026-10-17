@@ -35,7 +35,7 @@
 
 namespace lpl::ecology {
 
-/// Trophic roles the herd distinguishes. Two is what the sim uses today.
+/** Trophic roles the herd distinguishes. Two is what the sim uses today. */
 inline constexpr core::u32 kMaxHerdSpecies = 4u;
 
 /**
@@ -52,10 +52,9 @@ inline constexpr core::u32 kMaxHerdSpecies = 4u;
 struct SpeciesScent {
     static constexpr core::u32 kNoDeposit = 0xFFFFFFFFu;
 
-    /// Where this species leaves its mark; @ref kNoDeposit to leave none.
-    core::u32 depositChannel{kNoDeposit};
+    core::u32 depositChannel{kNoDeposit}; /**< Where this species leaves its mark; @ref kNoDeposit to leave none. */
     math::Fixed32 depositAmount{math::Fixed32::one()};
-    ai::ScentPalate palate{}; ///< What it is drawn to and what it flees.
+    ai::ScentPalate palate{}; /**< What it is drawn to and what it flees. */
 };
 
 /**
@@ -81,6 +80,10 @@ struct SpeciesScent {
  * are pulled toward the herbivore scent and pushed off each other's, so a pack
  * that all wanted the same cell spreads around the prey instead of stacking
  * behind it. Nothing in the code says "flank".
+ *
+ * The grazer is drawn to what it eats, driven off by what eats it, and mildly off
+ * its own kind — the last term is what spreads a herd over a meadow instead of
+ * letting it collapse into one cell of grass.
  */
 [[nodiscard]] inline SpeciesScent defaultGrazerScent() noexcept;
 [[nodiscard]] inline SpeciesScent defaultHunterScent() noexcept;
@@ -99,17 +102,19 @@ struct HerdParams {
     core::f32 cohesionGrazer{0.5f};
     core::i32 neighbourHunter{10};
     core::i32 neighbourGrazer{6};
-    /// Below this, push apart. A pack holds a looser formation than a herd, and one
-    /// radius for both made the wolves move like a shoal — which is exactly what a
-    /// pack must not look like.
+    /**
+     * @brief Below this, push apart.
+     *
+     * A pack holds a looser formation than a herd, and one radius for both made
+     * the wolves move like a shoal — which is exactly what a pack must not look
+     * like.
+     */
     math::Fixed32 separationHunterRadius{math::Fixed32::fromFloat(2.5f)};
     math::Fixed32 separationGrazerRadius{math::Fixed32::fromFloat(1.6f)};
-    /// How hard a scent gradient pulls, before personality scales it.
-    math::Fixed32 scentPull{math::Fixed32::fromFloat(0.06f)};
+    math::Fixed32 scentPull{math::Fixed32::fromFloat(0.06f)}; /**< Scent gradient pull, before personality scaling. */
 
-    /// Per-species olfaction, indexed by the Creature component's species.
-    SpeciesScent scent[kMaxHerdSpecies]{};
-    math::Fixed32 step{math::Fixed32::fromRaw(1092)}; ///< One tick, in seconds (60 Hz).
+    SpeciesScent scent[kMaxHerdSpecies]{}; /**< Per-species olfaction, indexed by the Creature component's species. */
+    math::Fixed32 step{math::Fixed32::fromRaw(1092)}; /**< One tick, in seconds (60 Hz). */
 };
 
 /**
@@ -121,6 +126,9 @@ inline void applyDefaultScents(HerdParams &params) noexcept;
 /**
  * @class Herd
  * @brief The roster of a world's animal bodies, and the census over it.
+ *
+ * Its definitions, like those of the default scents, live in a `.inl`: they are
+ * consumed header-only, the freestanding kernel included.
  */
 class Herd {
 public:
@@ -161,6 +169,11 @@ public:
 
     /**
      * @brief Destroys one animal of a species; used to reconcile with the census.
+     *
+     * Destroys the ENTITY, not just the roster entry. Popping the entry alone left
+     * the body in the registry: a species could go extinct in the census while its
+     * animals kept being drawn and kept obstructing the living.
+     *
      * @param species The species of the animal to remove.
      * @return True when one was found and removed.
      */
@@ -176,18 +189,7 @@ public:
      * @param spawn (species) -> bool, creating one animal; false when it could not.
      */
     template <typename CountFor, typename Spawn>
-    void reconcile(core::u32 speciesCount, CountFor &&countFor, Spawn &&spawn)
-    {
-        for (core::u32 species = 0u; species < speciesCount; ++species)
-        {
-            const core::u32 wanted = countFor(species);
-            core::u32 present = countSpecies(species);
-            while (present < wanted && spawn(species))
-                ++present;
-            while (present > wanted && removeOne(species))
-                --present;
-        }
-    }
+    void reconcile(core::u32 speciesCount, CountFor &&countFor, Spawn &&spawn);
 
     /**
      * @brief An entity's Creature component: {species, id}, or nullptr.
@@ -200,6 +202,11 @@ public:
      * for why a world whose systems are all PrePhysics never publishes a front
      * buffer at all.
      *
+     * ecs::Registry::chunkOf does the walk AND the identity check: a chunk index
+     * alone does not identify a chunk, since every partition has one, and skipping
+     * that check reads another archetype's row. The walk was written out by hand
+     * here and in a map viewer before the registry could answer it.
+     *
      * @param registry The registry to look in.
      * @param entity   The entity to resolve.
      * @return Pointer to two u32 (species, id), or nullptr when unreachable.
@@ -207,13 +214,12 @@ public:
     [[nodiscard]] static const core::u32 *creatureOf(ecs::Registry &registry, ecs::EntityId entity) noexcept;
 
 private:
-    lpl::pmr::vector<ecs::EntityId> _bodies; ///< Which entities this herd owns.
+    lpl::pmr::vector<ecs::EntityId> _bodies; /**< Which entities this herd owns. */
     ecs::Registry *_registry{nullptr};
 };
 
 } // namespace lpl::ecology
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/ecology/Herd.inl>
+#    include "Herd.inl"
 
 #endif // LPL_ECOLOGY_HERD_HPP

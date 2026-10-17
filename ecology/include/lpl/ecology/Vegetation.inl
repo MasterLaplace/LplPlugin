@@ -1,24 +1,8 @@
-/**
- * @file Vegetation.inl
- * @brief Out-of-line definitions for the standing-plant helpers.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-28
- * @copyright MIT License
- */
-
-#pragma once
-
 #ifndef LPL_ECOLOGY_VEGETATION_INL
-#    define LPL_ECOLOGY_VEGETATION_INL
+#define LPL_ECOLOGY_VEGETATION_INL
 
 namespace lpl::ecology {
 
-/**
- * @brief Advances regrowth and counts what is standing.
- * @return Plants currently standing, which IS the producer population.
- */
 inline core::u32 tickPlants(PlantCell *plants, core::u32 count) noexcept
 {
     core::u32 standing = 0u;
@@ -32,7 +16,6 @@ inline core::u32 tickPlants(PlantCell *plants, core::u32 count) noexcept
     return standing;
 }
 
-/** @brief Plants standing in a span, without advancing anything. */
 inline core::u32 countStanding(const PlantCell *plants, core::u32 count) noexcept
 {
     core::u32 standing = 0u;
@@ -41,11 +24,6 @@ inline core::u32 countStanding(const PlantCell *plants, core::u32 count) noexcep
     return standing;
 }
 
-/**
- * @brief Eats the first standing plant within @p radius cells of a position.
- *
- * @return True when something was eaten, so a caller can count it.
- */
 inline bool grazeAt(PlantCell *plants, core::u32 count, core::i32 worldX, core::i32 worldZ, core::i32 radius,
                     core::u32 regrowthTicks) noexcept
 {
