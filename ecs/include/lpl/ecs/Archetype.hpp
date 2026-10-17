@@ -38,7 +38,9 @@ public:
 
     using Mask = std::bitset<kMaxComponents>;
 
-    /** @brief Default-constructs an empty archetype. */
+    /**
+     * @brief Default-constructs an empty archetype.
+     */
     constexpr Archetype() noexcept = default;
 
     /**
@@ -47,25 +49,39 @@ public:
      */
     explicit Archetype(std::span<const ComponentId> ids) noexcept;
 
-    /** @brief Adds a component to the archetype. */
+    /**
+     * @brief Adds a component to the archetype.
+     */
     void add(ComponentId id) noexcept;
 
-    /** @brief Removes a component from the archetype. */
+    /**
+     * @brief Removes a component from the archetype.
+     */
     void remove(ComponentId id) noexcept;
 
-    /** @brief Tests whether the archetype contains a given component. */
+    /**
+     * @brief Tests whether the archetype contains a given component.
+     */
     [[nodiscard]] bool has(ComponentId id) const noexcept;
 
-    /** @brief Tests whether this archetype is a superset of @p other. */
+    /**
+     * @brief Tests whether this archetype is a superset of @p other.
+     */
     [[nodiscard]] bool contains(const Archetype &other) const noexcept;
 
-    /** @brief Returns the raw bitmask. */
+    /**
+     * @brief Returns the raw bitmask.
+     */
     [[nodiscard]] const Mask &mask() const noexcept;
 
-    /** @brief Returns the number of component types in this archetype. */
+    /**
+     * @brief Returns the number of component types in this archetype.
+     */
     [[nodiscard]] core::usize count() const noexcept;
 
-    /** @brief Equality. */
+    /**
+     * @brief Equality.
+     */
     [[nodiscard]] bool operator==(const Archetype &other) const noexcept;
 
 private:

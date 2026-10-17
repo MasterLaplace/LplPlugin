@@ -76,9 +76,15 @@ public:
 
     /**
      * @brief Queries all entities within @p radius of @p center.
+     *
+     * Enumerates every cell of the grid-space bounding box of the query sphere,
+     * whose radius in cells is the first whole number above radius / cellSize,
+     * and reports every entity they hold: no distance is tested, so the results
+     * can include entities further away.
+     *
      * @param center Query center in world-space.
      * @param radius Query radius.
-     * @param[out] results Populated with entity IDs in range.
+     * @param[out] results Populated with the entity IDs of those cells.
      */
     void queryRadius(const math::Vec3<math::Fixed32> &center, math::Fixed32 radius,
                      pmr::vector<EntityId> &results) const;
@@ -89,6 +95,10 @@ public:
      * Ported from legacy WorldPartition::tick(). If a GPU backend is
      * registered and entity count exceeds @c kGpuThreshold, dispatches to
      * GPU; otherwise falls back to CPU.
+     *
+     * The CPU path does nothing: physics integration is delegated to
+     * CpuPhysicsBackend through the SystemScheduler (PhysicsSystem), and
+     * step() serves only as the GPU dispatch gateway.
      *
      * @param dt Fixed delta-time.
      */
@@ -117,10 +127,14 @@ public:
      */
     core::u32 gcEmptyCells();
 
-    /** @brief Returns the Morton code for a world-space position. */
+    /**
+     * @brief Returns the Morton code for a world-space position.
+     */
     [[nodiscard]] core::u64 mortonForPosition(const math::Vec3<math::Fixed32> &pos) const noexcept;
 
-    /** @brief Returns the number of active cells. */
+    /**
+     * @brief Returns the number of active cells.
+     */
     [[nodiscard]] core::u32 cellCount() const noexcept;
 
 public:

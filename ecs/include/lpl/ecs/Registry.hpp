@@ -38,7 +38,6 @@ class Registry final : public core::NonCopyable<Registry> {
 public:
     /**
      * @brief Default-constructs an empty registry.
-     * @brief Default-constructs an empty registry.
      */
     Registry();
     ~Registry();
@@ -53,10 +52,10 @@ public:
      */
     void setAllocator(memory::IAllocator *allocator) noexcept;
 
-    // --------------------------------------------------------------------- //
-    //  Entity lifecycle                                                      //
-    // --------------------------------------------------------------------- //
-
+    /**
+     * @name Entity lifecycle
+     * @{
+     */
     /**
      * @brief Creates a new entity with the given archetype.
      * @param archetype Archetype determining which components the entity has.
@@ -78,6 +77,11 @@ public:
      * mints it (allocateSlot skips a slot already alive). Idempotent: if the slot
      * already holds this exact id, the call succeeds and changes nothing.
      *
+     * The slot table grows to cover the slot, and the high-water mark advances past
+     * it so the local free-list allocator (allocateSlot) starts beyond it. Any slots
+     * skipped over become genuinely free — they go to the free-list rather than
+     * leaking.
+     *
      * Not thread-safe against a concurrent createEntity: reconciliation runs in
      * its scheduler phase, single-threaded, like the legacy StateReconciliation.
      *
@@ -95,13 +99,16 @@ public:
      */
     [[nodiscard]] core::Expected<void> destroyEntity(EntityId id);
 
-    /** @brief Tests whether an entity is alive (generation matches). */
+    /**
+     * @brief Tests whether an entity is alive (generation matches).
+     */
     [[nodiscard]] bool isAlive(EntityId id) const noexcept;
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Lookup                                                                //
-    // --------------------------------------------------------------------- //
-
+    /**
+     * @name Lookup
+     * @{
+     */
     /**
      * @brief Resolves an EntityId to its in-partition reference.
      * @return EntityRef on success, or error if dead/unknown.
@@ -126,20 +133,29 @@ public:
      */
     [[nodiscard]] Chunk *chunkOf(EntityId id, core::u32 &outRow) const noexcept;
 
-    /** @brief Returns the total number of live entities. */
+    /**
+     * @brief Returns the total number of live entities.
+     */
     [[nodiscard]] core::u32 liveCount() const noexcept;
+    /** @} */
 
-    // --------------------------------------------------------------------- //
-    //  Partition access                                                      //
-    // --------------------------------------------------------------------- //
-
-    /** @brief Returns or creates the partition for the given archetype. */
+    /**
+     * @name Partition access
+     * @{
+     */
+    /**
+     * @brief Returns or creates the partition for the given archetype.
+     */
     [[nodiscard]] Partition &getOrCreatePartition(const Archetype &archetype);
 
-    /** @brief Returns a read-only view of all partitions. */
+    /**
+     * @brief Returns a read-only view of all partitions.
+     */
     [[nodiscard]] std::span<const lpl::pmr::unique_ptr<Partition>> partitions() const noexcept;
 
-    /** @brief Swaps front/back buffers on every partition (end-of-tick). */
+    /**
+     * @brief Swaps front/back buffers on every partition (end-of-tick).
+     */
     void swapAllBuffers() noexcept;
 
     /**
@@ -148,8 +164,11 @@ public:
      */
     [[nodiscard]] core::u64 swappedBytes() const noexcept;
 
-    /** @brief The share of @ref swappedBytes that buffers of @p id account for. */
+    /**
+     * @brief The share of @ref swappedBytes that buffers of @p id account for.
+     */
     [[nodiscard]] core::u64 swappedBytes(ComponentId id) const noexcept;
+    /** @} */
 
 private:
     struct Impl;

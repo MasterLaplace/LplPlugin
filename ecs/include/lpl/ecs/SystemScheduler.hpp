@@ -48,10 +48,10 @@ public:
 
     ~SystemScheduler();
 
-    // --------------------------------------------------------------------- //
-    //  Registration                                                          //
-    // --------------------------------------------------------------------- //
-
+    /**
+     * @name Registration
+     * @{
+     */
     /**
      * @brief Registers a system instance.
      * @param system Owning pointer to the system.
@@ -61,16 +61,37 @@ public:
 
     /**
      * @brief Rebuilds the DAG after all systems have been registered.
+     *
+     * Each ordered pair of systems is examined exactly once and adds at most one
+     * directed edge, so the adjacency lists never contain duplicates — a plain
+     * vector suffices (no set needed) and keeps the in-degrees exact.
+     *
+     * The FIFO frontier of Kahn's algorithm is a vector consumed via a head index
+     * (a std::queue would pull in <queue>, which is not in the freestanding
+     * subset). Append-only + head advance preserves the exact BFS wave order.
+     *
      * @return OK if a valid topological order exists.
      */
     [[nodiscard]] core::Expected<void> buildGraph();
-
-    // --------------------------------------------------------------------- //
-    //  Execution                                                             //
-    // --------------------------------------------------------------------- //
+    /** @} */
 
     /**
+     * @name Execution
+     * @{
+     */
+    /**
      * @brief Runs all systems for one tick in dependency order.
+     *
+     * All systems in a wave share the same phase (guaranteed by the DAG, which
+     * creates edges across phases), so the phase of a wave is that of its first
+     * system. A phase callback fires when the next wave belongs to another phase,
+     * and the last phase's at the end of the tick.
+     *
+     * A multi-system wave goes to the job dispatcher, which runs every system and
+     * only returns once the wave is complete. The inline dispatcher executes them
+     * in order (deterministic); a parallel backend could fan them out — the
+     * systems in a wave are data-hazard-free.
+     *
      * @param dt Fixed delta-time.
      */
     void tick(core::f32 dt);
@@ -88,8 +109,11 @@ public:
      */
     void setPhaseCallback(SchedulePhase afterPhase, lpl::pmr::function<void()> callback);
 
-    /** @brief Returns the number of registered systems. */
+    /**
+     * @brief Returns the number of registered systems.
+     */
     [[nodiscard]] core::u32 systemCount() const noexcept;
+    /** @} */
 
 private:
     struct Impl;

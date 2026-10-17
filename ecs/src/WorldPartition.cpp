@@ -1,13 +1,3 @@
-/**
- * @file WorldPartition.cpp
- * @brief WorldPartition implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/container/FlatAtomicHashMap.hpp>
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
@@ -21,61 +11,6 @@
 #include <lpl/std/vector.hpp>
 
 namespace lpl::ecs {
-
-// ========================================================================== //
-//  SpatialCell                                                               //
-// ========================================================================== //
-
-/**
- * @brief Lightweight cell stored in the FlatAtomicHashMap.
- *
- * Each cell holds a small vector of entity raw IDs that reside within the
- * corresponding Morton-coded grid cube.
- */
-struct SpatialCell {
-    core::u64 mortonKey{0};
-    pmr::vector<core::u32> entities;
-
-    void insert(core::u32 raw) { entities.push_back(raw); }
-
-    void erase(core::u32 raw)
-    {
-        auto it = std::find(entities.begin(), entities.end(), raw);
-        if (it != entities.end())
-        {
-            *it = entities.back();
-            entities.pop_back();
-        }
-    }
-
-    [[nodiscard]] bool empty() const noexcept { return entities.empty(); }
-};
-
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
-
-/**
- * @brief Where an entity is filed: the key of its cell, and the grid coordinates it was taken from.
- *
- * A tick files every entity again, and most stay in their cell: three coordinates compared tell so
- * without the key, which costs nine table loads.
- */
-struct FiledCell {
-    core::u64 key; /**< The key of the cell: what cellKey gives for x, y and z. */
-    core::i32 x;   /**< The grid coordinate along x, bias included. */
-    core::i32 y;   /**< The grid coordinate along y, bias included. */
-    core::i32 z;   /**< The grid coordinate along z, bias included. */
-};
-
-struct WorldPartition::Impl {
-    math::Fixed32 cellSize;
-    container::FlatAtomicHashMap<SpatialCell> cells;
-    pmr::unordered_map<core::u32, FiledCell> entityToCell;
-    gpu::IComputeBackend *gpuBackend{nullptr};
-
-    Impl(math::Fixed32 cs, core::u32 cellCapacity) : cellSize{cs}, cells{cellCapacity} {}
-};
 
 /**
  * @brief The grid coordinate, bias included, of the cell @p v falls in along one axis: what
@@ -138,9 +73,52 @@ static constexpr std::array<core::u32, 128> kSpreadSeven = [] {
     return word(0u) | (word(7u) << 21u) | (word(14u) << 42u);
 }
 
-// ========================================================================== //
-//  Public API                                                                //
-// ========================================================================== //
+/**
+ * @brief Lightweight cell stored in the FlatAtomicHashMap.
+ *
+ * Each cell holds a small vector of entity raw IDs that reside within the
+ * corresponding Morton-coded grid cube.
+ */
+struct SpatialCell {
+    core::u64 mortonKey{0};
+    pmr::vector<core::u32> entities;
+
+    void insert(core::u32 raw) { entities.push_back(raw); }
+
+    void erase(core::u32 raw)
+    {
+        auto it = std::find(entities.begin(), entities.end(), raw);
+        if (it != entities.end())
+        {
+            *it = entities.back();
+            entities.pop_back();
+        }
+    }
+
+    [[nodiscard]] bool empty() const noexcept { return entities.empty(); }
+};
+
+/**
+ * @brief Where an entity is filed: the key of its cell, and the grid coordinates it was taken from.
+ *
+ * A tick files every entity again, and most stay in their cell: three coordinates compared tell so
+ * without the key, which costs nine table loads.
+ */
+struct FiledCell {
+    core::u64 key; /**< The key of the cell: what cellKey gives for x, y and z. */
+    core::i32 x;   /**< The grid coordinate along x, bias included. */
+    core::i32 y;   /**< The grid coordinate along y, bias included. */
+    core::i32 z;   /**< The grid coordinate along z, bias included. */
+};
+
+struct WorldPartition::Impl {
+    math::Fixed32 cellSize;
+    container::FlatAtomicHashMap<SpatialCell> cells;
+    pmr::unordered_map<core::u32, FiledCell> entityToCell;
+    gpu::IComputeBackend *gpuBackend{nullptr};
+
+    Impl(math::Fixed32 cs, core::u32 cellCapacity) : cellSize{cs}, cells{cellCapacity} {}
+};
 
 WorldPartition::WorldPartition(math::Fixed32 cellSize, core::u32 cellCapacity)
     : _impl{pmr::make_unique<Impl>(cellSize, cellCapacity)}
@@ -214,15 +192,12 @@ core::Expected<void> WorldPartition::remove(EntityId id)
 void WorldPartition::queryRadius(const math::Vec3<math::Fixed32> &center, math::Fixed32 radius,
                                  pmr::vector<EntityId> &results) const
 {
-    // Compute the grid-space bounding box for the query sphere
     const core::i32 cx = gridAlong(center.x, _impl->cellSize);
     const core::i32 cy = gridAlong(center.y, _impl->cellSize);
     const core::i32 cz = gridAlong(center.z, _impl->cellSize);
 
-    // Radius in grid cells (ceiling)
     const core::i32 cellRadius = static_cast<core::i32>((radius / _impl->cellSize).toInt()) + 1;
 
-    // Enumerate all cells within the bounding box
     for (core::i32 dx = -cellRadius; dx <= cellRadius; ++dx)
     {
         for (core::i32 dy = -cellRadius; dy <= cellRadius; ++dy)
@@ -272,12 +247,6 @@ void WorldPartition::step(core::f32 dt)
 
     if (_impl->gpuBackend && entityCount >= kGpuThreshold)
     {
-        // ── GPU path ────────────────────────────────────────────────────────
-        // Pack entity raw IDs into a host buffer, upload, dispatch, download.
-        // The physics kernel (gpu/src/PhysicsKernel.cu) expects:
-        //   args[0..3]  float dt
-        //   args[4..7]  u32   entity count
-        // followed by the raw entity IDs as u32[entityCount].
         const core::usize payloadBytes =
             sizeof(core::f32) + sizeof(core::u32) + static_cast<core::usize>(entityCount) * sizeof(core::u32);
 
@@ -311,11 +280,6 @@ void WorldPartition::step(core::f32 dt)
     }
 
 cpu_fallback:
-    // ── CPU path ─────────────────────────────────────────────────────────────
-    // Physics integration is delegated to CpuPhysicsBackend through the
-    // SystemScheduler (PhysicsSystem / SpatialGrid). WorldPartition::step()
-    // serves only as the GPU dispatch gateway; nothing to do here on the
-    // CPU path.
     (void) dt;
 }
 
@@ -323,8 +287,6 @@ core::u32 WorldPartition::migrateEntities(const pmr::function<math::Vec3<math::F
 {
     core::u32 migrated = 0;
 
-    // Iterate all tracked entity→morton mappings
-    // Collect entities that need migration
     pmr::vector<std::pair<core::u32, math::Vec3<math::Fixed32>>> toMigrate;
 
     for (auto &[raw, filed] : _impl->entityToCell)
@@ -338,7 +300,6 @@ core::u32 WorldPartition::migrateEntities(const pmr::function<math::Vec3<math::F
         }
     }
 
-    // Apply migrations
     for (auto &[raw, pos] : toMigrate)
     {
         auto entityId = EntityId{raw};
@@ -353,7 +314,6 @@ core::u32 WorldPartition::gcEmptyCells()
 {
     core::u32 removed = 0;
 
-    // Collect empty cells and remove them from the FlatAtomicHashMap
     pmr::vector<core::u64> emptyKeys;
     _impl->cells.forEach([&](SpatialCell &cell) {
         if (cell.empty())

@@ -1,13 +1,3 @@
-/**
- * @file SystemScheduler.cpp
- * @brief DAG system scheduler implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/ecs/SystemScheduler.hpp>
 
@@ -15,25 +5,16 @@
 
 namespace lpl::ecs {
 
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
-
 struct SystemScheduler::Impl {
     concurrency::IJobSystem &jobs;
     lpl::pmr::vector<lpl::pmr::unique_ptr<ISystem>> systems;
     lpl::pmr::vector<lpl::pmr::vector<core::u32>> waves;
     bool graphBuilt{false};
 
-    // Phase boundary callbacks: indexed by SchedulePhase (fired after that phase)
     lpl::pmr::function<void()> phaseCallbacks[static_cast<core::u8>(SchedulePhase::Count)] = {};
 
     explicit Impl(concurrency::IJobSystem &j) : jobs{j} {}
 };
-
-// ========================================================================== //
-//  Public API                                                                //
-// ========================================================================== //
 
 SystemScheduler::SystemScheduler(concurrency::IJobSystem &jobs) : _impl{lpl::pmr::make_unique<Impl>(jobs)} {}
 
@@ -54,9 +35,6 @@ core::Expected<void> SystemScheduler::buildGraph()
 {
     const core::u32 n = static_cast<core::u32>(_impl->systems.size());
 
-    // Each ordered pair (i, j) is examined exactly once below and adds at most
-    // one directed edge, so the adjacency lists never contain duplicates — a
-    // plain vector suffices (no set needed) and keeps inDegree exact.
     lpl::pmr::vector<lpl::pmr::vector<core::u32>> adj(n);
     lpl::pmr::vector<core::u32> inDegree(n, 0);
 
@@ -98,10 +76,6 @@ core::Expected<void> SystemScheduler::buildGraph()
                     break;
             }
 
-            // World-level state, same rule. Without this, two systems sharing a
-            // scent field or a terrain declared no dependency on each other at
-            // all, so the graph was free to put them in one wave — which is only
-            // safe while a wave happens to run sequentially.
             for (const auto &a : descA.resources)
             {
                 if (conflict)
@@ -124,9 +98,6 @@ core::Expected<void> SystemScheduler::buildGraph()
         }
     }
 
-    // FIFO frontier for Kahn's algorithm, as a vector consumed via a head index
-    // (a std::queue would pull in <queue>, which is not in the freestanding
-    // subset). Append-only + head advance preserves the exact BFS wave order.
     lpl::pmr::vector<core::u32> ready;
     for (core::u32 i = 0; i < n; ++i)
     {
@@ -179,18 +150,12 @@ void SystemScheduler::tick(core::f32 dt)
 {
     LPL_ASSERT(_impl->graphBuilt);
 
-    // Track which phase was last executed to detect phase transitions
     auto lastPhase = SchedulePhase::Count;
 
     for (const auto &wave : _impl->waves)
     {
-        // Determine the phase of the first system in this wave.
-        // All systems in a wave share the same phase (guaranteed by the DAG
-        // which creates edges across phases), or they are in the same phase
-        // with no data conflicts.
         const auto wavePhase = _impl->systems[wave[0]]->descriptor().phase;
 
-        // Fire phase callback on transition
         if (lastPhase != SchedulePhase::Count && wavePhase != lastPhase)
         {
             const auto idx = static_cast<core::u8>(lastPhase);
@@ -207,10 +172,6 @@ void SystemScheduler::tick(core::f32 dt)
             continue;
         }
 
-        // Multi-system wave: hand every system to the job dispatcher, which
-        // runs them all and only returns once the wave is complete. The inline
-        // dispatcher executes them in order (deterministic); a parallel backend
-        // could fan them out — the systems in a wave are data-hazard-free.
         lpl::pmr::vector<lpl::pmr::function<void()>> jobs;
         for (auto idx : wave)
             jobs.push_back([this, idx, dt]() { _impl->systems[idx]->execute(dt); });
@@ -218,7 +179,6 @@ void SystemScheduler::tick(core::f32 dt)
         _impl->jobs.dispatch(std::span<lpl::pmr::function<void()>>{jobs.data(), jobs.size()});
     }
 
-    // Fire callback for the last phase if any
     if (lastPhase != SchedulePhase::Count)
     {
         const auto idx = static_cast<core::u8>(lastPhase);
