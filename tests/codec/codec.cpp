@@ -3,6 +3,8 @@
 #include <lpl/codec/FourRussians.hpp>
 #include <lpl/codec/GaloisField.hpp>
 #include <lpl/codec/GaussJordan.hpp>
+#include <lpl/codec/Peeling.hpp>
+#include <lpl/codec/Prng.hpp>
 #include <lpl/codec/XorKernel.hpp>
 #include <lpl/math/Random.hpp>
 #include <lpl/std/vector.hpp>
@@ -407,6 +409,31 @@ LPL_TEST(gray_code_table_is_cheap_and_exact)
         }
     }
     test.check(exact, "every entry is the combination its index names");
+}
+
+LPL_TEST(peeling_refuses_a_table_built_for_other_blocks)
+{
+    lpl::codec::SolitonParams tuning;
+    lpl::codec::SolitonTable eightBlocks;
+    lpl::pmr::vector<lpl::codec::Droplet> droplets;
+    lpl::pmr::vector<lpl::core::u8> blocks;
+    lpl::codec::DecodeReport report;
+
+    tuning.sourceBlocks = 8u;
+    eightBlocks.build(tuning);
+    for (lpl::core::u32 seed = 1u; seed <= 16u; ++seed)
+    {
+        lpl::codec::Droplet droplet;
+
+        droplet.seed = seed;
+        droplet.payload.resize(4u, static_cast<lpl::core::u8>(seed));
+        droplets.push_back(droplet);
+    }
+
+    test.check(!lpl::codec::decodeDroplets(droplets, eightBlocks, 4u, 4u, blocks, report),
+               "droplets drawn from an eight-block table do not decode as four blocks");
+    test.check(blocks.empty() && report.peeledBlocks == 0u && report.residualRows == 0u,
+               "and the decoder refuses before it writes a block");
 }
 
 /**
