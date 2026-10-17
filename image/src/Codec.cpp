@@ -115,8 +115,8 @@ bool readPpm(const core::u8 *data, core::usize length, Image &out)
         return false;
     ++c.pos;
 
-    const core::usize pixels = static_cast<core::usize>(width) * height;
-    if (c.pos + pixels * 3u > length)
+    const core::usize pixelsHeld = (length - c.pos) / 3u;
+    if (height > pixelsHeld / width)
         return false;
 
     out.resize(width, height);

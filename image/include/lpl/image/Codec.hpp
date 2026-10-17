@@ -38,6 +38,9 @@ namespace lpl::image {
  * read as opaque RGBA (alpha = 255). Returns false on a malformed header,
  * unsupported maxval (!= 255) or truncated pixel data.
  *
+ * The height is compared with the rows the buffer holds, (length - header) / 3 / width,
+ * never through width * height, a product that wraps a 32-bit size_t on i686.
+ *
  * Exactly one whitespace byte separates the header from the pixel data.
  */
 [[nodiscard]] bool readPpm(const core::u8 *data, core::usize length, Image &out);
