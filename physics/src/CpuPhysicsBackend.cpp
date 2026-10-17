@@ -61,6 +61,12 @@ static constexpr core::u32 kNeighboursReserved = 32;
 /** @brief Cells per body past which the neighbour lists are made through the tree, not a grid. */
 static constexpr core::u32 kMostGridCellsPerBody = 8;
 
+/** @brief What Impl::loneListedNeighbour returns when no listed neighbour meets the region. */
+static constexpr core::u32 kNoNeighbour = 0xFFFFFFFFu;
+
+/** @brief What Impl::loneListedNeighbour returns when two listed neighbours or more meet the region. */
+static constexpr core::u32 kSeveralNeighbours = 0xFFFFFFFEu;
+
 /**
  * @brief Sorts @p bodies by their keys, @p keys holding the key of each in the same order, then by
  *        number: the order a broad-phase search reports them in. An insertion sort, since a body has
@@ -423,6 +429,45 @@ struct CpuPhysicsBackend::Impl {
         }
         neighbourStarts[count] = static_cast<core::u32>(neighbours.size());
         return true;
+    }
+
+    /**
+     * @brief The one neighbour listed after @p body whose filed box meets @p region.
+     *
+     * A list seldom holds two bodies a box meets (see sortCandidatesAsFiled), so the resolver
+     * meets a lone one without filling @c candidates.
+     *
+     * @return That neighbour, kNoNeighbour when none meets @p region, or kSeveralNeighbours.
+     */
+    [[nodiscard]] core::u32 loneListedNeighbour(core::u32 body, const math::AABB<math::Fixed32> &region) const noexcept
+    {
+        core::u32 lone = kNoNeighbour;
+        for (core::u32 k = neighbourStarts[body]; k < neighbourStarts[body + 1u]; ++k)
+        {
+            const core::u32 other = neighbours[k];
+            if (!filedBoxes[other].intersects(region))
+                continue;
+            if (lone != kNoNeighbour)
+                return kSeveralNeighbours;
+            lone = other;
+        }
+        return lone;
+    }
+
+    /**
+     * @brief Fills @c candidates with the neighbours listed after @p body whose filed boxes meet
+     *        @p region, in the order a broad-phase search reports them.
+     */
+    void listCandidates(core::u32 body, const math::AABB<math::Fixed32> &region)
+    {
+        candidates.clear();
+        for (core::u32 k = neighbourStarts[body]; k < neighbourStarts[body + 1u]; ++k)
+        {
+            const core::u32 other = neighbours[k];
+            if (filedBoxes[other].intersects(region))
+                candidates.push_back(other);
+        }
+        sortCandidatesAsFiled();
     }
 
     /**
@@ -820,20 +865,21 @@ void CpuPhysicsBackend::resolveCollisionsWorld() const noexcept
             {
                 const math::AABB<math::Fixed32> queryRegion = _impl->boxOf(i);
 
-                _impl->candidates.clear();
                 if (listsHold && _impl->stillListed(i))
                 {
-                    for (core::u32 k = _impl->neighbourStarts[i]; k < _impl->neighbourStarts[i + 1u]; ++k)
+                    const core::u32 lone = _impl->loneListedNeighbour(i, queryRegion);
+                    if (lone == kNoNeighbour)
+                        continue;
+                    if (lone != kSeveralNeighbours)
                     {
-                        const core::u32 j = _impl->neighbours[k];
-                        if (_impl->filedBoxes[j].intersects(queryRegion))
-                            _impl->candidates.push_back(j);
+                        resolveCollision(i, lone);
+                        continue;
                     }
-                    if (_impl->candidates.size() > 1u)
-                        _impl->sortCandidatesAsFiled();
+                    _impl->listCandidates(i, queryRegion);
                 }
                 else
                 {
+                    _impl->candidates.clear();
                     if (!treeBuilt)
                     {
                         _impl->buildTree();
