@@ -35,7 +35,7 @@ namespace lpl::codec {
  */
 inline constexpr core::u32 kMaxBlockWidth = 12u;
 
-/// Table budget assumed for the host's L2, in bytes. Conservative on purpose.
+/** @brief Table budget assumed for the host's L2, in bytes. Conservative on purpose. */
 inline constexpr core::u32 kDefaultTableBudget = 256u * 1024u;
 
 /**
@@ -61,6 +61,10 @@ public:
 
     /**
      * @brief Builds the combinations of @p width rows starting at @p firstRow.
+     *
+     * Entry 0 is the empty combination and stays zero. Every other entry is the
+     * PREVIOUS Gray entry plus one row, which is what keeps the table at 2^k XORs.
+     *
      * @param source   Matrix holding the pivot rows.
      * @param firstRow Index of the first pivot row.
      * @param width    Rows to combine; clamped to @ref kMaxBlockWidth.
@@ -68,6 +72,8 @@ public:
     void build(const BitMatrix &source, core::u32 firstRow, core::u32 width);
 
     /**
+     * @brief Looks up one combination.
+     *
      * @return Combination @p index, or nullptr when the table is empty.
      */
     [[nodiscard]] const core::u64 *combination(core::u32 index) const noexcept;
@@ -96,6 +102,24 @@ private:
  * makes it a refactor rather than a second algorithm, and the parity test asserts it.
  * What changes is that a row is cleared of k columns by one table read and one XOR
  * instead of up to k XORs (SIM-104).
+ *
+ * Each block runs in two phases.
+ *
+ * Phase 1 reduces the block among the rows at or below the pivot row, restricted to those
+ * rows ON PURPOSE. The pivot search in the plain algorithm only ever looks at rows at or
+ * below the pivot row, and those rows see exactly the same bits here as they would there —
+ * every pivot column left of this block was cleared from every row by the blocks before it,
+ * below by their phase 1 and above by their phase 2. So the two algorithms choose the same
+ * pivots, perform the same swaps, and end with the same row permutation. That is what lets
+ * the parity test assert they fold identically rather than merely "agree up to a
+ * permutation".
+ *
+ * Phase 2 clears the block from every row ABOVE it, in one read. The rows below were
+ * already cleared by phase 1, which had to touch them to find its pivots. What is left is
+ * the back-substitution half, and that is where the table pays: one lookup plus one XOR
+ * removes all k columns from a row at once (SIM-104), instead of up to k separate row XORs.
+ * A row whose index into the table is zero is skipped (SIM-096: test before calling the
+ * kernel).
  *
  * @param matrix        System to reduce; modified.
  * @param systemColumns Columns eligible to hold a pivot; 0 means all.

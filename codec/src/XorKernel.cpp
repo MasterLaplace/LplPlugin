@@ -1,12 +1,3 @@
-/**
- * @file XorKernel.cpp
- * @brief The two kernels behind lpl::codec::xorRow.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/XorKernel.hpp>
 
 #include <lpl/core/Platform.hpp>
@@ -34,11 +25,6 @@ void xorRow(core::u64 *destination, const core::u64 *source, core::u32 words) no
     core::u32 i = 0u;
 
 #if defined(LPL_ARCH_X64)
-    // Two 128-bit lanes per iteration, i.e. four words, so the vector path and the
-    // scalar path below consume the same stride. Unaligned loads: the rows ARE
-    // aligned (BitMatrix guarantees it), but a droplet payload handed in by net/ or
-    // pack/ is whatever the caller had, and on every processor this module targets
-    // an unaligned load of an aligned address costs the same as an aligned one.
     for (; i + 4u <= words; i += 4u)
     {
         __m128i lo = _mm_loadu_si128(reinterpret_cast<const __m128i *>(destination + i));
@@ -51,8 +37,6 @@ void xorRow(core::u64 *destination, const core::u64 *source, core::u32 words) no
         _mm_storeu_si128(reinterpret_cast<__m128i *>(destination + i + 2u), hi);
     }
 #else
-    // Four independent XORs rather than one: a dependent chain stalls on the load,
-    // and the ports are there whether or not they are used.
     for (; i + 4u <= words; i += 4u)
     {
         destination[i] ^= source[i];

@@ -1,12 +1,3 @@
-/**
- * @file BitMatrix.cpp
- * @brief Implementation of the bit-packed GF(2) matrix.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/BitMatrix.hpp>
 
 #include <lpl/codec/XorKernel.hpp>
@@ -36,11 +27,6 @@ BitMatrix::BitMatrix(core::u32 rows, core::u32 columns) : _rows(rows), _columns(
     if (_rows == 0u)
         return;
 
-    // Over-allocate by one line so the base can be walked forward to an aligned
-    // address. lpl::pmr has no aligned allocation and the kernel heap makes no
-    // alignment promise past a word, so the alignment is established here rather
-    // than assumed — an assumption is what makes a vector load straddle a line on
-    // exactly one target and nowhere else.
     const core::u32 wordsPerLine = kRowAlignment / sizeof(core::u64);
     _storage.resize(static_cast<core::usize>(_rows) * _rowWords + wordsPerLine, core::u64{0});
 
@@ -110,7 +96,6 @@ core::u32 BitMatrix::firstSetColumn(core::u32 row, core::u32 fromColumn) const n
     const core::u64 *const words = _rowPointers[row];
     core::u32 word = wordIndex(fromColumn);
 
-    // The first word is masked so bits before fromColumn do not answer.
     core::u64 value = words[word] & ~((core::u64{1} << (fromColumn % kBitsPerWord)) - core::u64{1});
     const core::u32 lastWord = wordIndex(_columns - 1u);
     while (true)

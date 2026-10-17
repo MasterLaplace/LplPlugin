@@ -26,10 +26,10 @@
 
 namespace lpl::codec {
 
-/// Bits in one storage word. The whole module is written in these units.
+/** @brief Bits in one storage word. The whole module is written in these units. */
 inline constexpr core::u32 kBitsPerWord = 64u;
 
-/// Bytes a row is aligned to: one cache line on every target this runs on.
+/** @brief Bytes a row is aligned to: one cache line on every target this runs on. */
 inline constexpr core::u32 kRowAlignment = 64u;
 
 /**
@@ -48,6 +48,12 @@ public:
      * the matrix. That is not tidiness: the elimination XORs whole rows, so a padding
      * word that ever became non-zero would leak into every row it touched and the
      * matrix would stop meaning what it says.
+     *
+     * The storage is over-allocated by one line so the base can be walked forward to an
+     * aligned address. lpl::pmr has no aligned allocation and the kernel heap makes no
+     * alignment promise past a word, so the alignment is established here rather than
+     * assumed — an assumption is what makes a vector load straddle a line on exactly one
+     * target and nowhere else.
      */
     BitMatrix(core::u32 rows, core::u32 columns);
 
@@ -136,8 +142,8 @@ private:
         return core::u64{1} << (column % kBitsPerWord);
     }
 
-    lpl::pmr::vector<core::u64> _storage{};       ///< Backing words, over-allocated for alignment.
-    lpl::pmr::vector<core::u64 *> _rowPointers{}; ///< Indirection: pivoting rewrites this, not the bits.
+    lpl::pmr::vector<core::u64> _storage{};       /**< Backing words, over-allocated for alignment. */
+    lpl::pmr::vector<core::u64 *> _rowPointers{}; /**< Indirection: pivoting rewrites this, not the bits. */
     core::u32 _rows{0u};
     core::u32 _columns{0u};
     core::u32 _rowWords{0u};

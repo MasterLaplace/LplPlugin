@@ -1,12 +1,3 @@
-/**
- * @file Peeling.cpp
- * @brief Belief propagation over the droplet graph, and the elimination behind it.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/codec/Peeling.hpp>
 
 #include <lpl/codec/GaussJordan.hpp>
@@ -68,9 +59,6 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
     lpl::pmr::vector<core::u8> solved;
     solved.resize(blockCount, core::u8{0});
 
-    // Expand every seed once. This is where the wire's four bytes become a row of the
-    // matrix again, and it is the only place the decoder needs the distribution — the
-    // seed is meaningless without the same table the encoder drew from.
     lpl::pmr::vector<WorkingDroplet> working;
     working.resize(droplets.size());
     DropletPlan plan;
@@ -82,13 +70,6 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
         working[d].value.resize(blockBytes, core::u8{0});
     }
 
-    // ── Belief propagation ────────────────────────────────────────────────────
-    //
-    // A droplet of degree one names its block outright. Resolving it removes that
-    // block from every other droplet, which lowers their degree, which may expose the
-    // next degree-one droplet. The whole decode is that cascade, and it is why the
-    // robust soliton spends part of its mass manufacturing degree-one droplets: with
-    // the ideal distribution alone the cascade often has nothing to start from.
     core::u32 resolved = 0u;
     bool progressed = true;
     while (progressed && resolved < blockCount)
@@ -112,7 +93,6 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
             ++outReport.peeledBlocks;
             progressed = true;
 
-            // Propagate: every droplet still carrying this block loses it.
             for (core::usize e = 0u; e < working.size(); ++e)
             {
                 if (e == d || working[e].consumed)
@@ -131,14 +111,6 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
         return true;
     }
 
-    // ── The Gaussian tail ─────────────────────────────────────────────────────
-    //
-    // What is left is a residual system with no degree-one droplet in it. It goes to
-    // the same elimination the rest of the module uses, with the payload carried as
-    // AUGMENTED COLUMNS of the very same matrix — that is what GaussJordan's
-    // systemColumns parameter is for. Carrying the bytes in a parallel array instead
-    // would mean writing a second elimination that mirrors every row operation, and a
-    // mirror is a thing that can fall out of step.
     lpl::pmr::vector<core::u32> unknownColumn;
     unknownColumn.resize(blockCount, kNoPivot);
     core::u32 unknowns = 0u;
@@ -184,9 +156,8 @@ bool decodeDroplets(const lpl::pmr::vector<Droplet> &droplets, const SolitonTabl
     if (!isConsistent(system, elimination, unknowns))
         return false;
     if (elimination.rank < unknowns)
-        return false; // under-determined: some blocks genuinely cannot be known
+        return false;
 
-    // Read the answers off the augmented tail, one pivot row per unknown.
     for (core::u32 b = 0u; b < blockCount; ++b)
     {
         const core::u32 column = unknownColumn[b];

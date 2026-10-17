@@ -51,6 +51,11 @@ inline constexpr core::u32 kMaxCodewordSymbols = 255u;
  * roots the code has, and a second opinion about that is a code that encodes one way
  * and verifies another.
  *
+ * g(x) starts at 1 and is multiplied by (x - a^i) once per root. Over GF(256) subtraction
+ * is addition is XOR, so "x - a^i" and "x + a^i" are the same polynomial — which is why no
+ * sign appears anywhere in it. The product is formed in place, descending, so a
+ * coefficient is read before it is overwritten.
+ *
  * @param parityCount Parity symbols; clamped to @ref kMaxParitySymbols.
  * @param out         Receives parityCount + 1 coefficients, lowest degree first.
  * @return Coefficients written.
@@ -63,6 +68,12 @@ core::u32 generatorPolynomial(core::u32 parityCount, core::u8 *out) noexcept;
  * Systematic: the data is left untouched and the parity follows it, so a reader that
  * trusts its medium can ignore the code entirely and a reader that does not can use
  * it without rearranging anything.
+ *
+ * Long division of data * x^s by g(x); the remainder IS the parity. Written as a shift
+ * register rather than as an array division because the remainder is all that is wanted
+ * and the quotient would be computed only to be thrown away. The register holds the
+ * remainder with the highest-order symbol last; the wire wants it in transmission order,
+ * so it is reversed.
  *
  * @param data        The message.
  * @param dataCount   Symbols in it.
@@ -78,10 +89,10 @@ core::u32 generatorPolynomial(core::u32 parityCount, core::u8 *out) noexcept;
  * @brief What a decode found and did.
  */
 struct ReedSolomonRepair {
-    bool clean{false};         ///< The codeword already satisfied the code.
-    bool corrected{false};     ///< It did not, and every error was located and fixed.
-    core::u32 errorCount{0u};  ///< Symbols changed.
-    core::u32 errorDegree{0u}; ///< Degree of the error locator, i.e. errors the syndromes implied.
+    bool clean{false};         /**< The codeword already satisfied the code. */
+    bool corrected{false};     /**< It did not, and every error was located and fixed. */
+    core::u32 errorCount{0u};  /**< Symbols changed. */
+    core::u32 errorDegree{0u}; /**< Degree of the error locator, i.e. errors the syndromes implied. */
 };
 
 /**
@@ -91,6 +102,35 @@ struct ReedSolomonRepair {
  * symbols this finds and fixes at most floor(s/2) errors. Beyond that it does not
  * silently produce a plausible codeword — it reports failure, because for an archival
  * format a wrong world that loads is strictly worse than a right one that refuses.
+ *
+ * Every working array is a fixed-size automatic: the decoder runs in ring 0 on a
+ * cartridge that may itself be the thing that is broken, so it allocates nothing.
+ *
+ * - **Syndromes.** S_i = C(a^i). A codeword with no errors is a multiple of g(x), whose
+ *   roots are exactly those points, so every syndrome is zero. Any non-zero one is proof
+ *   of corruption — and the cheapest proof there is, at one field multiply per symbol.
+ * - **Berlekamp-Massey: the shortest recurrence the syndromes obey.** The error locator
+ *   polynomial's roots are the inverse positions of the errors. Finding it is finding the
+ *   shortest linear feedback register that generates the syndrome sequence, one
+ *   discrepancy at a time. A locator longer than floor(s/2) means more errors than the
+ *   bound allows, and the decoder says so rather than guess.
+ * - **Chien search: which positions the locator points at.** The symbol at index i has
+ *   position exponent (symbolCount - 1 - i), because the codeword is evaluated
+ *   highest-degree-first. When the locator has roots outside the codeword, they are not
+ *   our errors, and the decode fails.
+ * - **Forney: how much each of them is wrong by.** Omega(x) = S(x) * Lambda(x) mod x^s,
+ *   and the magnitude at a root is Omega(X^-1) / Lambda'(X^-1). The formal derivative
+ *   over a field of characteristic two keeps only the odd-degree terms, every even term
+ *   differentiating to zero. In full, e_j = X_j^(1-b) * Omega(X_j^-1) / Lambda'(X_j^-1),
+ *   and this code's first consecutive root is b = 0, so the factor is X_j itself.
+ * - **Verify rather than trust.** A bounded-distance decoder handed more errors than it
+ *   can correct can converge on a word that is not a codeword, and recomputing the
+ *   syndromes is what tells it apart from a repair.
+ *
+ * @warning Leaving out the X_j factor was measured rather than reasoned about: the decoder
+ * refused 194 of 200 single-error codewords and fixed 6. Three percent is one position in
+ * forty, which is exactly the share where X_j happens to be one — the only place a missing
+ * multiplication by X_j is invisible.
  *
  * @param codeword     Data followed by parity; modified on success.
  * @param symbolCount  Total symbols, data and parity together.
@@ -106,9 +146,9 @@ struct ReedSolomonRepair {
  * @brief What a transversal repair found.
  */
 struct TransversalReport {
-    core::u32 codewords{0u};        ///< Columns examined.
-    core::u32 damagedCodewords{0u}; ///< Columns that were not already clean.
-    core::u32 correctedBytes{0u};   ///< Symbols changed.
+    core::u32 codewords{0u};        /**< Columns examined. */
+    core::u32 damagedCodewords{0u}; /**< Columns that were not already clean. */
+    core::u32 correctedBytes{0u};   /**< Symbols changed. */
 };
 
 /**
