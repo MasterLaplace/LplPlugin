@@ -38,8 +38,8 @@ struct BroadcastSystem::Impl {
     /**
      * @brief Prefixes the stream with a StateSnapshot header and broadcasts it.
      *
-     * SessionManager::broadcastState splits anything longer than kMaxPayloadSize into
-     * datagrams of that size, so the packet is passed whole.
+     * The entities are batched so that the packet, header included, fits in the one datagram
+     * SessionManager::broadcastState accepts; a refusal is logged.
      */
     void flushStream()
     {
@@ -61,7 +61,8 @@ struct BroadcastSystem::Impl {
 
         std::memcpy(pkt.data() + sizeof(header), payload.data(), payloadSize);
 
-        sessionManager.broadcastState(*transport, std::span<const core::byte>{pkt.data(), pkt.size()});
+        if (!sessionManager.broadcastState(*transport, std::span<const core::byte>{pkt.data(), pkt.size()}).has_value())
+            core::Log::error("BroadcastSystem", "a state packet did not fit in one datagram");
 
         stream.reset();
     }
@@ -88,7 +89,8 @@ void BroadcastSystem::execute(core::f32 /*dt*/)
     static constexpr core::u32 kEntityBytes = 32;
     static constexpr core::u32 kCountHeaderBytes = 2;
     static constexpr core::u32 kMaxEntitiesPerPacket =
-        (net::session::SessionManager::kMaxPayloadSize - kCountHeaderBytes) / kEntityBytes;
+        (net::session::SessionManager::kMaxPayloadSize - sizeof(net::protocol::PacketHeader) - kCountHeaderBytes) /
+        kEntityBytes;
 
     struct EntityRecord {
         core::u32 id;

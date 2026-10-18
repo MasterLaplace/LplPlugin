@@ -96,40 +96,36 @@ core::u32 SessionManager::reapTimedOut(core::f64 timeoutMs, const std::function<
 
 core::u32 SessionManager::activeCount() const noexcept { return static_cast<core::u32>(_impl->sessions.size()); }
 
-void SessionManager::broadcastState(transport::ITransport &transport, std::span<const core::byte> data)
+core::Expected<void> SessionManager::broadcastState(transport::ITransport &transport, std::span<const core::byte> data)
 {
-    const core::u32 totalSize = static_cast<core::u32>(data.size());
+    if (data.size() > kMaxPayloadSize)
+    {
+        return core::makeError(core::ErrorCode::InvalidArgument, "State packet longer than one datagram");
+    }
 
     _impl->broadcastBatch.clear();
 
-    for (core::u32 offset = 0; offset < totalSize;)
+    for (auto &[id, session] : _impl->sessions)
     {
-        const core::u32 chunkSize = std::min(kMaxPayloadSize, totalSize - offset);
-        auto fragment = data.subspan(offset, chunkSize);
-
-        for (auto &[id, session] : _impl->sessions)
+        if (session->state() != SessionState::Connected)
         {
-            if (session->state() != SessionState::Connected)
-            {
-                continue;
-            }
-
-            _impl->broadcastBatch.push_back(transport::Datagram{fragment, session->address()});
+            continue;
         }
 
-        offset += chunkSize;
+        _impl->broadcastBatch.push_back(transport::Datagram{data, session->address()});
     }
 
     if (_impl->broadcastBatch.empty())
     {
-        return;
+        return {};
     }
 
     auto result = transport.sendBatch(_impl->broadcastBatch);
     if (!result.has_value() || result.value() < _impl->broadcastBatch.size())
     {
-        core::Log::warn("SessionManager: broadcast did not send every fragment");
+        core::Log::warn("SessionManager: broadcast did not reach every session");
     }
+    return {};
 }
 
 bool SessionManager::isDuplicate(core::u32 playerId) const noexcept { return _impl->sessions.contains(playerId); }
