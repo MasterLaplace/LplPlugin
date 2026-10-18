@@ -45,15 +45,13 @@ WorldBuilder &WorldBuilder::terrain(core::u32 width, core::u32 depth, const Nois
     if (seeded.seed == NoiseParams{}.seed)
         seeded.seed = _seed;
 
-    if (_isChunk)
+    if (_isChunk && width == depth)
     {
         ChunkParams params;
         params.size = width;
         params.worldSeed = seeded.seed;
         params.noise = seeded;
         _height = generateChunkTerrain(params, _chunk);
-        if (width != depth)
-            _height = generateNoiseHeightfield(width, depth, seeded);
     }
     else
     {
@@ -930,18 +928,21 @@ void WorldBuilder::emit(ecs::Registry &registry, const lpl::pmr::vector<Placemen
 
         const ecs::Archetype archetype{collidable ? std::span<const ecs::ComponentId>{obstacleIds} :
                                                     std::span<const ecs::ComponentId>{sceneryIds}};
+        lpl::pmr::vector<Placement> placed;
         lpl::pmr::vector<ecs::EntityId> created;
+        placed.reserve(group.size());
         created.reserve(group.size());
         for (core::u32 i = 0u; i < group.size(); ++i)
         {
             auto id = registry.createEntity(archetype);
             if (!id)
                 continue;
+            placed.push_back(group[i]);
             created.push_back(*id);
             if (outIds != nullptr)
                 outIds->push_back(*id);
         }
-        fillPlacements(registry, archetype, group, created);
+        fillPlacements(registry, archetype, placed, created);
     }
 }
 
