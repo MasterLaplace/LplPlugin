@@ -25,18 +25,28 @@ template <typename I, core::u32 F>
 requires std::is_signed_v<I>
 constexpr FixedPoint<I, F> FixedPoint<I, F>::fromFloat(float f)
 {
-    FixedPoint fp;
-    fp._raw = static_cast<I>(f * static_cast<float>(kOne));
-    return fp;
+    const float scaled = f * static_cast<float>(kOne);
+    if (scaled != scaled)
+        return FixedPoint{};
+    if (scaled >= static_cast<float>(std::numeric_limits<I>::max()))
+        return max();
+    if (scaled <= static_cast<float>(std::numeric_limits<I>::min()))
+        return min();
+    return fromRaw(static_cast<I>(scaled));
 }
 
 template <typename I, core::u32 F>
 requires std::is_signed_v<I>
 constexpr FixedPoint<I, F> FixedPoint<I, F>::fromDouble(double d)
 {
-    FixedPoint fp;
-    fp._raw = static_cast<I>(d * static_cast<double>(kOne));
-    return fp;
+    const double scaled = d * static_cast<double>(kOne);
+    if (scaled != scaled)
+        return FixedPoint{};
+    if (scaled >= static_cast<double>(std::numeric_limits<I>::max()))
+        return max();
+    if (scaled <= static_cast<double>(std::numeric_limits<I>::min()))
+        return min();
+    return fromRaw(static_cast<I>(scaled));
 }
 
 template <typename I, core::u32 F>
