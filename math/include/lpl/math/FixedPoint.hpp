@@ -51,7 +51,17 @@ public:
 
     static constexpr FixedPoint fromRaw(IntType raw);
     static constexpr FixedPoint fromInt(IntType integer);
+    /**
+     * @brief The value nearest @p f toward zero, saturated to max() or min() beyond the word.
+     *
+     * A float the word cannot hold, infinities included, gives the end of the word on its side, and NaN
+     * gives zero: converting such a float to IntType is undefined behaviour, which two targets need not
+     * answer alike.
+     */
     static constexpr FixedPoint fromFloat(float f);
+    /**
+     * @brief The value nearest @p d toward zero, saturated like fromFloat().
+     */
     static constexpr FixedPoint fromDouble(double d);
 
     [[nodiscard]] constexpr IntType raw() const;
