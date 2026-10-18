@@ -9,6 +9,6 @@ target("lpl-samples")
     set_group("modules")
     -- Header-only sims; they use the software rasterizer + fixed-point math.
     add_deps("lpl-core", "lpl-math", "lpl-render", "lpl-ecs", "lpl-physics", "lpl-procgen", "lpl-ai", "lpl-ecology", "lpl-engine")
-    add_headerfiles("include/(lpl/samples/*.hpp)")
+    add_headerfiles("include/(lpl/samples/*.hpp)", "include/(lpl/samples/*.inl)")
     add_includedirs("include", {public = true})
 target_end()
