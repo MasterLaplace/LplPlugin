@@ -45,9 +45,9 @@ namespace lpl::procgen {
  * was multiplied at the end.
  */
 enum class TreeSpecies : core::u8 {
-    Conifer = 0, ///< A dominant stem with short side whorls: spruce, pine.
-    Broadleaf,   ///< A stem that forks and forks again: oak, beech.
-    Shrub,       ///< No dominant stem: many short stems from the base.
+    Conifer = 0, /**< A dominant stem with short side whorls: spruce, pine. */
+    Broadleaf,   /**< A stem that forks and forks again: oak, beech. */
+    Shrub,       /**< No dominant stem: many short stems from the base. */
     Count
 };
 
@@ -57,16 +57,16 @@ enum class TreeSpecies : core::u8 {
  */
 struct TreeParams {
     TreeSpecies species{TreeSpecies::Conifer};
-    core::u32 seed{0x7A3Eu};                                     ///< Determinism anchor.
-    core::u32 iterations{4u};                                    ///< Rewrite rounds.
-    core::u32 maxSegments{192u};                                 ///< Hard cap: a kernel heap is 4 MiB.
-    math::Fixed32 segmentLength{math::Fixed32::fromFloat(0.9f)}; ///< Length of a depth-0 segment.
-    math::Fixed32 lengthDecay{math::Fixed32::fromFloat(0.78f)};  ///< Length multiplier per branch depth.
-    math::Fixed32 radius{math::Fixed32::fromFloat(0.13f)};       ///< Trunk radius at the foot.
-    math::Fixed32 radiusDecay{math::Fixed32::fromFloat(0.68f)};  ///< Radius multiplier per branch depth.
-    math::Fixed32 branchAngle{math::Fixed32::fromFloat(0.42f)};  ///< Pitch away from the parent, radians.
-    math::Fixed32 rollAngle{math::Fixed32::fromFloat(2.39996f)}; ///< Roll between successive branches (golden angle).
-    math::Fixed32 leafSize{math::Fixed32::fromFloat(0.26f)};     ///< Half-extent of a leaf sprite.
+    core::u32 seed{0x7A3Eu};                                     /**< Determinism anchor. */
+    core::u32 iterations{4u};                                    /**< Rewrite rounds. */
+    core::u32 maxSegments{192u};                                 /**< Hard cap: a kernel heap is 4 MiB. */
+    math::Fixed32 segmentLength{math::Fixed32::fromFloat(0.9f)}; /**< Length of a depth-0 segment. */
+    math::Fixed32 lengthDecay{math::Fixed32::fromFloat(0.78f)};  /**< Length multiplier per branch depth. */
+    math::Fixed32 radius{math::Fixed32::fromFloat(0.13f)};       /**< Trunk radius at the foot. */
+    math::Fixed32 radiusDecay{math::Fixed32::fromFloat(0.68f)};  /**< Radius multiplier per branch depth. */
+    math::Fixed32 branchAngle{math::Fixed32::fromFloat(0.42f)};  /**< Pitch away from the parent, radians. */
+    math::Fixed32 rollAngle{math::Fixed32::fromFloat(2.39996f)}; /**< Roll between successive branches: golden angle. */
+    math::Fixed32 leafSize{math::Fixed32::fromFloat(0.26f)};     /**< Half-extent of a leaf sprite. */
 };
 
 /**
@@ -76,9 +76,9 @@ struct TreeParams {
 struct TreeBranch {
     math::Fixed32 x0{}, y0{}, z0{};
     math::Fixed32 x1{}, y1{}, z1{};
-    math::Fixed32 radius0{}; ///< Radius at the start.
-    math::Fixed32 radius1{}; ///< Radius at the end: a branch tapers.
-    core::u8 depth{0u};      ///< Branch depth, 0 at the trunk.
+    math::Fixed32 radius0{}; /**< Radius at the start. */
+    math::Fixed32 radius1{}; /**< Radius at the end: a branch tapers. */
+    core::u8 depth{0u};      /**< Branch depth, 0 at the trunk. */
 };
 
 /**
@@ -98,11 +98,20 @@ struct TreeLeaf {
 struct TreeSkeleton {
     lpl::pmr::vector<TreeBranch> branches;
     lpl::pmr::vector<TreeLeaf> leaves;
-    math::Fixed32 height{}; ///< Highest point reached, for culling and for shadows.
-    math::Fixed32 spread{}; ///< Largest horizontal distance from the trunk.
+    math::Fixed32 height{}; /**< Highest point reached, for culling and for shadows. */
+    math::Fixed32 spread{}; /**< Largest horizontal distance from the trunk. */
 };
 
-/** @brief The grammar for a species: rewrite rules and how far to run them. */
+/**
+ * @brief The grammar for a species: rewrite rules and how far to run them.
+ *
+ * - Conifer: a dominant stem. The rule always continues with F, and the whorls it
+ *   throws off are short and pitched down. That, not a width factor, is what
+ *   makes the silhouette a cone.
+ * - Broadleaf: no dominant stem past the first fork. A becomes two or three A's,
+ *   each inside a branch, so the crown opens out and the trunk stops being the
+ *   tallest thing in the tree.
+ */
 [[nodiscard]] LSystemParams makeTreeGrammar(TreeSpecies species, core::u32 seed);
 
 /**
@@ -115,10 +124,17 @@ struct TreeSkeleton {
  *  - `\` / `/` roll right / left
  *  - `[` / `]` push / pop, and each push is one branch deeper
  *  - `L` place a leaf cluster here
+ *  - any other character is inert: a rewrite-only variable
  *
- * A `]` that closes a branch with no `L` in it still gets foliage at its tip:
- * a grammar that forgot to say "leaf" would otherwise grow bare sticks, and the
- * tip of a branch is where leaves are.
+ * The turtle starts straight up. Growth wobbles per tree, so a stand grown from
+ * one grammar is a stand of different trees rather than one tree stamped many
+ * times: each `F` turns by a wobble of up to a twentieth of a radian, because
+ * perfectly straight segments read as a diagram of a tree, not as a tree.
+ *
+ * Leaves nearer the tips are smaller, which is what gives a crown an edge instead
+ * of a wall. A `]` that closes a branch with no `L` in it still gets foliage at
+ * its tip: a grammar that forgot to say "leaf" would otherwise grow bare sticks,
+ * and the tip of a branch is where leaves are.
  */
 [[nodiscard]] TreeSkeleton growTree(const TreeParams &params);
 

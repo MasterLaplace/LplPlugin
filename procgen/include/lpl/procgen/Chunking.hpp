@@ -48,8 +48,8 @@ namespace lpl::procgen {
  * @brief Which chunk, in chunk units (not cells).
  */
 struct ChunkCoord {
-    core::i32 x{0}; ///< Chunk column; may be negative.
-    core::i32 z{0}; ///< Chunk row; may be negative.
+    core::i32 x{0}; /**< Chunk column; may be negative. */
+    core::i32 z{0}; /**< Chunk row; may be negative. */
 
     [[nodiscard]] constexpr bool operator==(const ChunkCoord &other) const noexcept
     {
@@ -62,9 +62,9 @@ struct ChunkCoord {
  * @brief Chunk size and the world seed every chunk derives from.
  */
 struct ChunkParams {
-    core::u32 size{32u};        ///< Cells per chunk edge.
-    core::u32 worldSeed{1337u}; ///< The one seed the whole world comes from.
-    NoiseParams noise{};        ///< Terrain sampling; its own seed is ignored.
+    core::u32 size{32u};        /**< Cells per chunk edge. */
+    core::u32 worldSeed{1337u}; /**< The one seed the whole world comes from. */
+    NoiseParams noise{};        /**< Terrain sampling; its own seed is ignored. */
 
     /**
      * Real ground, when there is any, displacing @ref noise as the lowest frequency.
@@ -131,6 +131,9 @@ struct ChunkParams {
  * Derived from the world seed and the chunk coordinates, so it is reproducible
  * from the coordinates alone — no chunk has to have been generated before.
  *
+ * Hash the coordinates rather than combine them arithmetically: chunk (1, 0) and
+ * (0, 1) must not share a seed, and a simple sum or xor would give them one.
+ *
  * @param params World parameters.
  * @param coord  Chunk to seed.
  * @return A seed unique to that chunk.
@@ -166,6 +169,13 @@ struct ChunkParams {
  * @ref countSeamMismatches over an eroded patch is what proves it rather than
  * this paragraph.
  *
+ * The apron is iterations PLUS ONE, and the extra cell is not caution — it is the
+ * measurement. Thermal erosion moves material one cell per pass, so N passes
+ * reach N cells; but the apron's own outer ring is itself wrong (it has no
+ * neighbours beyond), and that error marches inward one cell per pass too.
+ * An apron of exactly N left 9 cells of 5184 disagreeing with the unchunked
+ * computation — the corners, where the two fronts meet. N+1 leaves none.
+ *
  * @warning HYDRAULIC erosion is not bounded this way. Water runs downhill for as
  *          far as the slope lasts, so a droplet's influence is the length of a
  *          river, not the iteration count — no finite apron makes it exact. It
@@ -174,20 +184,13 @@ struct ChunkParams {
  *
  * @param params     World parameters.
  * @param coord      Chunk to generate.
- * @param iterations Thermal iterations; also the apron width.
+ * @param iterations Thermal iterations; the apron is one cell wider.
  * @param talus      Slope above which material slides.
  * @return The eroded chunk, of size `params.size` squared.
  */
 [[nodiscard]] Heightfield generateErodedChunkTerrain(const ChunkParams &params, ChunkCoord coord, core::u32 iterations,
                                                      core::f32 talus = 0.6f);
 
-/**
- * @brief Height at one world cell, without generating its chunk.
- * @param params  World parameters.
- * @param worldX  World column.
- * @param worldZ  World row.
- * @return The elevation there.
- */
 /**
  * @struct ReliefBlend
  * @brief What it takes to lay measured ground over invented ground.
@@ -199,13 +202,27 @@ struct ChunkParams {
  * header already warns about for the noise layer.
  */
 struct ReliefBlend {
-    const math::ReliefMosaic *mosaic{nullptr}; ///< The survey, or null for a world without one.
-    NoiseParams detail{.amplitude = 0.0f};     ///< The high frequencies a survey cannot carry.
-    core::u32 seed{0u};                        ///< The world seed the detail layer derives from.
+    const math::ReliefMosaic *mosaic{nullptr}; /**< The survey, or null for a world without one. */
+    NoiseParams detail{.amplitude = 0.0f};     /**< The high frequencies a survey cannot carry. */
+    core::u32 seed{0u};                        /**< The world seed the detail layer derives from. */
 };
 
 /**
  * @brief Lays measured ground over invented ground at one cell.
+ *
+ * With no survey behind the world it returns @p invented: exactly the path it always took, so
+ * nothing already folded moves because this branch exists.
+ *
+ * The weight is asked for AFTER the sample, because a cell can be inside the field and still be a
+ * gap in the survey -- and a gap must fall back to invented ground at full strength rather than to
+ * a fade towards nothing.
+ *
+ * Real ground is the lowest frequency; the detail layer is what thirty-metre samples cannot carry.
+ * Added only where the real ground counts, so the border band does not gain roughness the invented
+ * side does not have.
+ *
+ * Linear across the band. A body walking out of the survey must not meet a cliff made of whatever
+ * the two surfaces happened to differ by.
  *
  * @param blend    The survey and its detail layer.
  * @param worldX   World column, already wrapped if the world is closed.
@@ -216,6 +233,25 @@ struct ReliefBlend {
 [[nodiscard]] math::Fixed32 applyRelief(const ReliefBlend &blend, core::i32 worldX, core::i32 worldZ,
                                         math::Fixed32 invented);
 
+/**
+ * @brief Height at one world cell, without generating its chunk.
+ *
+ * The coordinate is wrapped first, before anything reads it: on a closed world the cell past the
+ * last column IS the first column, so the survey lookup and the noise lattice both land on the same
+ * cell and the seam does not exist rather than being hidden. Costless when the world has real edges.
+ *
+ * World coordinates, not chunk-local ones. This single choice is what makes the whole scheme
+ * seamless: the shared edge of two chunks is the same world position, so it evaluates to the same
+ * height in both.
+ *
+ * The relief goes through @ref applyRelief, one blend shared with the bounded builder: see
+ * @ref ReliefBlend for why it is not written twice.
+ *
+ * @param params  World parameters.
+ * @param worldX  World column.
+ * @param worldZ  World row.
+ * @return The elevation there.
+ */
 [[nodiscard]] math::Fixed32 sampleWorldHeight(const ChunkParams &params, core::i32 worldX, core::i32 worldZ);
 
 /**
@@ -259,8 +295,8 @@ struct ReliefBlend {
  * this is the level below it, not a replacement for it.
  */
 struct EndlessRiverParams {
-    core::u32 coarseCells{4u}; ///< Fine cells per coarse cell; the river's width scale.
-    core::u32 basinRadius{7u}; ///< Coarse cells searched upstream. Cost is quadratic in it.
+    core::u32 coarseCells{4u}; /**< Fine cells per coarse cell; the river's width scale. */
+    core::u32 basinRadius{7u}; /**< Coarse cells searched upstream. Cost is quadratic in it. */
     /**
      * @brief Upstream cells that must drain through before it is a river.
      *
@@ -276,19 +312,23 @@ struct EndlessRiverParams {
      * definition. This threshold is calibrated on those.
      */
     core::u32 riverThreshold{6u};
-    core::f32 seaLevel{-1.0f}; ///< Below this the water is already the sea.
+    core::f32 seaLevel{-1.0f}; /**< Below this the water is already the sea. */
 
-    // ── The trunk: a second, coarser level ──────────────────────────────────
-    //
-    // A bounded basin gives tributaries and nothing else — that is arithmetic,
-    // not a limitation to be tuned away. A river that crosses a continent needs a
-    // basin the size of a continent, and sampling one per cell is unaffordable.
-    //
-    // So the same question is asked twice, at two scales, and the coarse answer
-    // constrains the fine one: exactly the cascade rule HiGen exists to enforce.
-    // The macro level is sampled sparsely (one height per @ref trunkCells coarse
-    // cells) and cached, so its reach costs a few hundred samples per macro cell
-    // rather than per world cell.
+    /**
+     * @name The trunk: a second, coarser level
+     * @brief A bounded basin gives tributaries and nothing else — that is arithmetic,
+     *        not a limitation to be tuned away.
+     *
+     * A river that crosses a continent needs a basin the size of a continent, and
+     * sampling one per cell is unaffordable.
+     *
+     * So the same question is asked twice, at two scales, and the coarse answer
+     * constrains the fine one: exactly the cascade rule HiGen exists to enforce.
+     * The macro level is sampled sparsely (one height per @ref trunkCells coarse
+     * cells) and cached, so its reach costs a few hundred samples per macro cell
+     * rather than per world cell.
+     * @{
+     */
 
     /**
      * @brief Octaves the macro level keeps.
@@ -324,8 +364,8 @@ struct EndlessRiverParams {
      */
     core::f32 trunkFrequencyScale{0.08f};
 
-    core::u32 trunkCells{8u};   ///< Coarse cells per macro cell.
-    core::u32 trunkRadius{10u}; ///< Macro cells searched upstream. This is the reach.
+    core::u32 trunkCells{8u};   /**< Coarse cells per macro cell. */
+    core::u32 trunkRadius{10u}; /**< Macro cells searched upstream. This is the reach. */
     /**
      * @brief Upstream macro cells before a trunk runs.
      *
@@ -344,8 +384,9 @@ struct EndlessRiverParams {
      */
     core::u32 trunkThreshold{6u};
 
-    core::u32 trunkWidth{1u}; ///< Coarse cells either side of the trunk's line.
-    bool trunks{true};        ///< Whether the coarse level runs at all.
+    core::u32 trunkWidth{1u}; /**< Coarse cells either side of the trunk's line. */
+    bool trunks{true};        /**< Whether the coarse level runs at all. */
+    /** @} */
 };
 
 /**
@@ -395,19 +436,6 @@ struct EndlessRiverParams {
                                      core::i32 coarseZ);
 
 /**
- * @brief Marks the river cells of one chunk.
- *
- * Works on a coarse grid covering the chunk plus @ref EndlessRiverParams::basinRadius
- * on every side, sampled once and then walked — the walks are cheap, the height
- * samples are not, and doing it the other way round costs a full basin of noise
- * evaluations per cell.
- *
- * @param params      World parameters.
- * @param rivers      How a river is decided.
- * @param coord       Chunk to mark.
- * @return A 0/1 mask of the chunk's cells, 1 where water runs.
- */
-/**
  * @brief The upstream count that makes a target SHARE of cells carry a river.
  *
  * @warning `EndlessRiverParams::riverThreshold` is an ABSOLUTE count, and an absolute threshold
@@ -420,6 +448,13 @@ struct EndlessRiverParams {
  *
  * So the threshold is calibrated instead of chosen: this returns the smallest count whose
  * river share is at or under @p targetShare.
+ *
+ * Raising the threshold can only mark fewer cells, so the share is monotonically
+ * non-increasing in it and a bisection is exact rather than approximate. The upper bound is
+ * the largest basin a bounded radius can hold, `(2 * basinRadius + 1)` squared: beyond it every
+ * basin candidate is rejected and what is left is the cells a trunk covers, which no threshold
+ * removes — so the search stops there, and returns that bound when even it marks more than
+ * @p targetShare.
  *
  * **Chunk independence is preserved, and it is the whole difficulty.** A quantile over "the
  * world" does not exist — there is no total. So the calibration window is a fixed block of
@@ -447,6 +482,37 @@ struct EndlessRiverParams {
  */
 [[nodiscard]] core::f32 measureRiverShare(const ChunkParams &params, const EndlessRiverParams &rivers);
 
+/**
+ * @brief Marks the river cells of one chunk.
+ *
+ * Works on a coarse grid covering the chunk plus @ref EndlessRiverParams::basinRadius
+ * on every side, sampled once and then walked — the walks are cheap, the height
+ * samples are not, and doing it the other way round costs a full basin of noise
+ * evaluations per cell.
+ *
+ * The window has to hold every cell that could drain into a cell of THIS chunk, or a
+ * coarse cell near the border would be judged on a truncated basin and the two chunks
+ * sharing it would disagree.
+ *
+ * Steepest descent, D8. Ties break on the lowest neighbour index, so a flat shelf routes
+ * the same way on every machine and in every chunk that asks; a walk ends at a pit,
+ * where the water stops.
+ *
+ * A walk credits a cell ONLY if it started within the basin radius OF THAT CELL. Without
+ * the test the count is "walks starting anywhere in the window", and the window belongs
+ * to the chunk — so the same world cell scores differently depending on which chunk
+ * asked, and a river changes its mind at every border. The bound has to be centred on
+ * the cell being credited, not on the caller.
+ *
+ * The trunk comes from the coarse level down, through the same helper the reference,
+ * @ref isRiverCoarseCell, uses. A cell that is already the sea is not a river: without
+ * that test every coastal cell qualifies, since the whole basin drains through it.
+ *
+ * @param params      World parameters.
+ * @param rivers      How a river is decided.
+ * @param coord       Chunk to mark.
+ * @return A 0/1 mask of the chunk's cells, 1 where water runs.
+ */
 [[nodiscard]] Grid<core::u8> markChunkRivers(const ChunkParams &params, const EndlessRiverParams &rivers,
                                              ChunkCoord coord);
 
@@ -462,6 +528,10 @@ struct EndlessRiverParams {
  * The alternative — the steepest descent of the CARVED chunk heights — would have been
  * cheaper and wrong: a cell on the chunk's edge has neighbours in the next chunk, so it
  * would be judged on a truncated stencil and the two chunks would disagree.
+ *
+ * A neighbour must drop strictly more than the best so far, so ties break on the lowest
+ * neighbour index: a flat reach has to route the same way on every machine and in every
+ * chunk that asks.
  *
  * @param params  World parameters.
  * @param rivers  How a river is decided.
@@ -479,6 +549,10 @@ struct EndlessRiverParams {
  * and a coarse verdict costs nine noise samples: derived at draw time it would be some
  * hundreds of fBm evaluations per frame for water that has not moved.
  *
+ * One verdict per coarse cell, memoised: nine noise samples each, and every fine cell of
+ * a coarse cell shares its answer. Asking per fine cell would cost the square of the
+ * coarse ratio for the same result.
+ *
  * @param params World parameters.
  * @param rivers How a river is decided.
  * @param coord  Chunk to describe.
@@ -490,6 +564,15 @@ struct EndlessRiverParams {
 
 /**
  * @brief Checks that two neighbouring chunks agree along their shared edge.
+ *
+ * The two edge cells are one world cell apart, never the same one, so there is nothing to
+ * compare them to each other. What has to hold is that EACH chunk's edge cell equals what the
+ * world function says at that chunk's own world position — checked on both sides, because a
+ * chunk that agreed with the world function only on the side it was queried from would still
+ * leave a step at the seam.
+ *
+ * Only 4-adjacent chunks share an edge; anything else has no seam to check and counts zero.
+ *
  * @param params World parameters.
  * @param a      First chunk.
  * @param b      Second chunk; must be 4-adjacent to @p a.
@@ -508,7 +591,7 @@ struct EndlessRiverParams {
  * @param size          Chunk edge in cells.
  * @param neighbour     The solved neighbour.
  * @param neighbourSide Which side of the NEW chunk the neighbour lies on
- *                      (index into kNeighbor4X/Z).
+ *                      (index into kNeighbor4X/Z: 0 east, 1 west, 2 south, 3 north).
  * @return A preset grid, pinned along one edge and free elsewhere.
  */
 [[nodiscard]] TileGrid borderConstraintsFrom(core::u32 size, const TileGrid &neighbour, core::u32 neighbourSide);
@@ -524,17 +607,10 @@ struct EndlessRiverParams {
  *
  * @return The canonical parameters.
  */
-[[nodiscard]] constexpr ChunkParams parityChunkParams() noexcept
-{
-    ChunkParams params{};
-    params.size = 24u;
-    params.worldSeed = 20260728u;
-    params.noise.frequency = 0.09f;
-    params.noise.amplitude = 14.0f;
-    params.noise.octaves = 5u;
-    return params;
-}
+[[nodiscard]] constexpr ChunkParams parityChunkParams() noexcept;
 
 } // namespace lpl::procgen
+
+#    include "Chunking.inl"
 
 #endif // LPL_PROCGEN_CHUNKING_HPP

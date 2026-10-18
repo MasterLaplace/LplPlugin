@@ -1,12 +1,3 @@
-/**
- * @file Botany.cpp
- * @brief Implementation of the 3D turtle that grows a tree from a grammar.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Botany.hpp>
 
 #include <lpl/math/Cordic.hpp>
@@ -28,9 +19,9 @@ namespace {
  * default roll.
  */
 struct Frame {
-    math::Fixed32 hx{}, hy{}, hz{}; ///< Heading: where the turtle moves.
-    math::Fixed32 lx{}, ly{}, lz{}; ///< Left.
-    math::Fixed32 ux{}, uy{}, uz{}; ///< Up, relative to the heading.
+    math::Fixed32 hx{}, hy{}, hz{}; /**< Heading: where the turtle moves. */
+    math::Fixed32 lx{}, ly{}, lz{}; /**< Left. */
+    math::Fixed32 ux{}, uy{}, uz{}; /**< Up, relative to the heading. */
 };
 
 struct TurtleState {
@@ -39,10 +30,13 @@ struct TurtleState {
     math::Fixed32 length{};
     math::Fixed32 radius{};
     core::u8 depth{0u};
-    bool leafed{false}; ///< Did anything inside this branch place a leaf?
+    bool leafed{false}; /**< Did anything inside this branch place a leaf? */
 };
 
-/// Rotates @p a and @p b about the axis they span, by @p angle radians.
+/**
+ * @brief Rotates a = (@p ax, @p ay, @p az) and b = (@p bx, @p by, @p bz) within the plane they span, by
+ *        @p angle radians.
+ */
 void rotatePair(math::Fixed32 &ax, math::Fixed32 &ay, math::Fixed32 &az, math::Fixed32 &bx, math::Fixed32 &by,
                 math::Fixed32 &bz, math::Fixed32 angle)
 {
@@ -63,13 +57,19 @@ void rotatePair(math::Fixed32 &ax, math::Fixed32 &ay, math::Fixed32 &az, math::F
     bz = nbz;
 }
 
-/// Yaw: heading turns towards left.
+/**
+ * @brief Yaw: heading turns towards left.
+ */
 void yaw(Frame &f, math::Fixed32 angle) { rotatePair(f.hx, f.hy, f.hz, f.lx, f.ly, f.lz, angle); }
 
-/// Pitch: heading turns towards up.
+/**
+ * @brief Pitch: heading turns towards up.
+ */
 void pitch(Frame &f, math::Fixed32 angle) { rotatePair(f.hx, f.hy, f.hz, f.ux, f.uy, f.uz, angle); }
 
-/// Roll: left and up turn about the heading, which the heading does not feel.
+/**
+ * @brief Roll: left and up turn about the heading, which the heading does not feel.
+ */
 void roll(Frame &f, math::Fixed32 angle) { rotatePair(f.lx, f.ly, f.lz, f.ux, f.uy, f.uz, angle); }
 
 [[nodiscard]] math::Fixed32 absOf(math::Fixed32 value) { return value.raw() < 0 ? math::Fixed32{} - value : value; }
@@ -85,9 +85,6 @@ LSystemParams makeTreeGrammar(TreeSpecies species, core::u32 seed)
     switch (species)
     {
     case TreeSpecies::Conifer:
-        // A dominant stem: the rule always continues with F, and the whorls it
-        // throws off are short and pitched down. That, not a width factor, is
-        // what makes the silhouette a cone.
         params.axiom = "A";
         params.rules.push_back(LRule{'A', lpl::pmr::string{"F[&/A L][&\\\\A L][&+A L]FA"}, 3u});
         params.rules.push_back(LRule{'A', lpl::pmr::string{"F[&\\A L][&/A L]FA"}, 2u});
@@ -95,8 +92,6 @@ LSystemParams makeTreeGrammar(TreeSpecies species, core::u32 seed)
         break;
 
     case TreeSpecies::Broadleaf:
-        // No dominant stem past the first fork: A becomes two A's, so the crown
-        // opens out and the trunk stops being the tallest thing in the tree.
         params.axiom = "FA";
         params.rules.push_back(LRule{'A', lpl::pmr::string{"F[+/A L][-\\A L]"}, 3u});
         params.rules.push_back(LRule{'A', lpl::pmr::string{"F[&/A L][^\\A L][+A L]"}, 2u});
@@ -120,12 +115,10 @@ TreeSkeleton growTree(const TreeParams &params)
     TreeSkeleton skeleton;
     const lpl::pmr::string expanded = expandLSystem(makeTreeGrammar(params.species, params.seed));
 
-    // Growth wobbles per tree, so a stand grown from one grammar is a stand of
-    // different trees rather than one tree stamped many times.
     math::Random jitter{params.seed ^ 0x5B7Eu};
 
     TurtleState state;
-    state.frame.hy = math::Fixed32::one(); // straight up
+    state.frame.hy = math::Fixed32::one();
     state.frame.lx = math::Fixed32::one();
     state.frame.uz = math::Fixed32::one();
     state.length = params.segmentLength;
@@ -141,8 +134,6 @@ TreeSkeleton growTree(const TreeParams &params)
         switch (expanded[i])
         {
         case 'F': {
-            // A wobble of up to a twentieth of a radian, per segment. Perfectly
-            // straight segments read as a diagram of a tree, not as a tree.
             const math::Fixed32 wobble = math::Fixed32::fromRaw(static_cast<core::i32>(jitter.below(6554u)) - 3277);
             yaw(state.frame, wobble);
             pitch(state.frame, math::Fixed32::fromRaw(static_cast<core::i32>(jitter.below(6554u)) - 3277));
@@ -177,8 +168,6 @@ TreeSkeleton growTree(const TreeParams &params)
             leaf.x = state.x;
             leaf.y = state.y;
             leaf.z = state.z;
-            // Leaves nearer the tips are smaller, which is what gives a crown an
-            // edge instead of a wall.
             leaf.size = params.leafSize *
                         (math::Fixed32::one() - math::Fixed32::fromFloat(0.12f) * math::Fixed32::fromInt(state.depth));
             leaf.depth = state.depth;
@@ -205,9 +194,6 @@ TreeSkeleton growTree(const TreeParams &params)
             break;
 
         case ']': {
-            // The tip of an unleafed branch gets foliage anyway: a grammar that
-            // forgot to say "leaf" would grow bare sticks, and a bare stick is
-            // not a shape any tree has.
             if (!state.leafed && state.depth != 0u)
             {
                 TreeLeaf leaf;
@@ -226,7 +212,7 @@ TreeSkeleton growTree(const TreeParams &params)
             break;
         }
 
-        default: break; // inert: a rewrite-only variable
+        default: break;
         }
     }
 

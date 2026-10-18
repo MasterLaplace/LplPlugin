@@ -59,16 +59,16 @@ namespace lpl::procgen {
  * else.
  */
 enum class ClimateAxis : core::u8 {
-    Temperature = 0, ///< Latitude gradient minus the altitude lapse rate.
-    Moisture,        ///< Rainfall, drainage, coast and rain shadow (see @ref computeMoisture).
-    Continentalness, ///< How far inland: 0 at the shore, 1 in the deep interior.
-    Erosion,         ///< How worn the ground is: 0 for jagged peaks, 1 for a floodplain.
-    Depth,           ///< Vertical position: 0 at the surface, 1 deep underground.
-    Weirdness,       ///< Controlled anomaly — an independent field that shifts rare biomes in.
-    Count            ///< Number of axes; never an index.
+    Temperature = 0, /**< Latitude gradient minus the altitude lapse rate. */
+    Moisture,        /**< Rainfall, drainage, coast and rain shadow (see @ref computeMoisture). */
+    Continentalness, /**< How far inland: 0 at the shore, 1 in the deep interior. */
+    Erosion,         /**< How worn the ground is: 0 for jagged peaks, 1 for a floodplain. */
+    Depth,           /**< Vertical position: 0 at the surface, 1 deep underground. */
+    Weirdness,       /**< Controlled anomaly — an independent field that shifts rare biomes in. */
+    Count            /**< Number of axes; never an index. */
 };
 
-/// Number of climate axes, as a plain count for array sizes.
+/** Number of climate axes, as a plain count for array sizes. */
 inline constexpr core::u32 kClimateAxisCount = static_cast<core::u32>(ClimateAxis::Count);
 
 /**
@@ -112,14 +112,10 @@ struct ClimateField {
     [[nodiscard]] core::u32 depth() const noexcept { return axes[0].depth(); }
     [[nodiscard]] bool empty() const noexcept { return axes[0].empty(); }
 
-    /// @brief Reads every axis at one cell.
-    [[nodiscard]] ClimateVector at(core::u32 x, core::u32 z) const noexcept
-    {
-        ClimateVector v{};
-        for (core::u32 i = 0u; i < kClimateAxisCount; ++i)
-            v.axis[i] = axes[i].at(x, z);
-        return v;
-    }
+    /**
+     * @brief Reads every axis at one cell.
+     */
+    [[nodiscard]] ClimateVector at(core::u32 x, core::u32 z) const noexcept;
 };
 
 /**
@@ -127,14 +123,14 @@ struct ClimateField {
  * @brief What shapes each axis before a biome is ever named.
  */
 struct ClimateParams {
-    core::f32 coldLatitude{0.2f};      ///< Share of the map at each edge that is fully polar.
-    core::f32 lapseRate{0.45f};        ///< Warmth lost between the lowest and highest ground, in [0, 1].
-    core::f32 seaLevel{-4.0f};         ///< Height at or below which a cell is sea.
-    core::f32 coastReach{0.25f};       ///< Share of the long axis over which continentalness saturates.
-    core::u32 weirdnessSeed{0x7E12Du}; ///< Seed of the weirdness field.
-    core::f32 weirdnessBelts{1.5f};    ///< Weirdness features across the map's longer axis.
-    core::u32 weirdnessOctaves{2u};    ///< fBm octaves of the weirdness field.
-    core::f32 surfaceDepth{0.0f};      ///< Depth value for the surface layer, in [0, 1].
+    core::f32 coldLatitude{0.2f};      /**< Share of the map at each edge that is fully polar. */
+    core::f32 lapseRate{0.45f};        /**< Warmth lost between the lowest and highest ground, in [0, 1]. */
+    core::f32 seaLevel{-4.0f};         /**< Height at or below which a cell is sea. */
+    core::f32 coastReach{0.25f};       /**< Share of the long axis over which continentalness saturates. */
+    core::u32 weirdnessSeed{0x7E12Du}; /**< Seed of the weirdness field. */
+    core::f32 weirdnessBelts{1.5f};    /**< Weirdness features across the map's longer axis. */
+    core::u32 weirdnessOctaves{2u};    /**< fBm octaves of the weirdness field. */
+    core::f32 surfaceDepth{0.0f};      /**< Depth value for the surface layer, in [0, 1]. */
 };
 
 /**
@@ -146,9 +142,34 @@ struct ClimateParams {
  * definition of each axis in the module, which is the only way the map a debug
  * view draws and the map the classifier reads can be the same map.
  *
+ * Each axis is built in turn:
+ *
+ * - Temperature: latitude, less what altitude takes away.
+ * - Moisture: already built, already in [0, 1].
+ * - Continentalness: how far the sea is, saturating at @c coastReach. With no sea
+ *   anywhere on the map, everything is interior: saying "coastal" instead would put
+ *   beaches in the middle of a continent.
+ * - Erosion: worn ground scores high, jagged ground low. Built from the local slope
+ *   and then INVERTED, because the axis names the result of erosion rather than its
+ *   potential: a floodplain is what erosion leaves behind, a spire is what it has
+ *   not reached yet. Rank, not min-max: slope is heavy-tailed (a few cliffs, mostly
+ *   gentle ground), so scaling by the maximum would report almost the entire map as
+ *   unworn and the axis would separate nothing.
+ * - Depth: which layer this field describes. Constant across a surface field, and
+ *   that is the point: the same profile table then classifies a cave layer by
+ *   handing it a different depth, instead of needing a second table for underground
+ *   biomes.
+ * - Weirdness: an independent field, deliberately correlated with nothing. Its whole
+ *   job is to be uncorrelated with the terrain. Rare biomes keyed to it therefore
+ *   appear where the land gives no warning, which is what makes them read as
+ *   anomalies rather than as a consequence of altitude.
+ *
  * @param field    Terrain (absolute heights).
  * @param moisture Moisture in [0, 1], same dimensions as @p field.
- * @param network  Drainage, for the erosion axis' flow term.
+ * @param network  Drainage, not read yet: the drainage term folds into the slope
+ *                 already. It stays in the signature because the erosion axis is
+ *                 the natural place to add accumulation weighting, and callers
+ *                 should not have to change when it does.
  * @param params   Axis shaping.
  * @return All six axes, each normalised to [0, 1] (empty when inputs mismatch).
  */
@@ -159,7 +180,8 @@ struct ClimateParams {
  * @brief Rescales a field so its values span exactly [0, 1].
  *
  * For axes whose distribution is roughly even. A constant field becomes all
- * halves rather than dividing by zero.
+ * halves rather than dividing by zero: a constant axis carries no information, and
+ * putting it at the midpoint means it neither attracts nor repels any profile.
  *
  * @param field Field to rescale in place.
  */
@@ -178,6 +200,13 @@ void normalizeUnit(Heightfield &field);
  * Ranks are computed through a fixed-resolution histogram, so the result depends
  * only on the values present and never on the order they are visited.
  *
+ * Every value is bucketed, then the histogram is walked once to turn counts into a
+ * cumulative distribution. A cell's new value is the share of the map at or below
+ * it — which is what "rank" means, and which is flat by construction whatever the
+ * input's shape was. The cumulative counts are taken at the *middle* of each
+ * bucket's run: a value sitting in the busiest bucket should not be reported as
+ * being above every other value in it.
+ *
  * @param field Field to rank-normalise in place.
  */
 void rankNormalize(Heightfield &field);
@@ -190,5 +219,7 @@ void rankNormalize(Heightfield &field);
 [[nodiscard]] core::u32 foldClimateField(const ClimateField &climate);
 
 } // namespace lpl::procgen
+
+#    include "Climate.inl"
 
 #endif // LPL_PROCGEN_CLIMATE_HPP

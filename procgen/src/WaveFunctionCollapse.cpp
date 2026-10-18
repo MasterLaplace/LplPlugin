@@ -1,12 +1,3 @@
-/**
- * @file WaveFunctionCollapse.cpp
- * @brief Implementation of the deterministic tiled WFC solver.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/WaveFunctionCollapse.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -15,12 +6,12 @@ namespace lpl::procgen {
 
 namespace {
 
-/// Index of the direction facing the opposite way (E<->W, S<->N).
-constexpr core::u32 oppositeDirection(core::u32 direction) noexcept
-{
-    // kNeighbor4 order is {E, W, S, N}, so pairs are (0,1) and (2,3).
-    return direction ^ 1u;
-}
+/**
+ * @brief Index of the direction facing the opposite way (E<->W, S<->N).
+ *
+ * kNeighbor4 order is {E, W, S, N}, so pairs are (0,1) and (2,3).
+ */
+constexpr core::u32 oppositeDirection(core::u32 direction) noexcept { return direction ^ 1u; }
 
 /**
  * @brief Number of set bits in a possibility mask.
@@ -39,7 +30,9 @@ constexpr core::u32 popcount64(core::u64 mask) noexcept
     return static_cast<core::u32>((mask * 0x0101010101010101ull) >> 56);
 }
 
-/// Index of the lowest set bit.
+/**
+ * @brief Index of the lowest set bit.
+ */
 core::u32 lowestBit(core::u64 mask) noexcept
 {
     core::u32 index = 0u;
@@ -51,13 +44,13 @@ core::u32 lowestBit(core::u64 mask) noexcept
     return index;
 }
 
-/// A cell awaiting propagation.
+/** A cell awaiting propagation. */
 struct PendingCell {
     core::u32 x;
     core::u32 z;
 };
 
-/// A candidate for collapse, keyed by how many options it still has.
+/** A candidate for collapse, keyed by how many options it still has. */
 struct EntropyEntry {
     core::u32 options;
     core::u32 cell;
@@ -146,6 +139,13 @@ private:
  */
 class Solver {
 public:
+    /**
+     * @brief Opens every cell to every tile, each one a collapse candidate.
+     *
+     * Every cell starts as a candidate. The heap can only stay complete if it
+     * begins complete: a cell absent from it would never be collapsed, and the
+     * solve would stop with that cell still superposed.
+     */
     Solver(const TileSet &tiles, const WfcParams &params, core::u32 seed)
         : _tiles(tiles), _params(params), _random(seed), _possible(params.width, params.depth, 0u),
           _options(params.width, params.depth, 0u), _stack()
@@ -158,15 +158,14 @@ public:
         _stack.reserve(cells);
         _candidates.reserve(cells * 2u);
 
-        // Every cell starts as a candidate. The heap can only stay complete if it
-        // begins complete: a cell absent from it would never be collapsed, and the
-        // solve would stop with that cell still superposed.
         if (_tiles.tileCount > 1u)
             for (core::u32 i = 0u; i < static_cast<core::u32>(cells); ++i)
                 _candidates.push(EntropyEntry{_tiles.tileCount, i});
     }
 
-    /// Pins the cells @p preset holds, propagating each as a constraint.
+    /**
+     * @brief Pins the cells @p preset holds, propagating each as a constraint.
+     */
     bool applyPreset(const TileGrid &preset)
     {
         for (core::u32 z = 0u; z < _possible.depth(); ++z)
@@ -185,6 +184,11 @@ public:
 
     /**
      * @brief Runs the collapse loop.
+     *
+     * A contradiction gets a layered recovery: clear a neighbourhood around the
+     * failure and let it re-solve against the borders that survived, rather than
+     * discarding the whole grid.
+     *
      * @param outLocalRepairs Incremented once per contradiction absorbed locally.
      * @param outContradictions Incremented on every contradiction.
      * @return true when every cell settled on exactly one tile.
@@ -198,7 +202,7 @@ public:
             core::u32 x = 0u;
             core::u32 z = 0u;
             if (!findLowestEntropy(x, z))
-                return true; // every cell is decided
+                return true;
 
             collapse(x, z);
             if (propagate())
@@ -206,9 +210,6 @@ public:
 
             ++outContradictions;
 
-            // Layered recovery: clear a neighbourhood around the failure and
-            // let it re-solve against the borders that survived, rather than
-            // discarding the whole grid.
             if (_params.localRepairRadius == 0u || repairsLeft == 0u)
                 return false;
             --repairsLeft;
@@ -218,7 +219,9 @@ public:
         }
     }
 
-    /// Writes the settled tiles out.
+    /**
+     * @brief Writes the settled tiles out.
+     */
     TileGrid harvest() const
     {
         TileGrid grid{_possible.width(), _possible.depth(), kNoTile};
@@ -230,7 +233,9 @@ public:
 private:
     void push(core::u32 x, core::u32 z) { _stack.push_back(PendingCell{x, z}); }
 
-    /// Rewrites a cell's options, keeping the cached count and heap in step.
+    /**
+     * @brief Rewrites a cell's options, keeping the cached count and heap in step.
+     */
     void setOptions(core::u32 cell, core::u64 mask)
     {
         _possible[cell] = mask;
@@ -240,27 +245,30 @@ private:
             _candidates.push(EntropyEntry{count, cell});
     }
 
-    /// Fewest remaining options above 1; ties go to the lowest index.
+    /**
+     * @brief Fewest remaining options above 1; ties go to the lowest index.
+     */
     bool findLowestEntropy(core::u32 &outX, core::u32 &outZ)
     {
         while (!_candidates.empty())
         {
             const EntropyEntry entry = _candidates.pop();
-            // Outdated: the cell has been rewritten since this entry was made, so
-            // a newer entry for it is already in the heap.
             if (_options[entry.cell] != static_cast<core::u8>(entry.options) || entry.options <= 1u)
                 continue;
             outX = entry.cell % _possible.width();
             outZ = entry.cell / _possible.width();
-            // Put it back: a contradiction may send the solve through a local
-            // repair that reopens this very cell, and the entry has to survive that.
             _candidates.push(entry);
             return true;
         }
         return false;
     }
 
-    /// Picks one tile from a cell's options, weighted by tile frequency.
+    /**
+     * @brief Picks one tile from a cell's options, weighted by tile frequency.
+     *
+     * When every remaining option has zero weight it falls back to the first, so
+     * the solve makes progress instead of stalling on an authoring slip.
+     */
     void collapse(core::u32 x, core::u32 z)
     {
         const core::u32 cell = _possible.index(x, z);
@@ -272,8 +280,6 @@ private:
 
         if (total == 0u)
         {
-            // Every remaining option has zero weight: fall back to the first so
-            // the solve makes progress instead of stalling on a authoring slip.
             setOptions(cell, core::u64{1} << lowestBit(options));
             push(x, z);
             return;
@@ -296,6 +302,12 @@ private:
 
     /**
      * @brief Removes now-impossible options from neighbours, transitively.
+     *
+     * A neighbour keeps the union of what each still-possible tile here permits
+     * there. Walking the set bits rather than every tile index matters late in a
+     * solve, which is where propagation does most of its work: a cell down to two
+     * options then costs two lookups instead of tileCount.
+     *
      * @return false when a cell was left with no option at all.
      */
     bool propagate()
@@ -316,10 +328,6 @@ private:
                 if (!_possible.contains(nx, nz))
                     continue;
 
-                // Union of what each still-possible tile here permits there.
-                // Walking the set bits rather than every tile index matters late in
-                // a solve, which is where propagation does most of its work: a cell
-                // down to two options then costs two lookups instead of tileCount.
                 core::u64 permitted = 0u;
                 for (core::u64 rest = options; rest != 0u; rest &= rest - 1u)
                     permitted |= _tiles.allowed[lowestBit(rest) * 4u + direction];
@@ -328,7 +336,7 @@ private:
                 const core::u64 neighbour = _possible[neighbourCell];
                 const core::u64 reduced = neighbour & permitted;
                 if (reduced == neighbour)
-                    continue; // nothing new to say
+                    continue;
                 if (reduced == 0u)
                     return false;
 
@@ -345,6 +353,9 @@ private:
      * The cleared cells go back to full superposition; their surviving
      * neighbours immediately constrain them again, which is what makes the
      * repair local rather than a partial restart.
+     *
+     * Propagation is re-seeded from the ring just outside the cleared area: those
+     * cells kept their options, and they are what the repair must agree with.
      */
     bool repairAround(core::u32 x, core::u32 z)
     {
@@ -365,14 +376,12 @@ private:
             }
         }
 
-        // Re-seed propagation from the ring just outside the cleared area: those
-        // cells are still decided and are what the repair must agree with.
         for (core::i32 dz = -radius - 1; dz <= radius + 1; ++dz)
         {
             for (core::i32 dx = -radius - 1; dx <= radius + 1; ++dx)
             {
                 if (dx > -radius - 1 && dx < radius + 1 && dz > -radius - 1 && dz < radius + 1)
-                    continue; // interior: just cleared
+                    continue;
                 const core::i32 cx = static_cast<core::i32>(x) + dx;
                 const core::i32 cz = static_cast<core::i32>(z) + dz;
                 if (_possible.contains(cx, cz))
@@ -386,8 +395,7 @@ private:
     const WfcParams &_params;
     math::Random _random;
     Grid<core::u64> _possible;
-    /// Cached popcount of every cell's mask, so entropy never recounts bits.
-    Grid<core::u8> _options;
+    Grid<core::u8> _options; /**< Cached popcount of every cell's mask, so entropy never recounts bits. */
     EntropyHeap _candidates;
     lpl::pmr::vector<PendingCell> _stack;
 };
@@ -408,7 +416,6 @@ void TileSet::allow(core::u32 tile, core::u32 direction, core::u32 neighbour)
     if (tile >= tileCount || neighbour >= tileCount || direction >= 4u)
         return;
     allowed[tile * 4u + direction] |= core::u64{1} << neighbour;
-    // Adjacency only means anything both ways round.
     allowed[neighbour * 4u + oppositeDirection(direction)] |= core::u64{1} << tile;
 }
 
@@ -430,9 +437,6 @@ bool TileSet::valid() const
         return false;
     for (core::u32 tile = 0u; tile < tileCount; ++tile)
     {
-        // A tile that may sit next to nothing in some direction can never be
-        // placed away from that border, which is almost always an authoring
-        // slip rather than an intent.
         for (core::u32 direction = 0u; direction < 4u; ++direction)
             if (allowed[tile * 4u + direction] == 0u)
                 return false;
@@ -451,8 +455,6 @@ WfcResult solveWfc(const TileSet &tiles, const WfcParams &params, const TileGrid
     {
         ++result.attempts;
 
-        // Each attempt draws from its own stream, so a retry explores a
-        // different arrangement instead of replaying the failed one.
         Solver solver{tiles, params, math::deriveStream(params.seed, 0x5EEDu + attempt).state()};
 
         bool ok = true;
@@ -483,7 +485,6 @@ core::u32 countAdjacencyViolations(const TileGrid &grid, const TileSet &tiles)
                 ++violations;
                 continue;
             }
-            // Only forward directions, so each pair is judged once.
             for (core::u32 direction = 0u; direction < 4u; direction += 2u)
             {
                 const core::i32 nx = static_cast<core::i32>(x) + kNeighbor4X[direction];
@@ -506,8 +507,6 @@ TileSet makeTerrainTileSet()
     TileSet set;
     set.reset(5u);
 
-    // A gradient: each step may touch itself and its immediate neighbours in the
-    // sequence, so water never abuts grass without sand between them.
     constexpr core::u32 kSequence[] = {
         static_cast<core::u32>(TerrainTile::Water), static_cast<core::u32>(TerrainTile::Sand),
         static_cast<core::u32>(TerrainTile::Grass), static_cast<core::u32>(TerrainTile::Forest),
@@ -519,7 +518,6 @@ TileSet makeTerrainTileSet()
             set.allowAnywhere(kSequence[i], kSequence[i + 1u]);
     }
 
-    // Open water and grass dominate; rock and forest are accents.
     set.setWeight(static_cast<core::u32>(TerrainTile::Water), 4u);
     set.setWeight(static_cast<core::u32>(TerrainTile::Sand), 2u);
     set.setWeight(static_cast<core::u32>(TerrainTile::Grass), 5u);

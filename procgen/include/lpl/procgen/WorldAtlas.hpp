@@ -48,14 +48,14 @@ namespace lpl::procgen {
  * beside a live grid.
  */
 struct WorldAtlas : WorldSnapshot {
-    DrainageNetwork drainage{};             ///< Flow directions, accumulation, the filled surface.
-    VoronoiDiagram regions{};               ///< Surface provinces, when partitioned.
-    ClimateField climate{};                 ///< The six axes, when shaped.
-    DungeonMap dungeon{};                   ///< The flat underground layer, when carved.
-    CaveSystem caveSystem{};                ///< The layered underground, when dug.
-    VoxelVolume townVolume{};               ///< The town raised by the shape grammar.
-    VoxelVolume roadsideVolume{};           ///< Roadside modules, when decorated.
-    lpl::pmr::vector<BuildingPlot> plots{}; ///< Building footprints the settlement laid out.
+    DrainageNetwork drainage{};             /**< Flow directions, accumulation, the filled surface. */
+    VoronoiDiagram regions{};               /**< Surface provinces, when partitioned. */
+    ClimateField climate{};                 /**< The six axes, when shaped. */
+    DungeonMap dungeon{};                   /**< The flat underground layer, when carved. */
+    CaveSystem caveSystem{};                /**< The layered underground, when dug. */
+    VoxelVolume townVolume{};               /**< The town raised by the shape grammar. */
+    VoxelVolume roadsideVolume{};           /**< Roadside modules, when decorated. */
+    lpl::pmr::vector<BuildingPlot> plots{}; /**< Building footprints the settlement laid out. */
 
     /**
      * @brief The height a viewer draws water at.
@@ -83,19 +83,7 @@ struct WorldAtlas : WorldSnapshot {
  * @param rule    What counts as impassable.
  * @param out     Destination; @c stats and @c seaLevel stay the caller's.
  */
-inline void captureAtlas(const WorldBuilder &builder, const WalkabilityRule &rule, WorldAtlas &out)
-{
-    captureSnapshot(builder, rule, out);
-
-    out.drainage = builder.drainage();
-    out.regions = builder.regionMap();
-    out.climate = builder.climateField();
-    out.dungeon = builder.dungeonMap();
-    out.caveSystem = builder.caves();
-    out.townVolume = builder.townVolume();
-    out.roadsideVolume = builder.roadsideVolume();
-    out.plots = builder.plots();
-}
+inline void captureAtlas(const WorldBuilder &builder, const WalkabilityRule &rule, WorldAtlas &out);
 
 /**
  * @brief Runs @p recipe and copies out everything an instrument looks at.
@@ -106,6 +94,9 @@ inline void captureAtlas(const WorldBuilder &builder, const WalkabilityRule &rul
  * bit — that is what makes a diagnostic re-derivation honest rather than a second
  * source of truth.
  *
+ * As in @ref buildSnapshot, the rule and the reported sea level both travel with
+ * the lift, or every absolute height an instrument reads is off by it.
+ *
  * @param recipe     The world to build.
  * @param registry   Where scattered props become entities, or nullptr for grids only.
  * @param outPropIds Receives the created entity ids, or nullptr.
@@ -114,23 +105,10 @@ inline void captureAtlas(const WorldBuilder &builder, const WalkabilityRule &rul
 [[nodiscard]] inline WorldAtlas buildAtlas(WorldRecipe recipe, ecs::Registry *registry,
                                            lpl::pmr::vector<ecs::EntityId> *outPropIds,
                                            const WalkabilityRule &rule = WalkabilityRule{},
-                                           const ReliefBlend *relief = nullptr)
-{
-    WorldAtlas out;
-
-    WorldBuilder builder{recipe.seed};
-    // See buildSnapshot: the rule and the reported sea level both travel with the lift,
-    // or every absolute height an instrument reads is off by it.
-    const core::f32 lift = applyRecipe(builder, recipe, relief);
-    WalkabilityRule lifted = rule;
-    lifted.seaLevel += lift;
-
-    out.stats = registry != nullptr ? builder.materializeProps(*registry, outPropIds) : builder.bakeGrids();
-    captureAtlas(builder, lifted, out);
-    out.seaLevel = recipe.biomes.seaLevel + lift;
-    return out;
-}
+                                           const ReliefBlend *relief = nullptr);
 
 } // namespace lpl::procgen
+
+#    include "WorldAtlas.inl"
 
 #endif // LPL_PROCGEN_WORLD_ATLAS_HPP

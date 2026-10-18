@@ -1,12 +1,3 @@
-/**
- * @file QualityGate.cpp
- * @brief Implementation of the level playability measurements.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/QualityGate.hpp>
 
 #include <lpl/std/vector.hpp>
@@ -15,11 +6,17 @@ namespace lpl::procgen {
 
 namespace {
 
-// The predicate lives in Dungeon.hpp: what counts as walkable decides what
-// "connected" means, and two answers to that question is one too many.
+/**
+ * @brief Forwards to @ref isWalkable.
+ *
+ * The predicate lives in Dungeon.hpp: what counts as walkable decides what
+ * "connected" means, and two answers to that question is one too many.
+ */
 constexpr bool walkable(DungeonCell cell) noexcept { return lpl::procgen::isWalkable(cell); }
 
-/// Counts a cell's walkable 4-neighbours.
+/**
+ * @brief Counts a cell's walkable 4-neighbours.
+ */
 core::u32 walkableNeighbours(const DungeonMap &map, core::u32 x, core::u32 z)
 {
     core::u32 count = 0u;
@@ -33,7 +30,12 @@ core::u32 walkableNeighbours(const DungeonMap &map, core::u32 x, core::u32 z)
     return count;
 }
 
-/// Farthest reachable cell from a source, and its distance.
+/**
+ * @brief Farthest reachable cell from a source, and its distance.
+ *
+ * Strictly greater keeps the first of several equally distant cells, in scan order, so
+ * the choice is reproducible.
+ */
 bool farthestFrom(const DungeonMap &map, core::u32 startX, core::u32 startZ, core::u32 &outX, core::u32 &outZ,
                   core::u32 &outDistance)
 {
@@ -45,8 +47,6 @@ bool farthestFrom(const DungeonMap &map, core::u32 startX, core::u32 startZ, cor
     {
         if (distances[i] == kUnreachable)
             continue;
-        // Strictly greater keeps the first of several equally distant cells,
-        // in scan order, so the choice is reproducible.
         if (!found || distances[i] > best)
         {
             best = distances[i];
@@ -69,9 +69,6 @@ DistanceMap computeDistanceMap(const DungeonMap &map, core::u32 startX, core::u3
     if (!walkable(map.at(startX, startZ)))
         return distances;
 
-    // Breadth-first, so every cell is reached by a shortest path and the first
-    // time it is seen is final. An explicit queue rather than recursion: a large
-    // level would overflow any stack.
     lpl::pmr::vector<core::u32> queue;
     queue.reserve(map.cellCount());
 
@@ -148,9 +145,6 @@ HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u3
     if (map.empty() || !map.contains(static_cast<core::i32>(goalX), static_cast<core::i32>(goalZ)))
         return analysis;
 
-    // Distances from the entrance give the route for free: from the exit, step to
-    // any neighbour one closer to the entrance, repeatedly. That is a shortest path
-    // by construction, so there is no need for A* and no heuristic to get wrong.
     const DistanceMap fromStart = computeDistanceMap(map, startX, startZ);
     const core::u32 goal = map.index(goalX, goalZ);
     if (fromStart[goal] == kUnreachable)
@@ -182,7 +176,7 @@ HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u3
             }
         }
         if (previous == cell)
-            break; // no predecessor: the distance map is inconsistent, stop rather than loop
+            break;
         cell = previous;
     }
 
@@ -194,8 +188,6 @@ HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u3
             continue;
         if (depth > detourLimit)
             ++analysis.excessiveCells;
-        // Strictly greater: the first of several equally deep cells wins, in scan
-        // order, so the chosen hiding place is reproducible.
         if (depth > analysis.deepestDetour)
         {
             analysis.deepestDetour = depth;
@@ -216,14 +208,11 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
     const DistanceMap fromStart = computeDistanceMap(map, startX, startZ);
     core::u32 written = 0u;
 
-    // How long the route is, in steps rather than in cells: spacing an encounter
-    // "every N cells of the grid" would bunch them wherever the path doubles back.
     core::u32 spine = 0u;
     for (core::u32 i = 0u; i < analysis.onPath.cellCount(); ++i)
         if (analysis.onPath[i] != 0u && fromStart[i] != kUnreachable && fromStart[i] > spine)
             spine = fromStart[i];
 
-    // ── encounters, evenly spaced through the player's progress ──────────────
     const core::u32 encounterStart = written;
     for (core::u32 k = 1u; k <= params.encounters && written < capacity; ++k)
     {
@@ -237,8 +226,6 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
                 continue;
             const core::u32 progress = fromStart[i];
             const core::u32 error = progress > wanted ? progress - wanted : wanted - progress;
-            // Strictly smaller: the first of several equally good cells wins, in
-            // scan order, so the furnished level is reproducible.
             if (!found || error < bestError)
             {
                 found = true;
@@ -259,7 +246,7 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
                 tooClose = true;
         }
         if (tooClose)
-            continue; // a short route legitimately holds fewer encounters
+            continue;
 
         out[written].x = bestCell % map.width();
         out[written].z = bestCell / map.width();
@@ -269,12 +256,6 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
         ++written;
     }
 
-    // ── rewards: the deepest dead ends, deepest first ────────────────────────
-    //
-    // A dead end and not merely a deep cell. A deep cell in the middle of a wide
-    // room is walked through, and a prize the player crosses by accident is not a
-    // reward. This is the same measurement that condemned the geometry as an
-    // excrescence, used to furnish it.
     const core::u32 rewardStart = written;
     for (core::u32 k = 0u; k < params.rewards && written < capacity; ++k)
     {
@@ -307,7 +288,6 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
             if (taken)
                 continue;
 
-            // Strictly greater: deepest wins, first-in-scan-order breaks ties.
             if (!found || depth > bestDepth)
             {
                 found = true;
@@ -316,7 +296,7 @@ core::u32 placeAlongHotPath(const DungeonMap &map, const HotPathAnalysis &analys
             }
         }
         if (!found)
-            break; // the level has no more hiding places, which is a fact about it
+            break;
 
         out[written].x = bestCell % map.width();
         out[written].z = bestCell / map.width();
@@ -335,7 +315,6 @@ DistanceMap computeFleeMap(const DungeonMap &map, const DistanceMap &danger, cor
     if (map.empty() || danger.width() != map.width() || danger.depth() != map.depth())
         return flee;
 
-    // Which cells count as safety. By default, the ones furthest from the threat.
     core::u32 threshold = safeDistance;
     if (threshold == 0u)
     {
@@ -355,20 +334,6 @@ DistanceMap computeFleeMap(const DungeonMap &map, const DistanceMap &danger, cor
     if (!anyHaven)
         return flee;
 
-    // A distance map FROM safety, rather than the negation of the distance map to
-    // the threat.
-    //
-    // The published recipe is to multiply the danger map by about -1.2 and relax it
-    // again. That does remove the crude failure — walking uphill on the danger map
-    // wedges an agent into the nearest corner, because a dead end is a local
-    // maximum — but relaxing only enforces that no cell exceeds a neighbour by more
-    // than one step, which a plateau satisfies without having any way down. So the
-    // construction still admits spurious low points, and this was not a theoretical
-    // objection: the first cave it was measured on had them.
-    //
-    // A breadth-first map from the safe cells cannot. Every cell it reaches sits one
-    // step further out than some neighbour, so descending always makes progress, and
-    // the only cells with no lower neighbour are the havens themselves.
     return computeDistanceMapFrom(map, havens);
 }
 
@@ -428,9 +393,6 @@ bool passesGate(const LevelQuality &quality, const GateCriteria &criteria)
 
     if (quality.walkableCells != 0u)
     {
-        // A level that is mostly dead ends is a maze of corridors, not a space
-        // to play in. Integer percentage: no float, so the verdict is identical
-        // on every target.
         const core::u32 ratio = (quality.deadEnds * 100u) / quality.walkableCells;
         if (ratio > criteria.maxDeadEndRatio)
             return false;
@@ -444,7 +406,6 @@ bool findFarthestPair(const DungeonMap &map, core::u32 &outStartX, core::u32 &ou
     if (map.empty())
         return false;
 
-    // Any walkable cell to start the double sweep from.
     core::i32 seed = -1;
     for (core::u32 i = 0u; i < map.cellCount(); ++i)
         if (walkable(map[i]))
@@ -458,9 +419,6 @@ bool findFarthestPair(const DungeonMap &map, core::u32 &outStartX, core::u32 &ou
     const core::u32 seedX = static_cast<core::u32>(seed) % map.width();
     const core::u32 seedZ = static_cast<core::u32>(seed) / map.width();
 
-    // Double sweep: the farthest cell from an arbitrary start is an endpoint of
-    // the diameter, and the farthest from THAT is the other end. Exact on a
-    // tree, and a good approximation on a level with loops.
     core::u32 firstX = seedX;
     core::u32 firstZ = seedZ;
     core::u32 distance = 0u;
@@ -493,9 +451,6 @@ DesireMap combineDesires(const DungeonMap &map, const DesireTerm *terms, core::u
 
         for (core::u32 i = 0u; i < desires.cellCount(); ++i)
         {
-            // An unreachable cell contributes nothing rather than a huge number:
-            // folding kUnreachable into the sum would swamp every other want and
-            // make the blend a statement about connectivity instead of desire.
             const core::u32 distance = (*source)[i];
             if (distance == kUnreachable)
                 continue;
@@ -524,9 +479,6 @@ bool descendDesire(const DungeonMap &map, const DesireMap &desires, core::u32 x,
         if (map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) == DungeonCell::Wall)
             continue;
         const core::i32 value = desires.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz));
-        // Strictly lower, and ties keep the first neighbour in kNeighbor4 order:
-        // an agent that wavered between two equal steps would move differently on
-        // two targets running the same simulation.
         if (value < best)
         {
             best = value;

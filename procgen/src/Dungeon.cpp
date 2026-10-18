@@ -1,12 +1,3 @@
-/**
- * @file Dungeon.cpp
- * @brief Implementation of the dungeon and cave generators.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Dungeon.hpp>
 
 #include <lpl/math/Random.hpp>
@@ -20,7 +11,9 @@ constexpr core::u32 kFnv1aPrime = 0x01000193u;
 
 constexpr core::u32 kInvalidRegion = 0xFFFFFFFFu;
 
-/// Carves an axis-aligned rectangle of floor, clipped to the map.
+/**
+ * @brief Carves an axis-aligned rectangle of floor, clipped to the map.
+ */
 void carveRect(DungeonMap &map, core::u32 x, core::u32 z, core::u32 width, core::u32 depth)
 {
     for (core::u32 cz = z; cz < z + depth; ++cz)
@@ -29,7 +22,9 @@ void carveRect(DungeonMap &map, core::u32 x, core::u32 z, core::u32 width, core:
                 map.at(cx, cz) = DungeonCell::Floor;
 }
 
-/// Carves an L-shaped corridor: along X first, then along Z.
+/**
+ * @brief Carves an L-shaped corridor: along X first, then along Z.
+ */
 void carveCorridor(DungeonMap &map, core::u32 fromX, core::u32 fromZ, core::u32 toX, core::u32 toZ, core::u32 thickness)
 {
     const core::u32 width = thickness == 0u ? 1u : thickness;
@@ -45,6 +40,10 @@ void carveCorridor(DungeonMap &map, core::u32 fromX, core::u32 fromZ, core::u32 
         carveRect(map, toX, z, width, 1u);
 }
 
+struct BspNode {
+    core::u32 x, z, width, depth;
+};
+
 /**
  * @brief Recursively splits a region, carving a room in every leaf.
  *
@@ -52,11 +51,10 @@ void carveCorridor(DungeonMap &map, core::u32 fromX, core::u32 fromZ, core::u32 
  * caller uses to join its two children. That is what makes connectivity
  * structural: every split immediately links the two halves it created, so the
  * whole tree ends up joined without any global pathfinding.
+ *
+ * A node is split along its longer axis, so nodes stay roughly square and rooms do
+ * not degenerate into slivers.
  */
-struct BspNode {
-    core::u32 x, z, width, depth;
-};
-
 void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const BspDungeonParams &params,
                    math::Random &random, lpl::pmr::vector<Room> *outRooms, core::u32 &outCenterX, core::u32 &outCenterZ)
 {
@@ -64,7 +62,6 @@ void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const 
 
     if (level >= params.maxDepth || tooSmallToSplit)
     {
-        // Leaf: carve a room somewhere inside, leaving the padding as rock.
         const core::u32 padding = params.roomPadding;
         if (node.width <= padding * 2u + 2u || node.depth <= padding * 2u + 2u)
         {
@@ -90,8 +87,6 @@ void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const 
         return;
     }
 
-    // Split along the longer axis, so nodes stay roughly square and rooms do
-    // not degenerate into slivers.
     const bool splitVertically = node.width > node.depth;
     core::u32 leftCenterX = 0u, leftCenterZ = 0u, rightCenterX = 0u, rightCenterZ = 0u;
 
@@ -121,7 +116,12 @@ void splitAndCarve(DungeonMap &map, const BspNode &node, core::u32 level, const 
     outCenterZ = leftCenterZ;
 }
 
-/// Exchanges two maps without touching their cells.
+/**
+ * @brief Exchanges two maps without touching their cells.
+ *
+ * Swap rather than copy: the automaton needs two buffers, not two copies, and a step
+ * is O(cells) of real work either way.
+ */
 void swapMaps(DungeonMap &a, DungeonMap &b)
 {
     DungeonMap temporary = static_cast<DungeonMap &&>(a);
@@ -129,7 +129,12 @@ void swapMaps(DungeonMap &a, DungeonMap &b)
     b = static_cast<DungeonMap &&>(temporary);
 }
 
-/// Counts rock cells in the 8-neighbourhood; out-of-bounds counts as rock.
+/**
+ * @brief Counts rock cells in the 8-neighbourhood; out-of-bounds counts as rock.
+ *
+ * Treating the outside as solid keeps caves away from the border, which is what stops
+ * them opening onto nothing.
+ */
 core::u32 rockNeighbours(const DungeonMap &map, core::u32 x, core::u32 z)
 {
     core::u32 count = 0u;
@@ -137,8 +142,6 @@ core::u32 rockNeighbours(const DungeonMap &map, core::u32 x, core::u32 z)
     {
         const core::i32 nx = static_cast<core::i32>(x) + kNeighbor8X[n];
         const core::i32 nz = static_cast<core::i32>(z) + kNeighbor8Z[n];
-        // Treating the outside as solid keeps caves away from the border,
-        // which is what stops them opening onto nothing.
         if (!map.contains(nx, nz) ||
             map.at(static_cast<core::u32>(nx), static_cast<core::u32>(nz)) == DungeonCell::Wall)
             ++count;
@@ -148,6 +151,10 @@ core::u32 rockNeighbours(const DungeonMap &map, core::u32 x, core::u32 z)
 
 /**
  * @brief Labels every walkable cell with its connected-region index.
+ *
+ * Breadth-first from each unlabelled seed. An explicit queue, not recursion: a large
+ * cavern would overflow any reasonable stack.
+ *
  * @return Number of regions found; @p outSizes receives each region's cell count.
  */
 core::u32 labelRegions(const DungeonMap &map, Grid<core::u32> &outLabels, lpl::pmr::vector<core::u32> &outSizes)
@@ -164,8 +171,6 @@ core::u32 labelRegions(const DungeonMap &map, Grid<core::u32> &outLabels, lpl::p
         if (!isWalkable(map[start]) || outLabels[start] != kInvalidRegion)
             continue;
 
-        // Breadth-first from this seed. An explicit queue, not recursion: a
-        // large cavern would overflow any reasonable stack.
         core::u32 size = 0u;
         queue.clear();
         queue.push_back(start);
@@ -212,6 +217,12 @@ core::u32 labelRegions(const DungeonMap &map, Grid<core::u32> &outLabels, lpl::p
  * shortest tunnel, and walking the predecessors back carves exactly it. One pass
  * over the map, and the corridors go where a person would have put them.
  *
+ * The sweep attaches to the biggest cavern rather than to region 0: region 0 is merely
+ * the first found in scan order and may be a three-cell alcove, which would make every
+ * other region tunnel toward the least significant part of the level. Among a region's
+ * cells equally near the main one, the lowest index is its mouth, which the ascending
+ * scan picks by using a strict comparison.
+ *
  * @param map      Level to tunnel through, modified in place.
  * @param labels   Region label per cell from @ref labelRegions.
  * @param sizes    Cell count per region.
@@ -221,9 +232,6 @@ core::u32 labelRegions(const DungeonMap &map, Grid<core::u32> &outLabels, lpl::p
 core::u32 tunnelToMainRegion(DungeonMap &map, const Grid<core::u32> &labels, const lpl::pmr::vector<core::u32> &sizes,
                              core::u32 regions)
 {
-    // Attach to the biggest cavern rather than to region 0: region 0 is merely the
-    // first found in scan order and may be a three-cell alcove, which would make
-    // every other region tunnel toward the least significant part of the level.
     core::u32 main = 0u;
     for (core::u32 r = 1u; r < regions; ++r)
         if (sizes[r] > sizes[main])
@@ -264,8 +272,6 @@ core::u32 tunnelToMainRegion(DungeonMap &map, const Grid<core::u32> &labels, con
         }
     }
 
-    // Nearest cell of each region to the main one; ties go to the lowest index,
-    // which the ascending scan below picks by using a strict comparison.
     lpl::pmr::vector<core::u32> mouth(regions, kUnvisited);
     lpl::pmr::vector<core::u32> mouthDistance(regions, kUnvisited);
     for (core::u32 i = 0u; i < map.cellCount(); ++i)
@@ -317,7 +323,6 @@ DungeonMap generateCellularCave(const CaveParams &params)
     math::Random random = math::deriveStream(params.seed, 0xCA7Eu);
     const math::Fixed32 fill = math::Fixed32::fromFloat(params.fillProbability);
 
-    // Seed with noise, keeping a solid border.
     for (core::u32 z = 0u; z < params.depth; ++z)
     {
         for (core::u32 x = 0u; x < params.width; ++x)
@@ -327,9 +332,6 @@ DungeonMap generateCellularCave(const CaveParams &params)
         }
     }
 
-    // The 4-5 rule, applied synchronously: the next state depends only on the
-    // frozen previous one, so a scratch buffer is not an optimisation, it is
-    // what makes the automaton an automaton.
     DungeonMap scratch = map;
     for (core::u32 step = 0u; step < params.steps; ++step)
     {
@@ -344,12 +346,9 @@ DungeonMap generateCellularCave(const CaveParams &params)
                     scratch.at(x, z) = neighbours >= params.birthLimit ? DungeonCell::Wall : DungeonCell::Floor;
             }
         }
-        // Swap rather than copy: the automaton needs two buffers, not two copies,
-        // and a step is O(cells) of real work either way.
         swapMaps(map, scratch);
     }
 
-    // The automaton is blind to topology and routinely seals off pockets.
     (void) connectRegions(map, params.minRegionSize);
     return map;
 }
@@ -373,8 +372,6 @@ DungeonMap generateDrunkardWalk(const DrunkardParams &params)
 
     for (core::u32 digger = 0u; digger < params.diggers && carved < target; ++digger)
     {
-        // Every digger starts mid-map so the galleries meet near the centre
-        // rather than fragmenting into disjoint burrows at the edges.
         core::u32 x = params.width / 2u;
         core::u32 z = params.depth / 2u;
 
@@ -390,9 +387,6 @@ DungeonMap generateDrunkardWalk(const DrunkardParams &params)
             const core::i32 nx = static_cast<core::i32>(x) + kNeighbor4X[direction];
             const core::i32 nz = static_cast<core::i32>(z) + kNeighbor4Z[direction];
 
-            // Confinement: a step that would leave the margin is refused rather
-            // than clamped, so the walk bounces inward instead of hugging the
-            // border (which is where an unconstrained walk spends its time).
             if (nx < static_cast<core::i32>(margin) || nz < static_cast<core::i32>(margin) ||
                 nx >= static_cast<core::i32>(params.width - margin) ||
                 nz >= static_cast<core::i32>(params.depth - margin))
@@ -420,7 +414,6 @@ DungeonReport connectRegions(DungeonMap &map, core::u32 minRegionSize)
     if (report.regions == 0u)
         return report;
 
-    // ── Fill the pockets not worth keeping ──────────────────────────────────
     for (core::u32 i = 0u; i < map.cellCount(); ++i)
     {
         const core::u32 label = labels[i];
@@ -433,7 +426,6 @@ DungeonReport connectRegions(DungeonMap &map, core::u32 minRegionSize)
         }
     }
 
-    // ── Link what survived ──────────────────────────────────────────────────
     report.regions = labelRegions(map, labels, sizes);
     if (report.regions > 1u)
         report.linksDug = tunnelToMainRegion(map, labels, sizes, report.regions);
@@ -468,9 +460,6 @@ void erodeEdges(DungeonMap &map, core::u32 seed, core::f32 strength)
         for (core::u32 x = 1u; x + 1u < map.width(); ++x)
         {
             const core::u32 neighbours = rockNeighbours(source, x, z);
-            // Only cells on a boundary are eligible: eroding the middle of a
-            // room would punch holes, and eroding deep rock would do nothing
-            // visible while risking a new pocket.
             const bool onBoundary = neighbours != 0u && neighbours != 8u;
             if (!onBoundary || !random.chance(chance))
                 continue;
@@ -478,7 +467,6 @@ void erodeEdges(DungeonMap &map, core::u32 seed, core::f32 strength)
         }
     }
 
-    // Erosion can seal a corridor or open a pocket; re-establish the guarantee.
     (void) connectRegions(map, 1u);
 }
 
@@ -498,18 +486,11 @@ core::u32 forceConnectivity(DungeonMap &map, core::u32 seed)
         if (regions <= 1u)
             break;
 
-        // Largest component wins the title of "the level"; everything else is an
-        // orphan to be let in. Ties go to the lower label so the choice does not
-        // depend on the labelling's traversal order.
         core::u32 mainLabel = 0u;
         for (core::u32 r = 1u; r < sizes.size(); ++r)
             if (sizes[r] > sizes[mainLabel])
                 mainLabel = r;
 
-        // The thinnest wall between the main component and anything else: a wall
-        // cell whose opposite neighbours belong to two different components is a
-        // one-cell breach. Preferring those is what makes the repair read as a
-        // doorway instead of a gouge.
         core::u32 bestCell = 0u;
         core::u32 bestThickness = 0xFFFFFFFFu;
         core::u32 candidates = 0u;
@@ -521,7 +502,6 @@ core::u32 forceConnectivity(DungeonMap &map, core::u32 seed)
                 if (isWalkable(map.at(x, z)))
                     continue;
 
-                // Horizontal and vertical breaches of thickness 1.
                 for (core::u32 axis = 0u; axis < 2u; ++axis)
                 {
                     const core::i32 dx = axis == 0u ? 1 : 0;
@@ -541,9 +521,6 @@ core::u32 forceConnectivity(DungeonMap &map, core::u32 seed)
                         continue;
 
                     const core::u32 thickness = 1u;
-                    // Reservoir choice among equally thin walls, so a level with
-                    // a dozen candidate doorways does not always use the
-                    // top-left one.
                     ++candidates;
                     if (thickness < bestThickness || (thickness == bestThickness && random.below(candidates) == 0u))
                     {
@@ -556,12 +533,9 @@ core::u32 forceConnectivity(DungeonMap &map, core::u32 seed)
 
         if (bestThickness == 0xFFFFFFFFu)
         {
-            // No one-cell breach exists. Fall back on the tunneller, which digs a
-            // corridor rather than a doorway — uglier, but it always succeeds,
-            // and an ugly connection beats an unreachable room.
             const core::u32 dug = tunnelToMainRegion(map, labels, sizes, regions);
             if (dug == 0u)
-                break; // Nothing left that can be joined; stop rather than spin.
+                break;
             broken += dug;
             continue;
         }
@@ -589,9 +563,6 @@ core::u32 mergeRoomsAsymmetric(DungeonMap &map, core::u32 seed, core::f32 streng
             if (isWalkable(source.at(x, z)))
                 continue;
 
-            // A party wall: open on both sides along one axis. Dissolving it
-            // merges two rooms; dissolving anything else would punch a hole in
-            // the outer shell.
             const bool horizontal = isWalkable(source.at(x - 1u, z)) && isWalkable(source.at(x + 1u, z));
             const bool vertical = isWalkable(source.at(x, z - 1u)) && isWalkable(source.at(x, z + 1u));
             if (!horizontal && !vertical)
@@ -622,9 +593,6 @@ core::u32 misalignPillars(DungeonMap &map, core::u32 seed, core::f32 density)
             if (!isWalkable(map.at(x, z)) || !random.chance(chance))
                 continue;
 
-            // Never in a spot whose four neighbours are not all open: a pillar in
-            // a corridor is a plug, and a plug is a softlock waiting for the
-            // connectivity pass to notice.
             bool surrounded = true;
             for (core::u32 n = 0u; n < 4u; ++n)
             {

@@ -55,13 +55,19 @@ public:
     [[nodiscard]] core::u32 cellCount() const noexcept { return _width * _depth; }
     [[nodiscard]] bool empty() const noexcept { return _width == 0u || _depth == 0u; }
 
-    /// @return true when (@p x, @p z) is inside the grid.
+    /**
+     * @brief Whether a cell lies inside the grid.
+     * @return true when (@p x, @p z) is inside the grid.
+     */
     [[nodiscard]] bool contains(core::i32 x, core::i32 z) const noexcept
     {
         return x >= 0 && z >= 0 && static_cast<core::u32>(x) < _width && static_cast<core::u32>(z) < _depth;
     }
 
-    /// @return Row-major index of (@p x, @p z). Caller must have checked bounds.
+    /**
+     * @brief The flat index of a cell.
+     * @return Row-major index of (@p x, @p z). Caller must have checked bounds.
+     */
     [[nodiscard]] core::u32 index(core::u32 x, core::u32 z) const noexcept { return x + z * _width; }
 
     [[nodiscard]] T &at(core::u32 x, core::u32 z) noexcept { return _cells[index(x, z)]; }
@@ -82,23 +88,17 @@ public:
      * @param z Row, may be out of range.
      * @return The nearest in-range cell.
      */
-    [[nodiscard]] const T &clamped(core::i32 x, core::i32 z) const noexcept
-    {
-        const core::u32 cx =
-            x < 0 ? 0u : (static_cast<core::u32>(x) >= _width ? _width - 1u : static_cast<core::u32>(x));
-        const core::u32 cz =
-            z < 0 ? 0u : (static_cast<core::u32>(z) >= _depth ? _depth - 1u : static_cast<core::u32>(z));
-        return _cells[index(cx, cz)];
-    }
+    [[nodiscard]] const T &clamped(core::i32 x, core::i32 z) const noexcept;
 
-    /// @brief Sets every cell to @p value.
-    void fill(T value) noexcept
-    {
-        for (core::u32 i = 0u; i < cellCount(); ++i)
-            _cells[i] = value;
-    }
+    /**
+     * @brief Sets every cell to @p value.
+     */
+    void fill(T value) noexcept;
 
-    /// @return Pointer to the flat cell array (row-major), or nullptr when empty.
+    /**
+     * @brief The flat cell array.
+     * @return Pointer to the flat cell array (row-major), or nullptr when empty.
+     */
     [[nodiscard]] T *data() noexcept { return _cells.empty() ? nullptr : &_cells[0]; }
     [[nodiscard]] const T *data() const noexcept { return _cells.empty() ? nullptr : &_cells[0]; }
 
@@ -108,15 +108,19 @@ private:
     lpl::pmr::vector<T> _cells;
 };
 
-/// The four axis-aligned neighbour offsets, in a fixed order (E, W, S, N).
+/** The four axis-aligned neighbour offsets, in a fixed order (E, W, S, N). */
 inline constexpr core::i32 kNeighbor4X[4] = {1, -1, 0, 0};
 inline constexpr core::i32 kNeighbor4Z[4] = {0, 0, 1, -1};
 
-/// The eight neighbour offsets, in a fixed order. Order matters: it decides
-/// which of several equal candidates a pass picks, and therefore the result.
+/**
+ * The eight neighbour offsets, in a fixed order. Order matters: it decides
+ * which of several equal candidates a pass picks, and therefore the result.
+ */
 inline constexpr core::i32 kNeighbor8X[8] = {1, -1, 0, 0, 1, 1, -1, -1};
 inline constexpr core::i32 kNeighbor8Z[8] = {0, 0, 1, -1, 1, -1, 1, -1};
 
 } // namespace lpl::procgen
+
+#    include "Grid.inl"
 
 #endif // LPL_PROCGEN_GRID_HPP

@@ -1,19 +1,10 @@
-/**
- * @file Streaming.cpp
- * @brief Implementation of the streaming policy and the chunk pool.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/Streaming.hpp>
 
 namespace lpl::procgen {
 
 namespace {
 
-/// Priority is an integer so ordering is exact. Distances are scaled by this.
+/** Priority is an integer so ordering is exact. Distances are scaled by this. */
 constexpr core::i32 kPriorityScale = 256;
 
 [[nodiscard]] bool sameChunk(ChunkCoord a, ChunkCoord b) noexcept { return a.x == b.x && a.z == b.z; }
@@ -33,16 +24,22 @@ constexpr core::i32 kPriorityScale = 256;
  * treated as nearer than it is — the "generate ahead of the player" behaviour,
  * expressed as a discount rather than as a separate cone test, which keeps the
  * ordering total and therefore reproducible.
+ *
+ * The distance is Chebyshev: the generate radius is a square, so the metric that
+ * orders chunks should be the one that defines the square. A Euclidean ordering
+ * over a square region schedules the corners last for no reason a player can
+ * perceive.
+ *
+ * The heading term is the dot product of the offset with the heading, normalised
+ * by the offset's magnitude (here |dx| + |dz|) so the bonus depends on DIRECTION
+ * and not on how far away the chunk is. Without that division a distant chunk
+ * roughly ahead would outrank a near one exactly ahead.
  */
 [[nodiscard]] core::i32 priorityFor(const GenerationSource &source, ChunkCoord coord, const StreamingParams &params)
 {
     const math::Fixed32 dx = math::Fixed32::fromInt(coord.x) - source.x;
     const math::Fixed32 dz = math::Fixed32::fromInt(coord.z) - source.z;
 
-    // Chebyshev distance: the generate radius is a square, so the metric that
-    // orders chunks should be the one that defines the square. A Euclidean
-    // ordering over a square region schedules the corners last for no reason a
-    // player can perceive.
     const math::Fixed32 adx = dx.abs();
     const math::Fixed32 adz = dz.abs();
     const math::Fixed32 distance = adx > adz ? adx : adz;
@@ -51,10 +48,6 @@ constexpr core::i32 kPriorityScale = 256;
 
     if (params.directionWeight16 != 0u)
     {
-        // Dot product of the offset with the heading, normalised by the offset's
-        // magnitude so the bonus depends on DIRECTION and not on how far away the
-        // chunk is. Without that division a distant chunk roughly ahead would
-        // outrank a near one exactly ahead.
         const math::Fixed32 dot = dx * source.headingX + dz * source.headingZ;
         const math::Fixed32 magnitude = adx + adz;
         if (magnitude.raw() != 0)
@@ -78,9 +71,6 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
     plan.resident = residentCount;
     if (sources == nullptr || sourceCount == 0u)
     {
-        // No source means nothing should exist. Releasing everything is the right
-        // answer rather than a degenerate one: it is what happens when the last
-        // player disconnects.
         for (core::u32 i = 0u; i < residentCount; ++i)
             plan.toRelease.push_back(resident[i]);
         return plan;
@@ -88,11 +78,6 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
 
     const core::i32 radius = static_cast<core::i32>(params.generateRadius);
 
-    // ── What should exist ───────────────────────────────────────────────────
-    //
-    // Scanned in a fixed order per source, and de-duplicated, so two sources
-    // whose regions overlap produce one request rather than two — and always the
-    // same one.
     for (core::u32 s = 0u; s < sourceCount; ++s)
     {
         const GenerationSource &source = sources[s];
@@ -135,9 +120,6 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
         }
     }
 
-    // Insertion sort by priority, ties broken by coordinate. The tie rule is not
-    // cosmetic: without it two chunks of equal urgency would be ordered by the
-    // scan, and the scan depends on which source was listed first.
     for (core::u32 i = 1u; i < plan.toGenerate.size(); ++i)
     {
         const StreamingRequest key = plan.toGenerate[i];
@@ -157,12 +139,6 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
         plan.toGenerate[j] = key;
     }
 
-    // ── What should go ──────────────────────────────────────────────────────
-    //
-    // The release radius is deliberately larger than the generate radius. A
-    // source oscillating across a boundary otherwise generates and releases the
-    // same chunk on alternate ticks forever, and the manager spends its whole
-    // budget standing still.
     const core::i32 releaseRadius = static_cast<core::i32>((params.generateRadius * params.releaseRatio16 + 15u) / 16u);
 
     for (core::u32 i = 0u; i < residentCount; ++i)
@@ -182,7 +158,6 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
             plan.toRelease.push_back(coord);
     }
 
-    // ── Budget, counted in chunks ───────────────────────────────────────────
     if (params.maxGeneratePerTick != 0u)
         while (plan.toGenerate.size() > params.maxGeneratePerTick)
             plan.toGenerate.pop_back();

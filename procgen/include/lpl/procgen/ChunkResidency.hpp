@@ -37,12 +37,10 @@
 
 namespace lpl::procgen {
 
-/** @brief Floor division, so a chunk index is monotonic across the origin. */
-[[nodiscard]] inline core::i32 floorDivChunk(core::i32 value, core::i32 divisor) noexcept
-{
-    const core::i32 quotient = value / divisor;
-    return (value % divisor != 0 && ((value < 0) != (divisor < 0))) ? quotient - 1 : quotient;
-}
+/**
+ * @brief Floor division, so a chunk index is monotonic across the origin.
+ */
+[[nodiscard]] inline core::i32 floorDivChunk(core::i32 value, core::i32 divisor) noexcept;
 
 /**
  * @class ChunkResidency
@@ -61,22 +59,12 @@ public:
      *                    Zero means no cap, which on a bounded heap is a decision
      *                    rather than a default.
      */
-    void configure(const ChunkParams &chunkParams, const StreamingParams &streamParams, core::u32 maxResident) noexcept
-    {
-        _chunkParams = chunkParams;
-        _streamParams = streamParams;
-        _maxResident = maxResident;
-    }
+    void configure(const ChunkParams &chunkParams, const StreamingParams &streamParams, core::u32 maxResident) noexcept;
 
     [[nodiscard]] const ChunkParams &chunkParams() const noexcept { return _chunkParams; }
     [[nodiscard]] const StreamingParams &streamParams() const noexcept { return _streamParams; }
 
-    void clear() noexcept
-    {
-        _chunks.clear();
-        _generated = 0u;
-        _released = 0u;
-    }
+    void clear() noexcept;
 
     [[nodiscard]] core::u32 size() const noexcept { return static_cast<core::u32>(_chunks.size()); }
     [[nodiscard]] bool empty() const noexcept { return _chunks.empty(); }
@@ -86,32 +74,26 @@ public:
     [[nodiscard]] core::u32 releasedCount() const noexcept { return _released; }
     [[nodiscard]] core::u32 maxResident() const noexcept { return _maxResident; }
 
-    /** @brief The record covering a chunk coordinate, or nullptr. */
-    [[nodiscard]] const Chunk *find(core::i32 chunkX, core::i32 chunkZ) const noexcept
-    {
-        for (core::u32 i = 0u; i < _chunks.size(); ++i)
-            if (_chunks[i].coord.x == chunkX && _chunks[i].coord.z == chunkZ)
-                return &_chunks[i];
-        return nullptr;
-    }
+    /**
+     * @brief The record covering a chunk coordinate, or nullptr.
+     */
+    [[nodiscard]] const Chunk *find(core::i32 chunkX, core::i32 chunkZ) const noexcept;
 
-    /** @brief The record covering a WORLD cell, or nullptr. */
-    [[nodiscard]] const Chunk *findByCell(core::i32 worldX, core::i32 worldZ) const noexcept
-    {
-        const core::i32 span = static_cast<core::i32>(_chunkParams.size);
-        return find(floorDivChunk(worldX, span), floorDivChunk(worldZ, span));
-    }
+    /**
+     * @brief The record covering a WORLD cell, or nullptr.
+     */
+    [[nodiscard]] const Chunk *findByCell(core::i32 worldX, core::i32 worldZ) const noexcept;
 
-    /** @brief Local cell of a world cell inside its chunk. */
-    void localCell(core::i32 worldX, core::i32 worldZ, core::u32 &outX, core::u32 &outZ) const noexcept
-    {
-        const core::i32 span = static_cast<core::i32>(_chunkParams.size);
-        outX = static_cast<core::u32>(worldX - floorDivChunk(worldX, span) * span);
-        outZ = static_cast<core::u32>(worldZ - floorDivChunk(worldZ, span) * span);
-    }
+    /**
+     * @brief Local cell of a world cell inside its chunk.
+     */
+    void localCell(core::i32 worldX, core::i32 worldZ, core::u32 &outX, core::u32 &outZ) const noexcept;
 
     /**
      * @brief Applies one streaming plan around a focus.
+     *
+     * A released record is swapped with the last one rather than erased: the order
+     * of the resident set has no meaning, and erase would move every record after it.
      *
      * @param focusCellX  Focus in WORLD cells (converted to chunk units here, so a
      *                    caller never has to remember which unit the policy takes).
@@ -123,43 +105,7 @@ public:
      */
     template <typename Build, typename OnGenerated>
     void stream(core::f32 focusCellX, core::f32 focusCellZ, core::f32 headingX, core::f32 headingZ, Build &&build,
-                OnGenerated &&onGenerated)
-    {
-        _scratch.clear();
-        for (core::u32 i = 0u; i < _chunks.size(); ++i)
-            _scratch.push_back(_chunks[i].coord);
-
-        const core::f32 span = static_cast<core::f32>(_chunkParams.size == 0u ? 1u : _chunkParams.size);
-        GenerationSource source;
-        source.x = math::Fixed32::fromFloat(focusCellX / span);
-        source.z = math::Fixed32::fromFloat(focusCellZ / span);
-        source.headingX = math::Fixed32::fromFloat(headingX);
-        source.headingZ = math::Fixed32::fromFloat(headingZ);
-
-        const StreamingPlan plan = planStreaming(&source, 1u, _scratch.empty() ? nullptr : &_scratch[0],
-                                                 static_cast<core::u32>(_scratch.size()), _streamParams);
-
-        for (core::u32 i = 0u; i < plan.toRelease.size(); ++i)
-            for (core::u32 j = 0u; j < _chunks.size(); ++j)
-                if (_chunks[j].coord == plan.toRelease[i])
-                {
-                    // Swap-with-last rather than erase: the order of the resident
-                    // set has no meaning, and erase would move every record after it.
-                    _chunks[j] = _chunks[_chunks.size() - 1u];
-                    _chunks.pop_back();
-                    ++_released;
-                    break;
-                }
-
-        for (core::u32 i = 0u; i < plan.toGenerate.size(); ++i)
-        {
-            if (_maxResident != 0u && _chunks.size() >= _maxResident)
-                break;
-            _chunks.push_back(build(plan.toGenerate[i].coord));
-            onGenerated(_chunks[_chunks.size() - 1u]);
-            ++_generated;
-        }
-    }
+                OnGenerated &&onGenerated);
 
     /**
      * @brief Ground height at a world cell — the resident field first.
@@ -171,17 +117,7 @@ public:
      * @tparam HeightOf Called as @c heightOf(chunk, localX, localZ) -> f32.
      */
     template <typename HeightOf>
-    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const
-    {
-        if (const Chunk *chunk = findByCell(worldX, worldZ); chunk != nullptr)
-        {
-            core::u32 localX = 0u;
-            core::u32 localZ = 0u;
-            localCell(worldX, worldZ, localX, localZ);
-            return heightOf(*chunk, localX, localZ);
-        }
-        return sampleWorldHeight(_chunkParams, worldX, worldZ).toFloat();
-    }
+    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const;
 
     /**
      * @brief The same lookup, in Fixed32, for a caller whose result is AUTHORITATIVE.
@@ -197,17 +133,7 @@ public:
      * @tparam HeightOf Called as @c heightOf(chunk, localX, localZ) -> math::Fixed32.
      */
     template <typename HeightOf>
-    [[nodiscard]] math::Fixed32 groundFixedAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const
-    {
-        if (const Chunk *chunk = findByCell(worldX, worldZ); chunk != nullptr)
-        {
-            core::u32 localX = 0u;
-            core::u32 localZ = 0u;
-            localCell(worldX, worldZ, localX, localZ);
-            return heightOf(*chunk, localX, localZ);
-        }
-        return sampleWorldHeight(_chunkParams, worldX, worldZ);
-    }
+    [[nodiscard]] math::Fixed32 groundFixedAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const;
 
 private:
     ChunkParams _chunkParams{};
@@ -220,5 +146,7 @@ private:
 };
 
 } // namespace lpl::procgen
+
+#    include "ChunkResidency.inl"
 
 #endif // LPL_PROCGEN_CHUNK_RESIDENCY_HPP

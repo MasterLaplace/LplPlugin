@@ -48,13 +48,13 @@
 
 namespace lpl::procgen {
 
-/// Maximum tiles in a set: one bit each in a 64-bit possibility mask.
+/** Maximum tiles in a set: one bit each in a 64-bit possibility mask. */
 inline constexpr core::u32 kMaxTiles = 64u;
 
-/// Resulting tile index per cell.
+/** Resulting tile index per cell. */
 using TileGrid = Grid<core::u8>;
 
-/// Marks a cell no tile could satisfy.
+/** Marks a cell no tile could satisfy. */
 inline constexpr core::u8 kNoTile = 0xFFu;
 
 /**
@@ -66,9 +66,9 @@ inline constexpr core::u8 kNoTile = 0xFFu;
  * `tile`". Directions follow @ref kNeighbor4X / @ref kNeighbor4Z order.
  */
 struct TileSet {
-    core::u32 tileCount{0u};             ///< Number of tiles, <= kMaxTiles.
-    lpl::pmr::vector<core::u64> allowed; ///< tileCount * 4 adjacency masks.
-    lpl::pmr::vector<core::u32> weight;  ///< Relative frequency per tile (0 disables it).
+    core::u32 tileCount{0u};             /**< Number of tiles, <= kMaxTiles. */
+    lpl::pmr::vector<core::u64> allowed; /**< tileCount * 4 adjacency masks. */
+    lpl::pmr::vector<core::u32> weight;  /**< Relative frequency per tile (0 disables it). */
 
     /**
      * @brief Allocates a set of @p count tiles with no adjacency permitted yet.
@@ -90,13 +90,25 @@ struct TileSet {
      */
     void allow(core::u32 tile, core::u32 direction, core::u32 neighbour);
 
-    /// @brief Permits @p a and @p b to touch in every direction.
+    /**
+     * @brief Permits @p a and @p b to touch in every direction.
+     */
     void allowAnywhere(core::u32 a, core::u32 b);
 
-    /// @brief Sets a tile's relative frequency.
+    /**
+     * @brief Sets a tile's relative frequency.
+     */
     void setWeight(core::u32 tile, core::u32 value);
 
-    /// @return true when the set has tiles and every one of them has an adjacency.
+    /**
+     * @brief Whether @ref solveWfc will accept the set.
+     *
+     * A tile that may sit next to nothing in some direction can never be placed
+     * away from that border, which is almost always an authoring slip rather than
+     * an intent.
+     *
+     * @return true when the set has tiles and every one of them has an adjacency.
+     */
     [[nodiscard]] bool valid() const;
 };
 
@@ -105,12 +117,12 @@ struct TileSet {
  * @brief Grid size, seed, and how hard to try.
  */
 struct WfcParams {
-    core::u32 width{32u};             ///< Cells along X.
-    core::u32 depth{32u};             ///< Cells along Z.
-    core::u32 seed{1337u};            ///< Determinism anchor.
-    core::u32 maxAttempts{8u};        ///< Full restarts allowed after a contradiction.
-    core::u32 localRepairRadius{3u};  ///< Cells cleared around a contradiction before restarting (0 disables).
-    core::u32 localRepairBudget{32u}; ///< Local repairs allowed per attempt.
+    core::u32 width{32u};             /**< Cells along X. */
+    core::u32 depth{32u};             /**< Cells along Z. */
+    core::u32 seed{1337u};            /**< Determinism anchor. */
+    core::u32 maxAttempts{8u};        /**< Full restarts allowed after a contradiction. */
+    core::u32 localRepairRadius{3u};  /**< Cells cleared around a contradiction before restarting (0 disables). */
+    core::u32 localRepairBudget{32u}; /**< Local repairs allowed per attempt. */
 };
 
 /**
@@ -118,11 +130,11 @@ struct WfcParams {
  * @brief What the solve produced, and how hard it was.
  */
 struct WfcResult {
-    bool solved{false};           ///< Did an attempt complete without contradiction?
-    core::u32 attempts{0u};       ///< Full attempts used (1 when it worked first try).
-    core::u32 contradictions{0u}; ///< Contradictions hit across all attempts.
-    core::u32 localRepairs{0u};   ///< Contradictions absorbed without a full restart.
-    TileGrid tiles;               ///< The arrangement; cells are kNoTile when unsolved.
+    bool solved{false};           /**< Did an attempt complete without contradiction? */
+    core::u32 attempts{0u};       /**< Full attempts used (1 when it worked first try). */
+    core::u32 contradictions{0u}; /**< Contradictions hit across all attempts. */
+    core::u32 localRepairs{0u};   /**< Contradictions absorbed without a full restart. */
+    TileGrid tiles;               /**< The arrangement; cells are kNoTile when unsolved. */
 };
 
 /**
@@ -133,6 +145,9 @@ struct WfcResult {
  * around. That is what lets a chunk read its already-generated neighbours as
  * rigid borders and stay seamless, and what lets a heightfield dictate where
  * water and rock must go before the solver fills in the rest.
+ *
+ * Each attempt draws from its own stream, so a retry explores a different
+ * arrangement instead of replaying the failed one.
  *
  * @param tiles  Tile set with adjacency and weights.
  * @param params Grid size, seed, repair and attempt budgets.
@@ -148,6 +163,8 @@ struct WfcResult {
  * rules back. A solver bug that produced a plausible-looking but illegal grid
  * would pass a determinism test and fail this one.
  *
+ * Only forward directions are walked, so each pair is judged once.
+ *
  * @param grid  Arrangement to verify.
  * @param tiles The rules it should satisfy.
  * @return Number of violated adjacencies (0 when the grid is legal).
@@ -160,11 +177,15 @@ struct WfcResult {
  * Neighbours are allowed only between adjacent steps of that sequence, which is
  * what produces beaches between sea and land instead of hard edges.
  *
+ * A gradient: each step may touch itself and its immediate neighbours in the
+ * sequence, so water never abuts grass without sand between them. Open water and
+ * grass dominate; rock and forest are accents.
+ *
  * @return The tile set (5 tiles).
  */
 [[nodiscard]] TileSet makeTerrainTileSet();
 
-/// Tile indices of @ref makeTerrainTileSet.
+/** Tile indices of @ref makeTerrainTileSet. */
 enum class TerrainTile : core::u8 {
     Water = 0,
     Sand,

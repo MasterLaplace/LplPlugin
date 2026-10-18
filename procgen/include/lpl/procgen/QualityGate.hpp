@@ -34,10 +34,10 @@
 
 namespace lpl::procgen {
 
-/// Distance in steps from a source; @ref kUnreachable when no path exists.
+/** Distance in steps from a source; @ref kUnreachable when no path exists. */
 using DistanceMap = Grid<core::u32>;
 
-/// Marks a cell no path reaches.
+/** Marks a cell no path reaches. */
 inline constexpr core::u32 kUnreachable = 0xFFFFFFFFu;
 
 /**
@@ -45,14 +45,14 @@ inline constexpr core::u32 kUnreachable = 0xFFFFFFFFu;
  * @brief What the gate measured.
  */
 struct LevelQuality {
-    bool goalReachable{false};     ///< Is the exit connected to the entrance?
-    bool fullyConnected{false};    ///< Is every walkable cell reachable from the entrance?
-    core::u32 walkableCells{0u};   ///< Total walkable cells.
-    core::u32 reachableCells{0u};  ///< Cells the entrance can actually reach.
-    core::u32 pathLength{0u};      ///< Steps from entrance to exit.
-    core::u32 deadEnds{0u};        ///< Walkable cells with exactly one walkable neighbour.
-    core::u32 junctions{0u};       ///< Walkable cells with three or more.
-    core::u32 longestDistance{0u}; ///< Farthest reachable cell, in steps.
+    bool goalReachable{false};     /**< Is the exit connected to the entrance? */
+    bool fullyConnected{false};    /**< Is every walkable cell reachable from the entrance? */
+    core::u32 walkableCells{0u};   /**< Total walkable cells. */
+    core::u32 reachableCells{0u};  /**< Cells the entrance can actually reach. */
+    core::u32 pathLength{0u};      /**< Steps from entrance to exit. */
+    core::u32 deadEnds{0u};        /**< Walkable cells with exactly one walkable neighbour. */
+    core::u32 junctions{0u};       /**< Walkable cells with three or more. */
+    core::u32 longestDistance{0u}; /**< Farthest reachable cell, in steps. */
 };
 
 /**
@@ -63,15 +63,20 @@ struct LevelQuality {
  * to generate nothing.
  */
 struct GateCriteria {
-    bool requireGoalReachable{true};  ///< The exit must be reachable.
-    bool requireFullyConnected{true}; ///< No isolated pockets.
-    core::u32 minPathLength{8u};      ///< Reject levels where the exit is next to the entrance.
-    core::u32 minWalkableCells{32u};  ///< Reject levels too small to play in.
-    core::u32 maxDeadEndRatio{60u};   ///< Reject mazes: max share of dead ends, in percent.
+    bool requireGoalReachable{true};  /**< The exit must be reachable. */
+    bool requireFullyConnected{true}; /**< No isolated pockets. */
+    core::u32 minPathLength{8u};      /**< Reject levels where the exit is next to the entrance. */
+    core::u32 minWalkableCells{32u};  /**< Reject levels too small to play in. */
+    core::u32 maxDeadEndRatio{60u};   /**< Reject mazes: max share of dead ends, in percent. */
 };
 
 /**
  * @brief Breadth-first distances from one cell over the walkable space.
+ *
+ * Breadth-first, so every cell is reached by a shortest path and the first time it
+ * is seen is final. An explicit queue rather than recursion: a large level would
+ * overflow any stack.
+ *
  * @param map     Level to traverse.
  * @param startX  Source column.
  * @param startZ  Source row.
@@ -92,7 +97,7 @@ struct GateCriteria {
  */
 [[nodiscard]] DistanceMap computeDistanceMapFrom(const DungeonMap &map, const Grid<core::u8> &sources);
 
-/// A signed field an agent descends; unlike @ref DistanceMap it may go negative.
+/** A signed field an agent descends; unlike @ref DistanceMap it may go negative. */
 using DesireMap = Grid<core::i32>;
 
 /**
@@ -100,8 +105,8 @@ using DesireMap = Grid<core::i32>;
  * @brief One want, and how much of it to take.
  */
 struct DesireTerm {
-    const DistanceMap *map{nullptr}; ///< Distances to the things this want is about.
-    core::i32 weight{1};             ///< Scaled by 16: 16 is "×1", -16 is "flee", 8 is "half".
+    const DistanceMap *map{nullptr}; /**< Distances to the things this want is about. */
+    core::i32 weight{1};             /**< Scaled by 16: 16 is "×1", -16 is "flee", 8 is "half". */
 };
 
 /**
@@ -124,6 +129,10 @@ struct DesireTerm {
  *          work — use @ref computeFleeMap, which is a breadth-first search from
  *          the havens and therefore monotone by construction.
  *
+ * An unreachable cell contributes nothing to a term rather than a huge number:
+ * folding @ref kUnreachable into the sum would swamp every other want and make the
+ * blend a statement about connectivity instead of desire.
+ *
  * @param map   The level, for walkability.
  * @param terms The wants to blend.
  * @param count How many terms.
@@ -133,6 +142,11 @@ struct DesireTerm {
 
 /**
  * @brief The neighbouring cell a descent should step to, if any.
+ *
+ * Strictly lower, and ties keep the first neighbour in kNeighbor4 order: an agent that
+ * wavered between two equal steps would move differently on two targets running the
+ * same simulation.
+ *
  * @param map     The level, for walkability.
  * @param desires The field to descend.
  * @param x       Current column.
@@ -149,13 +163,13 @@ struct DesireTerm {
  * @brief What the critical path through a level looks like, and what hangs off it.
  */
 struct HotPathAnalysis {
-    Grid<core::u8> onPath;        ///< 1 for cells on the shortest entrance-to-exit route.
-    DistanceMap detour;           ///< Steps from the nearest path cell.
-    core::u32 pathCells{0u};      ///< Length of the route, in cells.
-    core::u32 deepestDetour{0u};  ///< Farthest any cell lies from the route.
-    core::u32 excessiveCells{0u}; ///< Cells beyond @c detourLimit from the route.
-    core::u32 farthestCell{0u};   ///< Flat index of the deepest cell — where a secret goes.
-    bool valid{false};            ///< False when entrance and exit are not connected.
+    Grid<core::u8> onPath;        /**< 1 for cells on the shortest entrance-to-exit route. */
+    DistanceMap detour;           /**< Steps from the nearest path cell. */
+    core::u32 pathCells{0u};      /**< Length of the route, in cells. */
+    core::u32 deepestDetour{0u};  /**< Farthest any cell lies from the route. */
+    core::u32 excessiveCells{0u}; /**< Cells beyond @c detourLimit from the route. */
+    core::u32 farthestCell{0u};   /**< Flat index of the deepest cell — where a secret goes. */
+    bool valid{false};            /**< False when entrance and exit are not connected. */
 };
 
 /**
@@ -167,12 +181,19 @@ struct HotPathAnalysis {
  * player's experience — then flood from the whole spine at once. Every other cell
  * now carries its detour depth.
  *
+ * Distances from the entrance give the route for free: from the exit, step to any
+ * neighbour one closer to the entrance, repeatedly. That is a shortest path by
+ * construction, so there is no need for A* and no heuristic to get wrong. A cell with
+ * no such neighbour means the distance map is inconsistent, and the trace stops there
+ * rather than loop.
+ *
  * That single number answers two questions a generator otherwise cannot. A cell
  * far past the limit is an architectural excrescence: a long spur that exhausts a
  * player for nothing, and a reason to reject or repair the layout. And the very
  * deepest cell is, for exactly the same reason, the best place in the level to hide
  * something worth finding — the same measurement condemns the geometry and
- * furnishes it.
+ * furnishes it. Strictly greater: the first of several equally deep cells wins, in
+ * scan order, so the chosen hiding place is reproducible.
  *
  * @param map          Level to analyse.
  * @param startX       Entrance column.
@@ -185,10 +206,10 @@ struct HotPathAnalysis {
 [[nodiscard]] HotPathAnalysis analyseHotPath(const DungeonMap &map, core::u32 startX, core::u32 startZ, core::u32 goalX,
                                              core::u32 goalZ, core::u32 detourLimit);
 
-/// What a spot on a level is FOR.
+/** What a spot on a level is FOR. */
 enum class PlacementRole : core::u8 {
-    Encounter = 0, ///< On the spine: the player will pass through here.
-    Reward = 1,    ///< Off it, deep: the player has to choose to come here.
+    Encounter = 0, /**< On the spine: the player will pass through here. */
+    Reward = 1,    /**< Off it, deep: the player has to choose to come here. */
 };
 
 /**
@@ -199,8 +220,8 @@ struct Placement {
     core::u32 x{0u};
     core::u32 z{0u};
     PlacementRole role{PlacementRole::Encounter};
-    core::u32 detour{0u};   ///< Steps off the critical path; 0 for an encounter.
-    core::u32 progress{0u}; ///< Steps from the entrance — how far in this is.
+    core::u32 detour{0u};   /**< Steps off the critical path; 0 for an encounter. */
+    core::u32 progress{0u}; /**< Steps from the entrance — how far in this is. */
 };
 
 /**
@@ -208,10 +229,10 @@ struct Placement {
  * @brief How much to put where.
  */
 struct PlacementParams {
-    core::u32 encounters{4u};      ///< Spots wanted on the spine.
-    core::u32 rewards{2u};         ///< Spots wanted off it.
-    core::u32 minSpacing{3u};      ///< Cells between two spots of the same role.
-    core::u32 rewardMinDetour{2u}; ///< A reward must lie at least this far off the path.
+    core::u32 encounters{4u};      /**< Spots wanted on the spine. */
+    core::u32 rewards{2u};         /**< Spots wanted off it. */
+    core::u32 minSpacing{3u};      /**< Cells between two spots of the same role. */
+    core::u32 rewardMinDetour{2u}; /**< A reward must lie at least this far off the path. */
 };
 
 /**
@@ -256,8 +277,21 @@ struct PlacementParams {
  *
  * The map returned here holds each cell's distance to the nearest place of safety,
  * so descending it always moves away from the threat and always arrives somewhere.
- * Its guarantee is structural rather than incidental — see the implementation note
- * for why the usual "negate and re-relax" recipe does not have it.
+ * Its guarantee is structural rather than incidental, and the usual "negate and
+ * re-relax" recipe does not have it: this is a distance map FROM safety, rather than
+ * the negation of the distance map to the threat.
+ *
+ * The published recipe is to multiply the danger map by about -1.2 and relax it
+ * again. That does remove the crude failure — walking uphill on the danger map
+ * wedges an agent into the nearest corner, because a dead end is a local maximum —
+ * but relaxing only enforces that no cell exceeds a neighbour by more than one step,
+ * which a plateau satisfies without having any way down. So the construction still
+ * admits spurious low points, and this was not a theoretical objection: the first
+ * cave it was measured on had them.
+ *
+ * A breadth-first map from the safe cells cannot. Every cell it reaches sits one step
+ * further out than some neighbour, so descending always makes progress, and the only
+ * cells with no lower neighbour are the havens themselves.
  *
  * @param map          Level the distances were taken over.
  * @param danger       Distances from whatever is being fled.
@@ -281,6 +315,11 @@ struct PlacementParams {
 
 /**
  * @brief Does a level meet the criteria?
+ *
+ * A level that is mostly dead ends is a maze of corridors, not a space to play in.
+ * The dead-end ratio is an integer percentage: no float, so the verdict is identical
+ * on every target.
+ *
  * @param quality  Measurements from @ref evaluateLevel.
  * @param criteria What it has to satisfy.
  * @return true when every criterion holds.
@@ -294,6 +333,10 @@ struct PlacementParams {
  * two ends of the longest path (the graph's diameter, approximated by the usual
  * double sweep) puts them where the level is most worth crossing, rather than
  * at arbitrary corners that might be adjacent.
+ *
+ * Double sweep: the farthest cell from an arbitrary start is an endpoint of the
+ * diameter, and the farthest from THAT is the other end. Exact on a tree, and a good
+ * approximation on a level with loops.
  *
  * @param map     Level to inspect.
  * @param outStartX Receives the entrance column.

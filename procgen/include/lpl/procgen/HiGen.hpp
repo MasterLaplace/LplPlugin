@@ -40,10 +40,10 @@
 
 namespace lpl::procgen {
 
-/// Most levels a hierarchy may declare.
+/** Most levels a hierarchy may declare. */
 inline constexpr core::u32 kMaxGridLevels = 4u;
 
-/// Level index meaning "not bound to a grid at all": runs once, over everything.
+/** Level index meaning "not bound to a grid at all": runs once, over everything. */
 inline constexpr core::u32 kUnboundedLevel = 0xFFFFFFFFu;
 
 /**
@@ -51,8 +51,8 @@ inline constexpr core::u32 kUnboundedLevel = 0xFFFFFFFFu;
  * @brief One resolution in the hierarchy.
  */
 struct GridLevel {
-    core::u32 cellSize{1u}; ///< World cells per level cell; larger is coarser.
-    bool unbounded{false};  ///< Runs once for the whole domain rather than per cell.
+    core::u32 cellSize{1u}; /**< World cells per level cell; larger is coarser. */
+    bool unbounded{false};  /**< Runs once for the whole domain rather than per cell. */
 };
 
 /**
@@ -69,12 +69,22 @@ struct HiGenSchedule {
 
     /**
      * @brief Appends a level, keeping the coarsest-first ordering.
+     *
+     * Coarsest first, strictly. Equal sizes are refused too: two levels of the
+     * same resolution are one level, and allowing them would make "which level is
+     * coarser" ambiguous — which is the exact question the cascade rule asks.
+     *
      * @param cellSize World cells per level cell.
      * @return false when the level would break the ordering or the array is full.
      */
     bool addLevel(core::u32 cellSize);
 
-    /// @brief Appends the unbounded level. At most one may exist, and it runs first.
+    /**
+     * @brief Appends the unbounded level. At most one may exist, and it runs first.
+     *
+     * Only as the first entry: an unbounded pass runs over the whole domain, so
+     * by definition nothing is coarser than it.
+     */
     bool addUnbounded();
 };
 
@@ -83,9 +93,9 @@ struct HiGenSchedule {
  * @brief What is wrong with a pass's declared dependencies.
  */
 enum class CascadeViolation : core::u8 {
-    None = 0,    ///< The dependency is legal.
-    ReadsFiner,  ///< A pass reads a level finer than its own — the forbidden direction.
-    UnknownLevel ///< A level index outside the schedule.
+    None = 0,    /**< The dependency is legal. */
+    ReadsFiner,  /**< A pass reads a level finer than its own — the forbidden direction. */
+    UnknownLevel /**< A level index outside the schedule. */
 };
 
 /**
@@ -94,6 +104,13 @@ enum class CascadeViolation : core::u8 {
  * Separate from the schedule so a caller can validate a whole pipeline before
  * running any of it. A world half-generated against a broken dependency graph is
  * worse than one that never started, because it looks finished.
+ *
+ * The unbounded level sees the whole domain, so it may read anything and
+ * anything may read it. It is the one level with no resolution to compare.
+ *
+ * Levels are stored coarsest-first, so a LOWER index is coarser. A pass may
+ * read its own level and anything coarser; reading a higher index means
+ * reading finer, which is the forbidden direction.
  *
  * @param schedule   The hierarchy.
  * @param passLevel  Level the pass runs at (or @ref kUnboundedLevel).
@@ -105,6 +122,11 @@ enum class CascadeViolation : core::u8 {
 
 /**
  * @brief Which cell of @p level covers a world cell.
+ *
+ * Floor division, not truncation: -1 / 8 is 0 in C++ and -1 here, so the
+ * cells just left of the origin would collapse onto cell 0 and a world would
+ * be mirrored about its own axis.
+ *
  * @param schedule The hierarchy.
  * @param level    Level index.
  * @param worldX   Absolute world column.
@@ -128,16 +150,27 @@ enum class CascadeViolation : core::u8 {
  */
 class HiGenCache {
 public:
-    /// @brief Forgets everything. Called when the world's parameters change.
+    /**
+     * @brief Forgets everything. Called when the world's parameters change.
+     */
     void clear() noexcept { _entries.clear(); }
 
-    /// @return Number of cached results.
+    /**
+     * @brief Counts the cached results.
+     * @return Number of cached results.
+     */
     [[nodiscard]] core::u32 size() const noexcept { return static_cast<core::u32>(_entries.size()); }
 
-    /// @return How many lookups were served from the cache.
+    /**
+     * @brief Counts the lookups that hit.
+     * @return How many lookups were served from the cache.
+     */
     [[nodiscard]] core::u32 hits() const noexcept { return _hits; }
 
-    /// @return How many lookups had to be computed.
+    /**
+     * @brief Counts the lookups that missed.
+     * @return How many lookups had to be computed.
+     */
     [[nodiscard]] core::u32 misses() const noexcept { return _misses; }
 
     /**

@@ -55,10 +55,10 @@
 
 namespace lpl::procgen {
 
-/// Cells an adit may be driven before the site is refused. Bounds the search and the array.
+/** Cells an adit may be driven before the site is refused. Bounds the search and the array. */
 inline constexpr core::u32 kMaxAditCells = 32u;
 
-/// Columns of a warren's doorway. The bore is a handful of cells wide and deep.
+/** Columns of a warren's doorway. The bore is a handful of cells wide and deep. */
 inline constexpr core::u32 kMaxApertureCells = 24u;
 
 /**
@@ -99,9 +99,9 @@ struct CaveWarrenParams {
      */
     core::u32 halfSpan{20u};
 
-    core::u32 layers{3u};         ///< Stacked galleries; deeper ones open out.
-    core::u32 levelsPerLayer{2u}; ///< Voxel levels a gallery occupies.
-    core::f32 levelHeight{1.4f};  ///< World units per voxel level.
+    core::u32 layers{3u};         /**< Stacked galleries; deeper ones open out. */
+    core::u32 levelsPerLayer{2u}; /**< Voxel levels a gallery occupies. */
+    core::f32 levelHeight{1.4f};  /**< World units per voxel level. */
 
     /**
      * @brief Solid levels ABOVE the shallowest gallery. The cave's roof.
@@ -142,8 +142,8 @@ struct CaveWarrenParams {
      */
     core::f32 coverMargin{0.4f};
 
-    core::u32 aditReach{18u};    ///< Cells the adit may be driven before giving up.
-    core::u32 aditHalfWidth{1u}; ///< Trench half-width, in cells.
+    core::u32 aditReach{18u};    /**< Cells the adit may be driven before giving up. */
+    core::u32 aditHalfWidth{1u}; /**< Trench half-width, in cells. */
     /**
      * @brief Cells the adit bores past the mouth before the plan takes over.
      *
@@ -153,15 +153,13 @@ struct CaveWarrenParams {
      */
     core::u32 aditBore{4u};
 
-    core::f32 topFill{0.46f};  ///< Fill probability of the shallowest gallery.
-    core::f32 deepFill{0.38f}; ///< Fill probability of the deepest.
+    core::f32 topFill{0.46f};  /**< Fill probability of the shallowest gallery. */
+    core::f32 deepFill{0.38f}; /**< Fill probability of the deepest. */
     core::u32 automatonSteps{5u};
     core::u32 minChamberSize{18u};
     core::u32 shaftsPerPair{3u};
 
-    core::u8 rockMaterial{1u}; ///< Material id written for solid rock.
-
-    // ── What kind of place this is ──────────────────────────────────────────
+    core::u8 rockMaterial{1u}; /**< Material id written for solid rock. */
 
     /**
      * @brief What the document asked for, straight from @ref WorldRecipe::caveKind.
@@ -182,7 +180,7 @@ struct CaveWarrenParams {
      * @c Auto.
      */
     LandmarkParams villages{settlementDefaults()};
-    core::f32 seaLevel{-1.0f}; ///< Where the water is, for the settlement query.
+    core::f32 seaLevel{-1.0f}; /**< Where the water is, for the settlement query. */
     /**
      * @brief How far a settlement counts as "here", in world cells.
      *
@@ -193,7 +191,9 @@ struct CaveWarrenParams {
     core::u32 settlementReach{72u};
 };
 
-/** @brief The defaults a walked world uses. */
+/**
+ * @brief The defaults a walked world uses.
+ */
 [[nodiscard]] constexpr CaveWarrenParams caveWarrenDefaults() noexcept { return CaveWarrenParams{}; }
 
 /**
@@ -207,17 +207,15 @@ struct CaveWarrenParams {
  * and forty-eight of fifty-two caves silently built nothing. The symptom was a warren
  * that produced no geometry, which looks nothing like a disagreement about a threshold.
  *
+ * Measured against the top of the CAP, not the top of the gallery: the cap is rock this
+ * warren puts there itself, so ground that only clears the gallery would have the cave's
+ * own roof sticking out of the hillside.
+ *
  * @param warren Gallery geometry.
  * @param floorY The trench floor, i.e. the top gallery's floor.
  * @return The surface height at or above which a column is part of the cave.
  */
-[[nodiscard]] constexpr core::f32 caveCoverThreshold(const CaveWarrenParams &warren, core::f32 floorY) noexcept
-{
-    const core::u32 perLayer = warren.levelsPerLayer == 0u ? 1u : warren.levelsPerLayer;
-    const core::f32 gallery = static_cast<core::f32>(perLayer) * warren.levelHeight;
-    const core::f32 cap = static_cast<core::f32>(warren.capLevels) * warren.levelHeight;
-    return floorY + gallery + cap + warren.coverMargin;
-}
+[[nodiscard]] constexpr core::f32 caveCoverThreshold(const CaveWarrenParams &warren, core::f32 floorY) noexcept;
 
 /**
  * @struct CaveAdit
@@ -229,32 +227,42 @@ struct CaveWarrenParams {
  * of this feature meet.
  */
 struct CaveAdit {
-    core::i32 cellX[kMaxAditCells]{}; ///< Trench cells, from the site centre outward.
+    core::i32 cellX[kMaxAditCells]{}; /**< Trench cells, from the site centre outward. */
     core::i32 cellZ[kMaxAditCells]{};
-    core::u32 length{0u}; ///< Trench cells actually cut.
-    core::i32 mouthX{0};  ///< First cell with rock over the gallery.
+    core::u32 length{0u}; /**< Trench cells actually cut. */
+    core::i32 mouthX{0};  /**< First cell with rock over the gallery. */
     core::i32 mouthZ{0};
-    core::i32 stepX{0}; ///< Uphill step, one cell.
+    core::i32 stepX{0}; /**< Uphill step, one cell. */
     core::i32 stepZ{0};
-    core::i32 halfWidth{1}; ///< Trench half-width; travels with the plan so
-                            ///< the carve and the cover mask agree on it.
-    core::f32 floorY{0.0f}; ///< The one level the trench is cut to.
-    bool found{false};      ///< False when no cell within reach had cover.
+    core::i32 halfWidth{1}; /**< Trench half-width; travels with the plan so the carve and cover mask agree on it. */
+    core::f32 floorY{0.0f}; /**< The one level the trench is cut to. */
+    bool found{false};      /**< False when no cell within reach had cover. */
 };
 
 /**
  * @brief Drives an adit uphill from a site until the ground can roof a gallery.
  *
  * Uphill is the opposite of @ref LandmarkSite::facing, which already names the way
- * down. The search is bounded and it is allowed to FAIL: a site with a qualifying
- * relief may still have no direction in which the ground rises far enough within
- * reach, and a warren forced onto it would be a gallery with daylight through its
- * roof. A refusal is a site with no cave, which is a world with fewer caves in it
+ * down; deriving it again from the height field would be a second answer to which
+ * way the hill is. The search is bounded and it is allowed to FAIL: a site with a
+ * qualifying relief may still have no direction in which the ground rises far enough
+ * within reach, and a warren forced onto it would be a gallery with daylight through
+ * its roof. A refusal is a site with no cave, which is a world with fewer caves in it
  * and not a world with broken ones.
+ *
+ * The reach is bounded by the FOOTPRINT as well as by the array, and the first bound is
+ * the one that matters: a mouth found further out than `halfSpan` is a mouth outside the
+ * volume, so nothing can be bored at it and the warren silently builds nothing.
+ * Measured — at halfSpan 10 that was five of the fifty-two sited caves.
+ *
+ * Cover is read on the shelf, but NOT on the trench: the trench is what the search is
+ * deciding, and every cell it has passed is one it will cut to `floorY` — which is below
+ * @ref caveCoverThreshold by construction, so a cut cell can never read as covered
+ * anyway.
  *
  * @param params  World parameters.
  * @param site    The cave-mouth site.
- * @param warren  Gallery geometry; only the height and the cover margin are read.
+ * @param warren  Gallery geometry; read for the cover threshold, the adit's reach and width, and the half-span.
  * @param drop    How far the shelf is cut below the site, @ref ChunkTerrainRule::caveMouthDrop.
  * @return The adit; @c found is false when the site cannot carry a cave.
  */
@@ -268,6 +276,17 @@ struct CaveAdit {
  * by the chunk that generates terrain and once per cell by the warren that measures
  * its own cover. It LOWERS and never raises, so a cell already below the floor is
  * left alone — setting it would build a plinth out into the valley.
+ *
+ * The trench stops AT the mouth: no cell at or past the mouth along the adit's step is
+ * cut by it. Without that rule the trench's own width spills one cell past its last step
+ * and lowers the mouth to the trench floor — which takes the rock off the very roof the
+ * mouth is a hole in. Measured: it left every one of fifty-two sited caves with an
+ * uncovered mouth and therefore no way in, and the symptom was a warren that built
+ * nothing rather than one that built something wrong.
+ *
+ * The trench is a chain of small squares rather than a rasterised line: a diagonal adit
+ * drawn cell by cell is one cell wide across its corners and pinches shut there, and a
+ * passage a body cannot fit through is the same as no passage.
  *
  * @param site     The site.
  * @param adit     Its adit, from @ref planCaveAdit.
@@ -291,12 +310,12 @@ struct CaveAdit {
 struct CaveWarren {
     LandmarkSite site{};
     CaveAdit adit{};
-    VoxelVolume volume{};     ///< Rock and air; layer 0 at the top, see @ref caveVolume.
-    Grid<core::u8> covered{}; ///< 1 where the ground can roof the gallery, 0 where the terrain rules.
+    VoxelVolume volume{};     /**< Rock and air; layer 0 at the top, see @ref caveVolume. */
+    Grid<core::u8> covered{}; /**< 1 where the ground can roof the gallery, 0 where the terrain rules. */
 
-    core::i32 originX{0};  ///< World column of the volume's (0, *, 0) corner.
-    core::i32 originZ{0};  ///< World row of it.
-    core::f32 baseY{0.0f}; ///< World Y at the bottom of level 0, for the renderer.
+    core::i32 originX{0};  /**< World column of the volume's (0, *, 0) corner. */
+    core::i32 originZ{0};  /**< World row of it. */
+    core::f32 baseY{0.0f}; /**< World Y at the bottom of level 0, for the renderer. */
     core::f32 levelHeight{1.4f};
 
     /**
@@ -323,10 +342,10 @@ struct CaveWarren {
     core::u32 apertureCount{0u};
 
     core::u32 layerCount{0u};
-    core::u32 openCells{0u};      ///< Hollow cells of the system, over every layer.
-    core::u32 coveredColumns{0u}; ///< Columns with rock over the gallery roof.
-    core::u32 reachableCells{0u}; ///< Hollow cells the flood reaches from the mouth.
-    core::u32 pathLength{0u};     ///< Steps from the mouth to the deepest reachable cell.
+    core::u32 openCells{0u};      /**< Hollow cells of the system, over every layer. */
+    core::u32 coveredColumns{0u}; /**< Columns with rock over the gallery roof. */
+    core::u32 reachableCells{0u}; /**< Hollow cells the flood reaches from the mouth. */
+    core::u32 pathLength{0u};     /**< Steps from the mouth to the deepest reachable cell. */
     core::u32 repairedCells{0u};
     /**
      * @brief What kind of place this turned out to be. Never @c Auto.
@@ -343,42 +362,31 @@ struct CaveWarren {
      * player can feel: a warren that fails it is a mouth leading to one room.
      */
     bool navigable{false};
-    bool valid{false}; ///< False when the site carried no adit, or no cave.
+    bool valid{false}; /**< False when the site carried no adit, or no cave. */
 
     [[nodiscard]] core::u32 levels() const noexcept { return volume.levels; }
-    /** @brief World Y at the top of the volume: the top of the rock cap. */
+    /**
+     * @brief World Y at the top of the volume: the top of the rock cap.
+     */
     [[nodiscard]] core::f32 topY() const noexcept
     {
         return baseY + static_cast<core::f32>(volume.levels) * levelHeight;
     }
 
-    /** @brief Whether a world cell is part of the doorway. */
-    [[nodiscard]] bool isAperture(core::i32 worldX, core::i32 worldZ) const noexcept
-    {
-        for (core::u32 i = 0u; i < apertureCount; ++i)
-            if (apertureX[i] == worldX && apertureZ[i] == worldZ)
-                return true;
-        return false;
-    }
+    /**
+     * @brief Whether a world cell is part of the doorway.
+     */
+    [[nodiscard]] bool isAperture(core::i32 worldX, core::i32 worldZ) const noexcept;
 
-    /** @brief Whether a world cell falls inside the volume's footprint. */
-    [[nodiscard]] bool containsCell(core::i32 worldX, core::i32 worldZ) const noexcept
-    {
-        if (volume.empty())
-            return false;
-        const core::i32 lx = worldX - originX;
-        const core::i32 lz = worldZ - originZ;
-        return lx >= 0 && lz >= 0 && static_cast<core::u32>(lx) < volume.width &&
-               static_cast<core::u32>(lz) < volume.depth;
-    }
+    /**
+     * @brief Whether a world cell falls inside the volume's footprint.
+     */
+    [[nodiscard]] bool containsCell(core::i32 worldX, core::i32 worldZ) const noexcept;
 
-    /** @brief Whether a world cell is part of the cave rather than of the terrain. */
-    [[nodiscard]] bool isCavernous(core::i32 worldX, core::i32 worldZ) const noexcept
-    {
-        if (!containsCell(worldX, worldZ) || covered.empty())
-            return false;
-        return covered.at(static_cast<core::u32>(worldX - originX), static_cast<core::u32>(worldZ - originZ)) != 0u;
-    }
+    /**
+     * @brief Whether a world cell is part of the cave rather than of the terrain.
+     */
+    [[nodiscard]] bool isCavernous(core::i32 worldX, core::i32 worldZ) const noexcept;
 };
 
 /**
@@ -388,6 +396,47 @@ struct CaveWarren {
  * from the site alone: layers, inter-layer shafts, the forced bore that guarantees a
  * way in, the reachability repair from that way in, and the judgement of whether the
  * bottom can be reached from the top.
+ *
+ * The top gallery's FLOOR sits at the trench floor, so walking in is level. Every other
+ * anchor follows from that one, which is why it is written once here rather than being
+ * a lift each consumer adds.
+ *
+ * The build runs in this order:
+ *
+ * - Cover: where there is rock enough over the roof for a cave to be a cave, by
+ *   @ref caveCoverThreshold on the carved surface.
+ * - The cave system, with no vertical entrances and an empty surface so none are
+ *   attempted. A shaft that pierces the sky is a hole in a heightfield, which is the one
+ *   thing a heightfield cannot have — the way in here is horizontal, and it is this
+ *   file's business.
+ * - What kind of place this is: the document's word when it gave one, and otherwise the
+ *   place's own evidence. Both queries are pure functions of coordinates, so this is
+ *   decided identically by every chunk that touches the warren and on every target.
+ *   Layered is the CONTAINER, not a filling: a warren is always a stack, so the word
+ *   means "give the floors different characters" rather than naming a generator.
+ * - Uncovered columns are not cave. Before the repair, never after: the repair
+ *   guarantees a route through every hollow cell, and a column plugged afterwards would
+ *   break exactly the route it had just promised.
+ * - The bore: the one part of the gallery that is not left to the automaton. Where the
+ *   hill dips it stops where the roof stops and does not punch through it; when the
+ *   mouth cell itself is not covered there is no cave to enter.
+ * - The repair, after a recount: the counts are stale after the masking and the bore,
+ *   and the repair reads them to decide when it is done. Recounting is the caller's job
+ *   precisely because the caller is what edited the layers.
+ * - The volume, plus the rock over it. The cap goes on covered columns only: uncovered
+ *   columns are terrain and the span query ignores their voxels entirely; filling them
+ *   would be rock nobody can reach standing over ground the renderer draws.
+ * - The doorway: a bored column that touches an uncovered one. That touching IS the
+ *   opening, because an uncovered column is open air with the terrain drawn across it.
+ *   Found rather than assumed to be the mouth cell, since the bore is several cells wide
+ *   and the hill does not meet it squarely.
+ *
+ * A cave has to be bigger than the pockets this generator FILLS IN. `openCells != 0`
+ * was the bar, and it let a single hollow cell through as a cave: the debug warp
+ * dutifully teleported to the nearest one and reported "open 1", which is a hole you
+ * can stand in and nothing else. `minChamberSize` is already the number that says what
+ * is too small to be a room, so a whole warren under it is too small to be a cave — a
+ * threshold the params already carry rather than one chosen here.
  *
  * @warning Not cheap: a cellular automaton per layer plus a flood per repair round.
  *          It runs once, on the tick the chunk that OWNS the site is generated, and
@@ -415,6 +464,10 @@ struct CaveWarren {
  * far corner of ring r is further away than the near edge of ring r + 1, so stopping at
  * the first ring that contains anything would return something that is not the nearest.
  * Within the candidates it keeps the smallest true cell distance.
+ *
+ * Each ring is walked as a ring only, not as the filled square: the interior was
+ * searched at a smaller radius, and re-testing it makes the search quadratic in the ring
+ * for nothing.
  *
  * @warning Bounded by @p maxBuilds as well as by @p maxRings, because confirming a site
  * actually carries a cave costs a full @ref buildCaveWarren — about 1.4 ms. The adit is
@@ -445,6 +498,16 @@ struct CaveWarren {
 /**
  * @brief The gap a body stands in at one column of a warren.
  *
+ * Above the volume the hill answers, and a covered column IS hill: solid from the roof
+ * up to the surface, sky over that. Below it, bedrock — clamped rather than refused,
+ * because a body under the deepest gallery has to be put somewhere and the lowest floor
+ * is the only place it can be.
+ *
+ * Embedded in rock, the scan goes UP, the same direction a heightfield pushes a body
+ * that is under its ground: a body can then always climb out of a mistake, where
+ * scanning down could drop it into a sealed pocket it cannot leave. A column solid all
+ * the way to the roof answers as the hill above it, which is the way out.
+ *
  * @param warren   The warren.
  * @param worldX   Column.
  * @param worldZ   Row.
@@ -471,5 +534,7 @@ struct CaveWarren {
 [[nodiscard]] core::u32 foldCaveWarren(const CaveWarren &warren);
 
 } // namespace lpl::procgen
+
+#    include "CaveWarren.inl"
 
 #endif // LPL_PROCGEN_CAVE_WARREN_HPP

@@ -45,10 +45,10 @@
 
 namespace lpl::procgen {
 
-/// Longest grammar string accepted. Kernel-safe: parsing is bounded up front.
+/** Longest grammar string accepted. Kernel-safe: parsing is bounded up front. */
 inline constexpr core::u32 kMaxGrammarLength = 256u;
 
-/// Most modules one grammar may name.
+/** Most modules one grammar may name. */
 inline constexpr core::u32 kMaxGrammarModules = 16u;
 
 /**
@@ -62,23 +62,16 @@ inline constexpr core::u32 kMaxGrammarModules = 16u;
  * @param letter Symbol letter.
  * @return The material id, or 0 when the character is not a symbol.
  */
-[[nodiscard]] constexpr core::u8 materialForSymbol(char letter) noexcept
-{
-    if (letter >= 'A' && letter <= 'Z')
-        return static_cast<core::u8>(letter - 'A' + 1);
-    if (letter >= 'a' && letter <= 'z')
-        return static_cast<core::u8>(letter - 'a' + 1);
-    return 0u;
-}
+[[nodiscard]] constexpr core::u8 materialForSymbol(char letter) noexcept;
 
 /**
  * @enum GrammarAxis
  * @brief Which way a split cuts.
  */
 enum class GrammarAxis : core::u8 {
-    X = 0, ///< Across the plot's width.
-    Y,     ///< Vertically: base, floors, roof.
-    Z      ///< Across the plot's depth.
+    X = 0, /**< Across the plot's width. */
+    Y,     /**< Vertically: base, floors, roof. */
+    Z      /**< Across the plot's depth. */
 };
 
 /**
@@ -86,9 +79,9 @@ enum class GrammarAxis : core::u8 {
  * @brief One alternative in a probabilistic block: a symbol and its weight.
  */
 struct GrammarModule {
-    core::u8 material{1u}; ///< Material id emitted; 0 leaves the slot empty.
-    core::u8 height{1u};   ///< Levels this module occupies.
-    core::u16 weight{1u};  ///< Relative probability inside its block.
+    core::u8 material{1u}; /**< Material id emitted; 0 leaves the slot empty. */
+    core::u8 height{1u};   /**< Levels this module occupies. */
+    core::u16 weight{1u};  /**< Relative probability inside its block. */
 };
 
 /**
@@ -100,11 +93,11 @@ struct GrammarModule {
  * is always placed last.
  */
 struct SequenceGrammar {
-    GrammarModule alternatives[kMaxGrammarModules]{}; ///< The `{...}` block.
-    core::u32 alternativeCount{0u};                   ///< Entries in @c alternatives.
-    GrammarModule terminator{};                       ///< The `,[G,P]` tail.
-    bool hasTerminator{false};                        ///< Whether a tail was given.
-    core::u32 totalWeight{0u};                        ///< Sum of the alternatives' weights.
+    GrammarModule alternatives[kMaxGrammarModules]{}; /**< The `{...}` block. */
+    core::u32 alternativeCount{0u};                   /**< Entries in @c alternatives. */
+    GrammarModule terminator{};                       /**< The `,[G,P]` tail. */
+    bool hasTerminator{false};                        /**< Whether a tail was given. */
+    core::u32 totalWeight{0u};                        /**< Sum of the alternatives' weights. */
 };
 
 /**
@@ -116,18 +109,18 @@ struct SequenceGrammar {
  * make the grammar a second geometry engine.
  */
 struct BuildingGrammarParams {
-    core::u32 seed{0u};        ///< 0 derives a stream from the world seed.
-    core::u32 minFloors{1u};   ///< Fewest storeys any building gets.
-    core::u32 maxFloors{4u};   ///< Most storeys any building gets.
-    core::u32 baseHeight{1u};  ///< Levels of ground-floor course.
-    core::u32 floorHeight{1u}; ///< Levels per repeated storey.
-    core::u32 roofHeight{1u};  ///< Levels of roof; 0 leaves the top flat.
-    core::u32 inset{0u};       ///< Cells the walls step in from the plot edge.
-    core::f32 roofTaper{0.5f}; ///< Share of the roof that steps inward, in [0, 1].
-    core::u8 baseMaterial{2u}; ///< Material of the base course.
-    core::u8 wallMaterial{1u}; ///< Material of the storeys.
-    core::u8 roofMaterial{3u}; ///< Material of the roof.
-    bool hollow{true};         ///< Leave the interior empty above the base.
+    core::u32 seed{0u};        /**< 0 derives a stream from the world seed. */
+    core::u32 minFloors{1u};   /**< Fewest storeys any building gets. */
+    core::u32 maxFloors{4u};   /**< Most storeys any building gets. */
+    core::u32 baseHeight{1u};  /**< Levels of ground-floor course. */
+    core::u32 floorHeight{1u}; /**< Levels per repeated storey. */
+    core::u32 roofHeight{1u};  /**< Levels of roof; 0 leaves the top flat. */
+    core::u32 inset{0u};       /**< Cells the walls step in from the plot edge. */
+    core::f32 roofTaper{0.5f}; /**< Share of the roof that steps inward, in [0, 1]. */
+    core::u8 baseMaterial{2u}; /**< Material of the base course. */
+    core::u8 wallMaterial{1u}; /**< Material of the storeys. */
+    core::u8 roofMaterial{3u}; /**< Material of the roof. */
+    bool hollow{true};         /**< Leave the interior empty above the base. */
 };
 
 /**
@@ -141,14 +134,21 @@ struct BuildingGrammarParams {
  *   module   := '[' letters (',' letters)* ']'
  * @endcode
  *
- * A module's symbol is mapped to a material by @p symbols: the first letter of
- * the symbol indexes it, which keeps the notation the report uses (`A`, `BL`,
- * `BS`, `G`) without inventing a symbol table format nobody wrote down.
+ * A module's symbol is mapped to a material by @ref materialForSymbol: the first
+ * letter of the symbol indexes it, which keeps the notation the report uses (`A`,
+ * `BL`, `BS`, `G`) without inventing a symbol table format nobody wrote down.
  *
  * A malformed string is REFUSED outright rather than parsed as far as it goes. A
  * half-applied grammar produces a building that looks plausible and is wrong,
  * which is worse than one that does not appear — and an author fixing a typo
- * needs to be told there was one.
+ * needs to be told there was one. A weight of `:0` or a bare `:` is refused, as
+ * both are meaningless. The whole string must be consumed: trailing garbage means
+ * the author meant something the parser did not understand, and quietly ignoring
+ * it is how a typo becomes a shipped world.
+ *
+ * The string is bounded up front by @ref kMaxGrammarLength: a grammar arriving
+ * from a document is untrusted input, and a parser that walks until NUL is a
+ * parser that walks off the end of a truncated file.
  *
  * @param text    Grammar string, NUL-terminated.
  * @param out     Receives the parsed grammar on success.
@@ -158,6 +158,10 @@ struct BuildingGrammarParams {
 
 /**
  * @brief Fills a run of slots by repeating a sequence grammar.
+ *
+ * Roulette selection over the declared weights: `:2` really is twice as likely as
+ * `:1`, which is the only reading of the notation that makes the numbers mean
+ * anything.
  *
  * @param grammar The parsed grammar.
  * @param length  Slots to fill.
@@ -173,7 +177,16 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
  *
  * The volume covers the plot's own footprint, so a caller composites it into a
  * larger one at the plot's offset rather than the grammar having to know where
- * the town is.
+ * the town is. It is split along Y as `base | floors* | roof`:
+ *
+ * - The base is solid: it is the floor.
+ * - The floors, repeated.
+ * - The roof steps inward as it rises, by the requested share. A flat cap is what
+ *   `roofTaper = 0` asks for and it is a legitimate answer, so it is not treated
+ *   as a degenerate case.
+ *
+ * Inset is clamped so a narrow plot does not produce a building of negative
+ * width — which, unsigned, is a building the size of the world.
  *
  * @param plot   Footprint to raise.
  * @param params Grammar parameters.
@@ -184,6 +197,10 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
 
 /**
  * @brief Raises every plot of a settlement into one volume.
+ *
+ * Each plot's stream is keyed by the plot's POSITION, not by its index in the
+ * list. A plot inserted earlier in the vector must not re-roll every building
+ * after it, or adding one house redraws the town.
  *
  * @warning Only cells the settlement map still calls @c Plot are raised. A plot
  *          is a rectangle proposed BEFORE the streets were cut, so part of it is
@@ -206,7 +223,8 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
  * @brief Places modules along a marked path — fences, lamps, guardrails.
  *
  * The linear application of the same grammar. Cells are visited in scan order so
- * the result does not depend on how the path was traced.
+ * the result does not depend on how the path was traced — two callers that
+ * produce the same marked cells get the same fence.
  *
  * @param path      Non-zero marks a cell of the line.
  * @param grammar   Parsed sequence grammar.
@@ -219,5 +237,7 @@ core::u32 applySequence(const SequenceGrammar &grammar, core::u32 length, core::
                                        core::u32 levels, core::u32 &outCount);
 
 } // namespace lpl::procgen
+
+#    include "ShapeGrammar.inl"
 
 #endif // LPL_PROCGEN_SHAPEGRAMMAR_HPP

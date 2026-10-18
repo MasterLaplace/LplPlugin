@@ -40,13 +40,13 @@ namespace lpl::procgen {
  * @brief Grid, seed and growth budget.
  */
 struct DlaParams {
-    core::u32 width{64u};                 ///< Map width.
-    core::u32 depth{64u};                 ///< Map depth.
-    core::u32 seed{1337u};                ///< Determinism anchor.
-    core::u32 particles{600u};            ///< Particles to release.
-    core::u32 maxStepsPerParticle{2000u}; ///< Walk budget before a particle is abandoned.
-    core::u32 spawnMargin{3u};            ///< Cells beyond the cluster's extent a particle spawns.
-    core::u32 thickness{0u};              ///< Radius carved around each stuck particle; 0 keeps the fractal thin.
+    core::u32 width{64u};                 /**< Map width. */
+    core::u32 depth{64u};                 /**< Map depth. */
+    core::u32 seed{1337u};                /**< Determinism anchor. */
+    core::u32 particles{600u};            /**< Particles to release. */
+    core::u32 maxStepsPerParticle{2000u}; /**< Walk budget before a particle is abandoned. */
+    core::u32 spawnMargin{3u};            /**< Cells beyond the cluster's extent a particle spawns. */
+    core::u32 thickness{0u};              /**< Radius carved around each stuck particle; 0 keeps the fractal thin. */
 };
 
 /**
@@ -54,14 +54,26 @@ struct DlaParams {
  * @brief What the growth achieved.
  */
 struct DlaReport {
-    core::u32 stuck{0u};     ///< Particles that found the cluster.
-    core::u32 abandoned{0u}; ///< Particles that exhausted their budget.
-    core::u32 openCells{0u}; ///< Cells the cluster occupies.
-    core::u32 extent{0u};    ///< Largest distance from the seed reached.
+    core::u32 stuck{0u};     /**< Particles that found the cluster. */
+    core::u32 abandoned{0u}; /**< Particles that exhausted their budget. */
+    core::u32 openCells{0u}; /**< Cells the cluster occupies. */
+    core::u32 extent{0u};    /**< Largest distance from the seed reached. */
 };
 
 /**
  * @brief Grows a dendritic cave by diffusion-limited aggregation.
+ *
+ * Walks are confined to a margin, and spawns track the cluster's current extent:
+ * releasing from the far edge of a large map would spend nearly the whole budget
+ * crossing empty rock before the cluster is even reachable. A particle spawns on
+ * the square ring at the spawn radius (a side, then a position along it), and one
+ * that wanders too far is reflected rather than lost: letting it escape would
+ * waste the whole budget on a walk that can no longer reach the cluster.
+ *
+ * DLA is connected by construction — a particle only sticks where it touches the
+ * cluster — but the thickness carve can round corners into shapes the flood fill
+ * sees differently, so the guarantee is re-asserted.
+ *
  * @param params    Grid, seed and budgets.
  * @param outReport Receives the growth statistics (may be null).
  * @return The map, with the cluster as floor and everything else as rock.

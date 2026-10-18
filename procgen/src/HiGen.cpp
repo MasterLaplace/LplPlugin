@@ -1,12 +1,3 @@
-/**
- * @file HiGen.cpp
- * @brief Implementation of the hierarchical schedule and its cache.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/procgen/HiGen.hpp>
 
 namespace lpl::procgen {
@@ -16,9 +7,6 @@ bool HiGenSchedule::addLevel(core::u32 cellSize)
     if (levelCount >= kMaxGridLevels || cellSize == 0u)
         return false;
 
-    // Coarsest first, strictly. Equal sizes are refused too: two levels of the
-    // same resolution are one level, and allowing them would make "which level is
-    // coarser" ambiguous — which is the exact question the cascade rule asks.
     if (levelCount > 0u && !levels[levelCount - 1u].unbounded && cellSize >= levels[levelCount - 1u].cellSize)
         return false;
 
@@ -30,8 +18,6 @@ bool HiGenSchedule::addLevel(core::u32 cellSize)
 
 bool HiGenSchedule::addUnbounded()
 {
-    // Only as the first entry: an unbounded pass runs over the whole domain, so
-    // by definition nothing is coarser than it.
     if (levelCount != 0u)
         return false;
     levels[0].cellSize = 0u;
@@ -42,8 +28,6 @@ bool HiGenSchedule::addUnbounded()
 
 CascadeViolation checkCascade(const HiGenSchedule &schedule, core::u32 passLevel, core::u32 inputLevel) noexcept
 {
-    // The unbounded level sees the whole domain, so it may read anything and
-    // anything may read it. It is the one level with no resolution to compare.
     if (passLevel == kUnboundedLevel || inputLevel == kUnboundedLevel)
     {
         if (passLevel != kUnboundedLevel && passLevel >= schedule.levelCount)
@@ -56,9 +40,6 @@ CascadeViolation checkCascade(const HiGenSchedule &schedule, core::u32 passLevel
     if (passLevel >= schedule.levelCount || inputLevel >= schedule.levelCount)
         return CascadeViolation::UnknownLevel;
 
-    // Levels are stored coarsest-first, so a LOWER index is coarser. A pass may
-    // read its own level and anything coarser; reading a higher index means
-    // reading finer, which is the forbidden direction.
     return inputLevel <= passLevel ? CascadeViolation::None : CascadeViolation::ReadsFiner;
 }
 
@@ -71,9 +52,6 @@ ChunkCoord levelCellOf(const HiGenSchedule &schedule, core::u32 level, core::i32
     if (size <= 0)
         return ChunkCoord{0, 0};
 
-    // Floor division, not truncation: -1 / 8 is 0 in C++ and -1 here, so the
-    // cells left of the origin would all collapse onto cell 0 and a world would
-    // be mirrored about its own axis.
     const core::i32 x = worldX >= 0 ? worldX / size : -(((-worldX) + size - 1) / size);
     const core::i32 z = worldZ >= 0 ? worldZ / size : -(((-worldZ) + size - 1) / size);
     return ChunkCoord{x, z};
