@@ -45,7 +45,9 @@ public:
      */
     [[nodiscard]] core::Expected<void> initAll();
 
-    /** @brief Shut down all devices. */
+    /**
+     * @brief Shut down all devices.
+     */
     void shutdownAll();
 
     /**
@@ -64,10 +66,14 @@ public:
      */
     void playAtPosition(const math::Vec3<math::Fixed32> &worldPosition, core::f32 intensity);
 
-    /** @brief Cancel all effects on all devices. */
+    /**
+     * @brief Cancel all effects on all devices.
+     */
     void cancelAll();
 
-    /** @brief Number of registered devices. */
+    /**
+     * @brief Number of registered devices.
+     */
     [[nodiscard]] core::usize deviceCount() const noexcept;
 
 private:

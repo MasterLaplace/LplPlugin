@@ -50,10 +50,14 @@ public:
      */
     [[nodiscard]] virtual core::Expected<void> init() = 0;
 
-    /** @brief Shut down the device and release resources. */
+    /**
+     * @brief Shut down the device and release resources.
+     */
     virtual void shutdown() = 0;
 
-    /** @brief Query device capabilities. */
+    /**
+     * @brief Query device capabilities.
+     */
     [[nodiscard]] virtual HapticCapabilities capabilities() const noexcept = 0;
 
     /**
@@ -63,10 +67,14 @@ public:
      */
     [[nodiscard]] virtual core::Expected<void> submitEffect(const HapticEffect &effect) = 0;
 
-    /** @brief Cancel all pending effects. */
+    /**
+     * @brief Cancel all pending effects.
+     */
     virtual void cancelAll() = 0;
 
-    /** @brief Human-readable device name. */
+    /**
+     * @brief Human-readable device name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

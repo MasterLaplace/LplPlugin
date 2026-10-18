@@ -1,13 +1,3 @@
-/**
- * @file HapticManager.cpp
- * @brief HapticManager implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/haptic/HapticManager.hpp>
@@ -56,7 +46,7 @@ void HapticManager::broadcast(const HapticEffect &effect)
 
 void HapticManager::playAtPosition(const math::Vec3<math::Fixed32> & /*worldPosition*/, core::f32 /*intensity*/)
 {
-    /// @todo Map world position to nearest haptic actuator and modulate intensity.
+    // TODO(#317): map the world position to the nearest haptic actuator and modulate its intensity.
     LPL_ASSERT(false && "unimplemented");
 }
 
