@@ -35,6 +35,15 @@ kernel needs is merged before the kernel's.
 already raw, and write a raw literal as `Fixed32::fromRaw(1)`. `tools/check-fixed-literal.sh` refuses a
 non-zero literal in the braces, and the linter workflow runs it.
 
+## Comments and layout
+
+`tools/check-conventions.py` refuses what the shared C and C++ rules forbid in comments and layout:
+a `//` comment (but `// TODO(#N)` and a table's row labels), a banner, `///` (but a trailing `///<`),
+a function documented on one line, a `using` that shortens a namespace, a body of more than one line
+in a header, a `@file` block outside a header. The linter workflow runs it. A file allowed to break
+one rule (vendored, generated, a shim) is listed in `tools/check-conventions.declared` with its
+reason.
+
 ## Tests
 
 - A test of code the kernel links is an `LPL_TEST(name)` in `tests/<module>/`, under one
