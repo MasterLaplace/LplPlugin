@@ -1,13 +1,3 @@
-/**
- * @file Server.cpp
- * @brief Multi-instance game server implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-21
- * @copyright MIT License
- */
-
 #include <lpl/engine/Server.hpp>
 
 #ifdef LPL_HAS_NET
@@ -42,53 +32,80 @@
 
 namespace lpl::engine {
 
+namespace {
+
+/**
+ * @brief Packs an endpoint into the key the routing table is indexed by.
+ */
+[[nodiscard]] core::u64 senderKey(const net::Endpoint &endpoint) noexcept
+{
+    return (static_cast<core::u64>(endpoint.address()) << 16) | static_cast<core::u64>(endpoint.port());
+}
+
+} // namespace
+
 struct Server::Impl {
     Config config;
 
-    /// Shared by reference with every hosted World: one load per asset for the
-    /// whole server, not one per instance.
+    /**
+     * Shared by reference with every hosted World: one load per asset for the
+     * whole server, not one per instance.
+     */
     ResourceManager resources;
 
-    /// Instance slots. A removed instance leaves a null hole rather than
-    /// compacting, so live ids stay stable for the server's lifetime.
+    /**
+     * Instance slots. A removed instance leaves a null hole rather than
+     * compacting, so live ids stay stable for the server's lifetime.
+     */
     lpl::pmr::vector<lpl::pmr::unique_ptr<World>> worlds;
 
-    /// One set of queues per instance, parallel to @c worlds: a packet is decoded
-    /// into the queues of the instance its sender belongs to, so one game's
-    /// inputs can never be seen by another's systems.
+    /**
+     * One set of queues per instance, parallel to @c worlds: a packet is decoded
+     * into the queues of the instance its sender belongs to, so one game's
+     * inputs can never be seen by another's systems.
+     */
     lpl::pmr::vector<lpl::pmr::unique_ptr<EventQueues>> queues;
 
-    /// Sender -> instance. Keyed by the endpoint packed into 48 bits (IPv4 +
-    /// port), which is exactly what identifies a UDP peer.
+    /**
+     * Sender -> instance. Keyed by the endpoint packed into 48 bits (IPv4 +
+     * port), which is exactly what identifies a UDP peer.
+     */
     lpl::pmr::unordered_map<core::u64, WorldId> routing;
 
-    /// Where a sender we have never seen is placed.
-    WorldId defaultWorld{kInvalidWorldId};
+    WorldId defaultWorld{kInvalidWorldId}; /**< Where a sender we have never seen is placed. */
 
-    /// One set of connected clients per instance, parallel to @c worlds. NOT
-    /// shared: broadcastState() walks a whole manager, so one manager for all
-    /// instances would leak game A's state to game B's players.
+    /**
+     * One set of connected clients per instance, parallel to @c worlds. NOT
+     * shared: broadcastState() walks a whole manager, so one manager for all
+     * instances would leak game A's state to game B's players.
+     */
     lpl::pmr::vector<lpl::pmr::unique_ptr<net::session::SessionManager>> sessions;
 
-    /// One input state per instance, parallel to @c worlds. NOT shared either:
-    /// InputProcessingSystem keys input by ENTITY id and MovementSystem reads it
-    /// back from the same map, but entity ids are minted per registry — so two
-    /// instances would both own an entity 1, and game A's steering would drive
-    /// game B's player. Same failure mode as a shared SessionManager, on the
-    /// inbound path instead of the outbound one.
+    /**
+     * One input state per instance, parallel to @c worlds. NOT shared either:
+     * InputProcessingSystem keys input by ENTITY id and MovementSystem reads it
+     * back from the same map, but entity ids are minted per registry — so two
+     * instances would both own an entity 1, and game A's steering would drive
+     * game B's player. Same failure mode as a shared SessionManager, on the
+     * inbound path instead of the outbound one.
+     */
     lpl::pmr::vector<lpl::pmr::unique_ptr<input::InputManager>> inputs;
 
-    /// One physics backend per instance, parallel to @c worlds: a backend is
-    /// bound to the registry it integrates, so it cannot be shared.
+    /**
+     * One physics backend per instance, parallel to @c worlds: a backend is
+     * bound to the registry it integrates, so it cannot be shared.
+     */
     lpl::pmr::vector<lpl::pmr::unique_ptr<physics::IPhysicsBackend>> physicsBackends;
 
     lpl::pmr::unique_ptr<net::netcode::INetcodeStrategy> netcode;
     std::shared_ptr<net::transport::ITransport> transport;
 
-    /// Rolling digest history per instance, parallel to @c worlds: a ring of
-    /// kStateHashHistory entries indexed by (tick % size). A client reports a
-    /// digest for a tick we stepped a few frames ago, so the current digest is
-    /// useless for the comparison — we need the one it actually refers to.
+    /**
+     * Rolling digest history per instance, parallel to @c worlds: a ring of
+     * kStateHashHistory entries indexed by (tick % size). A client reports a
+     * digest for a tick we stepped a few frames ago, so the current digest is
+     * useless for the comparison — we need the one it actually refers to.
+     */
     struct HashRing {
         core::u64 ticks[Server::kStateHashHistory]{};
         core::u64 digests[Server::kStateHashHistory]{};
@@ -97,39 +114,51 @@ struct Server::Impl {
     };
     lpl::pmr::vector<lpl::pmr::unique_ptr<HashRing>> hashes;
 
-    /// Ticks stepped since the server started; the timeline digests are keyed by.
-    core::u64 tickCounter{0};
+    core::u64 tickCounter{0}; /**< Ticks stepped since the server started; the timeline digests are keyed by. */
 
-    /// One replay recorder per instance, parallel to @c worlds: periodic
-    /// snapshots kept so a divergence can be diagnosed after the fact (§6.4.2).
+    /**
+     * One replay recorder per instance, parallel to @c worlds: periodic
+     * snapshots kept so a divergence can be diagnosed after the fact (§6.4.2).
+     */
     lpl::pmr::vector<lpl::pmr::unique_ptr<serial::ReplayRecorder>> replays;
 
-    /// Desync telemetry, cumulative over the server's life.
+    /**
+     * @name Desync telemetry, cumulative over the server's life
+     * @{
+     */
     core::u64 desyncCount{0};
     core::u64 matchedReportCount{0};
     core::u64 staleReportCount{0};
+    /** @} */
 
-    /// The most recent captured divergence, for post-mortem diagnosis (§6.4.2).
-    Server::DesyncReport lastDesync{};
+    Server::DesyncReport lastDesync{}; /**< The most recent captured divergence, for post-mortem diagnosis (§6.4.2). */
     bool hasDesync{false};
 
-    /// Reused receive scratch: one contiguous block sliced into per-slot buffers,
-    /// so draining the socket never allocates on the hot path.
+    /**
+     * Reused receive scratch: one contiguous block sliced into per-slot buffers,
+     * so draining the socket never allocates on the hot path.
+     */
     std::vector<core::byte> receiveStorage;
     std::vector<net::transport::ReceiveSlot> receiveSlots;
 
-    /// How many ticks hit the per-tick receive budget with the socket still
-    /// full — i.e. the server did not keep up and the kernel is now shedding
-    /// load. The one number that makes an otherwise invisible wall visible.
+    /**
+     * How many ticks hit the per-tick receive budget with the socket still
+     * full — i.e. the server did not keep up and the kernel is now shedding
+     * load. The one number that makes an otherwise invisible wall visible.
+     */
     core::u64 backpressureEvents{0};
     core::u64 lastBackpressureTick{0};
 
-    /// Fans the per-instance ticks out across threads. Null when
-    /// Config::serverWorkerThreads is 0, which ticks instances sequentially.
+    /**
+     * Fans the per-instance ticks out across threads. Null when
+     * Config::serverWorkerThreads is 0, which ticks instances sequentially.
+     */
     lpl::pmr::unique_ptr<concurrency::JobSystem> jobs;
 
-    /// The World hooks need host services; the server has no display or input,
-    /// so it presents a headless platform to them.
+    /**
+     * The World hooks need host services; the server has no display or input,
+     * so it presents a headless platform to them.
+     */
     platform::linux_host::LinuxPlatform platform;
     memory::ArenaAllocator arena;
 
@@ -138,16 +167,6 @@ struct Server::Impl {
 
     explicit Impl(Config cfg) : config{std::move(cfg)}, arena{config.arenaSize()} {}
 };
-
-namespace {
-
-/// Packs an endpoint into the key the routing table is indexed by.
-[[nodiscard]] core::u64 senderKey(const net::Endpoint &endpoint) noexcept
-{
-    return (static_cast<core::u64>(endpoint.address()) << 16) | static_cast<core::u64>(endpoint.port());
-}
-
-} // namespace
 
 Server::Server(Config config) : _impl{lpl::pmr::make_unique<Impl>(std::move(config))} {}
 
@@ -188,18 +207,12 @@ Server::WorldId Server::addWorld(lpl::pmr::unique_ptr<World> world)
     if (!world)
         return kInvalidWorldId;
 
-    // The instance's session and broadcast systems are built around the shared
-    // transport, so it has to exist before they are wired: hosting before init()
-    // would hand them a null socket that only faults on the first tick, far from
-    // the call that caused it.
     if (!_impl->initialised)
     {
         core::Log::error("Server: addWorld called before init(), refused");
         return kInvalidWorldId;
     }
 
-    // No Engine hosts this World — the server does — so the context carries a
-    // null engine handle, which WorldContext documents as legitimate.
     WorldContext context{_impl->platform, _impl->resources, _impl->arena, _impl->config, nullptr};
 
     if (auto res = world->onInit(context); !res)
@@ -221,11 +234,6 @@ Server::WorldId Server::addWorld(lpl::pmr::unique_ptr<World> world)
     [[maybe_unused]] auto inputRes = _impl->inputs[id]->init();
     registerInstanceSystems(id);
 
-    // Every system is registered by now (the game's in onInit, the server's just
-    // above), so the scheduler can resolve its dependency graph. Without this
-    // the instance ticks an empty wave list: nothing it registered would ever
-    // run. Engine::init does the same after its own registrations, and the
-    // legacy server called core.buildSchedule() at the same point.
     if (auto built = _impl->worlds[id]->build(); !built)
     {
         core::Log::error("Server: instance schedule has a dependency cycle, refused");
@@ -233,7 +241,6 @@ Server::WorldId Server::addWorld(lpl::pmr::unique_ptr<World> world)
         return kInvalidWorldId;
     }
 
-    // The first instance hosted receives new clients unless told otherwise.
     if (_impl->defaultWorld == kInvalidWorldId)
         _impl->defaultWorld = id;
 
@@ -246,22 +253,10 @@ void Server::registerInstanceSystems(WorldId id)
     World &world = *_impl->worlds[id];
     auto &scheduler = world.scheduler();
 
-    // Every one of these systems indexes entities through the spatial grid, so
-    // the instance needs one whether or not its game asked for a broad-phase.
-    // fromFloat, NOT Fixed32{10}: the raw-representation constructor would give
-    // a cell size of 10/65536 and put every entity in its own cell.
     ecs::WorldPartition *spatial = world.spatialPartition();
     if (spatial == nullptr)
         spatial = &world.enableSpatialPartition(math::Fixed32::fromFloat(10.0f), _impl->config.worldCellCapacity());
 
-    // Legacy order (apps/server/main.cpp): NetworkReceive -> Session ->
-    // InputProcessing -> Movement -> Physics, then Broadcast and the monitor
-    // after the swap. The scheduler orders by phase, so registration order is
-    // free — but the FIRST of those systems is deliberately absent here:
-    // Server::pumpNetwork() already drains the shared socket once per tick and
-    // routes each datagram to its instance. Registering a NetworkReceiveSystem
-    // on a hosted World would put N systems in a race for one socket, each
-    // stealing datagrams meant for the others.
     {
         auto session = lpl::pmr::make_unique<systems::SessionSystem>(
             *_impl->sessions[id], *_impl->queues[id], _impl->transport, *_impl->inputs[id], *spatial, world.registry(),
@@ -278,10 +273,6 @@ void Server::registerInstanceSystems(WorldId id)
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(movement));
     }
 
-    // Physics: the legacy server stepped the world every tick (its "Physics"
-    // PreSwap system). A hosted World has no Engine to register it, so without
-    // this an instance would receive inputs and broadcast a state that never
-    // moved.
     if (_impl->config.enablePhysics())
     {
         _impl->physicsBackends[id] = lpl::pmr::make_unique<physics::CpuPhysicsBackend>(world.registry());
@@ -292,10 +283,6 @@ void Server::registerInstanceSystems(WorldId id)
         [[maybe_unused]] auto r = scheduler.registerSystem(std::move(physics));
     }
 
-    // Interest-managed broadcast when a radius is set, full broadcast otherwise.
-    // A positive radius sends each client only what is near its avatar, as
-    // spawn/despawn/delta — the O(clients × N) wall goes away (§2.6). Zero keeps
-    // the full-state fallback, unchanged.
     if (_impl->config.interestRadius() > math::Fixed32::zero())
     {
         auto broadcast = lpl::pmr::make_unique<systems::AoiBroadcastSystem>(
@@ -324,8 +311,6 @@ bool Server::removeWorld(WorldId id)
         return false;
 
     _impl->worlds[id]->onShutdown();
-    // The World owns the systems, and those systems hold references to the
-    // queues, sessions, input state and physics backend below: destroy it first.
     _impl->worlds[id].reset();
     _impl->queues[id].reset();
     _impl->sessions[id].reset();
@@ -336,7 +321,6 @@ bool Server::removeWorld(WorldId id)
     _impl->hashes[id].reset();
     _impl->replays[id].reset();
 
-    // Senders bound to a dead instance would otherwise route into a null slot.
     for (auto it = _impl->routing.begin(); it != _impl->routing.end();)
     {
         if (it->second == id)
@@ -410,11 +394,10 @@ void Server::pumpNetwork()
     if (!_impl->transport)
         return;
 
-    constexpr core::u32 kBurst = 64; // one recvmmsg's worth per drain
+    constexpr core::u32 kBurst = 64;
     static constexpr core::usize kSlotSize =
         sizeof(net::protocol::PacketHeader) + net::session::SessionManager::kMaxPayloadSize;
 
-    // Reused across ticks (cleared, capacity kept) so draining does not allocate.
     auto &storage = _impl->receiveStorage;
     auto &slots = _impl->receiveSlots;
     if (storage.empty())
@@ -441,7 +424,7 @@ void Server::pumpNetwork()
 
         const core::u32 count = result.value();
         if (count == 0)
-            break; // socket drained: we kept up this tick
+            break;
 
         for (core::u32 i = 0; i < count; ++i)
         {
@@ -454,15 +437,12 @@ void Server::pumpNetwork()
             if (!detail::parsePacket(std::span<const core::byte>{slot.buffer.data(), slot.length}, header, payload))
                 continue;
 
-            // Which instance is this sender playing in? An unknown sender is
-            // placed in the default instance — that is the join, and it is
-            // remembered so every later packet from it goes to the same game.
             auto worldId = worldForSender(slot.source);
             if (worldId == kInvalidWorldId)
             {
                 worldId = _impl->defaultWorld;
                 if (worldId == kInvalidWorldId)
-                    continue; // nothing hosted yet: drop rather than guess
+                    continue;
                 _impl->routing[senderKey(slot.source)] = worldId;
             }
 
@@ -472,52 +452,26 @@ void Server::pumpNetwork()
 
         drained += count;
 
-        // A full burst means the socket may still have more; a short one means
-        // it ran dry. Only keep looping while it stays full.
         if (count < slots.size())
             break;
     }
 
-    // We stopped at the budget with the socket still returning full bursts: we
-    // did NOT keep up this tick, and the kernel's RX buffer is now absorbing the
-    // overflow (and will silently drop past its limit). This is the metric that
-    // makes that visible — the wall is otherwise invisible.
     if (drained >= budget)
     {
         ++_impl->backpressureEvents;
-        _impl->lastBackpressureTick = _impl->tickCounter + 1; // recorded before tickCounter is bumped
+        _impl->lastBackpressureTick = _impl->tickCounter + 1;
     }
 }
 
 void Server::tick(core::f32 dt)
 {
-    // Drain the shared socket ONCE and fan each packet out to its instance. The
-    // instances never touch the transport: the server routes, a World simulates.
     pumpNetwork();
 
-    // Reports decoded by pumpNetwork are checked before the instances advance,
-    // so a verdict always refers to the tick history as the client saw it.
     consumeStateHashReports();
 
     if (_impl->netcode)
         _impl->netcode->tick(dt);
 
-    // Instances are independent — each owns its registry, scheduler, spatial
-    // index, physics backend, queues, sessions and input state — so they can be
-    // stepped concurrently. What they share is either thread-safe (the asset
-    // cache), read-only for the whole step (the transport's fd; sendto is atomic
-    // per datagram), or already done: pumpNetwork() and the netcode ran above,
-    // single-threaded, so no worker touches the socket for reading.
-    //
-    // Checked under ThreadSanitizer (test-server-routing, 4 workers): every
-    // report sits on the JobSystem's work-stealing transfer, never on instance
-    // state — no Registry, WorldPartition, SessionManager, EventQueues or
-    // InputManager appears in any of them. Running the same test with a single
-    // worker, where nothing can be stolen, reports nothing at all, which pins
-    // those reports to ChaseLevDeque::steal: it orders the handover with
-    // std::atomic_thread_fence, which TSan does not model. That is a
-    // pre-existing property of the job system, not of this fan-out — and it is
-    // why serverWorkerThreads defaults to 0 (sequential) rather than on.
     if (_impl->jobs && _impl->worlds.size() > 1u)
     {
         concurrency::JobHandle handle{};
@@ -544,8 +498,6 @@ void Server::tick(core::f32 dt)
 
 void Server::recordStateHashes()
 {
-    // Deliberately AFTER the fan-out has joined: every instance is at rest and
-    // this walk is single-threaded, so it never races a step in flight.
     ++_impl->tickCounter;
 
     const auto slot = static_cast<core::usize>(_impl->tickCounter % kStateHashHistory);
@@ -563,8 +515,6 @@ void Server::recordStateHashes()
         ring.filled[slot] = true;
         ring.lastDigest = digest;
 
-        // §6.5: keep a periodic snapshot so a divergence reported later can be
-        // diagnosed post-mortem against the state we actually held.
         if (_impl->config.replaySnapshotInterval() > 0 &&
             (_impl->tickCounter % _impl->config.replaySnapshotInterval()) == 0)
         {
@@ -579,9 +529,6 @@ void Server::recordStateHashes()
 
 void Server::consumeStateHashReports()
 {
-    // A client's report names a tick it has already simulated, so this is where
-    // the digest history earns its keep: checkClientHash looks that tick up
-    // rather than comparing against the state we hold right now.
     for (core::usize i = 0; i < _impl->queues.size(); ++i)
     {
         if (!_impl->queues[i])
@@ -595,15 +542,9 @@ void Server::consumeStateHashReports()
             switch (verdict)
             {
             case DesyncVerdict::Diverged: {
-                // The book's answer is a forced resynchronisation of that client.
-                // We report it; acting on it is the netcode strategy's call.
                 core::Log::error("Server: client desync detected, its state diverged from ours");
                 ++_impl->desyncCount;
 
-                // Capture the divergence for post-mortem (§6.4.2): the tick, both
-                // digests, and who reported it. The server's own full state for
-                // that tick lives in its ReplayRecorder (replay(id)), so this is
-                // enough to reconstruct and compare the two states after the fact.
                 DesyncReport rep{};
                 rep.instance = static_cast<WorldId>(i);
                 rep.tick = report.tick;
@@ -619,10 +560,7 @@ void Server::consumeStateHashReports()
                 break;
             }
 
-            case DesyncVerdict::TickUnknown:
-                // Normal for a very late report, or a client ahead of us.
-                ++_impl->staleReportCount;
-                break;
+            case DesyncVerdict::TickUnknown: ++_impl->staleReportCount; break;
 
             case DesyncVerdict::Match: ++_impl->matchedReportCount; break;
             }
@@ -670,9 +608,6 @@ Server::DesyncVerdict Server::checkClientHash(WorldId id, core::u64 tick, core::
     const auto &ring = *_impl->hashes[id];
     const auto slot = static_cast<core::usize>(tick % kStateHashHistory);
 
-    // The slot is reused every kStateHashHistory ticks, so holding the tick
-    // number alongside the digest is what distinguishes "the tick the client
-    // means" from "a much older tick that happens to land on the same slot".
     if (!ring.filled[slot] || ring.ticks[slot] != tick)
         return DesyncVerdict::TickUnknown;
 
@@ -697,7 +632,6 @@ void Server::shutdown()
 
     core::Log::info("Server: shutting down");
 
-    // Stop the workers before the instances they step are destroyed.
     _impl->jobs.reset();
 
     for (auto &world : _impl->worlds)
@@ -705,8 +639,6 @@ void Server::shutdown()
         if (world)
             world->onShutdown();
     }
-    // Same ordering rule as removeWorld: the systems die with their World, and
-    // they reference everything cleared afterwards.
     _impl->worlds.clear();
     _impl->queues.clear();
     _impl->sessions.clear();

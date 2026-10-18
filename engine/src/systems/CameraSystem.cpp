@@ -32,6 +32,10 @@ static void updateCameraDirection(CameraData &cam)
     }
 }
 
+/**
+ * @brief Reads an entity's position as floats: the camera is non-authoritative, so the
+ *        Fixed32 is converted here.
+ */
 static bool getEntityPosition(ecs::Registry &registry, core::u32 id, math::Vec3<float> &outPos)
 {
     auto refResult = registry.resolve(ecs::EntityId{id});
@@ -41,7 +45,6 @@ static bool getEntityPosition(ecs::Registry &registry, core::u32 id, math::Vec3<
     auto ref = refResult.value();
     const auto &partitions = registry.partitions();
 
-    // Find the partition that owns this entity
     for (const auto &part : partitions)
     {
         if (!part)
@@ -60,7 +63,6 @@ static bool getEntityPosition(ecs::Registry &registry, core::u32 id, math::Vec3<
                 if (auto *rpos =
                         static_cast<const math::Vec3<math::Fixed32> *>(chunk.readComponent(ecs::ComponentId::Position)))
                 {
-                    // Camera is non-authoritative: convert Fixed32 → float here.
                     outPos = {rpos[i].x.toFloat(), rpos[i].y.toFloat(), rpos[i].z.toFloat()};
                     return true;
                 }
@@ -124,7 +126,6 @@ void CameraSystem::execute(core::f32 dt)
         }
     }
 
-    // Free cam
     math::Vec3<float> movement{0.f, 0.f, 0.f};
     if (glfwGetKey(_window, GLFW_KEY_W) == GLFW_PRESS)
     {

@@ -1,12 +1,3 @@
-/**
- * @file TerrainRoutes.cpp
- * @brief Least-cost roads across a heightfield.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/engine/systems/TerrainRoutes.hpp>
 #include <lpl/std/vector.hpp>
 
@@ -46,8 +37,6 @@ void TerrainRoutes::bind(const procgen::Heightfield &field, const history::IPlac
     if (_params.cellSize == 0u)
         _params.cellSize = 1u;
     _roads = procgen::Grid<core::u8>{field.width(), field.depth(), 0u};
-    // Derived once, here, rather than per route: a summary is a function of the field, and the
-    // field is held by pointer precisely because it does not change under us.
     _coarse =
         _params.coarseRatio > 1u ? procgen::reduceHeightfield(field, _params.coarseRatio) : procgen::Heightfield{};
     _paved = 0u;
@@ -86,8 +75,6 @@ bool TerrainRoutes::toCell(math::Fixed32 x, math::Fixed32 z, core::u32 &outX, co
     if (_field == nullptr || _field->empty())
         return false;
 
-    // Arithmetic shift, which is a floor, and then a floor again by the cell size. See
-    // floorDivide for why truncation would break the two cells either side of the origin.
     const core::i32 unitX = static_cast<core::i32>(x.raw() >> 16);
     const core::i32 unitZ = static_cast<core::i32>(z.raw() >> 16);
 
@@ -109,7 +96,6 @@ void TerrainRoutes::toWorld(core::u32 cellX, core::u32 cellZ, math::Fixed32 &out
     const core::i32 baseZ = (static_cast<core::i32>(cellZ) - static_cast<core::i32>(_field->depth() / 2u)) *
                             static_cast<core::i32>(_params.cellSize);
 
-    // Half a cell, exactly: (cellSize << 16) / 2 with no rounding anywhere.
     const core::i32 half = static_cast<core::i32>(_params.cellSize << 15);
     outX = math::Fixed32{(baseX << 16) + half};
     outZ = math::Fixed32{(baseZ << 16) + half};
@@ -123,8 +109,6 @@ bool TerrainRoutes::cellOf(core::u32 place, core::u32 &outX, core::u32 &outZ) co
     history::Place resolved;
     if (!_places->resolve(place, resolved))
         return false;
-    // A place nobody has found on the ground has no cell, and inventing one would route a road
-    // to a position the corpus explicitly does not claim.
     if (!resolved.located)
         return false;
     return toCell(resolved.x, resolved.z, outX, outZ);
@@ -149,9 +133,6 @@ core::u32 TerrainRoutes::paveAttested(const core::u32 *places, core::u32 placeCo
             if (to == from)
                 continue;
 
-            // One road per pair, keyed on the ordered pair. Routing it in both directions would
-            // give two roads between the same two places, because the second call sees the
-            // first one's discount and takes it -- a parallel road nobody built.
             const core::u32 low = from < to ? from : to;
             const core::u32 high = from < to ? to : from;
             const core::u64 key = (static_cast<core::u64>(low) << 32) | static_cast<core::u64>(high);
@@ -183,14 +164,8 @@ core::u32 TerrainRoutes::paveAttested(const core::u32 *places, core::u32 placeCo
                 continue;
             }
 
-            // Counted here rather than at the deduplication, so the number means "roads laid"
-            // and not "pairs considered": a link whose endpoints the gazetteer cannot place is
-            // not a road, and reporting it as one would hide a gap in the corpus behind a
-            // network that looks complete.
             ++_pairs;
 
-            // Painted BEFORE the next pair is planned: that is what makes the network grow along
-            // its own trunk instead of accumulating parallel lines.
             for (core::usize c = 0u; c < path.cells.size(); ++c)
             {
                 core::u8 &cell = _roads[path.cells[c]];
@@ -227,10 +202,6 @@ core::u32 TerrainRoutes::route(core::u32 fromPlace, core::u32 toPlace, history::
         return 0u;
     }
 
-    // The corners: the cells where the road changes direction, plus the goal. A straight run of
-    // forty cells needs no waypoint in the middle of it -- the body walks the same ground either
-    // way -- and spending the caller's twelve slots on one would leave none for the bends, which
-    // are the whole of what a route knows that a straight line does not.
     lpl::pmr::vector<core::u32> corners;
     const core::u32 width = _field->width();
     core::i32 previousDx = 0;
@@ -257,9 +228,6 @@ core::u32 TerrainRoutes::route(core::u32 fromPlace, core::u32 toPlace, history::
     const core::u32 written = cornerCount < capacity ? cornerCount : capacity;
     for (core::u32 i = 0u; i < written; ++i)
     {
-        // Evenly strided, and the last slot always lands on the last corner: see the header for
-        // why keeping the FIRST n corners would walk a third of the road and then cut straight
-        // across what the rest of it was going round.
         const core::u32 pick =
             cornerCount <= capacity ? i : static_cast<core::u32>(((i + 1u) * cornerCount) / capacity) - 1u;
         const core::u32 cell = corners[pick];

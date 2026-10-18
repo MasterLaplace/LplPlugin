@@ -46,6 +46,14 @@ public:
     ~InputProcessingSystem() override;
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Applies every input decoded this tick to its entity's input state.
+     *
+     * An input is proof the client is alive: it marks its session active, so the reaper
+     * does not treat a playing client as idle. Sessions are keyed by the entity id (see
+     * SessionSystem), so this is an O(1) lookup.
+     */
     void execute(core::f32 dt) override;
 
 private:

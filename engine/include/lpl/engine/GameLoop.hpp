@@ -26,25 +26,20 @@ namespace lpl::engine {
 
 /** @brief Callbacks the game loop invokes each frame. */
 struct LoopCallbacks {
-    /** @brief Called once per fixed tick (dt = 1/tickRate). */
-    pmr::function<void(core::f64 dt)> fixedUpdate;
-
-    /** @brief Called once per render frame with interpolation alpha [0,1]. */
-    pmr::function<void(core::f64 alpha)> render;
-
-    /** @brief Called once per frame before fixed updates (input poll, etc.). */
-    pmr::function<void()> preFrame;
-
-    /** @brief Called once per frame after render (swap, metrics, etc.). */
-    pmr::function<void()> postFrame;
+    pmr::function<void(core::f64 dt)> fixedUpdate; /**< Called once per fixed tick (dt = 1/tickRate). */
+    pmr::function<void(core::f64 alpha)> render;   /**< Called once per render frame with interpolation alpha [0,1]. */
+    pmr::function<void()> preFrame;  /**< Called once per frame before fixed updates (input poll, etc.). */
+    pmr::function<void()> postFrame; /**< Called once per frame after render (swap, metrics, etc.). */
 };
 
 /** @brief Fixed time-step game loop. */
 class GameLoop {
 public:
-    /// @param config Engine configuration (provides tickRate).
-    /// @param clock  Platform clock backend driving wall-clock frame pacing
-    ///               (non-authoritative; the fixed dt comes from tickRate).
+    /**
+     * @param config Engine configuration (provides tickRate).
+     * @param clock  Platform clock backend driving wall-clock frame pacing
+     *               (non-authoritative; the fixed dt comes from tickRate).
+     */
     GameLoop(const Config &config, platform::IClockBackend &clock);
     ~GameLoop();
 
@@ -53,17 +48,30 @@ public:
 
     /**
      * @brief Run the loop until requestStop() is called.
+     *
+     * On a host it installs a SIGINT handler for graceful shutdown (legacy parity),
+     * without SA_RESTART so that nanosleep/poll are interrupted. Wall-clock pacing comes
+     * from the platform clock backend (non-authoritative; it only governs how many fixed
+     * steps run, never the fixed dt value). The tick count is u32 and may wrap, so
+     * deltas are taken modular-safe.
+     *
      * @param callbacks Tick / render callbacks.
      */
     void run(const LoopCallbacks &callbacks);
 
-    /** @brief Request graceful loop termination. */
+    /**
+     * @brief Request graceful loop termination.
+     */
     void requestStop() noexcept;
 
-    /** @brief Whether the loop is currently running. */
+    /**
+     * @brief Whether the loop is currently running.
+     */
     [[nodiscard]] bool isRunning() const noexcept;
 
-    /** @brief Total ticks elapsed since run() was called. */
+    /**
+     * @brief Total ticks elapsed since run() was called.
+     */
     [[nodiscard]] core::u64 tickCount() const noexcept;
 
 private:

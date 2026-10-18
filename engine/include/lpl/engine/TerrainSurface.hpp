@@ -56,21 +56,25 @@ namespace lpl::engine {
  */
 struct TerrainSurfaceParams {
     core::f32 seaLevel{-1.0f};
-    core::f32 fogDensity{0.010f}; ///< Reciprocal is roughly the distance haze wins.
-    core::f32 ambient{0.28f};     ///< What a surface facing away from the sun receives.
-    core::f32 grainTiles{0.25f};  ///< Texture tiles per world cell.
-    core::u32 shadowSteps{24u};   ///< Cells a shadow ray marches; also its longest shadow.
-    /// Per-metre-squared drop of distant terrain toward a false horizon (see
-    /// render::HeightfieldPatchParams::curvatureFactor). 0 disables it. Content, not
-    /// host: a world declares how far its horizon curves the same way it declares fog.
+    core::f32 fogDensity{0.010f}; /**< Reciprocal is roughly the distance haze wins. */
+    core::f32 ambient{0.28f};     /**< What a surface facing away from the sun receives. */
+    core::f32 grainTiles{0.25f};  /**< Texture tiles per world cell. */
+    core::u32 shadowSteps{24u};   /**< Cells a shadow ray marches; also its longest shadow. */
+    /**
+     * Per-metre-squared drop of distant terrain toward a false horizon (see
+     * render::HeightfieldPatchParams::curvatureFactor). 0 disables it. Content, not
+     * host: a world declares how far its horizon curves the same way it declares fog.
+     */
     core::f32 curvatureFactor{0.0f};
-    /// Added to curvatureFactor per metre the eye sits above seaLevel, so the horizon
-    /// bends more the higher a body climbs — the ground-level plate a walker sees and
-    /// the tighter arc an aircraft or a mountain sees are the same field, evaluated at
-    /// a different altitude. 0 disables it: a dev who does not want the dynamic mode
-    /// sets only curvatureFactor and this stays a flat, fixed bend. Altitude below sea
-    /// level (diving, a cave) does not SUBTRACT from the base curve — a submarine
-    /// should not un-bend the world below what the surface already has.
+    /**
+     * Added to curvatureFactor per metre the eye sits above seaLevel, so the horizon
+     * bends more the higher a body climbs — the ground-level plate a walker sees and
+     * the tighter arc an aircraft or a mountain sees are the same field, evaluated at
+     * a different altitude. 0 disables it: a dev who does not want the dynamic mode
+     * sets only curvatureFactor and this stays a flat, fixed bend. Altitude below sea
+     * level (diving, a cave) does not SUBTRACT from the base curve — a submarine
+     * should not un-bend the world below what the surface already has.
+     */
     core::f32 curvatureAltitudeGain{0.0f};
 };
 
@@ -84,11 +88,7 @@ struct TerrainSurfaceParams {
  * subtract from curvatureFactor: diving or standing in a cave should not un-bend a
  * world the surface already curves.
  */
-[[nodiscard]] inline core::f32 effectiveCurvature(const TerrainSurfaceParams &params, core::f32 eyeY) noexcept
-{
-    const core::f32 altitude = eyeY - params.seaLevel;
-    return params.curvatureFactor + (altitude > 0.0f ? altitude : 0.0f) * params.curvatureAltitudeGain;
-}
+[[nodiscard]] inline core::f32 effectiveCurvature(const TerrainSurfaceParams &params, core::f32 eyeY) noexcept;
 
 /**
  * @class TerrainSurface
@@ -96,7 +96,13 @@ struct TerrainSurfaceParams {
  */
 class TerrainSurface {
 public:
-    /** @brief Reads the host's presentation choices and builds the grain textures. */
+    /**
+     * @brief Reads the host's presentation choices and builds the grain textures.
+     *
+     * Two textures, not one: rock and vegetation want different grain, and one stretched
+     * over both is what makes a procedural world look like a single material painted
+     * different colours.
+     */
     void configure(const Config &config, const TerrainSurfaceParams &params, core::u32 seed);
 
     /**
@@ -107,22 +113,16 @@ public:
      * can afford); this reads the DOCUMENT (what the world looks like). Folding
      * them into one call would have made the caller choose which of the two owns
      * the sea level, and the answer is that they own different fields of it.
+     *
+     * The water's phase is kept: it is where the ripples HAPPEN to be — state, not
+     * content — so a cartridge load does not jerk the swell back to zero. The integrated
+     * sky is stale by construction afterwards, so one re-projection is forced.
      */
-    void applyLook(const render::SkyParams &sky, const render::WaterParams &water, core::f32 dayFraction) noexcept
-    {
-        _skyParams = sky;
-        // The phase is where the ripples HAPPEN to be — state, not content. Keeping
-        // ours means a cartridge load does not jerk the swell back to zero.
-        const core::f32 phase = _water.phase;
-        _water = water;
-        _water.phase = phase;
-        _dayFraction = dayFraction;
-        _sun = render::sunAt(_dayFraction);
-        // The integrated sky is now stale by construction; force one re-projection.
-        _irradianceElevation = -1.0e9f;
-    }
+    void applyLook(const render::SkyParams &sky, const render::WaterParams &water, core::f32 dayFraction) noexcept;
 
-    /** @brief Allocates the reflection probe's target once, out of the render path. */
+    /**
+     * @brief Allocates the reflection probe's target once, out of the render path.
+     */
     void attachProbe(core::u32 *colour, core::f32 *depth, core::u32 width, core::u32 height);
 
     /**
@@ -149,7 +149,9 @@ public:
     [[nodiscard]] bool shadowsEnabled() const noexcept { return _shadows; }
     [[nodiscard]] core::u32 shadowChunksPerTick() const noexcept { return _shadowChunksPerTick; }
     [[nodiscard]] core::u32 haze() const noexcept { return _haze; }
-    /** @brief Whether the last frame began underground. */
+    /**
+     * @brief Whether the last frame began underground.
+     */
     [[nodiscard]] bool underground() const noexcept { return _underground; }
     /**
      * @brief How fast distance fades, this frame.
@@ -173,7 +175,13 @@ public:
     [[nodiscard]] const TerrainSurfaceParams &params() const noexcept { return _params; }
     [[nodiscard]] const render::IrradianceProbe &irradiance() const noexcept { return _irradiance; }
 
-    /** @brief Paints the sky and remembers the haze the terrain fades into. */
+    /**
+     * @brief Paints the sky and remembers the haze the terrain fades into.
+     *
+     * The sky is re-integrated only when the sun has moved enough to change it. A day
+     * that advances by a thousandth per frame would otherwise pay for a projection to get
+     * back a probe indistinguishable from the last one.
+     */
     void beginFrame(const render::RenderTarget &rt, const render::CameraBasis &basis) noexcept;
 
     /**
@@ -188,6 +196,10 @@ public:
      * The sun keeps moving and the day keeps advancing while this runs. That is
      * deliberate: the surface is still out there, and a walker who spends ten minutes
      * underground should come out to a different hour.
+     *
+     * The target is cleared rather than left as it was. Leaving the last frame's sky in
+     * the buffer would show it wherever nothing is drawn, and underground that is most of
+     * the screen.
      *
      * @param rt      Target to clear.
      * @param tint    The dark; also what distance fades into.
@@ -213,14 +225,14 @@ public:
      */
     struct LampState {
         bool on{false};
-        core::f32 x{0.0f}; ///< Where the lamp is, world.
+        core::f32 x{0.0f}; /**< Where the lamp is, world. */
         core::f32 z{0.0f};
-        core::f32 headingX{0.0f}; ///< The beam's axis, normalised in the ground plane.
+        core::f32 headingX{0.0f}; /**< The beam's axis, normalised in the ground plane. */
         core::f32 headingZ{-1.0f};
         core::f32 coneInner{0.70f};
         core::f32 coneOuter{0.10f};
         core::f32 reach{20.0f};
-        core::u32 tint{0x00C8B79Eu}; ///< What ground under the beam looks like.
+        core::u32 tint{0x00C8B79Eu}; /**< What ground under the beam looks like. */
     };
 
     /**
@@ -241,6 +253,11 @@ public:
      * The grain is sampled at WORLD coordinates rather than per-vertex UVs. A cell
      * has no natural UV in a streamed world — there is no corner to measure from —
      * and world coordinates make two patches agree along their border for free.
+     *
+     * The mip level follows the distance: without the level moving, the grain crawls
+     * whenever the camera does — which is what mips are FOR. The grain modulates, it
+     * does not replace: a texture that overrode the base colour would throw away the
+     * only thing that says where you are.
      */
     [[nodiscard]] core::u32 shade(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit, core::f32 distance,
                                   bool rocky) const noexcept;
@@ -250,15 +267,26 @@ public:
      *
      * What it buys on terrain is not a highlight — grass has none — but the
      * RESPONSE: a slope facing away from the sun keeps the sky's blue instead of
-     * going grey. The environment term is a constant, which is the honest version
-     * of image-based lighting with no image: the sky evaluated straight up. A real
-     * irradiance map integrates the dome, and that is the next step, not this one.
+     * going grey.
+     *
+     * The environment term carries the whole shaded side of the world, so it cannot be a
+     * token value: at 0.35 the slopes facing away came out black, because ACES maps a
+     * small radiance to a smaller one. It used to be the sky read STRAIGHT UP — one
+     * colour for every normal, which made a slope facing the sunset and a slope facing
+     * away from it receive the same ambient. Now it is the sky integrated over the
+     * hemisphere the normal actually sees, so the two differ by exactly what the sky
+     * differs by.
      */
     [[nodiscard]] core::u32 shadePhysical(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 nx,
                                           core::f32 nz, core::f32 occlusion, core::f32 distance, bool rocky,
                                           const render::CameraBasis &basis) const noexcept;
 
-    /** @brief The shader to hand @c render::drawHeightfieldPatch, whichever path is on. */
+    /**
+     * @brief The shader to hand @c render::drawHeightfieldPatch, whichever path is on.
+     *
+     * One funnel, so the lamp is applied ONCE rather than in each of the three shading
+     * paths — three copies of a light are three chances for one of them to stay dark.
+     */
     [[nodiscard]] core::u32 shadeSurface(core::f32 worldX, core::f32 worldZ, core::u32 base, core::f32 lit,
                                          core::f32 nx, core::f32 nz, core::f32 occlusion,
                                          const render::CameraBasis &basis) const noexcept;
@@ -288,6 +316,40 @@ public:
      * over one implementation rather than two implementations: a river drawn by a copy
      * of this arithmetic would be a second place for Fresnel to be got wrong.
      *
+     * The probe carries what the sky cannot: the terrain standing over the water. Where
+     * it has nothing to say — off its edge, behind its near plane — the sky mirror
+     * already answered.
+     *
+     * A flat quad is a mirror that ripples: its silhouette against the horizon is a
+     * straight line however good the shading is. The swell becomes GEOMETRY only when
+     * there are vertices to move, which is what the divisions buy. Two conditions, and
+     * both are necessary: a world with no swell has nothing to displace, and a host that
+     * declined the cost gets the quad. Either alone would spend triangles on a flat
+     * surface.
+     *
+     * The grid is built from the quad's own corners, which the callers lay out as
+     * (x0,z0) (x1,z0) (x1,z1) (x0,z1) at one height. A quad that is not that — one corner
+     * lifted, a river cell on a slope — falls back rather than being subdivided wrongly:
+     * a tessellator that assumed the layout would silently flatten anything else.
+     *
+     * Displacement is damped to nothing as the bed rises to meet the surface. Two
+     * reasons, and the second is the one that would have shown: a crest lifted over a
+     * beach pokes through the sand it is supposed to lap against, and the waterline then
+     * crawls up and down the shore every frame.
+     *
+     * @warning The grid lines are snapped to an ABSOLUTE WORLD LATTICE, not divided out of
+     * this quad's own extent — and that is the difference between a watertight sheet and
+     * a cracked one. Quads differ in size, because each is tightened to the cells its own
+     * chunk has under water: dividing each by the same count puts their vertices at
+     * different world positions, so two neighbours interpolate the same wave function
+     * along two different piecewise-linear paths and the surface splits along every chunk
+     * border. It is the same discipline the terrain follows for the same reason — sample
+     * at absolute coordinates and neighbours agree for free. Both quads also put a vertex
+     * exactly ON their shared border, because the walk is clamped to the quad, so the
+     * lattice never has to line up with the border itself. The corners are evaluated from
+     * WORLD coordinates, so a cell shares its edge values with its neighbours — inside
+     * this quad and across the seam into the next chunk's — and the sheet cannot tear.
+     *
      * @param water     The surface to shade with.
      * @param latticePitch World-space spacing of the displacement grid, in cells.
      * @param bedDepthAt (worldX, worldZ) -> how far the bed is below the surface.
@@ -295,99 +357,7 @@ public:
     template <typename BedDepthAt>
     core::u32 drawWaterWith(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
                             const render::CameraBasis &basis, const core::f32 *quad, const render::WaterParams &water,
-                            core::f32 latticePitch, BedDepthAt &&bedDepthAt) const
-    {
-        const auto shade = [&](core::f32 wx, core::f32 wy, core::f32 wz) {
-            core::u32 colour = render::waterColour(wx, wy, wz, basis.eye, _sun, _skyParams, water, bedDepthAt(wx, wz));
-            // The probe carries what the sky cannot: the terrain standing over
-            // the water. Where it has nothing to say — off its edge, behind its
-            // near plane — the sky mirror already answered.
-            core::u32 reflected = 0u;
-            if (_reflection && render::sampleProbe(_probe, _probePixels, wx, wy, wz, reflected))
-                colour = render::mixColours(colour, reflected, 0.45f);
-            return render::applyAerialPerspective(
-                colour, _haze, render::approximateLength(wx - basis.eye.x, wz - basis.eye.z), _params.fogDensity);
-        };
-
-        // A flat quad is a mirror that ripples: its silhouette against the horizon is a
-        // straight line however good the shading is. The swell becomes GEOMETRY only when
-        // there are vertices to move, which is what the divisions buy.
-        //
-        // Two conditions, and both are necessary: a world with no swell has nothing to
-        // displace, and a host that declined the cost gets the quad. Either alone would
-        // spend triangles on a flat surface.
-        const core::u32 divisions = (water.swellHeight > 0.0f && _waterTessellation > 1u) ? _waterTessellation : 1u;
-        if (divisions == 1u)
-            return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, shade);
-
-        // The grid is built from the quad's own corners, which the callers lay out as
-        // (x0,z0) (x1,z0) (x1,z1) (x0,z1) at one height. A quad that is not that — one
-        // corner lifted, a river cell on a slope — falls back rather than being
-        // subdivided wrongly: a tessellator that assumed the layout would silently
-        // flatten anything else.
-        const core::f32 y = quad[1];
-        if (quad[4] != y || quad[7] != y || quad[10] != y)
-            return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, shade);
-
-        const core::f32 x0 = quad[0];
-        const core::f32 z0 = quad[2];
-        const core::f32 x1 = quad[6];
-        const core::f32 z1 = quad[8];
-        if (latticePitch <= 0.0f || x1 <= x0 || z1 <= z0)
-            return render::fillPolygonShadedClipped(rt, mvp, quad, 4u, shade);
-
-        // Displacement is damped to nothing as the bed rises to meet the surface. Two
-        // reasons, and the second is the one that would have shown: a crest lifted over a
-        // beach pokes through the sand it is supposed to lap against, and the waterline
-        // then crawls up and down the shore every frame.
-        const core::f32 fade = 1.0f / (2.0f * water.swellHeight);
-        const auto surfaceY = [&](core::f32 wx, core::f32 wz) {
-            const core::f32 depth = bedDepthAt(wx, wz);
-            core::f32 damp = depth * fade;
-            damp = damp < 0.0f ? 0.0f : (damp > 1.0f ? 1.0f : damp);
-            return y + render::waterHeight(wx, wz, water) * damp;
-        };
-
-        // @warning The grid lines are snapped to an ABSOLUTE WORLD LATTICE, not divided out of this
-        // quad's own extent — and that is the difference between a watertight sheet and a
-        // cracked one. Quads differ in size, because each is tightened to the cells its own
-        // chunk has under water: dividing each by the same count puts their vertices at
-        // different world positions, so two neighbours interpolate the same wave function
-        // along two different piecewise-linear paths and the surface splits along every
-        // chunk border. It is the same discipline the terrain follows for the same reason —
-        // sample at absolute coordinates and neighbours agree for free.
-        //
-        // Both quads also put a vertex exactly ON their shared border, because the walk is
-        // clamped to the quad, so the lattice never has to line up with the border itself.
-        const auto latticeFloor = [latticePitch](core::f32 v) {
-            const core::f32 scaled = v / latticePitch;
-            const core::f32 truncated = static_cast<core::f32>(static_cast<core::i32>(scaled));
-            return (scaled < truncated ? truncated - 1.0f : truncated) * latticePitch;
-        };
-
-        core::u32 triangles = 0u;
-        for (core::f32 az = latticeFloor(z0); az < z1; az += latticePitch)
-        {
-            const core::f32 lowZ = az < z0 ? z0 : az;
-            const core::f32 highZ = az + latticePitch > z1 ? z1 : az + latticePitch;
-            if (highZ <= lowZ)
-                continue;
-            for (core::f32 ax = latticeFloor(x0); ax < x1; ax += latticePitch)
-            {
-                const core::f32 lowX = ax < x0 ? x0 : ax;
-                const core::f32 highX = ax + latticePitch > x1 ? x1 : ax + latticePitch;
-                if (highX <= lowX)
-                    continue;
-                // Corners are evaluated from WORLD coordinates, so the cell shares its
-                // edge values with its neighbours — inside this quad and across the seam
-                // into the next chunk's — and the sheet cannot tear.
-                const core::f32 cell[12] = {lowX,  surfaceY(lowX, lowZ),   lowZ,  highX, surfaceY(highX, lowZ), lowZ,
-                                            highX, surfaceY(highX, highZ), highZ, lowX,  surfaceY(lowX, highZ), highZ};
-                triangles += render::fillPolygonShadedClipped(rt, mvp, cell, 4u, shade);
-            }
-        }
-        return triangles;
-    }
+                            core::f32 latticePitch, BedDepthAt &&bedDepthAt) const;
 
     /**
      * @brief Refreshes the reflection probe by rendering the world mirrored.
@@ -407,32 +377,12 @@ public:
      *                     every world without water in it, because nothing ever asked.
      *                     A default of true would keep that, silently, for any caller
      *                     that did not know to pass it.
+     *
+     * The picture goes into a texture allocated once: allocating per pass measurably
+     * stalled a world's streaming, because a probe pass runs every few frames.
      */
     template <typename DrawWorld>
-    void refreshProbe(core::u32 frame, const render::CameraBasis &basis, bool waterInSight, DrawWorld &&drawWorld)
-    {
-        if (!_reflection || _probeColour == nullptr || _probeDepth == nullptr || !waterInSight)
-        {
-            _probe.valid = false;
-            return;
-        }
-        if ((frame & 3u) != 0u && _probe.valid)
-            return;
-
-        const render::CameraBasis mirrored = render::mirrorBasisAboutPlane(basis, _params.seaLevel);
-        const core::f32 aspect = static_cast<core::f32>(_probe.width) / static_cast<core::f32>(_probe.height);
-        _probe.planeY = _params.seaLevel;
-        _probe.mirrorMvp =
-            render::mirrorViewProjection(mirrored, aspect, render::CameraLens{1.04719755f, 0.4f, 600.0f});
-
-        const render::RenderTarget target{_probeColour, _probeDepth, _probe.width, _probe.height};
-        render::drawSky(target, mirrored, _sun, _skyParams, 0.5773502692f, 3u);
-        drawWorld(target, _probe.mirrorMvp, mirrored);
-
-        // Into a texture allocated once: allocating here measurably stalled a
-        // world's streaming, because a probe pass runs every few frames.
-        _probe.valid = render::copyTargetToTexture(target, _probePixels);
-    }
+    void refreshProbe(core::u32 frame, const render::CameraBasis &basis, bool waterInSight, DrawWorld &&drawWorld);
 
     /**
      * @brief Fills a patch's shadow mask: the terrain over itself, then its props.
@@ -447,52 +397,15 @@ public:
      *                    a ray: walk the ground away from the sun, covering
      *                    height / sunElevation cells.
      * @param mask       Written in place; 0 lit, 255 fully shadowed.
+     *
+     * With the sun at or below the horizon (elevation 0.12 or less) the props cast
+     * nothing more: everything is shadowed anyway. A prop's shadow fades along its
+     * length: a crown thins towards the top, so the far end of its shadow is dappled
+     * rather than a hard bar.
      */
     template <typename HeightAt, typename ForEachProp>
     void fillShadowMask(const render::HeightfieldPatchParams &patch, HeightAt &&heightAt, ForEachProp &&forEachProp,
-                        procgen::Grid<core::u8> &mask) const
-    {
-        if (!_shadows || mask.empty())
-            return;
-
-        for (core::u32 z = 0u; z < patch.size; ++z)
-            for (core::u32 x = 0u; x < patch.size; ++x)
-            {
-                const core::i32 worldX = patch.originX + static_cast<core::i32>(x);
-                const core::i32 worldZ = patch.originZ + static_cast<core::i32>(z);
-                const core::f32 occlusion =
-                    render::terrainShadow([&heightAt](core::i32 sx, core::i32 sz) { return heightAt(sx, sz); }, worldX,
-                                          worldZ, heightAt(worldX, worldZ), _sun, _params.shadowSteps);
-                mask.at(x, z) = static_cast<core::u8>(occlusion * 255.0f);
-            }
-
-        if (_sun.y <= 0.12f)
-            return; // sun at or below the horizon: everything is shadowed anyway
-
-        const core::f32 reach = 1.0f / _sun.y;
-        forEachProp([&](core::i32 cellX, core::i32 cellZ, core::f32 height, core::f32 spread) {
-            const core::u32 steps = static_cast<core::u32>(height * reach);
-            for (core::u32 step = 0u; step <= steps && step < _params.shadowSteps; ++step)
-            {
-                const core::f32 t = static_cast<core::f32>(step);
-                const core::i32 shadowX = cellX - static_cast<core::i32>(_sun.x * t * reach);
-                const core::i32 shadowZ = cellZ - static_cast<core::i32>(_sun.z * t * reach);
-                const core::i32 localX = shadowX - patch.originX;
-                const core::i32 localZ = shadowZ - patch.originZ;
-                if (localX < 0 || localZ < 0 || localX >= static_cast<core::i32>(patch.size) ||
-                    localZ >= static_cast<core::i32>(patch.size))
-                    continue;
-
-                // Fades along its length: a crown thins towards the top, so the far
-                // end of its shadow is dappled rather than a hard bar.
-                const core::f32 along = steps == 0u ? 0.0f : t / static_cast<core::f32>(steps);
-                const core::f32 strength = (0.85f - 0.45f * along) * (spread > 0.6f ? 1.0f : 0.7f);
-                core::u8 &cell = mask.at(static_cast<core::u32>(localX), static_cast<core::u32>(localZ));
-                const core::u32 added = static_cast<core::u32>(cell) + static_cast<core::u32>(strength * 255.0f);
-                cell = static_cast<core::u8>(added > 255u ? 255u : added);
-            }
-        });
-    }
+                        procgen::Grid<core::u8> &mask) const;
 
 private:
     TerrainSurfaceParams _params{};
@@ -520,7 +433,17 @@ private:
     core::f32 _caveFog{0.10f};
     LampState _lamp{};
 
-    /** @brief Brightens a shaded colour by the carried lamp. */
+    /**
+     * @brief Brightens a shaded colour by the carried lamp.
+     *
+     * The cone comes from a cosine straight from the dot product. No angle is ever
+     * formed, which is what keeps a lamp off any transcendental on a target that has
+     * none. The cone is squared, so the edge of the beam softens instead of ending on a
+     * line. It BRIGHTENS what is there rather than replacing it: a torch on grass is
+     * warm-lit grass, and mixing straight to the lamp's own colour would paint every
+     * surface in the world the same beige and throw away the only thing that says where
+     * you are. The small blend toward the tint is the warmth; the multiply is the light.
+     */
     [[nodiscard]] core::u32 applyLamp(core::u32 colour, core::f32 worldX, core::f32 worldZ) const noexcept;
     bool _underground{false};
     core::u32 _skyBlock{1u};
@@ -534,7 +457,6 @@ private:
 
 } // namespace lpl::engine
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/engine/TerrainSurface.inl>
+#    include "TerrainSurface.inl"
 
 #endif // LPL_ENGINE_TERRAIN_SURFACE_HPP

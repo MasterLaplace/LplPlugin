@@ -45,6 +45,23 @@ inline constexpr core::u32 kMaxPacketsPerTick = 256;
  * which differ only in WHICH queues a packet is decoded into — the server picks
  * them per sender so one instance's inputs never leak into another's.
  *
+ * - Handshake and Disconnect: the address the packet actually came from is
+ *   authoritative; the payload's self-reported address, if any, is not consulted.
+ * - EntitySpawn (AOI): entities that just entered the client's interest radius. Full
+ *   snapshot, so the client can create them exactly as a StateSnapshot does.
+ * - StateDelta (AOI): field-masked delta of entities the client already holds and that
+ *   stayed in range (§6.2.5). Each entity carries only the fields that changed against
+ *   what the server last sent; absent fields are left to reconciliation, which merges
+ *   onto the state the client already holds. A Compressed StateDelta is a far-ring
+ *   group (§6.2.6): its positions are quantized, prefixed by [posBits][extent] so the
+ *   client can dequantize.
+ * - EntityDestroy (AOI): entities that left the client's interest radius — ids only.
+ * - StateHashReport: tick and digest are 64-bit; the Bitstream tops out at 32, so each
+ *   goes out as an explicit high/low pair rather than widening its API.
+ * - SnapshotAck: the client confirms it has applied every snapshot up to a sequence
+ *   (§6.2.5).
+ * - InputPayload: keys and axes, then the neural data (3 floats + 1 bool).
+ *
  * @param header Parsed packet header.
  * @param payload Bytes after the header.
  * @param source Address the datagram came from (authoritative for handshakes).

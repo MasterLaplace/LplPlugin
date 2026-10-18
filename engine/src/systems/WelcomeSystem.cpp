@@ -1,27 +1,9 @@
-/**
- * @file WelcomeSystem.cpp
- * @brief Client-side: processes HandshakeAck to establish local entity identity.
- *
- * @author MasterLaplace
- * @version 0.2.0
- * @date 2026-02-27
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/engine/systems/WelcomeSystem.hpp>
 
 namespace lpl::engine::systems {
 
-// ========================================================================== //
-//  Descriptor                                                                //
-// ========================================================================== //
-
 static const ecs::SystemDescriptor kWelcomeDesc{"Welcome", ecs::SchedulePhase::Input, {}};
-
-// ========================================================================== //
-//  Impl                                                                      //
-// ========================================================================== //
 
 struct WelcomeSystem::Impl {
     EventQueues &queues;
@@ -30,10 +12,6 @@ struct WelcomeSystem::Impl {
 
     Impl(EventQueues &q, core::u32 &eid, bool &conn) : queues{q}, myEntityId{eid}, connected{conn} {}
 };
-
-// ========================================================================== //
-//  Public                                                                    //
-// ========================================================================== //
 
 WelcomeSystem::WelcomeSystem(EventQueues &queues, core::u32 &myEntityId, bool &connected)
     : _impl{std::make_unique<Impl>(queues, myEntityId, connected)}

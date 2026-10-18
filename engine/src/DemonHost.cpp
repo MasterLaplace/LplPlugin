@@ -1,12 +1,3 @@
-/**
- * @file DemonHost.cpp
- * @brief Implementation of hosting an intelligence inside the engine loop.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/engine/DemonHost.hpp>
 
 #include <lpl/agent/Observation.hpp>
@@ -19,10 +10,12 @@ namespace lpl::engine {
 
 namespace {
 
-/// How many identical, identically-answered turns in a row means "stuck".
+/** How many identical, identically-answered turns in a row means "stuck". */
 constexpr core::u32 kRepeatsBeforeAbort = 2u;
 
-/// Merges the world critics with the asked-for-versus-got critics.
+/**
+ * @brief Merges the world critics with the asked-for-versus-got critics.
+ */
 agent::Observations combine(agent::Observations world, const agent::Observations &generation)
 {
     for (const agent::Finding &finding : generation.findings)
@@ -34,23 +27,10 @@ agent::Observations combine(agent::Observations world, const agent::Observations
 
 } // namespace
 
-DemonHost::DemonHost(ecs::Registry &registry, editor::CommandJournal &journal, agent::IHostedDecider &decider)
-    : _registry(registry), _journal(journal), _decider(decider), _dispatcher(journal, registry)
-{
-}
-
-void DemonHost::consider(const agent::Intent &intent) { _goal = intent.text; }
-
-agent::Observations DemonHost::observe() const
-{
-    agent::Observations findings = agent::inspectWorld(_registry);
-    if (!_lastGenerationReport.empty())
-        findings = combine(std::move(findings), agent::reviewGeneration(_lastRecipe, _lastGenerationReport));
-    return findings;
-}
-
-/// Turns the projection can carry. The decision only ever reads the tail of a
-/// session, and a bounded view is the whole point of the shared act.
+/**
+ * Turns the projection can carry. The decision only ever reads the tail of a session,
+ * and a bounded view is the whole point of the shared act.
+ */
 constexpr core::u32 kProjectedTurns = 16u;
 
 /**
@@ -59,6 +39,12 @@ constexpr core::u32 kProjectedTurns = 16u;
  * Each turn becomes the pair the shared seam knows about — the call, then what came
  * back — so a decider reading `context.transcript` sees the same alternation whether
  * it is running here or in ring 0.
+ *
+ * The rich transcript stays the record; what crosses the seam is this bounded
+ * PROJECTION of it. That is marshalling and not duplication — the same shape as
+ * SocketTransport turning a net::Endpoint into a sockaddr at the boundary and nowhere
+ * else — and it is what lets one decider serve a host that keeps journal indices and a
+ * kernel that keeps 512 bytes a line.
  *
  * @param transcript The record.
  * @param out        Receives the acts.
@@ -96,6 +82,21 @@ core::u32 projectTranscript(const agent::Transcript &transcript, agent::Act *out
     return written;
 }
 
+DemonHost::DemonHost(ecs::Registry &registry, editor::CommandJournal &journal, agent::IHostedDecider &decider)
+    : _registry(registry), _journal(journal), _decider(decider), _dispatcher(journal, registry)
+{
+}
+
+void DemonHost::consider(const agent::Intent &intent) { _goal = intent.text; }
+
+agent::Observations DemonHost::observe() const
+{
+    agent::Observations findings = agent::inspectWorld(_registry);
+    if (!_lastGenerationReport.empty())
+        findings = combine(std::move(findings), agent::reviewGeneration(_lastRecipe, _lastGenerationReport));
+    return findings;
+}
+
 ThinkResult DemonHost::think(const InferenceBudget &budget)
 {
     ThinkResult result;
@@ -106,18 +107,10 @@ ThinkResult DemonHost::think(const InferenceBudget &budget)
 
     for (core::u32 turn = 0u; turn < budget.turns(); ++turn)
     {
-        // Everything the planner sees is recomputed here, every turn. That is the
-        // point of regenerating the grammar each step: a plan made against a stale
-        // picture of the world is a plan that earns a refusal.
         const agent::ToolRegistry tools = agent::ToolRegistry::forWorld(_registry);
         const agent::Observations findings = observe();
         result.defectsAfter = findings.defects();
 
-        /* The rich transcript stays the record; what crosses the seam is a bounded
-           PROJECTION of it. That is marshalling and not duplication — the same shape
-           as SocketTransport turning a net::Endpoint into a sockaddr at the boundary
-           and nowhere else — and it is what lets one decider serve a host that keeps
-           journal indices and a kernel that keeps 512 bytes a line. */
         agent::Act view[kProjectedTurns]{};
         const core::u32 lines = projectTranscript(_transcript, view, kProjectedTurns);
 
@@ -153,9 +146,6 @@ ThinkResult DemonHost::think(const InferenceBudget &budget)
 
         ++result.turns;
 
-        // Validate before acting, and record the refusal rather than swallowing
-        // it: an agent that is told WHY it was refused can do better next turn,
-        // and one that is silently ignored cannot.
         auto validated = agent::parseToolCall(call, tools);
         if (!validated.has_value())
         {
@@ -173,9 +163,6 @@ ThinkResult DemonHost::think(const InferenceBudget &budget)
         else
             ++result.refusals;
 
-        // Keep the generation pair, so the asked-for-versus-got critics have
-        // something to judge. Reading them off the transcript instead would work
-        // until somebody trimmed it.
         if (validated.value().tool->name == "generate_world" && accepted)
         {
             _lastRecipe = validated.value().args;
@@ -193,8 +180,6 @@ ThinkResult DemonHost::think(const InferenceBudget &budget)
     }
 
     result.defectsAfter = observe().defects();
-    // A budget spent with nothing left to do is not exhaustion; it is a
-    // conclusion that happened to land on the last turn.
     result.outcome = result.defectsAfter == 0u ? ThinkOutcome::Concluded : ThinkOutcome::BudgetExhausted;
     return result;
 }

@@ -85,19 +85,22 @@ public:
         Builder &reliableBaseline(bool enabled) noexcept;
         Builder &sessionTimeoutMs(core::f64 ms) noexcept;
 
-        // ── Presentation and residency budget ───────────────────────────────
-        //
-        // What is NOT here matters as much as what is. The streaming radii, the
-        // release ratio and the per-tick generation budget belong to
-        // procgen::StreamingParams; the terrain's amplitude, its frequency and the
-        // scatter rules belong to procgen::WorldRecipe, which is the thing a
-        // .lplscene already serialises. Restating any of them here would create a
-        // second source of truth for a quantity that has an owner — the exact
-        // failure mode this engine has been bitten by twice (two ground heights,
-        // two camera bases).
-        //
-        // What is left is genuinely the host's business: how much memory the
-        // resident set may take, and how the frame is drawn.
+        /**
+         * @name Presentation and residency budget
+         *
+         * What is NOT here matters as much as what is. The streaming radii, the
+         * release ratio and the per-tick generation budget belong to
+         * procgen::StreamingParams; the terrain's amplitude, its frequency and the
+         * scatter rules belong to procgen::WorldRecipe, which is the thing a
+         * .lplscene already serialises. Restating any of them here would create a
+         * second source of truth for a quantity that has an owner — the exact
+         * failure mode this engine has been bitten by twice (two ground heights,
+         * two camera bases).
+         *
+         * What is left is genuinely the host's business: how much memory the
+         * resident set may take, and how the frame is drawn.
+         * @{
+         */
         Builder &maxResidentChunks(core::u32 chunks) noexcept;
         Builder &lodRings(core::u32 rings) noexcept;
         Builder &viewDistance(core::f32 cells) noexcept;
@@ -109,6 +112,7 @@ public:
         Builder &waterTessellation(core::u32 divisions) noexcept;
         Builder &caveDrawRadius(core::u32 cells) noexcept;
         Builder &skyBlockSize(core::u32 pixels) noexcept;
+        /** @} */
 
         [[nodiscard]] Config build() const noexcept;
 
@@ -373,7 +377,11 @@ public:
     [[nodiscard]] const pmr::string &serverAddress() const noexcept { return _serverAddress; }
     [[nodiscard]] core::u16 serverPort() const noexcept { return _serverPort; }
 
-    // ── The streamed world ──────────────────────────────────────────────────
+    /**
+     * @name The streamed world
+     * @{
+     */
+
     /**
      * @brief Hard ceiling on resident chunks, whatever the radii ask for.
      *
@@ -458,6 +466,7 @@ public:
      * @return The sky block size.
      */
     [[nodiscard]] core::u32 skyBlockSize() const noexcept { return _skyBlockSize; }
+    /** @} */
 
 private:
     friend class Builder;

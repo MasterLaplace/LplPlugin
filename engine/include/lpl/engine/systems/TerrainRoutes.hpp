@@ -89,8 +89,7 @@ struct TerrainRouteParams {
      */
     core::u32 corridorMargin{1u};
 
-    /// Cost model handed to @ref procgen::routeLeastCost.
-    procgen::RoutingParams cost{};
+    procgen::RoutingParams cost{}; /**< Cost model handed to @ref procgen::routeLeastCost. */
 };
 
 /**
@@ -107,7 +106,9 @@ public:
      * @brief Binds the relief and the gazetteer.
      *
      * Both are held by POINTER and must outlive this: a terrain is large, and a copy taken here
-     * would answer for a world that has since been eroded, raised or streamed away.
+     * would answer for a world that has since been eroded, raised or streamed away. The coarse
+     * summary is derived once, here, rather than per route: a summary is a function of the
+     * field, and the field is held by pointer precisely because it does not change under us.
      *
      * @param field  The relief the roads cross.
      * @param places Where the endpoints are.
@@ -144,7 +145,12 @@ public:
      * truncated.** Truncation keeps the beginning of the road and drops the end, so a body walks
      * the first third of it and then goes straight across precisely the terrain the route
      * existed to avoid. A strided set of corners is a coarser road with the same shape and the
-     * same destination.
+     * same destination, and the last slot always lands on the last corner.
+     *
+     * The corners are the cells where the road changes direction, plus the goal. A straight run
+     * of forty cells needs no waypoint in the middle of it -- the body walks the same ground
+     * either way -- and spending the caller's twelve slots on one would leave none for the
+     * bends, which are the whole of what a route knows that a straight line does not.
      *
      * @param fromPlace Where the body is.
      * @param toPlace   Where it is going.
@@ -234,6 +240,11 @@ public:
      * directed links, and a count of four would mean each road was laid twice -- the second
      * time taking its own discount, which is a parallel road nobody built.
      *
+     * A pair counts once its road is laid, not when it is considered, so the number means "roads
+     * laid" and not "pairs considered": a link whose endpoints the gazetteer cannot place is not
+     * a road, and reporting it as one would hide a gap in the corpus behind a network that looks
+     * complete.
+     *
      * @return The number of pairs.
      */
     [[nodiscard]] core::u32 pairs() const noexcept { return _pairs; }
@@ -244,7 +255,7 @@ private:
      *
      * @warning Floors via an arithmetic shift rather than @c toInt(), which truncates toward zero: with
      * truncation the two cells either side of the origin are half-width, so a body crossing zero
-     * skips one.
+     * skips one. The shift is a floor, and the division by the cell size floors again.
      *
      * @param x    World X.
      * @param z    World Z.
@@ -259,7 +270,8 @@ private:
      *
      * Its centre rather than its corner: a waypoint on the corner of a cell sits on the boundary
      * between it and three others, and a body aiming at it is aiming at the one place where the
-     * ground on either side disagrees.
+     * ground on either side disagrees. Half a cell, exactly: (cellSize << 16) / 2 with no
+     * rounding anywhere.
      *
      * @param cellX Column.
      * @param cellZ Row.
@@ -270,6 +282,9 @@ private:
 
     /**
      * @brief The cell a place stands in.
+     *
+     * A place nobody has found on the ground has no cell, and inventing one would route a road
+     * to a position the corpus explicitly does not claim.
      *
      * @param place The identifier.
      * @param outX  Receives the column.

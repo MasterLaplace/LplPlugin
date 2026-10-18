@@ -65,12 +65,14 @@ namespace lpl::engine::systems {
  * and replayed.
  */
 struct CreatureFieldView {
-    core::i32 originX{0}; ///< World cell the window's column 0 covers.
+    core::i32 originX{0}; /**< World cell the window's column 0 covers. */
     core::i32 originZ{0};
     core::u32 width{0u};
     core::u32 depth{0u};
 
-    /// @return false when @p worldX / @p worldZ fall outside the window.
+    /**
+     * @return false when @p worldX / @p worldZ fall outside the window.
+     */
     [[nodiscard]] bool toCell(core::i32 worldX, core::i32 worldZ, core::u32 &outX, core::u32 &outZ) const noexcept;
 };
 
@@ -93,29 +95,7 @@ struct CreatureFieldView {
  * @param registry Where the bodies live.
  * @param visit    Called with (species, identity, genome, position).
  */
-template <typename Visit> void forEachCreature(const ecs::Registry &registry, Visit &&visit)
-{
-    for (const auto &partition : registry.partitions())
-    {
-        if (!partition || !partition->archetype().has(ecs::ComponentId::Position) ||
-            !partition->archetype().has(ecs::ComponentId::Creature) ||
-            !partition->archetype().has(ecs::ComponentId::Genome))
-            continue;
-        for (const auto &chunk : partition->chunks())
-        {
-            if (!chunk)
-                continue;
-            const auto *positions =
-                static_cast<const math::Vec3<math::Fixed32> *>(chunk->latestComponent(ecs::ComponentId::Position));
-            const auto *creature = static_cast<const core::u32 *>(chunk->latestComponent(ecs::ComponentId::Creature));
-            const auto *genome = static_cast<const ecology::Genome *>(chunk->latestComponent(ecs::ComponentId::Genome));
-            if (positions == nullptr || creature == nullptr || genome == nullptr)
-                continue;
-            for (core::u32 i = 0u; i < chunk->count(); ++i)
-                visit(creature[i * 2u], creature[i * 2u + 1u], genome[i], positions[i]);
-        }
-    }
-}
+template <typename Visit> void forEachCreature(const ecs::Registry &registry, Visit &&visit);
 
 /**
  * @class ScentDepositSystem
@@ -133,10 +113,14 @@ public:
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
     void execute(core::f32 dt) override;
 
-    /// The window moves with the player, so the view is refreshed, not fixed.
+    /**
+     * @brief The window moves with the player, so the view is refreshed, not fixed.
+     */
     void setView(const CreatureFieldView &view) noexcept { _view = view; }
 
-    /// @return How many marks the last tick laid.
+    /**
+     * @return How many marks the last tick laid.
+     */
     [[nodiscard]] core::u32 deposits() const noexcept { return _deposits; }
 
 private:
@@ -186,11 +170,23 @@ public:
                         const CreatureFieldView &view);
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Turns every creature that smells something toward or away from it.
+     *
+     * The pull is scaled by the animal's own nature, not by the species average.
+     * personalityOf is a pure function of (id, species), both of which the Creature
+     * component carries — so the system reproduces exactly what Herd::step used to do,
+     * without needing the herd. Dropping this term flattened the pack's behaviour the
+     * first time round, and the encirclement measurement caught it.
+     */
     void execute(core::f32 dt) override;
 
     void setView(const CreatureFieldView &view) noexcept { _view = view; }
 
-    /// @return How many creatures the last tick actually steered.
+    /**
+     * @return How many creatures the last tick actually steered.
+     */
     [[nodiscard]] core::u32 steered() const noexcept { return _steered; }
 
 private:
@@ -220,17 +216,30 @@ public:
     FlockingSystem(ecs::Registry &registry, const ecology::HerdParams &params);
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Runs the boid rules over each species and takes the velocities back.
+     *
+     * Gathered per species, because a flock is a species: a deer does not align with a
+     * wolf. The step is the params' fixed step, not the frame's dt: this is
+     * authoritative, and a wall clock on the authoritative path is a desync waiting for
+     * a slow frame.
+     */
     void execute(core::f32 dt) override;
 
-    /// @return How many bodies the last tick flocked.
+    /**
+     * @return How many bodies the last tick flocked.
+     */
     [[nodiscard]] core::u32 flocked() const noexcept { return _flocked; }
 
 private:
     ecs::Registry &_registry;
     const ecology::HerdParams &_params;
-    /// Scratch, reused every tick: clear() keeps the capacity, so a steady herd
-    /// allocates on the first tick and never again. test-tick-allocations is the
-    /// instrument that makes that claim checkable rather than hopeful.
+    /**
+     * Scratch, reused every tick: clear() keeps the capacity, so a steady herd
+     * allocates on the first tick and never again. test-tick-allocations is the
+     * instrument that makes that claim checkable rather than hopeful.
+     */
     lpl::pmr::vector<ai::Boid> _flock;
     lpl::pmr::vector<math::Vec3<math::Fixed32> *> _sinks;
     core::u32 _flocked{0u};
@@ -255,7 +264,9 @@ public:
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
     void execute(core::f32 dt) override;
 
-    /// Meals taken on the LAST tick — transient, unlike the world's running total.
+    /**
+     * @brief Meals taken on the LAST tick — transient, unlike the world's running total.
+     */
     [[nodiscard]] core::u32 meals() const noexcept { return _meals; }
 
 private:
@@ -297,15 +308,44 @@ public:
     LocomotionSystem(ecs::Registry &registry, const ecology::HerdParams &params, const ITerrainQuery &terrain);
 
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
+
+    /**
+     * @brief Faces, paces and walks every creature, the terrain disposing.
+     *
+     * Containment comes before anything else. A body standing where it may not stand
+     * refuses every direction, so it refuses two steps a tick for the rest of the run:
+     * the world is asked which way is out and that step is taken; a world with no advice
+     * leaves it to reverse, which at least changes the situation. The velocity goes with
+     * it: leaving the flock's velocity intact walks the body straight back out of bounds
+     * on the next tick.
+     *
+     * Facing follows the velocity only when there IS one: normalising a velocity near
+     * zero turns numerical noise into a direction, and an animal standing still would
+     * spin. Keeping the last heading is the point of storing one — standing still is a
+     * valid boid state and not a valid animal one. The pace comes from the genome and the
+     * personality, NOT from the velocity's magnitude: the flock and the scent decide the
+     * direction, the genome decides how fast this animal can possibly travel.
+     *
+     * @warning The step itself lives in `stepOnGround`, shared with the historical
+     * journey. Two steppers would be two answers to "may a body go there", free to
+     * disagree about corners — and the corner case took three attempts to get right the
+     * first time.
+     */
     void execute(core::f32 dt) override;
 
-    /// @return How many bodies the terrain refused outright on the last tick.
+    /**
+     * @return How many bodies the terrain refused outright on the last tick.
+     */
     [[nodiscard]] core::u32 cornered() const noexcept { return _cornered; }
 
-    /// @return How many steered around an obstacle rather than into it.
+    /**
+     * @return How many steered around an obstacle rather than into it.
+     */
     [[nodiscard]] core::u32 avoided() const noexcept { return _avoided; }
 
-    /// @return How many were standing somewhere unstandable and had to be recovered.
+    /**
+     * @return How many were standing somewhere unstandable and had to be recovered.
+     */
     [[nodiscard]] core::u32 strays() const noexcept { return _strays; }
 
 private:
@@ -332,12 +372,12 @@ private:
  * to be right about.
  */
 enum class CreatureStage : core::u8 {
-    ScentDeposit = 0, ///< Every creature marks the channel of its own kind.
-    ScentField,       ///< The field evaporates and diffuses — after the marks, never with them.
-    ScentSteering,    ///< Each creature reads its palate and turns.
-    Flocking,         ///< The boid rules, per species, on top of that impulse.
-    Grazing,          ///< A forager eats where it STOOD, so before it moves.
-    Locomotion,       ///< Facing, pace, and the walk terrain allows.
+    ScentDeposit = 0, /**< Every creature marks the channel of its own kind. */
+    ScentField,       /**< The field evaporates and diffuses — after the marks, never with them. */
+    ScentSteering,    /**< Each creature reads its palate and turns. */
+    Flocking,         /**< The boid rules, per species, on top of that impulse. */
+    Grazing,          /**< A forager eats where it STOOD, so before it moves. */
+    Locomotion,       /**< Facing, pace, and the walk terrain allows. */
     Count
 };
 
@@ -356,6 +396,10 @@ enum class CreatureStage : core::u8 {
  * Ownership transfers on @ref registerOn, but the systems themselves do not move,
  * so the typed accessors stay valid: that is what lets a caller keep pushing a
  * fresh @ref CreatureFieldView into the two systems that need one.
+ *
+ * Building every stage needs the whole LivingLayer, which this header only
+ * forward-declares: that is what stops the include cycle (LivingLayer.hpp includes
+ * this header for CreatureFieldView).
  */
 class CreaturePipeline {
 public:
@@ -364,7 +408,9 @@ public:
      *
      * Every constructor argument comes from the layer or from the terrain, which
      * is why this takes two objects rather than eight references: a caller cannot
-     * hand one system a different herd from another's.
+     * hand one system a different herd from another's. Each system is stored under its
+     * stage index, so both drivers get the order from the enumeration rather than from
+     * the shape of the code around them.
      *
      * @param registry Where the bodies live.
      * @param living   The layer that owns the field, the herd parameters and the recipe.
@@ -372,18 +418,31 @@ public:
      */
     void build(ecs::Registry &registry, LivingLayer &living, ITerrainQuery &terrain);
 
-    /// Hands every stage to @p scheduler in order. @return an error if one is refused.
+    /**
+     * @brief Hands every stage to @p scheduler in order.
+     * @return an error if one is refused.
+     */
     [[nodiscard]] core::ExpectedVoid registerOn(ecs::SystemScheduler &scheduler);
 
-    /// Executes every stage in order, for a caller with no scheduler.
+    /**
+     * @brief Executes every stage in order, for a caller with no scheduler.
+     */
     void step(core::f32 dt);
 
-    /// Pushes a moved scent window into the two stages that read one.
+    /**
+     * @brief Pushes a moved scent window into the two stages that read one.
+     *
+     * Only two stages read the window; the others work in world units. Forwarding to
+     * one and forgetting the other is how a herd deposits where it is and reads the
+     * gradient somewhere else.
+     */
     void setView(const CreatureFieldView &view) noexcept;
 
     [[nodiscard]] bool built() const noexcept { return _deposit != nullptr; }
 
-    /// @return The deposit stage, or nullptr before @ref build.
+    /**
+     * @return The deposit stage, or nullptr before @ref build.
+     */
     [[nodiscard]] ScentDepositSystem *deposit() const noexcept { return _deposit; }
     [[nodiscard]] ScentSteeringSystem *steering() const noexcept { return _steering; }
     [[nodiscard]] FlockingSystem *flocking() const noexcept { return _flocking; }
@@ -391,7 +450,7 @@ public:
     [[nodiscard]] LocomotionSystem *locomotion() const noexcept { return _locomotion; }
 
 private:
-    /// Indexed by @ref CreatureStage, which IS the order.
+    /** Indexed by @ref CreatureStage, which IS the order. */
     lpl::pmr::unique_ptr<ecs::ISystem> _stages[static_cast<core::u32>(CreatureStage::Count)];
 
     ScentDepositSystem *_deposit{nullptr};
@@ -402,5 +461,7 @@ private:
 };
 
 } // namespace lpl::engine::systems
+
+#    include "CreatureSystems.inl"
 
 #endif // LPL_ENGINE_SYSTEMS_CREATURESYSTEMS_HPP

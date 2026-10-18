@@ -43,11 +43,11 @@ namespace lpl::engine {
 struct PropLibraryParams {
     core::u32 treeSpecies{3u};
     core::u32 rockVariants{3u};
-    core::u32 rockOneIn{64u};        ///< One cell in N carries a boulder.
-    core::f32 viewDistance{70.0f};   ///< Furthest a plant is worth drawing.
-    core::f32 nearDistance{5.0f};    ///< Nearer than this the walker is IN the plant.
-    core::f32 canopyDistance{11.0f}; ///< Nearer than this, wood only, no leaves.
-    core::f32 propDistance{45.0f};   ///< Furthest a boulder is worth its triangles.
+    core::u32 rockOneIn{64u};        /**< One cell in N carries a boulder. */
+    core::f32 viewDistance{70.0f};   /**< Furthest a plant is worth drawing. */
+    core::f32 nearDistance{5.0f};    /**< Nearer than this the walker is IN the plant. */
+    core::f32 canopyDistance{11.0f}; /**< Nearer than this, wood only, no leaves. */
+    core::f32 propDistance{45.0f};   /**< Furthest a boulder is worth its triangles. */
     core::f32 fogDensity{0.010f};
     core::u32 rockAlbedo{0x00877F76u};
     core::u32 plantSalt{0x9E3779B9u};
@@ -71,20 +71,30 @@ public:
     [[nodiscard]] const render::FoliageMesh *trees() const noexcept { return _trees; }
     [[nodiscard]] core::u32 treeSpecies() const noexcept { return _params.treeSpecies; }
 
-    /** @brief How tall and wide the plant on a cell is, for its shadow. */
+    /**
+     * @brief How tall and wide the plant on a cell is, for its shadow.
+     */
     void plantExtent(core::i32 cellX, core::i32 cellZ, core::f32 &outHeight, core::f32 &outSpread) const noexcept;
 
-    /** @brief Whether a boulder stands on a cell, and which one. */
+    /**
+     * @brief Whether a boulder stands on a cell, and which one.
+     */
     [[nodiscard]] bool rockAt(core::i32 cellX, core::i32 cellZ, core::u32 &outVariant,
                               core::f32 &outScale) const noexcept;
 
-    /** @brief Empties the frame's queue. Call once before queueing. */
+    /**
+     * @brief Empties the frame's queue. Call once before queueing.
+     */
     void beginFrame() const { _queue.clear(); }
 
-    /** @brief Queues the plant that grows on a cell, if one does. */
+    /**
+     * @brief Queues the plant that grows on a cell, if one does.
+     */
     void queuePlant(core::i32 cellX, core::i32 cellZ, core::f32 ground, core::f32 light) const;
 
-    /** @brief Draws the queued plants, batched by species and ordered by distance. */
+    /**
+     * @brief Draws the queued plants, batched by species and ordered by distance.
+     */
     core::u32 flushPlants(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
                           const render::CameraBasis &basis, core::u32 haze) const;
 
@@ -102,35 +112,18 @@ public:
     core::u32 drawRocks(const render::RenderTarget &rt, const math::Mat4<core::f32> &mvp,
                         const render::CameraBasis &basis, core::i32 originX, core::i32 originZ, core::u32 size,
                         core::f32 seaLevel, const math::Vec3<core::f32> &sunDirection, core::f32 ambient,
-                        HeightAt &&heightAt) const
-    {
-        core::u32 triangles = 0u;
-        for (core::u32 z = 0u; z < size; z += 4u)
-            for (core::u32 x = 0u; x < size; x += 4u)
-            {
-                const core::i32 cellX = originX + static_cast<core::i32>(x);
-                const core::i32 cellZ = originZ + static_cast<core::i32>(z);
-                core::u32 variant = 0u;
-                core::f32 scale = 1.0f;
-                if (!rockAt(cellX, cellZ, variant, scale))
-                    continue;
-                const core::f32 ground = heightAt(x, z);
-                if (ground < seaLevel)
-                    continue;
-                const core::f32 worldX = static_cast<core::f32>(cellX) + 0.5f;
-                const core::f32 worldZ = static_cast<core::f32>(cellZ) + 0.5f;
-                if (render::approximateLength(worldX - basis.eye.x, worldZ - basis.eye.z) > _params.propDistance)
-                    continue;
-                triangles += render::drawRevolved(rt, mvp, _rocks[variant], worldX, ground, worldZ, scale,
-                                                  _params.rockAlbedo, sunDirection, ambient);
-            }
-        return triangles;
-    }
+                        HeightAt &&heightAt) const;
 
     [[nodiscard]] const PropLibraryParams &params() const noexcept { return _params; }
 
-    /** @brief Packets the last flush submitted, and the fold of that stream. */
+    /**
+     * @brief Packets the last flush submitted.
+     */
     [[nodiscard]] core::u32 submittedDraws() const noexcept { return _queue.submittedDraws(); }
+
+    /**
+     * @brief The fold of the stream the last flush submitted.
+     */
     [[nodiscard]] core::u32 latchedFold() const noexcept { return _queue.latchedFold(); }
 
 private:
@@ -150,6 +143,9 @@ private:
      * exactly a rock's silhouette, widest near the BASE: widest in the middle is a
      * mushroom, which is what the first profile produced and what the screenshot
      * showed.
+     *
+     * Only the samples that bound a solid are kept: a closed loop comes back through
+     * negative radius, and a negative radius revolved is inside out.
      */
     void buildRocks(core::u32 seed);
 
@@ -163,7 +159,6 @@ private:
 
 } // namespace lpl::engine
 
-// Out-of-line definitions: consumed header-only, the freestanding kernel included.
-#    include <lpl/engine/PropLibrary.inl>
+#    include "PropLibrary.inl"
 
 #endif // LPL_ENGINE_PROP_LIBRARY_HPP
