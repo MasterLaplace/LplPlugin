@@ -676,6 +676,9 @@ public:
      */
     [[nodiscard]] bool tilesSolved() const noexcept { return _tilesSolved; }
     [[nodiscard]] const LevelQuality &lastQuality() const noexcept { return _quality; }
+    /**
+     * @brief Whether the last @ref validate passed its criteria; false until validate runs.
+     */
     [[nodiscard]] bool gatePassed() const noexcept { return _gatePassed; }
     [[nodiscard]] core::u32 seed() const noexcept { return _seed; }
 
@@ -777,6 +780,9 @@ private:
      * missing them — so it cannot share an archetype with decoration, and
      * interleaving the two would scatter each kind across both partitions with no
      * way to tell which row is which.
+     *
+     * A placement whose entity could not be created is left out of the fill, so
+     * each entity receives its own placement rather than the next one's.
      */
     void emit(ecs::Registry &registry, const lpl::pmr::vector<Placement> &placements,
               lpl::pmr::vector<ecs::EntityId> *outIds);
@@ -922,7 +928,7 @@ private:
     core::u32 _undergroundVoxels{0u};
     ChunkCoord _chunk{};
     bool _isChunk{false};
-    bool _gatePassed{true};
+    bool _gatePassed{false};
 };
 
 } // namespace lpl::procgen
