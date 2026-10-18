@@ -1,19 +1,3 @@
-/**
- * @file test_kernel_transport.cpp
- * @brief The process side of the module's rings, against a file mapped as the module maps them.
- *
- * KernelTransport maps /dev/lpl0; here it maps a plain file of the same size instead, and the test
- * plays the module: it writes the header, reads what the transport publishes on the TX ring, and
- * publishes RX slots for the transport to read. A kick is an ioctl, which a plain file refuses, but
- * the transport counts it all the same. The module itself is built and run on a Linux kernel
- * elsewhere; this runs wherever the tests run.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-10-10
- * @copyright MIT License
- */
-
 #include <lpl/core/Log.hpp>
 #include <lpl/net/Endpoint.hpp>
 #include <lpl/net/transport/KernelTransport.hpp>
@@ -245,6 +229,15 @@ void receivesInOneBatch()
 
 } // namespace
 
+/**
+ * @brief The process side of the module's rings, against a file mapped as the module maps them.
+ *
+ * @details KernelTransport maps /dev/lpl0; here it maps a plain file of the same size instead, and the test
+ *          plays the module: it writes the header, reads what the transport publishes on the TX ring, and
+ *          publishes RX slots for the transport to read. A kick is an ioctl, which a plain file refuses, but
+ *          the transport counts it all the same. The module itself is built and run on a Linux kernel
+ *          elsewhere; this runs wherever the tests run.
+ */
 int main()
 {
     lpl::core::Log::info("=== KernelTransport against a mapped file ===");
