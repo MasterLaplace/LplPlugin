@@ -39,7 +39,9 @@ class ServerWorld final : public lpl::engine::World {
 public:
     ServerWorld() : _pile{registry()} {}
 
-    /** @brief Seeds the pile and registers what a tick runs; false when the system graph does not build. */
+    /**
+     * @brief Seeds the pile and registers what a tick runs; false when the system graph does not build.
+     */
     [[nodiscard]] bool setUp()
     {
         _pile.init();

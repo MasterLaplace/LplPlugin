@@ -45,7 +45,9 @@ constexpr lpl::core::u32 kNotANumber = 0x7FC00000u;
 /** @brief Positive infinity, as a word. */
 constexpr lpl::core::u32 kInfinity = 0x7F800000u;
 
-/** @brief Where @p member sits in its section, in bytes. */
+/**
+ * @brief Where @p member sits in its section, in bytes.
+ */
 template <typename Section, typename Field> [[nodiscard]] lpl::core::u32 offsetIn(Field Section::*member)
 {
     const Section probe{};
@@ -92,21 +94,27 @@ void rehash(lpl::pmr::vector<lpl::core::u8> &image)
     return image;
 }
 
-/** @brief The parity pack, with @p word written into its world recipe at @p fieldOffset. */
+/**
+ * @brief The parity pack, with @p word written into its world recipe at @p fieldOffset.
+ */
 [[nodiscard]] lpl::pmr::vector<lpl::core::u8> parityWith(lpl::core::u32 fieldOffset, lpl::core::u32 word)
 {
     return imageWithWord(lpl::pack::kParityPackBytes, lpl::pack::kParityPackSize, lpl::pack::SectionType::WorldRecipe,
                          fieldOffset, word);
 }
 
-/** @brief The viewer's pack, with @p word written into its living recipe at @p fieldOffset. */
+/**
+ * @brief The viewer's pack, with @p word written into its living recipe at @p fieldOffset.
+ */
 [[nodiscard]] lpl::pmr::vector<lpl::core::u8> viewerLivingWith(lpl::core::u32 fieldOffset, lpl::core::u32 word)
 {
     return imageWithWord(lpl::pack::kViewerPackBytes, lpl::pack::kViewerPackSize, lpl::pack::SectionType::LivingRecipe,
                          fieldOffset, word);
 }
 
-/** @brief Loads @p image with defaults that no pack carries, so a refusal shows in the seeds. */
+/**
+ * @brief Loads @p image with defaults that no pack carries, so a refusal shows in the seeds.
+ */
 [[nodiscard]] lpl::pack::Cartridge load(const lpl::pmr::vector<lpl::core::u8> &image)
 {
     lpl::procgen::WorldRecipe defaults = lpl::procgen::parityWorldRecipe();
@@ -118,7 +126,9 @@ void rehash(lpl::pmr::vector<lpl::core::u8> &image)
                                     defaultLiving);
 }
 
-/** @brief Whether @p refusal names @p field. */
+/**
+ * @brief Whether @p refusal names @p field.
+ */
 [[nodiscard]] bool names(const lpl::pack::WireRefusal &refusal, std::string_view field)
 {
     return refusal.field != nullptr && std::string_view{refusal.field} == field;
@@ -150,7 +160,9 @@ void checkRefused(lpl::testing::Test &test, const lpl::pmr::vector<lpl::core::u8
 /** @brief An image with a word written into one of its sections, at an offset. */
 using ImageWith = lpl::pmr::vector<lpl::core::u8> (*)(lpl::core::u32 fieldOffset, lpl::core::u32 word);
 
-/** @brief Checks that @p word at @p fieldOffset, a field's bound, is not refused for @p field. */
+/**
+ * @brief Checks that @p word at @p fieldOffset, a field's bound, is not refused for @p field.
+ */
 void checkNotRefusedFor(lpl::testing::Test &test, ImageWith imageWith, lpl::core::u32 fieldOffset,
                         std::string_view field, lpl::core::u32 word)
 {
@@ -177,7 +189,9 @@ void checkRealBound(lpl::testing::Test &test, ImageWith imageWith, lpl::core::u3
     checkNotRefusedFor(test, imageWith, fieldOffset, field, std::bit_cast<lpl::core::u32>(least));
 }
 
-/** @brief Whether @p recipe comes back from the wire, decoded into @p outDecoded. */
+/**
+ * @brief Whether @p recipe comes back from the wire, decoded into @p outDecoded.
+ */
 [[nodiscard]] bool roundTrips(const lpl::procgen::WorldRecipe &recipe, lpl::procgen::WorldRecipe &outDecoded)
 {
     lpl::pack::WireRefusal refusal{};
@@ -185,7 +199,9 @@ void checkRealBound(lpl::testing::Test &test, ImageWith imageWith, lpl::core::u3
     return lpl::pack::toEngineRecipe(lpl::pack::toWireRecipe(recipe), outDecoded, refusal);
 }
 
-/** @brief Whether @p living comes back from the wire, decoded into @p outDecoded. */
+/**
+ * @brief Whether @p living comes back from the wire, decoded into @p outDecoded.
+ */
 [[nodiscard]] bool roundTrips(const lpl::ecology::LivingRecipe &living, lpl::ecology::LivingRecipe &outDecoded)
 {
     lpl::pack::WireRefusal refusal{};
