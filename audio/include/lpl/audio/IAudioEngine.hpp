@@ -27,13 +27,19 @@ class IAudioEngine {
 public:
     virtual ~IAudioEngine() = default;
 
-    /** @brief Initializes the audio context. */
+    /**
+     * @brief Initializes the audio context.
+     */
     [[nodiscard]] virtual core::Expected<void> init() = 0;
 
-    /** @brief Shuts down the audio context. */
+    /**
+     * @brief Shuts down the audio context.
+     */
     virtual void shutdown() = 0;
 
-    /** @brief Updates the listener position and orientation. */
+    /**
+     * @brief Updates the listener position and orientation.
+     */
     virtual void setListenerPosition(const math::Vec3<core::f32> &position, const math::Vec3<core::f32> &forward,
                                      const math::Vec3<core::f32> &up) = 0;
 
@@ -45,10 +51,14 @@ public:
      */
     virtual void playAt(core::u32 soundId, const math::Vec3<core::f32> &position, core::f32 volume = 1.0f) = 0;
 
-    /** @brief Stops all playing sounds. */
+    /**
+     * @brief Stops all playing sounds.
+     */
     virtual void stopAll() = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 
