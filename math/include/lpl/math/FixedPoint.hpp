@@ -68,7 +68,8 @@ public:
      * The dividend is shifted into a double-width word. When it still fits in IntType, with
      * IntType's lowest value excluded so that no quotient overflows, it is divided in IntType: the
      * same truncated quotient, without the double-width division that i686 runs as a libgcc call
-     * for Fixed32, and the host for Fixed64.
+     * for Fixed32, and the host for Fixed64. Whether it fits is read on the raw value, within
+     * max() >> FracBits either way: the same values, compared in one word rather than two.
      */
     constexpr FixedPoint operator/(FixedPoint rhs) const;
     constexpr FixedPoint operator-() const;
