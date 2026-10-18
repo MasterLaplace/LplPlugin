@@ -464,17 +464,11 @@ private:
      */
     static constexpr core::f32 kRipplePhasePerSecond = 0.42f;
     static constexpr core::u32 kFieldSpan = 64u; /**< Cells across the pheromone window that follows the walker. */
-    /** Ambient floor: what a surface facing away from the sun still receives. */
-    static constexpr core::f32 kAmbient = 0.28f;
     /** Fog density. The reciprocal is roughly the distance at which haze wins. */
     static constexpr core::f32 kFogDensity = 0.010f;
-    /** Cells a shadow ray marches. Also the longest shadow the terrain can cast. */
-    static constexpr core::u32 kShadowSteps = 24u;
     static constexpr core::f32 kSkirtDrop = 6.0f;     /**< How far a skirt hangs below the edge it is dropped from. */
     static constexpr core::f32 kPropDistance = 45.0f; /**< Furthest a boulder is worth its triangles, in world cells. */
     static constexpr core::u32 kRockAlbedo = 0x00877F76u;
-    static constexpr core::u32 kGrazerTint = 0x00D0A852u;
-    static constexpr core::u32 kHunterTint = 0x00C03028u;
     /**
      * Nearest and furthest a plant is worth drawing, in world cells.
      *
@@ -1180,7 +1174,6 @@ private:
     [[nodiscard]] core::u32 presentBiomes() const noexcept;
 
     static constexpr core::f32 kFloor = -6.0f;
-    static constexpr core::f32 kCeiling = 14.0f;
     /**
      * @brief Where the sea is: the RECIPE's, never a constant here.
      *
