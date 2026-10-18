@@ -1,13 +1,3 @@
-/**
- * @file EnergyMeter.cpp
- * @brief Locating and reading the package energy counter through Linux powercap.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-09-24
- * @copyright MIT License
- */
-
 #include <lpl/bench/EnergyMeter.hpp>
 
 #include <cerrno>

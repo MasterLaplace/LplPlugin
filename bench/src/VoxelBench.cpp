@@ -1,12 +1,3 @@
-/**
- * @file VoxelBench.cpp
- * @brief Where the volume renderer's time actually goes.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/bench/Harness.hpp>
 #include <lpl/bench/VoxelBench.hpp>
 #include <lpl/core/Assert.hpp>
@@ -35,7 +26,7 @@ namespace {
 constexpr core::u8 kMedium = 130u;
 constexpr core::u8 kSheet = 205u;
 
-/// The measured spire pitch of a Herculaneum roll, in level-0 samples: a ridge at every multiple of it along X.
+/** The measured spire pitch of a Herculaneum roll, in level-0 samples: a ridge at every multiple of it along X. */
 constexpr core::i64 kPitch = 38;
 constexpr core::i64 kRidgeHalfWidth = 3;
 
@@ -43,7 +34,7 @@ constexpr core::u32 kAxisZ = 0u;
 constexpr core::u32 kAxisY = 1u;
 constexpr core::u32 kAxisX = 2u;
 
-/// More than one, so that the level blend has coarser bricks to fade into: with one, it changes no count.
+/** More than one, so that the level blend has coarser bricks to fade into: with one, it changes no count. */
 constexpr core::u32 kSceneLevels = 3u;
 constexpr core::u32 kFrameWidth = 320u;
 constexpr core::u32 kFrameHeight = 200u;
@@ -69,10 +60,14 @@ struct VoxelScene final : private core::NonCopyable<VoxelScene> {
     return phase < kPitch / 2 ? phase : kPitch - phase;
 }
 
+/**
+ * @brief The sample at @p x across the sheets: a ridge, not a slab.
+ *
+ * The marcher's gradient has nothing to read off a flat-topped sheet,
+ * and such a fixture would report a speed the real field never gives.
+ */
 [[nodiscard]] core::u8 sheetSampleAt(core::i64 x) noexcept
 {
-    // A ridge, not a slab: the marcher's gradient has nothing to read off a flat-topped sheet,
-    // and such a fixture would report a speed the real field never gives.
     const core::i64 distance = distanceToRidge(x);
     if (distance >= kRidgeHalfWidth)
         return kMedium;
@@ -201,8 +196,16 @@ void timeMarch(const char *label, const VoxelScene &scene, const voxel::MarchPar
                 timing.medianNs / static_cast<core::f64>(last.steps));
 }
 
-// Two working-set sizes, because the difference between them is the memory behaviour. The label prints each
-// one's size: which cache it fits is a fact about the machine, not about the fixture.
+/**
+ * @brief Times the march on two working-set sizes, because the difference between them is the memory behaviour.
+ *
+ * The label prints each one's size: which cache it fits is a fact about the machine, not about the fixture.
+ *
+ * Each variant line, the ones that start with "...", times the same frame with one thing changed. That can move
+ * the sample count too, because rays stop at another depth or a longer step crosses the same depth in fewer
+ * samples, so a frame time alone mixes the thing's cost with the work it saved or added: the time a sample is
+ * the number to compare.
+ */
 void benchmarkMarch()
 {
     constexpr core::f32 kNoDistanceLimitMetres = 1.0e6f;
@@ -222,10 +225,6 @@ void benchmarkMarch()
             return std::format("  ... {} bricks, {}", scene.mosaic.count(), change);
         };
 
-        // Each summary line below times the same frame with one thing changed. That can move the sample count too,
-        // because rays stop at another depth or a longer step crosses the same depth in fewer samples, so a frame
-        // time alone mixes the thing's cost with the work it saved or added: the time a sample is the number to
-        // compare.
         voxel::MarchParams gradientOff = params;
         gradientOff.shading = 0.0f;
         gradientOff.boundaryOpacity = 0.0f;
@@ -245,15 +244,21 @@ void benchmarkMarch()
     }
 }
 
-/// @pre 0 <= @p position < @p edge and 0 < @p stride < @p edge.
+/**
+ * @pre 0 <= @p position < @p edge and 0 < @p stride < @p edge.
+ */
 [[nodiscard]] constexpr core::i64 advanceWrapping(core::i64 position, core::i64 stride, core::i64 edge) noexcept
 {
     const core::i64 next = position + stride;
     return next < edge ? next : next - edge;
 }
 
-// The lookup on its own, because it is what the whole frame is made of. Every point of the walk is answered by a
-// level-0 brick, so this times the hit path at level 0, not the fallback to coarser levels.
+/**
+ * @brief Times the lookup on its own, because it is what the whole frame is made of.
+ *
+ * Every point of the walk is answered by a level-0 brick, so this times the hit path at level 0, not the
+ * fallback to coarser levels.
+ */
 void benchmarkMosaicLookup()
 {
     constexpr core::u32 kLookupBricksPerAxis = 3u;
@@ -303,8 +308,12 @@ void printPatchOutcome(const voxel::SheetPatch &patch, core::u32 requestedRows, 
                     stops(voxel::SheetStop::Budget), walksOfAWholePatch, requestedRows, requestedColumns);
 }
 
-// And the tracer, because it is the other thing somebody waits for. The seed sits on a ridge: between two, the field
-// is flat, the seed has no normal, and the summary line would time an empty patch.
+/**
+ * @brief Times the tracer, because it is the other thing somebody waits for.
+ *
+ * The seed sits on a ridge: between two, the field is flat, the seed has no normal, and the summary line would
+ * time an empty patch.
+ */
 void benchmarkSheetTrace()
 {
     constexpr core::u32 kTraceBricksPerAxis = 2u;

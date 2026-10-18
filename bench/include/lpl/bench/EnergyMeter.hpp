@@ -41,22 +41,22 @@ namespace lpl::bench {
 
 /** What an energy reading can honestly claim. */
 enum class EnergyAvailability : core::u8 {
-    Measured,   ///< The package counter is readable.
-    Denied,     ///< The counter exists and this process may not read it.
-    Unreadable, ///< A package zone exists and one of its files could not be read or holds no usable value.
-    Absent,     ///< There is no counter this build knows how to read.
+    Measured,   /**< The package counter is readable. */
+    Denied,     /**< The counter exists and this process may not read it. */
+    Unreadable, /**< A package zone exists and one of its files could not be read or holds no usable value. */
+    Absent,     /**< There is no counter this build knows how to read. */
 };
 
 /** Why a window of repetitions carries no energy figure. */
 enum class EnergyAbsence : core::u8 {
-    Denied,        ///< The meter's counter exists and this process may not read it.
-    Unreadable,    ///< The meter found a package zone it could not read, or that holds no usable value.
-    Absent,        ///< There is no counter this build knows how to read.
-    NoRepetition,  ///< No repetition ran in the window.
-    ShortWindow,   ///< The window lasted less than @ref EnergyBracket::kMinimumWindow.
-    ReadFailed,    ///< The counter could not be read when the window opened or when it closed.
-    AmbiguousWrap, ///< The two readings cannot describe a single wrap of the counter.
-    Interleaved,   ///< The repetitions alternated with another measurement's, so no window holds them alone.
+    Denied,        /**< The meter's counter exists and this process may not read it. */
+    Unreadable,    /**< The meter found a package zone it could not read, or that holds no usable value. */
+    Absent,        /**< There is no counter this build knows how to read. */
+    NoRepetition,  /**< No repetition ran in the window. */
+    ShortWindow,   /**< The window lasted less than @ref EnergyBracket::kMinimumWindow. */
+    ReadFailed,    /**< The counter could not be read when the window opened or when it closed. */
+    AmbiguousWrap, /**< The two readings cannot describe a single wrap of the counter. */
+    Interleaved,   /**< The repetitions alternated with another measurement's, so no window holds them alone. */
 };
 
 /**
