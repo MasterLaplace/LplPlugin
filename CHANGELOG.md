@@ -5,7 +5,33 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
-## [0.9.0] - 2026-10-17
+## [0.10.0] - 2026-10-18
+
+### Performance
+
+- **physics**: The resolver folds its zero and one (#509)
+- **math**: A Fixed32 quotient checks its word on the raw value (#508)
+- **physics**: The resolver meets a lone listed neighbour without a list (#507)
+
+### Changed
+
+- **kernel-module**: Follow the shared C rules on comments and headers (#534)
+- **bci**: Follow the shared C++ rules on comments and headers (#533)
+- **bench**: Follow the shared C++ rules on comments and headers (#532)
+- **zarr**: Follow the shared C++ rules on comments and headers (#531)
+- **serial**: Follow the shared C++ rules on comments and headers (#530)
+- **haptic**: Follow the shared C++ rules on comments and headers (#529)
+- **audio**: Follow the shared C++ rules on comments and headers (#528)
+- **apps**: Follow the shared C++ rules on comments and headers (#525)
+- **engine**: Follow the shared C++ rules on comments and headers (#523)
+- **render**: Follow the shared C++ rules on comments and headers (#520)
+- **procgen**: Follow the shared C++ rules on comments and headers (#517)
+- **samples**: Follow the shared C++ rules on comments and headers (#512)
+- **voxel**: Follow the shared C++ rules on comments and headers (#511)
+- **agent**: Follow the shared C++ rules on comments and headers (#506)
+- **editor**: Follow the shared C++ rules on comments and headers (#505)
+
+## [0.9.0] - 2026-10-18
 
 ### Fixed
 
