@@ -1,14 +1,3 @@
-/**
- * @file test_spinlock.cpp
- * @brief The spin-lock is mutually exclusive: concurrent increments under it lose nothing,
- *        and a held lock refuses a second taker.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-10-03
- * @copyright MIT License
- */
-
 #include <lpl/concurrency/SpinLock.hpp>
 
 #include <cstdio>
@@ -65,6 +54,10 @@ bool tryLockFromAnotherThread(lpl::concurrency::SpinLock &lock)
 
 } // namespace
 
+/**
+ * @brief The spin-lock is mutually exclusive: concurrent increments under it lose nothing,
+ *        and a held lock refuses a second taker.
+ */
 int main()
 {
     expect(countUnderContention() == lpl::core::u64{kThreads} * kAcquisitionsPerThread,

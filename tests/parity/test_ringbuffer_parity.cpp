@@ -1,22 +1,3 @@
-/**
- * @file test_ringbuffer_parity.cpp
- * @brief Two-thread stress test of lpl::container::RingBuffer.
- *
- * A producer thread and a consumer thread move two million elements through a ring of 64 slots,
- * small enough that both ends keep running out of their cached index and reading the other's.
- * Every push and every pop call is used in turn, so each path meets each other path across the
- * threads. The consumer checks that each element arrives once and in order; for an element that
- * owns heap memory, the constructions and destructions on both threads balance at the end. The
- * single-threaded semantics are tested in tests/container/ring_buffer.cpp, on the host and in
- * ring 0; this one needs threads, so it runs on the host only, and under ThreadSanitizer it checks
- * the memory orders.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-06
- * @copyright MIT License
- */
-
 #include <lpl/container/RingBuffer.hpp>
 #include <lpl/core/Log.hpp>
 
@@ -182,6 +163,18 @@ template <typename Element> [[nodiscard]] bool transfer(lpl::core::u32 &rejected
 
 } // namespace
 
+/**
+ * @brief Two-thread stress test of lpl::container::RingBuffer.
+ *
+ * A producer thread and a consumer thread move two million elements through a ring of 64 slots,
+ * small enough that both ends keep running out of their cached index and reading the other's.
+ * Every push and every pop call is used in turn, so each path meets each other path across the
+ * threads. The consumer checks that each element arrives once and in order; for an element that
+ * owns heap memory, the constructions and destructions on both threads balance at the end. The
+ * single-threaded semantics are tested in tests/container/ring_buffer.cpp, on the host and in
+ * ring 0; this one needs threads, so it runs on the host only, and under ThreadSanitizer it checks
+ * the memory orders.
+ */
 int main()
 {
     lpl::core::Log::info("=== RingBuffer two-thread stress test ===");

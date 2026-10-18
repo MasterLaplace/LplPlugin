@@ -1,22 +1,3 @@
-/**
- * @file test_editor_commands.cpp
- * @brief Proof that the JSON command stream drives a deterministic world.
- *
- * Runs a batch of editor commands (generate a heightfield, scatter props, check
- * playability, save the scene) against one registry, then replays the exact same
- * command JSON against a fresh registry, and checks that the two worlds fold
- * bit-for-bit identically — the command stream is a deterministic recipe, the
- * seam the Caine AI bridge will emit into. Also checks the playability verdict is
- * reported and the saved scene round-trips.
- *
- * Host-only. Build via xmake: `xmake run test-editor-commands`.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-16
- * @copyright MIT License
- */
-
 #include <cstdio>
 #include <string>
 
@@ -28,9 +9,7 @@
 #include <lpl/math/FixedPoint.hpp>
 #include <lpl/math/Vec3.hpp>
 
-using namespace lpl;
-using math::Fixed32;
-using FVec3 = math::Vec3<Fixed32>;
+using FVec3 = lpl::math::Vec3<lpl::math::Fixed32>;
 
 static int failures = 0;
 static void check(bool ok, const char *what)
@@ -40,34 +19,47 @@ static void check(bool ok, const char *what)
         ++failures;
 }
 
-static core::u32 foldPositions(const ecs::Registry &registry)
+static lpl::core::u32 foldPositions(const lpl::ecs::Registry &registry)
 {
-    core::u32 h = 0x811C9DC5u;
-    auto step = [&](core::u32 v) { h = (h ^ v) * 0x01000193u; };
+    lpl::core::u32 h = 0x811C9DC5u;
+    auto step = [&](lpl::core::u32 v) { h = (h ^ v) * 0x01000193u; };
     for (const auto &part : registry.partitions())
         if (part)
             for (const auto &chunk : part->chunks())
             {
-                const core::u32 n = chunk->count();
-                const auto *pos = static_cast<const FVec3 *>(chunk->readComponent(ecs::ComponentId::Position));
+                const lpl::core::u32 n = chunk->count();
+                const auto *pos = static_cast<const FVec3 *>(chunk->readComponent(lpl::ecs::ComponentId::Position));
                 if (!pos)
                     continue;
-                for (core::u32 i = 0; i < n; ++i)
+                for (lpl::core::u32 i = 0; i < n; ++i)
                 {
-                    step(static_cast<core::u32>(pos[i].x.raw()));
-                    step(static_cast<core::u32>(pos[i].y.raw()));
-                    step(static_cast<core::u32>(pos[i].z.raw()));
+                    step(static_cast<lpl::core::u32>(pos[i].x.raw()));
+                    step(static_cast<lpl::core::u32>(pos[i].y.raw()));
+                    step(static_cast<lpl::core::u32>(pos[i].z.raw()));
                 }
             }
     return h;
 }
 
+/**
+ * @brief Proof that the JSON command stream drives a deterministic world.
+ *
+ * Runs a batch of editor commands (generate a heightfield, scatter props, check
+ * playability, save the scene) against one registry, then replays the exact same
+ * command JSON against a fresh registry, and checks that the two worlds fold
+ * bit-for-bit identically — the command stream is a deterministic recipe, the
+ * seam the Caine AI bridge will emit into. Also checks the playability verdict is
+ * reported and that save_scene emits a document.
+ *
+ * The batch is a recipe an AI/editor could emit: a whole world — terrain, erosion, water,
+ * climate, props, an underground and its playability verdict — then a count.
+ *
+ * Host-only. Build via xmake: `xmake run test-editor-commands`.
+ */
 int main()
 {
     std::printf("== editor command stream determinism ==\n\n");
 
-    // A recipe an AI/editor could emit: a whole world — terrain, erosion, water,
-    // climate, props, an underground and its playability verdict — then a count.
     const char *batch = R"([
       {"cmd":"generate_world","seed":7,"width":16,"depth":16,
        "terrain":{"seed":7,"frequency":0.15,"amplitude":12.0,"octaves":4},
@@ -78,8 +70,8 @@ int main()
       {"cmd":"count"}
     ])";
 
-    ecs::Registry world1, world2;
-    editor::CommandProcessor cp1(world1), cp2(world2);
+    lpl::ecs::Registry world1, world2;
+    lpl::editor::CommandProcessor cp1(world1), cp2(world2);
     const auto r1 = cp1.execute(batch);
     const auto r2 = cp2.execute(batch);
 
@@ -93,10 +85,9 @@ int main()
         check(rep.find("\"reachable\":") != std::string::npos, "playability verdict is reported");
         std::printf("\n  report: %s\n", rep.c_str());
     }
-    std::printf("  world fold = 0x%08X (%u entities)\n", foldPositions(world1), editor::entityCount(world1));
+    std::printf("  world fold = 0x%08X (%u entities)\n", foldPositions(world1), lpl::editor::entityCount(world1));
 
-    // save_scene -> load into a fresh world -> same fold.
-    editor::CommandProcessor saver(world1);
+    lpl::editor::CommandProcessor saver(world1);
     const auto saved = saver.execute(R"({"cmd":"save_scene"})");
     check(saved.has_value() && saved.value().find("lplscene/1") != std::string::npos, "save_scene emits a document");
 
