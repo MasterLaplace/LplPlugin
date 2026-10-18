@@ -236,6 +236,8 @@ private:
      * @brief Create a Texture Buffer object in the Vulkan API.
      *
      * The texture buffer is used to store the texture data from an image file.
+     * The image is transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while
+     * its mipmaps are generated.
      *
      * @param device  The Vulkan device.
      * @param physicalDevice  The Vulkan physical device.
@@ -349,6 +351,8 @@ private:
 
     /**
      * @brief Generate Mipmaps for the given texture image.
+     *
+     * Aborts if the image format does not support linear blitting.
      *
      * @param device  The Vulkan device.
      * @param physicalDevice The Vulkan physical device.

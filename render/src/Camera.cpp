@@ -1,13 +1,3 @@
-/**
- * @file Camera.cpp
- * @brief Camera implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/render/Camera.hpp>
 
 namespace lpl::render {

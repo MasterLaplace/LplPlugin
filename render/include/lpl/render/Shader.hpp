@@ -30,22 +30,34 @@ class Shader {
 public:
     virtual ~Shader() = default;
 
-    /** @brief Compiles the shader from source strings. */
+    /**
+     * @brief Compiles the shader from source strings.
+     */
     [[nodiscard]] virtual core::Expected<void> compile(std::string_view vertexSrc, std::string_view fragmentSrc) = 0;
 
-    /** @brief Activates this shader for subsequent draw calls. */
+    /**
+     * @brief Activates this shader for subsequent draw calls.
+     */
     virtual void bind() = 0;
 
-    /** @brief Deactivates this shader. */
+    /**
+     * @brief Deactivates this shader.
+     */
     virtual void unbind() = 0;
 
-    /** @brief Sets an integer uniform. */
+    /**
+     * @brief Sets an integer uniform.
+     */
     virtual void setUniform(std::string_view name, core::i32 value) = 0;
 
-    /** @brief Sets a float uniform. */
+    /**
+     * @brief Sets a float uniform.
+     */
     virtual void setUniform(std::string_view name, core::f32 value) = 0;
 
-    /** @brief Returns a human-readable name. */
+    /**
+     * @brief Returns a human-readable name.
+     */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
 };
 

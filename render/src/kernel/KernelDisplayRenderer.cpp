@@ -1,13 +1,3 @@
-/**
- * @file KernelDisplayRenderer.cpp
- * @brief Software renderer implementation for the kernel linear framebuffer.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-06-26
- * @copyright MIT License
- */
-
 #if LPL_TARGET_KERNEL
 
 #    include <lpl/render/kernel/KernelDisplayRenderer.hpp>
@@ -16,30 +6,29 @@
 
 namespace lpl::render::kernel {
 
-// ---------------------------------------------------------------------------
-// Triangle geometry constants.
-// ---------------------------------------------------------------------------
-
-// Rotation increment per tick: 2° per tick (π / 90), i.e. one full revolution per 180 ticks.
-// Fixed32::fromInt(n) creates the integer n in Q16.16 (raw = n << 16), so this equals π/90.
+/**
+ * Rotation increment per tick: 2° per tick (π / 90), i.e. one full revolution per 180 ticks.
+ * Fixed32::fromInt(n) creates the integer n in Q16.16 (raw = n << 16), so this equals π/90.
+ */
 static constexpr math::Fixed32 kDeltaAngle = math::Fixed32::pi() / math::Fixed32::fromInt(90);
 
-// Base equilateral triangle vertices in model space, normalised [-1, 1].
-// Inscribed in radius 0.45:  V_k = (r·cos(90° + 120°·k), r·sin(90° + 120°·k))
-//   V0 = (0,        0.45)     top
-//   V1 = (-0.3897, -0.225)
-//   V2 = ( 0.3897, -0.225)
-// These author a shared lpl::render::Mesh (the same vertex type the Vulkan
-// backend consumes on the host); the rotation authority stays Fixed32.
+/**
+ * @name Base equilateral triangle vertices in model space, normalised [-1, 1]
+ *
+ * Inscribed in radius 0.45:  V_k = (r·cos(90° + 120°·k), r·sin(90° + 120°·k))
+ *   V0 = (0,        0.45)     top
+ *   V1 = (-0.3897, -0.225)
+ *   V2 = ( 0.3897, -0.225)
+ * These author a shared lpl::render::Mesh (the same vertex type the Vulkan
+ * backend consumes on the host); the rotation authority stays Fixed32.
+ * @{
+ */
 static constexpr float kBaseX[3] = {0.0f, -0.3897f, 0.3897f};
 static constexpr float kBaseY[3] = {0.45f, -0.225f, -0.225f};
+/** @} */
 
-// Per-vertex colours (0x00RRGGBB), indexed by mesh vertex index.
+/** Per-vertex colours (0x00RRGGBB), indexed by mesh vertex index. */
 static constexpr core::u32 kVertexColor[3] = {0x00FF4040u, 0x0040FF40u, 0x004040FFu};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 static inline core::i32 edgeFunction(core::i32 ax, core::i32 ay, core::i32 bx, core::i32 by, core::i32 px,
                                      core::i32 py) noexcept
@@ -47,16 +36,11 @@ static inline core::i32 edgeFunction(core::i32 ax, core::i32 ay, core::i32 bx, c
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
 
-// ---------------------------------------------------------------------------
-// KernelDisplayRenderer
-// ---------------------------------------------------------------------------
-
 KernelDisplayRenderer::KernelDisplayRenderer(platform::IDisplayBackend &display) noexcept : _display{display} {}
 
 void KernelDisplayRenderer::tick() noexcept
 {
     _angle = _angle + kDeltaAngle;
-    // Wrap at 2π using subtraction to avoid accumulated drift.
     const math::Fixed32 twoPi = math::Fixed32::pi() + math::Fixed32::pi();
     while (_angle >= twoPi)
         _angle = _angle - twoPi;
@@ -66,9 +50,6 @@ core::Expected<void> KernelDisplayRenderer::init(core::u32 /*width*/, core::u32 
 {
     _display.querySurface(_surface);
 
-    // Author the base triangle as a shared lpl::render::Mesh — the kernel
-    // software path consumes the same Vertex/index data the host Vulkan backend
-    // does, instead of hard-coded vertex arrays.
     pmr::vector<Vertex> vertices;
     vertices.reserve(3u);
     for (int i = 0; i < 3; ++i)
@@ -95,7 +76,6 @@ void KernelDisplayRenderer::beginFrame()
     if (!_initialized)
         return;
     _display.querySurface(_surface);
-    // Clear to dark navy background.
     _display.clear(0x00001040u);
 }
 
@@ -123,10 +103,6 @@ void KernelDisplayRenderer::drawMesh() noexcept
     if (vertices.size() < 3u || indices.size() < 3u)
         return;
 
-    // Rotation authority is Fixed32 (CORDIC, deterministic). The sin/cos values
-    // are converted to float once and applied to the float model-space vertices
-    // — float is confined to the non-authoritative rasterisation path, and no
-    // float result ever flows back into Fixed32.
     math::Fixed32 sinA{0}, cosA{0};
     math::Cordic::sincos(_angle, sinA, cosA);
     const float fs = sinA.toFloat();
@@ -138,7 +114,6 @@ void KernelDisplayRenderer::drawMesh() noexcept
     const core::i32 W = static_cast<core::i32>(_surface.width);
     const core::i32 H = static_cast<core::i32>(_surface.height);
 
-    // Iterate the index buffer as a triangle list.
     for (core::usize tri = 0u; tri + 2u < indices.size(); tri += 3u)
     {
         const core::u32 i0 = indices[tri + 0u];
@@ -148,7 +123,6 @@ void KernelDisplayRenderer::drawMesh() noexcept
             continue;
         const core::u32 idx[3] = {i0, i1, i2};
 
-        // --- Rotate model-space vertices + project to screen ----------------
         core::i32 sx[3], sy[3];
         for (int i = 0; i < 3; ++i)
         {
@@ -156,10 +130,9 @@ void KernelDisplayRenderer::drawMesh() noexcept
             const float rxF = fc * p.x - fs * p.y;
             const float ryF = fs * p.x + fc * p.y;
             sx[i] = static_cast<core::i32>(hw + rxF * hw);
-            sy[i] = static_cast<core::i32>(hh - ryF * hh); // Y flipped
+            sy[i] = static_cast<core::i32>(hh - ryF * hh);
         }
 
-        // --- Bounding box (clamped to surface) ------------------------------
         core::i32 minX = sx[0], maxX = sx[0];
         core::i32 minY = sy[0], maxY = sy[0];
         for (int i = 1; i < 3; ++i)
@@ -182,15 +155,11 @@ void KernelDisplayRenderer::drawMesh() noexcept
         if (maxY >= H)
             maxY = H - 1;
 
-        // --- Rasterise (barycentric edge-function fill) ---------------------
-        // Total triangle area (for barycentric weight normalisation).
         const core::i32 area = edgeFunction(sx[0], sy[0], sx[1], sy[1], sx[2], sy[2]);
         if (area == 0)
             continue;
         const float rcpArea = 1.0f / static_cast<float>(area);
 
-        // Per-corner colours (indexed by the mesh vertex id, wrapped to the
-        // 3-entry palette so any triangle list still shades).
         const core::u32 c0 = kVertexColor[i0 % 3u];
         const core::u32 c1 = kVertexColor[i1 % 3u];
         const core::u32 c2 = kVertexColor[i2 % 3u];
@@ -203,13 +172,11 @@ void KernelDisplayRenderer::drawMesh() noexcept
                 const core::i32 w1 = edgeFunction(sx[2], sy[2], sx[0], sy[0], px, py);
                 const core::i32 w2 = edgeFunction(sx[0], sy[0], sx[1], sy[1], px, py);
 
-                // Accept CW and CCW: require all weights same sign as the area.
                 if (area > 0 && (w0 < 0 || w1 < 0 || w2 < 0))
                     continue;
                 if (area < 0 && (w0 > 0 || w1 > 0 || w2 > 0))
                     continue;
 
-                // Barycentric blend of the three vertex colours.
                 const float b0 = static_cast<float>(w0) * rcpArea;
                 const float b1 = static_cast<float>(w1) * rcpArea;
                 const float b2 = static_cast<float>(w2) * rcpArea;
@@ -234,7 +201,7 @@ void KernelDisplayRenderer::drawMesh() noexcept
                     (R << 16) | (G << 8) | B;
             }
         }
-    } // triangle list
+    }
 }
 
 } // namespace lpl::render::kernel

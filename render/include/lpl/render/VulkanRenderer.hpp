@@ -32,20 +32,42 @@ public:
     VulkanRenderer();
     ~VulkanRenderer() override;
 
+    /**
+     * @brief Creates the wrapper only.
+     *
+     * The instance and the pipeline need the window, which the engine hands to
+     * initVulkanContext once it has created it; they are configured there.
+     */
     [[nodiscard]] core::Expected<void> init(core::u32 width, core::u32 height) override;
 
     void beginFrame() override;
     void endFrame() override;
 
     void resize(core::u32 width, core::u32 height) override;
+    /**
+     * @brief Destroys the wrapper; idempotent.
+     *
+     * Guards against double-destroy: Engine::shutdown() calls shutdown() then
+     * reset() on the unique_ptr, which invokes the destructor (and thus
+     * shutdown() again). Nullifying the wrapper makes the call idempotent.
+     */
     void shutdown() override;
 
-    /** @brief Initializes the Vulkan instance and pipeline bounding it to a GLFW window. */
+    /**
+     * @brief Initializes the Vulkan instance and pipeline bounding it to a GLFW window.
+     *
+     * The shaders and the texture are read from LPL_SHADER_DIR and LPL_ASSET_DIR,
+     * which render/xmake.lua defines as absolute paths so the binary works
+     * regardless of the current working directory; without them, from shaders/
+     * and assets/ relative to it.
+     */
     void initVulkanContext(GLFWwindow *window);
 
     [[nodiscard]] const char *name() const noexcept override { return "VulkanRenderer (VkWrapper)"; }
 
-    /** @brief Exposes the under-the-hood wrapper for BCI / GUI injections. */
+    /**
+     * @brief Exposes the under-the-hood wrapper for BCI / GUI injections.
+     */
     [[nodiscard]] class Wrapper &getWrapper() noexcept;
 
 private:

@@ -74,6 +74,10 @@ public:
     /**
      * @brief Create the Swap Chain object.
      *
+     * The images have one array layer, always 1 unless for a stereoscopic 3D
+     * application (VR), and are colour attachments; post-processing would need
+     * VK_IMAGE_USAGE_TRANSFER_DST_BIT.
+     *
      * @param device  The device.
      * @param physicalDevice  The physical device.
      * @param surface  The surface.

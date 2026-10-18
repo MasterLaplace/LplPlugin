@@ -53,8 +53,8 @@ void SwapChain::Create(const VkDevice &device, const VkPhysicalDevice &physicalD
     createInfo.imageFormat = _surfaceFormat.format;
     createInfo.imageColorSpace = _surfaceFormat.colorSpace;
     createInfo.imageExtent = _extent;
-    createInfo.imageArrayLayers = 1;                             // Always 1 unless stereoscopic 3D application (VR)
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // VK_IMAGE_USAGE_TRANSFER_DST_BIT for post-processing
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     _queueFamilies.FindQueueFamilies(physicalDevice, surface);
     auto indices = _queueFamilies.GetIndices();
