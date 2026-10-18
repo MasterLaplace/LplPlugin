@@ -13,6 +13,8 @@ on:
       - '**.cuh'
       - '.github/workflows/linter.yml'
       - 'tools/check-fixed-literal.sh'
+      - 'tools/check-conventions.py'
+      - 'tools/check-conventions.declared'
 
 permissions:
   contents: write
@@ -86,6 +88,12 @@ jobs:
         run: |
           tools/check-fixed-literal.sh --self-test
           tools/check-fixed-literal.sh
+
+      - name: Refuse comments and layouts the shared C and C++ rules forbid
+        if: ${{ !cancelled() }}
+        run: |
+          tools/check-conventions.py --self-test
+          tools/check-conventions.py
 
       - name: Commit the formatting, signed by GitHub
         if: ${{ steps.files.outputs.files != '' }}
