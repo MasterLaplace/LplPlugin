@@ -5,6 +5,28 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.11.0] - 2026-10-18
+
+### Added
+
+- **tools**: Refuse comments and layouts the shared C and C++ rules forbid (#546)
+
+### Fixed
+
+- **concurrency**: A full deque refuses a job, and the job system runs what is pending when destroyed (#551)
+- **container**: The hash map finds a key past a tombstone before inserting it (#550)
+- **procgen**: Voronoi finds the nearest site at any distance and jitter (#549)
+- **math**: A float out of range saturates when it becomes a Fixed32 (#548)
+- **input**: A blink, not a float axis, makes an entity jump (#547)
+
+### Changed
+
+- **tests**: Bring the terrain programs and the engine tests to the shared C++ rules (#544)
+- **tests**: Bring the voxel, geo and zarr programs to the shared C++ rules (#542)
+- **tests**: Bring the agent, simulation and core programs to the shared C++ rules (#541)
+- **tests**: Bring the net, pack and scene programs to the shared C++ rules (#539)
+- **tests**: Bring the procgen programs to the shared C++ rules (#537)
+
 ## [0.10.0] - 2026-10-18
 
 ### Performance
