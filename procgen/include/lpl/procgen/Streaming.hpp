@@ -105,7 +105,7 @@ struct StreamingRequest {
  */
 struct StreamingPlan {
     lpl::pmr::vector<StreamingRequest> toGenerate; /**< Most urgent first. */
-    lpl::pmr::vector<ChunkCoord> toRelease;        /**< In the order of the resident list. */
+    lpl::pmr::vector<ChunkCoord> toRelease;        /**< Resident order; under the budget, the furthest of them. */
     core::u32 wanted{0u};                          /**< Chunks that should exist, before the budget applied. */
     core::u32 resident{0u};                        /**< Chunks that already exist. */
 };
@@ -117,9 +117,9 @@ struct StreamingPlan {
  * any machine, in any order. That is what makes a streaming world reproducible
  * rather than merely convincing.
  *
- * No source means nothing should exist. Releasing everything is the right answer
- * rather than a degenerate one: it is what happens when the last player
- * disconnects.
+ * No source means nothing should exist. Releasing everything, within the release
+ * budget, is the right answer rather than a degenerate one: it is what happens
+ * when the last player disconnects.
  *
  * Otherwise the plan is built in this order:
  *
@@ -133,7 +133,8 @@ struct StreamingPlan {
  *   radius. A source oscillating across a boundary otherwise generates and
  *   releases the same chunk on alternate ticks forever, and the manager spends its
  *   whole budget standing still.
- * - The budget, counted in chunks.
+ * - The budget, counted in chunks. The requests keep the most urgent, and the
+ *   releases the residents furthest from every source, in resident order.
  *
  * @param sources      Where the world should exist.
  * @param sourceCount  Entries in @p sources.
@@ -172,7 +173,8 @@ public:
 
     /**
      * @brief Returns a slot to the pool.
-     * @param slot Slot to release; @c kNoSlot is ignored, and so is any slot while none is live.
+     * @param slot Slot to release; @c kNoSlot, a slot the pool never created and any slot while none is live
+     *             are ignored.
      */
     void release(core::u32 slot);
 
@@ -189,6 +191,7 @@ public:
 
 private:
     lpl::pmr::vector<core::u32> _free;
+    lpl::pmr::vector<core::u8> _served; /**< Per slot, whether it was ever acquired. */
     core::u32 _liveCount{0u};
     core::u32 _recycled{0u};
     core::u32 _created{0u};

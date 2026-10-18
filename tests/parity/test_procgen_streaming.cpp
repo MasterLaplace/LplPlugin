@@ -208,7 +208,7 @@ void testPoolRecycles()
         pool.release(b);
     }
 
-    std::printf("    %u acquisitions served from a pool of %u slots\n", pool.recycled(), pool.capacity());
+    std::printf("    %u acquisitions served by a recycled slot of a pool of %u\n", pool.recycled(), pool.capacity());
     check(pool.capacity() == 8u, "the pool never grew");
     check(pool.live() == 0u, "every slot came back");
 }

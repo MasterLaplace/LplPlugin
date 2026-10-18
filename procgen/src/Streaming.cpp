@@ -1,5 +1,7 @@
 #include <lpl/procgen/Streaming.hpp>
 
+#include <limits>
+
 namespace lpl::procgen {
 
 namespace {
@@ -62,6 +64,65 @@ constexpr core::i32 kPriorityScale = 256;
     return priority;
 }
 
+/**
+ * @brief Chebyshev distance, in whole chunks, from @p coord to the nearest of the sources.
+ */
+[[nodiscard]] core::i32 distanceToNearestSource(const GenerationSource *sources, core::u32 sourceCount,
+                                                ChunkCoord coord) noexcept
+{
+    core::i32 nearest = std::numeric_limits<core::i32>::max();
+    for (core::u32 s = 0u; s < sourceCount; ++s)
+    {
+        const core::i32 dx = coord.x - sources[s].x.toInt();
+        const core::i32 dz = coord.z - sources[s].z.toInt();
+        const core::i32 adx = dx < 0 ? -dx : dx;
+        const core::i32 adz = dz < 0 ? -dz : dz;
+        const core::i32 distance = adx > adz ? adx : adz;
+        nearest = distance < nearest ? distance : nearest;
+    }
+    return nearest;
+}
+
+/**
+ * @brief Keeps the @p budget releases furthest from every source, in the order they were listed.
+ *
+ * Two releases at the same distance go in the order of the list, so the plan is the same on every
+ * target. With no source there is no distance to compare, and the first @p budget releases of the list
+ * are kept. A budget of 0 keeps them all.
+ */
+void keepFurthestReleases(lpl::pmr::vector<ChunkCoord> &releases, const GenerationSource *sources,
+                          core::u32 sourceCount, core::u32 budget)
+{
+    const core::u32 count = static_cast<core::u32>(releases.size());
+    if (budget == 0u || count <= budget)
+        return;
+    if (sourceCount == 0u)
+    {
+        releases.resize(budget);
+        return;
+    }
+
+    lpl::pmr::vector<core::i32> distances(count);
+    for (core::u32 i = 0u; i < count; ++i)
+        distances[i] = distanceToNearestSource(sources, sourceCount, releases[i]);
+
+    lpl::pmr::vector<core::u8> chosen(count, 0u);
+    for (core::u32 picked = 0u; picked < budget; ++picked)
+    {
+        core::u32 furthest = count;
+        for (core::u32 i = 0u; i < count; ++i)
+            if (chosen[i] == 0u && (furthest == count || distances[i] > distances[furthest]))
+                furthest = i;
+        chosen[furthest] = 1u;
+    }
+
+    core::u32 kept = 0u;
+    for (core::u32 i = 0u; i < count; ++i)
+        if (chosen[i] != 0u)
+            releases[kept++] = releases[i];
+    releases.resize(kept);
+}
+
 } // namespace
 
 StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCount, const ChunkCoord *resident,
@@ -73,6 +134,7 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
     {
         for (core::u32 i = 0u; i < residentCount; ++i)
             plan.toRelease.push_back(resident[i]);
+        keepFurthestReleases(plan.toRelease, nullptr, 0u, params.maxReleasePerTick);
         return plan;
     }
 
@@ -161,9 +223,7 @@ StreamingPlan planStreaming(const GenerationSource *sources, core::u32 sourceCou
     if (params.maxGeneratePerTick != 0u)
         while (plan.toGenerate.size() > params.maxGeneratePerTick)
             plan.toGenerate.pop_back();
-    if (params.maxReleasePerTick != 0u)
-        while (plan.toRelease.size() > params.maxReleasePerTick)
-            plan.toRelease.pop_back();
+    keepFurthestReleases(plan.toRelease, sources, sourceCount, params.maxReleasePerTick);
 
     return plan;
 }
@@ -173,6 +233,7 @@ void ChunkPool::reserve(core::u32 count)
     while (capacity() < count)
     {
         _free.push_back(_created);
+        _served.push_back(0u);
         ++_created;
     }
 }
@@ -184,13 +245,15 @@ core::u32 ChunkPool::acquire()
     const core::u32 slot = _free[_free.size() - 1u];
     _free.pop_back();
     ++_liveCount;
-    ++_recycled;
+    if (_served[slot] != 0u)
+        ++_recycled;
+    _served[slot] = 1u;
     return slot;
 }
 
 void ChunkPool::release(core::u32 slot)
 {
-    if (slot == kNoSlot || _liveCount == 0u)
+    if (slot == kNoSlot || slot >= _created || _liveCount == 0u)
         return;
     _free.push_back(slot);
     --_liveCount;
