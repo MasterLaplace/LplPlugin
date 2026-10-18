@@ -2,12 +2,24 @@
 
 #include <lpl/procgen/ValueNoise.hpp>
 
+#include <limits>
+
 namespace lpl::procgen {
 
 namespace {
 
 constexpr core::u32 kFnv1aOffsetBasis = 0x811C9DC5u;
 constexpr core::u32 kFnv1aPrime = 0x01000193u;
+
+/** @brief Half a raw word in squared raw words: what Fixed32 multiplication adds before it shifts. */
+constexpr core::i64 kHalfWordSquared = core::i64{1} << (math::Fixed32::kFracBits - 1u);
+
+/** @brief The highest jitter, (3 - sqrt 2) / (1 + sqrt 2) rounded down, whose nearest Euclidean site lies
+ *         in the first ring. */
+constexpr core::i32 kEuclideanOneRingJitterRaw = 43047;
+
+/** @brief The highest jitter, 1/3 rounded down, whose nearest Manhattan site lies in the first ring. */
+constexpr core::i32 kManhattanOneRingJitterRaw = 21845;
 
 /**
  * @brief Where the site of coarse cell (@p cellX, @p cellZ) sits.
@@ -38,24 +50,50 @@ VoronoiSite siteOf(core::i32 cellX, core::i32 cellZ, const VoronoiParams &params
 }
 
 /**
- * @brief Distance from a point to a site under the chosen metric.
+ * @brief Distance from a point to a site under the chosen metric, in raw Q16.16 words held by 64 bits.
  *
  * Euclidean is returned SQUARED and the other two are not, which is fine because
  * the value is only ever compared against other distances computed the same way —
  * and squaring is monotone, so it cannot change which site is nearest. Taking a
  * root to make the three commensurable would cost precision and buy nothing.
+ *
+ * Each square is rounded to Q16.16 as Fixed32 multiplication rounds it, in a 64-bit
+ * word: in Fixed32, the sum of the two squares overflows once the point lies about
+ * 181 units from the site.
  */
-math::Fixed32 metricDistance(math::Fixed32 px, math::Fixed32 pz, const VoronoiSite &site, DistanceMetric metric)
+core::i64 metricDistance(math::Fixed32 px, math::Fixed32 pz, const VoronoiSite &site, DistanceMetric metric)
 {
-    const math::Fixed32 dx = (px - site.x).abs();
-    const math::Fixed32 dz = (pz - site.z).abs();
+    const core::i64 dx = (px - site.x).abs().raw();
+    const core::i64 dz = (pz - site.z).abs().raw();
     switch (metric)
     {
     case DistanceMetric::Manhattan: return dx + dz;
     case DistanceMetric::Chebyshev: return dx > dz ? dx : dz;
     case DistanceMetric::Euclidean: break;
     }
-    return dx * dx + dz * dz;
+    return ((dx * dx + kHalfWordSquared) >> math::Fixed32::kFracBits) +
+           ((dz * dz + kHalfWordSquared) >> math::Fixed32::kFracBits);
+}
+
+/**
+ * @brief Rings of coarse cells around a point's own that hold its nearest site, for a jitter in [0, 1].
+ *
+ * A site never leaves its own coarse cell. Along one axis, a site two rings out lies more than
+ * (3 - jitter) / 2 cells from the point, and one three rings out more than two cells, farther than the
+ * point's own site can be under any of the three metrics: at most (1 + jitter) / 2 cells along each axis.
+ * Under Chebyshev that never passes the second ring's bound; under the Euclidean metric it does above a
+ * jitter of (3 - sqrt 2) / (1 + sqrt 2), about 0.657, and under Manhattan above 1/3, where the second ring
+ * is searched too.
+ */
+core::i32 ringsHoldingTheNearestSite(DistanceMetric metric, math::Fixed32 jitter)
+{
+    switch (metric)
+    {
+    case DistanceMetric::Chebyshev: return 1;
+    case DistanceMetric::Manhattan: return jitter.raw() > kManhattanOneRingJitterRaw ? 2 : 1;
+    case DistanceMetric::Euclidean: break;
+    }
+    return jitter.raw() > kEuclideanOneRingJitterRaw ? 2 : 1;
 }
 
 } // namespace
@@ -66,7 +104,10 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
     if (params.width == 0u || params.depth == 0u || params.cellSize == 0u)
         return diagram;
 
-    const math::Fixed32 jitter = math::Fixed32::fromFloat(params.jitter);
+    const math::Fixed32 requestedJitter = math::Fixed32::fromFloat(params.jitter);
+    const math::Fixed32 jitter = requestedJitter < math::Fixed32::zero() ? math::Fixed32::zero() :
+                                 requestedJitter > math::Fixed32::one()  ? math::Fixed32::one() :
+                                                                           requestedJitter;
     const core::i32 coarseWidth = static_cast<core::i32>((params.width + params.cellSize - 1u) / params.cellSize);
     const core::i32 coarseDepth = static_cast<core::i32>((params.depth + params.cellSize - 1u) / params.cellSize);
 
@@ -93,7 +134,7 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
         warpStrength.raw() <= 0 ?
             0 :
             static_cast<core::i32>(warpStrength.toInt()) / static_cast<core::i32>(params.cellSize) + 1;
-    const core::i32 reach = 1 + warpReach;
+    const core::i32 reach = ringsHoldingTheNearestSite(params.metric, jitter) + warpReach;
 
     for (core::u32 z = 0u; z < params.depth; ++z)
     {
@@ -107,7 +148,7 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
             const core::i32 homeX = px.toInt() / static_cast<core::i32>(params.cellSize);
             const core::i32 homeZ = pz.toInt() / static_cast<core::i32>(params.cellSize);
 
-            math::Fixed32 best = math::Fixed32::max();
+            core::i64 best = std::numeric_limits<core::i64>::max();
             core::u16 bestRegion = kNoRegion;
 
             for (core::i32 dz = -reach; dz <= reach; ++dz)
@@ -119,7 +160,7 @@ VoronoiDiagram computeVoronoi(const VoronoiParams &params)
                     if (cx < 0 || cz < 0 || cx >= coarseWidth || cz >= coarseDepth)
                         continue;
                     const core::u32 region = static_cast<core::u32>(cz * coarseWidth + cx);
-                    const math::Fixed32 distance = metricDistance(px, pz, diagram.sites[region], params.metric);
+                    const core::i64 distance = metricDistance(px, pz, diagram.sites[region], params.metric);
                     if (distance < best)
                     {
                         best = distance;
@@ -170,9 +211,12 @@ Grid<math::Fixed32> regionDistanceField(const VoronoiDiagram &diagram, DistanceM
             const core::u16 region = diagram.regions.at(x, z);
             if (region == kNoRegion || region >= diagram.sites.size())
                 continue;
-            field.at(x, z) =
+            const core::i64 distance =
                 metricDistance(math::Fixed32::fromInt(static_cast<core::i32>(x)),
                                math::Fixed32::fromInt(static_cast<core::i32>(z)), diagram.sites[region], metric);
+            field.at(x, z) = distance < math::Fixed32::max().raw() ?
+                                 math::Fixed32::fromRaw(static_cast<core::i32>(distance)) :
+                                 math::Fixed32::max();
         }
     }
     return field;
