@@ -1,7 +1,6 @@
 #include <lpl/core/Log.hpp>
 #include <lpl/input/InputManager.hpp>
 
-#include <lpl/std/cmath.hpp>
 #include <lpl/std/unordered_map.hpp>
 
 namespace lpl::input {
@@ -84,7 +83,7 @@ void InputManager::setNeural(core::u32 entityId, float alpha, float beta, float 
 
     if (blink && !state.blinkPrev)
     {
-        state.setAxis(15, 1.0f);
+        state.blinkTriggered = true;
     }
     state.blinkPrev = blink;
 }
@@ -107,14 +106,14 @@ void InputManager::removeEntity(core::u32 entityId) { _impl->entityStates.erase(
 
 bool InputManager::hasEntity(core::u32 entityId) const { return _impl->entityStates.contains(entityId); }
 
-void InputManager::updateGroundedState(core::u32 entityId, float currentVelY, float threshold)
+void InputManager::updateGroundedState(core::u32 entityId, math::Fixed32 currentVelY, math::Fixed32 threshold)
 {
     auto *state = getStateMut(entityId);
     if (!state)
     {
         return;
     }
-    state->isGrounded = pmr::fabs(currentVelY) < threshold;
+    state->isGrounded = currentVelY > -threshold && currentVelY < threshold;
 }
 
 math::Vec3<math::Fixed32>
@@ -151,12 +150,12 @@ InputManager::computeMovementVelocity(core::u32 entityId, math::Vec3<math::Fixed
     currentVel.x = dx * finalSpeed;
     currentVel.z = dz * finalSpeed;
 
-    if (state->getAxis(15) > 0.5f && state->isGrounded)
+    if (state->blinkTriggered && state->isGrounded)
     {
         currentVel.y = math::Fixed32::fromInt(15);
         state->isGrounded = false;
     }
-    state->setAxis(15, 0.0f);
+    state->blinkTriggered = false;
 
     return currentVel;
 }

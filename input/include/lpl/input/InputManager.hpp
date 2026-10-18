@@ -60,8 +60,9 @@ struct PerEntityInput {
 
     NeuralControl neural{};
 
-    bool blinkPrev = false;  /**< Previous blink state for rising-edge detection. */
-    bool isGrounded = false; /**< Whether the entity is currently on the ground. */
+    bool blinkPrev = false;      /**< Previous blink state for rising-edge detection. */
+    bool blinkTriggered = false; /**< A blink's rising edge that no movement has consumed yet. */
+    bool isGrounded = false;     /**< Whether the entity is currently on the ground. */
 
     /**
      * @brief Gets key state.
@@ -142,9 +143,8 @@ public:
      *
      * Blink detection is on the rising edge: a blink counts only when the
      * previous call reported none, so repeated calls with @p blink true trigger
-     * it once. The edge sets axis 15, the blink trigger, which
-     * computeMovementVelocity reads and clears; blinkPrev keeps @p blink for
-     * the next call.
+     * it once. The edge sets blinkTriggered, which computeMovementVelocity
+     * reads and clears; blinkPrev keeps @p blink for the next call.
      *
      * @param entityId Entity to update.
      * @param alpha    Alpha band power.
@@ -181,11 +181,16 @@ public:
 
     /**
      * @brief Updates grounded state based on vertical velocity.
+     *
+     * The entity is grounded when the vertical velocity lies strictly between
+     * -@p threshold and @p threshold, compared on the Q16.16 words.
+     *
      * @param entityId Entity to check.
      * @param currentVelY Vertical velocity component.
-     * @param threshold Velocity threshold for grounded detection (default 0.5f).
+     * @param threshold Velocity threshold for grounded detection, positive (default 0.5).
      */
-    void updateGroundedState(core::u32 entityId, float currentVelY, float threshold = 0.5f);
+    void updateGroundedState(core::u32 entityId, math::Fixed32 currentVelY,
+                             math::Fixed32 threshold = math::Fixed32::half());
 
     /**
      * @brief Computes movement velocity from WASD + neural modulation.
@@ -198,8 +203,8 @@ public:
      * not, so nothing needs a float to be exact. Above a concentration of 0.001
      * the scale interpolates linearly (0.0 → 0.70, 0.5 → 1.00, 1.0 → 1.30); at
      * 0.001 or below it stays 1. A jump sets the vertical velocity to an
-     * impulse of 15 and the entity is no longer grounded. It then clears the
-     * blink trigger, axis 15, whether the entity jumped or not.
+     * impulse of 15 and the entity is no longer grounded. It then clears
+     * blinkTriggered, whether the entity jumped or not.
      *
      * **Fixed32 in, Fixed32 out.** This used to take and return floats, and the
      * caller quantised the result — so a player's velocity, which is authoritative
