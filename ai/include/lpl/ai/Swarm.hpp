@@ -119,9 +119,11 @@ struct AntParams {
  *
  * The caller's stream is advanced in place: the agent owns its randomness, so
  * two agents stepping in a different order still each get their own sequence.
- * An explorer ignores the field completely. Not "prefers a weaker trail" —
+ * An explorer ignores the scent completely. Not "prefers a weaker trail" —
  * ignores it, because a weighted choice still concentrates on whatever the
- * colony already believes, and the point is to look where nobody has.
+ * colony already believes, and the point is to look where nobody has. It does
+ * not ignore the walls: a direction drawn into a wall or off the field leaves
+ * the agent where it is, since nothing deposited inside a wall is kept.
  *
  * @param field    The pheromone field.
  * @param params   Exploration balance.
@@ -129,7 +131,8 @@ struct AntParams {
  * @param z        Agent row.
  * @param stream   Per-agent, per-tick random stream state (advanced in place).
  * @param outExplored Set to true when the agent ignored the field this move.
- * @return A direction index into kNeighbor8, or @ref StigmergyField::kNoDirection.
+ * @return A direction index into kNeighbor8 toward a cell StigmergyField::passable
+ *         accepts, or @ref StigmergyField::kNoDirection.
  */
 [[nodiscard]] core::u32 chooseAntMove(const StigmergyField &field, const AntParams &params, core::u32 x, core::u32 z,
                                       core::u32 &stream, bool &outExplored);

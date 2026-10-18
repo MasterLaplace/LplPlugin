@@ -234,6 +234,14 @@ public:
     [[nodiscard]] math::Fixed32 value(core::u32 channel, core::u32 x, core::u32 z) const;
 
     /**
+     * @brief Whether an agent may stand on a cell.
+     * @param x Column.
+     * @param z Row.
+     * @return true when the cell is inside the field and no wall stands on it.
+     */
+    [[nodiscard]] bool passable(core::u32 x, core::u32 z) const noexcept;
+
+    /**
      * @brief The steepest uphill 8-neighbour, for an agent rolling up a gradient.
      *
      * Returns an index into @c procgen::kNeighbor8X / @c kNeighbor8Z, or

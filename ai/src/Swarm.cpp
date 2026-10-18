@@ -110,11 +110,15 @@ core::u32 chooseAntMove(const StigmergyField &field, const AntParams &params, co
     const core::u32 roll = stream & 0xFu;
     outExplored = roll < params.explore16;
 
-    if (outExplored)
-    {
-        return (stream >> 8) % 8u;
-    }
-    return field.gradientDirection(params.channel, x, z, true);
+    if (!outExplored)
+        return field.gradientDirection(params.channel, x, z, true);
+
+    const core::u32 direction = (stream >> 8) % 8u;
+    const core::i32 nx = static_cast<core::i32>(x) + procgen::kNeighbor8X[direction];
+    const core::i32 nz = static_cast<core::i32>(z) + procgen::kNeighbor8Z[direction];
+    if (nx < 0 || nz < 0 || !field.passable(static_cast<core::u32>(nx), static_cast<core::u32>(nz)))
+        return StigmergyField::kNoDirection;
+    return direction;
 }
 
 void seedPheromoneField(StigmergyField &field, core::u32 channel, const core::u32 *goals, core::u32 count,
