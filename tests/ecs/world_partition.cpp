@@ -9,8 +9,10 @@ LPL_TEST_SUITE(world_partition);
 
 namespace {
 
-/** @brief Cell sides, raw: one unit and just over it, the engine's ten units, odd ones, the end of the word, and two
- * under one unit. */
+/**
+ * @brief Cell sides, raw: one unit and just over it, the engine's ten units, odd ones, the end of the word, and two
+ *        under one unit.
+ */
 constexpr lpl::core::i32 kCellSides[] = {65536, 65537, 655360, 3 * 65536 + 12345, 99999, 2147483647, 32768, 1};
 
 /** @brief Coordinates, raw: zero, one unit either side of it, and the ends of the word. */

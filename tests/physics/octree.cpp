@@ -25,7 +25,9 @@ constexpr lpl::core::u32 kLeafCapacity = 4u;
 struct Words {
     lpl::core::u32 state = 0x2545F491u;
 
-    /** @brief The next word of the sequence. */
+    /**
+     * @brief The next word of the sequence.
+     */
     [[nodiscard]] lpl::core::u32 next() noexcept
     {
         state ^= state << 13u;
@@ -34,13 +36,17 @@ struct Words {
         return state;
     }
 
-    /** @brief A Fixed32 in [@p low, @p low + @p span) whole units, in steps of 1/256. */
+    /**
+     * @brief A Fixed32 in [@p low, @p low + @p span) whole units, in steps of 1/256.
+     */
     [[nodiscard]] lpl::math::Fixed32 within(lpl::core::i32 low, lpl::core::u32 span) noexcept
     {
         return lpl::math::Fixed32::fromRaw(low * 65536 + static_cast<lpl::core::i32>((next() % (span * 256u)) << 8u));
     }
 
-    /** @brief A box of sides up to @p size, somewhere in [-@p half, @p half) on each axis. */
+    /**
+     * @brief A box of sides up to @p size, somewhere in [-@p half, @p half) on each axis.
+     */
     [[nodiscard]] Box box(lpl::core::i32 half, lpl::core::u32 size) noexcept
     {
         const lpl::math::Vec3<lpl::math::Fixed32> low{within(-half, static_cast<lpl::core::u32>(2 * half)),

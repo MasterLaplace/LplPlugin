@@ -19,7 +19,9 @@ namespace {
     return entities;
 }
 
-/** @brief Hands out the write buffer of @p id in every chunk, as a system that writes it does. */
+/**
+ * @brief Hands out the write buffer of @p id in every chunk, as a system that writes it does.
+ */
 void handOutForWriting(lpl::ecs::Registry &registry, lpl::ecs::ComponentId id)
 {
     for (const auto &partition : registry.partitions())
