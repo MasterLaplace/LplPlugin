@@ -117,7 +117,7 @@ void checkNonBatchingTransportStillGetsEveryPacket(const std::vector<lpl::core::
     seed(sessions, kClients);
     CountingTransport transport;
 
-    sessions.broadcastState(transport, payload);
+    check(sessions.broadcastState(transport, payload).has_value(), "a packet that fills one datagram is accepted");
 
     check(transport.datagrams == expectedDatagrams, "non-batching transport still gets every datagram");
     check(transport.sendCalls == expectedDatagrams, "and pays one send() per datagram, as before");
@@ -138,7 +138,7 @@ void checkBatchingTransportGetsTheWholeBurstInOneCall(const std::vector<lpl::cor
     seed(sessions, kClients);
     BatchingTransport transport;
 
-    sessions.broadcastState(transport, payload);
+    check(sessions.broadcastState(transport, payload).has_value(), "a packet that fills one datagram is accepted");
 
     check(transport.batchCalls == 1, "a batching transport is called exactly once for the whole broadcast");
     check(transport.sendCalls == 0, "and never falls back to one-at-a-time sends");
@@ -146,20 +146,18 @@ void checkBatchingTransportGetsTheWholeBurstInOneCall(const std::vector<lpl::cor
 }
 
 /**
- * @brief Every client is addressed, none is dropped or duplicated.
+ * @brief Every client is addressed once, none is dropped or duplicated.
  *
- * @param payload           The broadcast payload.
- * @param kClients          The number of clients connected.
- * @param expectedFragments The fragments the payload is cut into.
+ * @param payload  The broadcast payload.
+ * @param kClients The number of clients connected.
  */
-void checkEveryClientIsAddressedOnce(const std::vector<lpl::core::byte> &payload, lpl::core::u32 kClients,
-                                     lpl::core::u32 expectedFragments)
+void checkEveryClientIsAddressedOnce(const std::vector<lpl::core::byte> &payload, lpl::core::u32 kClients)
 {
     lpl::net::session::SessionManager sessions;
     seed(sessions, kClients);
     BatchingTransport transport;
 
-    sessions.broadcastState(transport, payload);
+    check(sessions.broadcastState(transport, payload).has_value(), "a packet that fills one datagram is accepted");
 
     bool everyClientAddressed = true;
     for (lpl::core::u32 i = 0; i < kClients; ++i)
@@ -171,9 +169,31 @@ void checkEveryClientIsAddressedOnce(const std::vector<lpl::core::byte> &payload
             if (destination == expected)
                 ++seen;
         }
-        everyClientAddressed = everyClientAddressed && seen == expectedFragments;
+        everyClientAddressed = everyClientAddressed && seen == 1u;
     }
-    check(everyClientAddressed, "each client receives each fragment exactly once");
+    check(everyClientAddressed, "each client receives the packet exactly once");
+}
+
+/**
+ * @brief A state packet longer than one datagram is refused, and nothing is sent.
+ *
+ * @details broadcastState used to cut such a packet into raw slices, without a header per slice: the client read
+ *          the first as a whole packet, truncated, and dropped the others.
+ *
+ * @param kClients The number of clients connected.
+ */
+void checkAPacketLongerThanADatagramIsRefused(lpl::core::u32 kClients)
+{
+    lpl::net::session::SessionManager sessions;
+    seed(sessions, kClients);
+    BatchingTransport transport;
+    const std::vector<lpl::core::byte> tooLong(lpl::net::session::SessionManager::kMaxPayloadSize + 1u,
+                                               lpl::core::byte{0xAB});
+
+    const auto sent = sessions.broadcastState(transport, tooLong);
+
+    check(!sent.has_value(), "a packet one byte longer than a datagram is refused");
+    check(transport.batchCalls == 0 && transport.sendCalls == 0, "and touches the transport zero times");
 }
 
 /**
@@ -186,7 +206,7 @@ void checkNoClientsMeansNoCall(const std::vector<lpl::core::byte> &payload)
     lpl::net::session::SessionManager sessions;
     BatchingTransport transport;
 
-    sessions.broadcastState(transport, payload);
+    check(sessions.broadcastState(transport, payload).has_value(), "a packet that fills one datagram is accepted");
 
     check(transport.batchCalls == 0 && transport.sendCalls == 0,
           "a broadcast with no connected client touches the transport zero times");
@@ -244,12 +264,10 @@ void checkDefaultReceiveBatchDrainsEveryQueuedPacket()
 /**
  * @brief Transport batching test.
  *
- * @details A broadcast is fragments × clients packets, all ready at once. Handing them to the transport one
- *          at a time costs one syscall each; handed over together, a transport that can batch does (sendmmsg
- *          on Linux sockets, a single ring kick for the kernel module). This counts the CALLS, because an
- *          optimisation nobody measured is a claim, not a result. The payload is big enough to need several
- *          fragments, 3 full and 1 partial, so the burst is fragments × clients rather than just one packet
- *          per client.
+ * @details A broadcast is one packet per client, all ready at once. Handing them to the transport one at a
+ *          time costs one syscall each; handed over together, a transport that can batch does (sendmmsg on
+ *          Linux sockets, a single ring kick for the kernel module). This counts the CALLS, because an
+ *          optimisation nobody measured is a claim, not a result. The payload fills one datagram exactly.
  */
 int main()
 {
@@ -257,15 +275,13 @@ int main()
 
     constexpr lpl::core::u32 kClients = 5;
 
-    const lpl::core::usize payloadSize = lpl::net::session::SessionManager::kMaxPayloadSize * 3 + 16;
-    std::vector<lpl::core::byte> payload(payloadSize, lpl::core::byte{0xAB});
+    const std::vector<lpl::core::byte> payload(lpl::net::session::SessionManager::kMaxPayloadSize,
+                                               lpl::core::byte{0xAB});
 
-    const lpl::core::u32 expectedFragments = 4;
-    const lpl::core::u32 expectedDatagrams = expectedFragments * kClients;
-
-    checkNonBatchingTransportStillGetsEveryPacket(payload, kClients, expectedDatagrams);
-    checkBatchingTransportGetsTheWholeBurstInOneCall(payload, kClients, expectedDatagrams);
-    checkEveryClientIsAddressedOnce(payload, kClients, expectedFragments);
+    checkNonBatchingTransportStillGetsEveryPacket(payload, kClients, kClients);
+    checkBatchingTransportGetsTheWholeBurstInOneCall(payload, kClients, kClients);
+    checkEveryClientIsAddressedOnce(payload, kClients);
+    checkAPacketLongerThanADatagramIsRefused(kClients);
     checkNoClientsMeansNoCall(payload);
     checkDefaultReceiveBatchDrainsEveryQueuedPacket();
 

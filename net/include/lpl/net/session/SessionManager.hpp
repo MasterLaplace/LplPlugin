@@ -79,22 +79,27 @@ public:
     core::u32 reapTimedOut(core::f64 timeoutMs, const std::function<void(const Session &)> &onReap = {});
 
     /**
-     * @brief Broadcasts state data to all active sessions with UDP fragmentation.
+     * @brief Broadcasts one state packet to every connected session, as one datagram each.
      *
-     * Splits the data into packets of at most @c kMaxPayloadSize bytes each
-     * (legacy MAX_ENTITIES_PER_PACKET logic).
+     * A packet longer than @c kMaxPayloadSize is refused and nothing is sent. Cut
+     * into slices without a header each, it reached the client as a truncated
+     * first packet and pieces nobody could put back; a caller with more state
+     * sends several packets, each usable alone, as BroadcastSystem does. Large
+     * blocks that must arrive whole belong to a reliable channel (#147).
      *
-     * Every fragment for every client is ready at this instant, so the whole
-     * burst is handed to the transport at once instead of one packet at a time:
-     * fragments × clients syscalls collapse into one sendmmsg per 64 datagrams
-     * (sockets) or at most one ring kick (kernel module). The datagrams borrow
-     * their bytes from @p data and their addresses from the sessions, both of
-     * which outlive the call.
+     * Every client's datagram is ready at this instant, so the whole burst is
+     * handed to the transport at once instead of one packet at a time: one
+     * sendmmsg per 64 datagrams (sockets) or at most one ring kick (kernel
+     * module). The datagrams borrow their bytes from @p data and their addresses
+     * from the sessions, both of which outlive the call. A transport that sends
+     * fewer than it was handed is logged.
      *
      * @param transport Transport to send through.
-     * @param data      Raw state data to broadcast.
+     * @param data      The state packet, header included.
+     * @return Nothing, or InvalidArgument when @p data does not fit in one datagram.
      */
-    void broadcastState(transport::ITransport &transport, std::span<const core::byte> data);
+    [[nodiscard]] core::Expected<void> broadcastState(transport::ITransport &transport,
+                                                      std::span<const core::byte> data);
 
     /**
      * @brief Checks if a connection from the same endpoint already exists.

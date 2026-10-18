@@ -51,7 +51,7 @@ core::Expected<core::u32> sendInputs(transport::ITransport &transport, const End
 core::Expected<core::u32> sendState(transport::ITransport &transport, const Endpoint *address,
                                     std::span<const core::byte> stateData, core::u32 seq)
 {
-    auto pkt = buildPacket(PacketType::StateSnapshot, stateData, seq, static_cast<core::u8>(PacketFlag::Fragment));
+    auto pkt = buildPacket(PacketType::StateSnapshot, stateData, seq);
     return transport.send(std::span<const core::byte>{pkt.data(), pkt.size()}, address);
 }
 
