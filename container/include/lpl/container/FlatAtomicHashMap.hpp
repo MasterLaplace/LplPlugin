@@ -130,7 +130,10 @@ private:
      * @brief Publishes the entry of @p key, pointing at pool slot @p slotIndex, in the first empty or
      *        tombstoned entry of its probe sequence.
      *
-     * A failed compare-and-swap retries the same entry.
+     * The probe goes on past a tombstone up to the first empty entry, where the sequence ends, so a key
+     * stored beyond a removal is found rather than stored twice. A compare-and-swap lost to another thread
+     * probes again from the start: two inserts of one key then meet, unless a removal in the same sequence
+     * lands between their probes.
      *
      * @param key       Morton key.
      * @param slotIndex Pool slot that already holds the value.

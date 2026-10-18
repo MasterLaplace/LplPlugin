@@ -159,29 +159,43 @@ template <typename V> bool FlatAtomicHashMap<V>::remove(core::u64 key)
 
 template <typename V> bool FlatAtomicHashMap<V>::linkKeyToSlot(core::u64 key, core::u32 slotIndex)
 {
-    core::u64 packed = detail::packEntry(key, slotIndex);
-    core::u32 idx = static_cast<core::u32>(key) & _mask;
+    const core::u64 packed = detail::packEntry(key, slotIndex);
+    const core::u32 idx = static_cast<core::u32>(key) & _mask;
 
-    for (core::u32 i = 0; i < _mapCapacity; ++i)
+    for (;;)
     {
-        auto &entry = _entries[(idx + i) & _mask];
-        core::u64 prev = entry.load(std::memory_order_relaxed);
+        core::u32 target = _mapCapacity;
+        core::u64 expected = kEmpty;
 
-        if (prev == kEmpty || prev == kTombstone)
+        for (core::u32 i = 0; i < _mapCapacity; ++i)
         {
-            if (entry.compare_exchange_weak(prev, packed, std::memory_order_release, std::memory_order_relaxed))
+            const core::u32 position = (idx + i) & _mask;
+            const core::u64 entry = _entries[position].load(std::memory_order_relaxed);
+
+            if (entry == kEmpty || entry == kTombstone)
             {
-                _size.fetch_add(1, std::memory_order_relaxed);
-                return true;
+                if (target == _mapCapacity)
+                {
+                    target = position;
+                    expected = entry;
+                }
+                if (entry == kEmpty)
+                    break;
+                continue;
             }
-            --i;
-            continue;
+            if (detail::extractKey(entry) == key)
+                return false;
         }
 
-        if (detail::extractKey(prev) == key)
+        if (target == _mapCapacity)
             return false;
+        if (_entries[target].compare_exchange_strong(expected, packed, std::memory_order_release,
+                                                     std::memory_order_relaxed))
+        {
+            _size.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
     }
-    return false;
 }
 
 template <typename V> template <typename Fn> void FlatAtomicHashMap<V>::forEach(Fn &&fn)
