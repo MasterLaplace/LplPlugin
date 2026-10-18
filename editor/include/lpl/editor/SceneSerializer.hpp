@@ -59,6 +59,12 @@ namespace lpl::editor {
 /**
  * @brief Parses a `.lplscene` document and instantiates its entities into
  *        @p registry (which should be empty for a clean load).
+ *
+ * Each entity's archetype is built from the component names it carries once its
+ * templates are flattened. Both buffers of each component are written: the write
+ * (back) buffer the integrator uses and the read (front) buffer some systems read
+ * (e.g. Mass).
+ *
  * @param text     The `.lplscene` JSON text.
  * @param registry Destination world.
  * @return The number of entities created, or an error on malformed input.

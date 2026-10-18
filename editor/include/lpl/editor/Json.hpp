@@ -52,13 +52,7 @@ struct JVal {
      * @param key The key to search for.
      * @return A pointer to the value if found, nullptr otherwise.
      */
-    [[nodiscard]] const JVal *find(std::string_view key) const
-    {
-        for (const auto &kv : obj)
-            if (kv.first == key)
-                return &kv.second;
-        return nullptr;
-    }
+    [[nodiscard]] const JVal *find(std::string_view key) const;
 
     /**
      * @brief Numeric field @p key, or @p fallback if absent / not a number.
@@ -66,11 +60,7 @@ struct JVal {
      * @param fallback The value to return if the key is absent or not a number.
      * @return The numeric value if found and valid, otherwise the fallback.
      */
-    [[nodiscard]] double numOr(std::string_view key, double fallback) const
-    {
-        const JVal *v = find(key);
-        return (v != nullptr && v->t == T::Num) ? v->num : fallback;
-    }
+    [[nodiscard]] double numOr(std::string_view key, double fallback) const;
 };
 
 /**
@@ -110,6 +100,11 @@ struct Parser {
  * replayed later, a template instantiated elsewhere — because the parser keeps
  * no byte spans into the source. Numbers print with %.17g so a value that made
  * the round trip rebuilds the same world it described.
+ *
+ * %.17g is the shortest precision that round-trips every double exactly; anything
+ * shorter can shift a parameter and therefore the world a replayed command
+ * rebuilds. Integral values are printed without a decimal point, so a journal
+ * stays readable.
  */
 [[nodiscard]] std::string emit(const JVal &value);
 
@@ -130,5 +125,7 @@ struct Parser {
 void overlay(JVal &target, const JVal &patch);
 
 } // namespace lpl::editor::detail
+
+#    include "Json.inl"
 
 #endif // LPL_EDITOR_JSON_HPP

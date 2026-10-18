@@ -1,13 +1,3 @@
-/**
- * @file EditorSession.cpp
- * @brief Implementation of the headless editing model.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-07-16
- * @copyright MIT License
- */
-
 #include <lpl/editor/EditorSession.hpp>
 
 #include <lpl/ecs/ComponentReflection.hpp>
@@ -23,7 +13,9 @@ namespace lpl::editor {
 
 namespace {
 
-// Locates the ecs::FieldDesc named @p field within component @p id, or nullptr.
+/**
+ * @brief Locates the ecs::FieldDesc named @p field within component @p id, or nullptr.
+ */
 const ecs::FieldDesc *findField(ecs::ComponentId id, std::string_view field)
 {
     const ecs::ComponentSchema &schema = ecs::schemaOf(id);
@@ -33,7 +25,9 @@ const ecs::FieldDesc *findField(ecs::ComponentId id, std::string_view field)
     return nullptr;
 }
 
-// Reads a single 4-byte-or-less lane at @p p as a human-unit double.
+/**
+ * @brief Reads a single 4-byte-or-less lane at @p p as a human-unit double.
+ */
 double readLane(const core::byte *p, ecs::FieldType type)
 {
     switch (type)
@@ -71,7 +65,9 @@ double readLane(const core::byte *p, ecs::FieldType type)
     return 0.0;
 }
 
-// Writes a human-unit double into a single lane at @p p (math::Fixed32 is quantised).
+/**
+ * @brief Writes a human-unit double into a single lane at @p p (math::Fixed32 is quantised).
+ */
 void writeLane(core::byte *p, ecs::FieldType type, double value)
 {
     switch (type)
@@ -108,7 +104,9 @@ void writeLane(core::byte *p, ecs::FieldType type, double value)
     }
 }
 
-// Lane byte stride within a composite (0 for scalars).
+/**
+ * @brief Lane byte stride within a composite (0 for scalars).
+ */
 core::u32 laneStride(ecs::FieldType type)
 {
     return (type == ecs::FieldType::Vec3F || type == ecs::FieldType::Vec3Fixed || type == ecs::FieldType::QuatF) ? 4u :
@@ -183,7 +181,6 @@ bool EditorSession::setField(core::u32 flatIndex, ecs::ComponentId id, std::stri
     const std::size_t byteOffset = static_cast<std::size_t>(loc.localIndex) * size + f->offset +
                                    static_cast<std::size_t>(lane) * laneStride(f->type);
 
-    // Write both buffers so integrators (back) and readers (front) agree.
     bool wrote = false;
     if (auto *wb = static_cast<core::byte *>(loc.chunk->writeComponent(id)))
     {
@@ -200,7 +197,6 @@ bool EditorSession::setField(core::u32 flatIndex, ecs::ComponentId id, std::stri
 
 void EditorSession::clear()
 {
-    // Collect every live id first: destroying while iterating chunks mutates them.
     std::vector<ecs::EntityId> ids;
     for (const auto &part : registry_.partitions())
     {
@@ -214,18 +210,10 @@ void EditorSession::clear()
     for (const ecs::EntityId id : ids)
         (void) registry_.destroyEntity(id);
     clearSelection();
-    // The history describes how this world was built. Emptying the world without
-    // forgetting it would leave an undo that replays commands onto a world that
-    // no longer matches them.
     journal_.reset();
 }
 
-core::Expected<std::string> EditorSession::command(std::string_view json)
-{
-    // Through the journal, never straight to the processor: the journal is what
-    // makes undo possible without any command knowing how to reverse itself.
-    return journal_.execute(json);
-}
+core::Expected<std::string> EditorSession::command(std::string_view json) { return journal_.execute(json); }
 
 std::string EditorSession::save() const { return toLplScene(registry_); }
 

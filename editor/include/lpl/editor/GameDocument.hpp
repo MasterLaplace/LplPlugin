@@ -60,9 +60,9 @@ namespace lpl::editor {
  * a client reading the same bytes.
  */
 enum class ResourceScope : core::u8 {
-    Shared = 0, ///< Both sides need it (a collision mesh, a table of stats).
-    Client,     ///< Presentation only: textures, fonts, sounds, shaders.
-    Server      ///< Authority only: tuning a client has no business reading.
+    Shared = 0, /**< Both sides need it (a collision mesh, a table of stats). */
+    Client,     /**< Presentation only: textures, fonts, sounds, shaders. */
+    Server      /**< Authority only: tuning a client has no business reading. */
 };
 
 /**
@@ -88,10 +88,10 @@ enum class ResourceKind : core::u8 {
  * understanding the component that mentions it.
  */
 struct ResourceEntry {
-    std::string name;                           ///< Logical name used by components.
-    std::string path;                           ///< Where the bytes live.
-    ResourceKind kind{ResourceKind::Other};     ///< Asset class.
-    ResourceScope scope{ResourceScope::Shared}; ///< Who loads it.
+    std::string name;                           /**< Logical name used by components. */
+    std::string path;                           /**< Where the bytes live. */
+    ResourceKind kind{ResourceKind::Other};     /**< Asset class. */
+    ResourceScope scope{ResourceScope::Shared}; /**< Who loads it. */
 };
 
 /**
@@ -99,22 +99,21 @@ struct ResourceEntry {
  * @brief One named scene: its systems, its resources, and how to fill it.
  */
 struct SceneDescription {
-    std::string name;                     ///< Scene identifier, referenced by startScene.
-    std::vector<std::string> systems;     ///< ORDERED list of system names to enable.
-    std::vector<ResourceEntry> resources; ///< Named assets this scene uses.
+    std::string name;                     /**< Scene identifier, referenced by startScene. */
+    std::vector<std::string> systems;     /**< ORDERED list of system names to enable. */
+    std::vector<ResourceEntry> resources; /**< Named assets this scene uses. */
 
-    bool hasRecipe{false};         ///< Does a procedural pass build this scene?
-    procgen::WorldRecipe recipe{}; ///< The pass, when hasRecipe.
+    bool hasRecipe{false};         /**< Does a procedural pass build this scene? */
+    procgen::WorldRecipe recipe{}; /**< The pass, when hasRecipe. */
 
-    bool hasLiving{false};          ///< Does the scene declare an ecosystem?
-    ecology::LivingRecipe living{}; ///< Food web, herd and stigmergy, when hasLiving.
+    bool hasLiving{false};          /**< Does the scene declare an ecosystem? */
+    ecology::LivingRecipe living{}; /**< Food web, herd and stigmergy, when hasLiving. */
 
-    bool hasView{false}; ///< Does the scene say what it LOOKS like?
-    pack::ViewV1 view{}; ///< Sky, water, palette and time of day, when hasView.
-                         ///< Wire form: engine::toEngineView turns it into a sky.
+    bool hasView{false}; /**< Does the scene say what it LOOKS like? */
+    pack::ViewV1 view{}; /**< Sky, water, palette, time of day, when hasView; wire form, for engine::toEngineView. */
 
-    std::string templatesJson; ///< Prefab table, as JSON text ("{}" when absent).
-    std::string entitiesJson;  ///< Explicit instances, as JSON text ("[]" when absent).
+    std::string templatesJson; /**< Prefab table, as JSON text ("{}" when absent). */
+    std::string entitiesJson;  /**< Explicit instances, as JSON text ("[]" when absent). */
 };
 
 /**
@@ -122,14 +121,14 @@ struct SceneDescription {
  * @brief The game-level stage: what Flakkari put at the root of config.cfg.
  */
 struct GameMetadata {
-    std::string title;          ///< Human-readable name.
-    std::string version;        ///< Game version (distinct from the format version).
-    std::string profile;        ///< Netcode preset NAME, e.g. "mmorpg" (see the layering note).
-    std::string startScene;     ///< Scene to load first; empty means the first one.
-    bool online{false};         ///< Does this game expect a server?
-    core::u32 minPlayers{1u};   ///< Lower player bound.
-    core::u32 maxPlayers{1u};   ///< Upper player bound.
-    core::u32 maxInstances{1u}; ///< How many worlds a server may host of it.
+    std::string title;          /**< Human-readable name. */
+    std::string version;        /**< Game version (distinct from the format version). */
+    std::string profile;        /**< Netcode preset NAME, e.g. "mmorpg" (see the layering note). */
+    std::string startScene;     /**< Scene to load first; empty means the first one. */
+    bool online{false};         /**< Does this game expect a server? */
+    core::u32 minPlayers{1u};   /**< Lower player bound. */
+    core::u32 maxPlayers{1u};   /**< Upper player bound. */
+    core::u32 maxInstances{1u}; /**< How many worlds a server may host of it. */
 };
 
 /**
@@ -137,8 +136,8 @@ struct GameMetadata {
  * @brief The parsed four-stage document.
  */
 struct GameDocument {
-    GameMetadata metadata{};              ///< Game-level stage.
-    std::vector<SceneDescription> scenes; ///< Named scenes, in declaration order.
+    GameMetadata metadata{};              /**< Game-level stage. */
+    std::vector<SceneDescription> scenes; /**< Named scenes, in declaration order. */
 
     /**
      * @brief Looks up a scene by name.
@@ -169,6 +168,10 @@ struct GameDocument {
 
 /**
  * @brief Serialises a document back to the four-stage form.
+ *
+ * Resources are always written in the flat form, whatever shape they were read
+ * in: one way to write them means one way to read them back.
+ *
  * @param document The document to write.
  * @return JSON text that @ref parseGameDocument reads back equivalently.
  */
@@ -197,10 +200,14 @@ struct GameDocument {
  */
 [[nodiscard]] std::vector<const ResourceEntry *> resourcesFor(const SceneDescription &scene, ResourceScope consumer);
 
-/// @brief Text form of a resource kind, as it appears in the document.
+/**
+ * @brief Text form of a resource kind, as it appears in the document.
+ */
 [[nodiscard]] std::string_view resourceKindName(ResourceKind kind) noexcept;
 
-/// @brief Text form of a resource scope, as it appears in the document.
+/**
+ * @brief Text form of a resource scope, as it appears in the document.
+ */
 [[nodiscard]] std::string_view resourceScopeName(ResourceScope scope) noexcept;
 
 } // namespace lpl::editor

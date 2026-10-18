@@ -1,12 +1,3 @@
-/**
- * @file EccBaker.cpp
- * @brief Computes the transversal parity and rewrites the header around it.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/editor/EccBaker.hpp>
 
 #include <lpl/codec/ReedSolomon.hpp>
@@ -50,10 +41,6 @@ std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPol
     if (dataShards + parityShards > codec::kMaxCodewordSymbols)
         return image;
 
-    // The span to protect runs from the end of the header to the end of the image as
-    // it stands, plus the entry this call is about to insert into the table. That
-    // entry shifts every payload by exactly one entry's worth, which is why the whole
-    // image is rebuilt rather than patched.
     const core::u32 entryBytes = static_cast<core::u32>(sizeof(pack::SectionEntry));
     const core::u32 oldTableBytes = header.sectionCount * entryBytes;
     const core::u32 payloadBytes = header.totalSize - static_cast<core::u32>(sizeof(pack::Header)) - oldTableBytes;
@@ -72,8 +59,6 @@ std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPol
     ecc.dataShards = dataShards;
     ecc.parityShards = parityShards;
 
-    // Build the new content first: the parity has to be taken over the bytes as they
-    // will actually be stored, not over the ones they were before the table grew.
     std::vector<core::u8> content;
     content.reserve(protectedBytes + sizeof(pack::EccV1) + static_cast<std::size_t>(parityShards) * rowBytes);
 
@@ -81,7 +66,7 @@ std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPol
     {
         pack::SectionEntry entry{};
         std::memcpy(&entry, image.data() + sizeof(pack::Header) + i * entryBytes, sizeof(entry));
-        entry.offset += entryBytes; // one more row in the table pushes every payload
+        entry.offset += entryBytes;
         appendPod(content, entry);
     }
 
@@ -94,7 +79,6 @@ std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPol
 
     content.insert(content.end(), image.begin() + sizeof(pack::Header) + oldTableBytes, image.end());
 
-    // Transversal, from codec/: one codeword down each column of the row-major span.
     std::vector<core::u8> parity(static_cast<std::size_t>(parityShards) * rowBytes, core::u8{0});
     if (!codec::transversalEncode(content.data(), static_cast<core::u32>(content.size()), dataShards, parityShards,
                                   rowBytes, parity.data()))
@@ -105,8 +89,6 @@ std::vector<core::u8> attachEcc(const std::vector<core::u8> &image, const EccPol
 
     pack::Header grown = header;
     grown.sectionCount = newSectionCount;
-    // The locator lives in the header, outside the span the parity protects. Without
-    // it a burst on the section table takes the parity's own address with it.
     grown.eccOffset = eccOffset;
     grown.eccSize = eccEntry.size;
     grown.totalSize = static_cast<core::u32>(sizeof(pack::Header) + content.size());
