@@ -21,10 +21,10 @@
 
 namespace lpl::zarr {
 
-/// Most dimensions an array may declare. A volume uses three.
+/** Most dimensions an array may declare. A volume uses three. */
 inline constexpr core::u32 kMaxDimensions = 4u;
 
-/// Longest store key this reader will build, including the terminator.
+/** Longest store key this reader will build, including the terminator. */
 inline constexpr core::u32 kMaxKeyLength = 128u;
 
 /**
@@ -36,51 +36,26 @@ struct ArrayMeta final {
     core::i64 chunks[kMaxDimensions]{};
     core::u32 dimensions{0u};
     Codec codec{Codec::Raw};
-    core::u8 fillValue{0u}; ///< The byte an absent chunk is made of: a signed -1 is 0xFF.
-    char separator{'.'};    ///< The character between chunk indices in a key, '.' or '/'.
+    core::u8 fillValue{0u}; /**< The byte an absent chunk is made of: a signed -1 is 0xFF. */
+    char separator{'.'};    /**< The character between chunk indices in a key, '.' or '/'. */
 
     /**
      * @return Whether the fields describe an array this reader can address: one to
      * @ref kMaxDimensions dimensions, no negative extent, chunks of at least one sample whose byte
      * count fits a `usize`, a separator of '.' or '/', and a codec the format names.
      */
-    [[nodiscard]] constexpr bool valid() const noexcept
-    {
-        if (dimensions < 1u || dimensions > kMaxDimensions || codec == Codec::Unsupported)
-            return false;
-        if (separator != '.' && separator != '/')
-            return false;
-        core::usize bytes = 1u;
-        for (core::u32 d = 0u; d < dimensions; ++d)
-        {
-            if (shape[d] < 0 || chunks[d] < 1)
-                return false;
-            if (static_cast<core::u64>(chunks[d]) > std::numeric_limits<core::usize>::max() / bytes)
-                return false;
-            bytes *= static_cast<core::usize>(chunks[d]);
-        }
-        return true;
-    }
+    [[nodiscard]] constexpr bool valid() const noexcept;
 
-    /// @return Bytes one decoded chunk occupies, or 0 when the fields are not valid().
-    [[nodiscard]] constexpr core::usize chunkBytes() const noexcept
-    {
-        if (!valid())
-            return 0u;
-        core::usize bytes = 1u;
-        for (core::u32 d = 0u; d < dimensions; ++d)
-            bytes *= static_cast<core::usize>(chunks[d]);
-        return bytes;
-    }
+    /**
+     * @return Bytes one decoded chunk occupies, or 0 when the fields are not valid().
+     */
+    [[nodiscard]] constexpr core::usize chunkBytes() const noexcept;
 
-    /// @return Chunks along @p axis, rounded up the way zarr rounds; 0 when the fields are not
-    /// valid() or the array has no such axis.
-    [[nodiscard]] constexpr core::i64 chunkCount(core::u32 axis) const noexcept
-    {
-        if (!valid() || axis >= dimensions)
-            return 0;
-        return shape[axis] / chunks[axis] + (shape[axis] % chunks[axis] != 0 ? 1 : 0);
-    }
+    /**
+     * @return Chunks along @p axis, rounded up the way zarr rounds; 0 when the fields are not
+     * valid() or the array has no such axis.
+     */
+    [[nodiscard]] constexpr core::i64 chunkCount(core::u32 axis) const noexcept;
 };
 
 /**
@@ -139,5 +114,7 @@ struct ArrayMeta final {
                                     std::span<core::u8> scratch) noexcept;
 
 } // namespace lpl::zarr
+
+#    include "Array.inl"
 
 #endif // LPL_ZARR_ARRAY_HPP
