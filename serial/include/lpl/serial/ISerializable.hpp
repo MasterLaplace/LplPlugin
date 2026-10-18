@@ -40,7 +40,9 @@ public:
      */
     [[nodiscard]] virtual core::Expected<void> deserialize(net::protocol::Bitstream &stream) = 0;
 
-    /** @brief Size in bytes when serialized (0 = variable). */
+    /**
+     * @brief Size in bytes when serialized (0 = variable).
+     */
     [[nodiscard]] virtual core::usize serializedSize() const noexcept { return 0; }
 };
 

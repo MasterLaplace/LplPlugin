@@ -1,13 +1,3 @@
-/**
- * @file ReplayPlayer.cpp
- * @brief ReplayPlayer stub implementation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include <lpl/core/Assert.hpp>
 #include <lpl/core/Log.hpp>
 #include <lpl/serial/ReplayPlayer.hpp>
@@ -26,8 +16,7 @@ ReplayPlayer::~ReplayPlayer() = default;
 
 core::Expected<void> ReplayPlayer::loadFromDisk(std::string_view /*path*/)
 {
-    /// @todo Deserialize replay frames and snapshots from disk.
-    ///       Binary format: [frameCount][frames...][snapshotCount][snapshots...].
+    // TODO(#141): read [frameCount][frames...][snapshotCount][snapshots...] from the replay file.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }
@@ -51,7 +40,7 @@ core::Expected<ReplayFrame> ReplayPlayer::advanceTick()
 
 core::Expected<void> ReplayPlayer::seekToTick(core::u64 /*tick*/)
 {
-    /// @todo Binary search snapshots for closest tick, then replay forwards.
+    // TODO(#141): binary-search the snapshots for the closest tick, then replay forwards.
     LPL_ASSERT(false && "unimplemented");
     return {};
 }
