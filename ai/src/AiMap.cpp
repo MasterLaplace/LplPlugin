@@ -111,9 +111,12 @@ core::u8 AiMap::capability(core::u32 x, core::u32 z) const
 }
 
 core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, core::u32 goalZ, core::u8 mask,
-                          const AiMapParams &params, lpl::pmr::vector<core::u32> &outPath) const
+                          const AiMapParams &params, lpl::pmr::vector<core::u32> &outPath,
+                          PathSearchStats *outStats) const
 {
     outPath.clear();
+    if (outStats != nullptr)
+        *outStats = PathSearchStats{};
     if (_capability.empty() || !passable(startX, startZ, mask) || !passable(goalX, goalZ, mask))
         return kNoPath;
 
@@ -142,9 +145,11 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
         return (adx > adz ? adx : adz) * params.baseCost;
     };
 
+    PathSearchStats stats;
     SearchHeap open;
     cost[stateOf(start, kNoIncoming)] = 0u;
     open.push(SearchNode{start, kNoIncoming, heuristic(start)});
+    ++stats.reached;
 
     core::u32 bestGoalState = kNoPath;
 
@@ -152,8 +157,11 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
     {
         const SearchNode current = open.pop();
         const core::u32 state = stateOf(current.cell, current.incoming);
-        if (cost[state] == kNoPath || current.estimate < cost[state])
+        if (cost[state] == kNoPath || current.estimate - heuristic(current.cell) > cost[state])
+        {
+            ++stats.skipped;
             continue;
+        }
 
         if (current.cell == goal)
         {
@@ -161,6 +169,7 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
             break;
         }
 
+        ++stats.expanded;
         const core::u32 x = current.cell % width;
         const core::u32 z = current.cell / width;
 
@@ -190,11 +199,15 @@ core::u32 AiMap::findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, c
             if (cost[nextState] != kNoPath && candidate >= cost[nextState])
                 continue;
 
+            stats.reached += cost[nextState] == kNoPath ? 1u : 0u;
             cost[nextState] = candidate;
             cameFrom[nextState] = state;
             open.push(SearchNode{nextCell, n, candidate + heuristic(nextCell)});
         }
     }
+
+    if (outStats != nullptr)
+        *outStats = stats;
 
     if (bestGoalState == kNoPath)
     {
