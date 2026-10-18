@@ -44,10 +44,15 @@ public:
     explicit ChaseLevDeque(core::u32 capacity = 4096);
 
     /**
-     * @brief Pushes an item to the bottom of the deque.
+     * @brief Pushes an item to the bottom of the deque, unless the deque is full.
+     *
+     * A thief may have taken an item since the owner last looked, so a deque reported full can have a slot
+     * free by the time the call returns; it is never reported free when it is not.
+     *
      * @note Only the owner thread may call this.
+     * @return True when the item was pushed; false when the deque was full and the item was left out.
      */
-    void push(T item);
+    [[nodiscard]] bool push(T item);
 
     /**
      * @brief Pops an item from the bottom of the deque.
