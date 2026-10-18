@@ -1,30 +1,15 @@
-/**
- * @file test_morton_parity.cpp
- * @brief Parity test: Morton encoding/decoding roundtrip verification.
- *
- * Verifies that morton encode3D/decode3D operations are lossless for
- * a range of coordinate inputs.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-03-05
- * @copyright MIT License
- */
-
 #include <cstdio>
 #include <cstdlib>
 #include <lpl/core/Log.hpp>
 #include <lpl/math/Morton.hpp>
 
-using namespace lpl;
-
 static int failures = 0;
 
-static void checkMorton(core::i32 x, core::i32 y, core::i32 z)
+static void checkMorton(lpl::core::i32 x, lpl::core::i32 y, lpl::core::i32 z)
 {
-    const core::u64 code = math::morton::encode3D(x, y, z);
-    core::i32 dx = 0, dy = 0, dz = 0;
-    math::morton::decode3D(code, dx, dy, dz);
+    const lpl::core::u64 code = lpl::math::morton::encode3D(x, y, z);
+    lpl::core::i32 dx = 0, dy = 0, dz = 0;
+    lpl::math::morton::decode3D(code, dx, dy, dz);
 
     if (dx != x || dy != y || dz != z)
     {
@@ -38,49 +23,96 @@ static void checkMorton(core::i32 x, core::i32 y, core::i32 z)
     }
 }
 
-int main()
+/**
+ * @brief Zero round-trips.
+ */
+static void checkZeroRoundTrips() { checkMorton(0, 0, 0); }
+
+/**
+ * @brief The unit axes round-trip.
+ */
+static void checkUnitAxesRoundTrip()
 {
-    core::Log::info("=== Morton3D Parity Test ===");
-
-    // Zero
-    checkMorton(0, 0, 0);
-
-    // Unit axes
     checkMorton(1, 0, 0);
     checkMorton(0, 1, 0);
     checkMorton(0, 0, 1);
+}
 
-    // Powers of two
+/**
+ * @brief Powers of two round-trip.
+ */
+static void checkPowersOfTwoRoundTrip()
+{
     checkMorton(2, 4, 8);
     checkMorton(16, 32, 64);
+}
 
-    // Max 10-bit values (Morton3D supports 10 bits per axis)
-    checkMorton(1023, 1023, 1023);
+/**
+ * @brief The largest 10-bit values round-trip.
+ */
+static void checkLargestTenBitValuesRoundTrip() { checkMorton(1023, 1023, 1023); }
 
-    // Mixed values
+/**
+ * @brief Mixed values round-trip.
+ */
+static void checkMixedValuesRoundTrip()
+{
     checkMorton(42, 137, 255);
     checkMorton(100, 200, 300);
     checkMorton(511, 0, 511);
+}
 
-    // Negative values (supported via kMortonBias)
+/**
+ * @brief Negative values round-trip, supported through kMortonBias.
+ */
+static void checkNegativeValuesRoundTrip()
+{
     checkMorton(-1, -1, -1);
     checkMorton(-100, 50, -200);
+}
 
-    // Ordering: encode(a) < encode(b) for monotonically increasing coords
+/**
+ * @brief Ordering: encode(a) < encode(b) for monotonically increasing coordinates.
+ */
+static void checkCodesGrowWithTheCoordinates()
+{
+    const lpl::core::u64 c1 = lpl::math::morton::encode3D(0, 0, 0);
+    const lpl::core::u64 c2 = lpl::math::morton::encode3D(1, 1, 1);
+    if (c1 < c2)
     {
-        const core::u64 c1 = math::morton::encode3D(0, 0, 0);
-        const core::u64 c2 = math::morton::encode3D(1, 1, 1);
-        if (c1 < c2)
-        {
-            std::printf("  PASS: ordering (0,0,0) < (1,1,1)\n");
-        }
-        else
-        {
-            std::printf("  FAIL: ordering %llu >= %llu\n", static_cast<unsigned long long>(c1),
-                        static_cast<unsigned long long>(c2));
-            ++failures;
-        }
+        std::printf("  PASS: ordering (0,0,0) < (1,1,1)\n");
     }
+    else
+    {
+        std::printf("  FAIL: ordering %llu >= %llu\n", static_cast<unsigned long long>(c1),
+                    static_cast<unsigned long long>(c2));
+        ++failures;
+    }
+}
+
+/**
+ * @brief Parity test: Morton encoding/decoding roundtrip verification.
+ *
+ * Verifies that morton encode3D/decode3D operations are lossless for
+ * a range of coordinate inputs.
+ */
+int main()
+{
+    lpl::core::Log::info("=== Morton3D Parity Test ===");
+
+    checkZeroRoundTrips();
+
+    checkUnitAxesRoundTrip();
+
+    checkPowersOfTwoRoundTrip();
+
+    checkLargestTenBitValuesRoundTrip();
+
+    checkMixedValuesRoundTrip();
+
+    checkNegativeValuesRoundTrip();
+
+    checkCodesGrowWithTheCoordinates();
 
     std::printf("\n%s (%d failure(s))\n", failures == 0 ? "ALL PASSED" : "SOME FAILED", failures);
     return failures == 0 ? 0 : 1;
