@@ -1,9 +1,3 @@
-/**
- * @file OpenBciSource.cpp
- * @brief Implementation of the OpenBCI Cyton serial acquisition source.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/source/OpenBciSource.hpp"
 
 #include <array>

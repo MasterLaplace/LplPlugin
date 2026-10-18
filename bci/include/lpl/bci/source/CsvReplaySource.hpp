@@ -70,6 +70,11 @@ public:
     [[nodiscard]] std::size_t cursor() const noexcept;
 
 private:
+    /**
+     * @brief Reads the rows of the file into memory, skipping comments and empty lines.
+     *
+     * Each value is parsed with strtof rather than stof, to avoid exceptions.
+     */
     Expected<void> loadCsv();
 
     CsvReplayConfig _config;

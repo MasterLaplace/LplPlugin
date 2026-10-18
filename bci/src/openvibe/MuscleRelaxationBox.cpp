@@ -1,8 +1,3 @@
-/**
- * @file MuscleRelaxationBox.cpp
- * @brief Implementation of the muscle relaxation processor.
- */
-
 #include "lpl/bci/openvibe/MuscleRelaxationBox.hpp"
 #include "lpl/bci/math/Statistics.hpp"
 

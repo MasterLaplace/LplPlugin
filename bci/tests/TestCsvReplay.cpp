@@ -1,8 +1,3 @@
-/**
- * @file TestCsvReplay.cpp
- * @brief Unit tests for bci::source::CsvReplaySource.
- */
-
 #include <catch2/catch_test_macros.hpp>
 
 #include "lpl/bci/source/CsvReplaySource.hpp"
@@ -11,8 +6,6 @@
 #include <fstream>
 
 namespace lpl::bci {
-
-using namespace bci::source;
 
 namespace {
 
@@ -39,12 +32,12 @@ TEST_CASE("CsvReplaySource reads CSV data", "[source][csv]")
 {
     TempCsvFile csv("1.0,2.0,3.0\n4.0,5.0,6.0\n7.0,8.0,9.0\n");
 
-    CsvReplayConfig config;
+    lpl::bci::source::CsvReplayConfig config;
     config.filePath = csv.path();
     config.channelCount = 3;
     config.burstMode = true;
 
-    CsvReplaySource source(config);
+    lpl::bci::source::CsvReplaySource source(config);
     auto startResult = source.start();
     REQUIRE(startResult.has_value());
 
@@ -66,12 +59,12 @@ TEST_CASE("CsvReplaySource loops on exhaustion", "[source][csv]")
 {
     TempCsvFile csv("1.0,2.0\n3.0,4.0\n");
 
-    CsvReplayConfig config;
+    lpl::bci::source::CsvReplayConfig config;
     config.filePath = csv.path();
     config.channelCount = 2;
     config.burstMode = true;
 
-    CsvReplaySource source(config);
+    lpl::bci::source::CsvReplaySource source(config);
     auto res = source.start();
     REQUIRE(res.has_value());
 
@@ -89,11 +82,11 @@ TEST_CASE("CsvReplaySource loops on exhaustion", "[source][csv]")
 
 TEST_CASE("CsvReplaySource rejects invalid file", "[source][csv]")
 {
-    CsvReplayConfig config;
+    lpl::bci::source::CsvReplayConfig config;
     config.filePath = "/nonexistent/file.csv";
     config.channelCount = 2;
 
-    CsvReplaySource source(config);
+    lpl::bci::source::CsvReplaySource source(config);
     auto result = source.start();
 
     REQUIRE_FALSE(result.has_value());

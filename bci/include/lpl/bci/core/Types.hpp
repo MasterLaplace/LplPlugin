@@ -23,8 +23,6 @@
 
 namespace lpl::bci {
 
-// ─── Frequency Band ──────────────────────────────────────────────────────────
-
 /**
  * @brief Defines a contiguous frequency range in Hz.
  *
@@ -50,8 +48,6 @@ inline constexpr FrequencyBand kEmg{40.0f, 70.0f};
 
 } // namespace band
 
-// ─── Sample ──────────────────────────────────────────────────────────────────
-
 /**
  * @brief A single multi-channel EEG sample (one time point, all channels).
  *
@@ -64,8 +60,6 @@ struct Sample {
 
     [[nodiscard]] std::size_t channelCount() const noexcept { return channels.size(); }
 };
-
-// ─── Signal Block ────────────────────────────────────────────────────────────
 
 /**
  * @brief A contiguous block of multi-channel samples with associated metadata.
@@ -92,8 +86,6 @@ struct SignalBlock {
     [[nodiscard]] bool empty() const noexcept { return data.empty(); }
 };
 
-// ─── Band Power ──────────────────────────────────────────────────────────────
-
 /**
  * @brief Spectral power per frequency band, per channel.
  *
@@ -105,8 +97,6 @@ struct BandPower {
     std::vector<float> perChannel;
     float mean = 0.0f;
 };
-
-// ─── Neural State ────────────────────────────────────────────────────────────
 
 /**
  * @brief High-level neural state derived from spectral analysis.
@@ -135,8 +125,6 @@ struct NeuralState {
     }
 };
 
-// ─── Source Info ─────────────────────────────────────────────────────────────
-
 /**
  * @brief Metadata describing an acquisition source.
  */
@@ -146,8 +134,6 @@ struct SourceInfo {
     float sampleRate = 0.0f;
 };
 
-// ─── Baseline ────────────────────────────────────────────────────────────────
-
 /**
  * @brief Statistical baseline (mean ± standard deviation) computed during calibration.
  */
@@ -155,8 +141,6 @@ struct Baseline {
     float mean = 0.0f;
     float stdDev = 0.0f;
 };
-
-// ─── Acquisition Mode ────────────────────────────────────────────────────────
 
 /**
  * @brief Enumerates supported acquisition backends.
@@ -172,17 +156,8 @@ enum class AcquisitionMode : std::uint8_t {
 /**
  * @brief Returns a human-readable name for the given acquisition mode.
  */
-[[nodiscard]] constexpr std::string_view acquisitionModeName(AcquisitionMode mode) noexcept
-{
-    switch (mode)
-    {
-    case AcquisitionMode::kSerial: return "Serial (OpenBCI)";
-    case AcquisitionMode::kSynthetic: return "Synthetic";
-    case AcquisitionMode::kLsl: return "LSL Inlet";
-    case AcquisitionMode::kCsvReplay: return "CSV Replay";
-    case AcquisitionMode::kBrainFlow: return "BrainFlow";
-    }
-    return "Unknown";
-}
+[[nodiscard]] constexpr std::string_view acquisitionModeName(AcquisitionMode mode) noexcept;
 
 } // namespace lpl::bci
+
+#include "Types.inl"

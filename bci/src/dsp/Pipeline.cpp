@@ -1,18 +1,8 @@
-/**
- * @file Pipeline.cpp
- * @brief Implementation of the DSP Pipeline and PipelineBuilder.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/dsp/Pipeline.hpp"
 
 namespace lpl::bci::dsp {
 
-// ─── PipelineBuilder ─────────────────────────────────────────────────────────
-
 Pipeline PipelineBuilder::build() { return Pipeline(std::move(_stages)); }
-
-// ─── Pipeline ────────────────────────────────────────────────────────────────
 
 Pipeline::Pipeline(std::vector<std::unique_ptr<IStage>> stages) : _stages(std::move(stages)) {}
 

@@ -1,12 +1,3 @@
-/**
- * @file StabilityMetric.cpp
- * @brief Implementation of the temporal stability metric.
- *
- * Fixes V1's CBoxAlgorithmStabilityMonitor bug where _distanceHistory was
- * declared but never populated, causing the stability assessment to always
- * report default values.
- */
-
 #include "lpl/bci/metric/StabilityMetric.hpp"
 #include "lpl/bci/math/Riemannian.hpp"
 

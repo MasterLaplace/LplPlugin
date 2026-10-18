@@ -56,38 +56,7 @@ enum class ErrorCode : std::uint8_t {
 /**
  * @brief Returns a short human-readable label for the given error code.
  */
-[[nodiscard]] constexpr std::string_view errorCodeName(ErrorCode code) noexcept
-{
-    switch (code)
-    {
-    case ErrorCode::kSerialPortNotFound: return "SerialPortNotFound";
-    case ErrorCode::kSerialPortConfigFailed: return "SerialPortConfigFailed";
-    case ErrorCode::kSerialReadFailed: return "SerialReadFailed";
-    case ErrorCode::kSerialWriteFailed: return "SerialWriteFailed";
-    case ErrorCode::kInvalidPacket: return "InvalidPacket";
-    case ErrorCode::kLslStreamNotFound: return "LslStreamNotFound";
-    case ErrorCode::kLslConnectionFailed: return "LslConnectionFailed";
-    case ErrorCode::kBrainFlowInitFailed: return "BrainFlowInitFailed";
-    case ErrorCode::kBrainFlowStreamFailed: return "BrainFlowStreamFailed";
-    case ErrorCode::kFileNotFound: return "FileNotFound";
-    case ErrorCode::kFileParseError: return "FileParseError";
-    case ErrorCode::kCalibrationIncomplete: return "CalibrationIncomplete";
-    case ErrorCode::kCalibrationInsufficientSamples: return "CalibrationInsufficientSamples";
-    case ErrorCode::kFftSizeMismatch: return "FftSizeMismatch";
-    case ErrorCode::kChannelCountMismatch: return "ChannelCountMismatch";
-    case ErrorCode::kEmptyInput: return "EmptyInput";
-    case ErrorCode::kInvalidArgument: return "InvalidArgument";
-    case ErrorCode::kInvalidState: return "InvalidState";
-    case ErrorCode::kPipelineEmpty: return "PipelineEmpty";
-    case ErrorCode::kMatrixNotSpd: return "MatrixNotSpd";
-    case ErrorCode::kSingularMatrix: return "SingularMatrix";
-    case ErrorCode::kMathError: return "MathError";
-    case ErrorCode::kNotInitialized: return "NotInitialized";
-    case ErrorCode::kAlreadyRunning: return "AlreadyRunning";
-    case ErrorCode::kUnknown: return "Unknown";
-    }
-    return "Unknown";
-}
+[[nodiscard]] constexpr std::string_view errorCodeName(ErrorCode code) noexcept;
 
 /**
  * @brief Structured error with code, message, and source location.
@@ -138,3 +107,5 @@ template <typename T> using Expected = std::expected<T, Error>;
 using ExpectedVoid = Expected<void>;
 
 } // namespace lpl::bci
+
+#include "Error.inl"

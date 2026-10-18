@@ -1,13 +1,3 @@
-/**
- * @file TestOpenBciSource.cpp
- * @brief BCI component: TestOpenBciSource.cpp
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #ifdef __unix__
 #    include "lpl/bci/core/Constants.hpp"
 #    include "lpl/bci/source/OpenBciSource.hpp"
@@ -22,27 +12,26 @@
 
 namespace lpl::bci {
 
-using namespace bci::source;
-using namespace bci;
-
+/**
+ * @brief Reads one packet whose channel bytes are all zero.
+ */
 TEST_CASE("OpenBciSource reads one packet", "[source][openbci]")
 {
     int master, slave;
     char slaveName[100];
     REQUIRE(openpty(&master, &slave, slaveName, nullptr, nullptr) == 0);
 
-    OpenBciConfig cfg;
+    lpl::bci::source::OpenBciConfig cfg;
     cfg.port = slaveName;
     cfg.channelCount = 2;
     cfg.baudRate = kCytonBaudRate;
 
-    OpenBciSource src(cfg);
+    lpl::bci::source::OpenBciSource src(cfg);
     REQUIRE(src.start().has_value());
 
     std::array<uint8_t, kCytonPacketSize> pkt{};
     pkt[0] = kCytonHeaderByte;
     pkt[1] = 123;
-    // remaining bytes left zero
     pkt[kCytonPacketSize - 1] = kCytonFooterByte;
 
     ::write(master, pkt.data(), pkt.size());

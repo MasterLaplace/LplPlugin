@@ -1,9 +1,3 @@
-/**
- * @file BandExtractor.cpp
- * @brief Implementation of the frequency band power extractor.
- * @author MasterLaplace
- */
-
 #include "lpl/bci/dsp/BandExtractor.hpp"
 
 #include <algorithm>

@@ -1,13 +1,3 @@
-/**
- * @file CsvReplaySource.cpp
- * @brief Implementation of the CSV file replay acquisition source.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @date 2026-02-26
- * @copyright MIT License
- */
-
 #include "lpl/bci/source/CsvReplaySource.hpp"
 
 #include <algorithm>
@@ -135,7 +125,6 @@ Expected<void> CsvReplaySource::loadCsv()
 
         while (std::getline(ss, token, ','))
         {
-            // Use strtof instead of stof to avoid exceptions
             char *end = nullptr;
             errno = 0;
             float val = std::strtof(token.c_str(), &end);

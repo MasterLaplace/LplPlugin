@@ -1,8 +1,3 @@
-/**
- * @file TestOpenViBe.cpp
- * @brief Unit tests for bci::openvibe processors.
- */
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -11,17 +6,14 @@
 
 namespace lpl::bci {
 
-using namespace bci::openvibe;
-using Catch::Matchers::WithinAbs;
-
 TEST_CASE("MuscleRelaxationBox computes gamma ratio", "[openvibe][muscle]")
 {
-    MuscleRelaxationConfig config;
+    lpl::bci::openvibe::MuscleRelaxationConfig config;
     config.sampleRate = 250.0f;
     config.fftSize = 256;
     config.alertThreshold = 0.5f;
 
-    MuscleRelaxationBox box(config);
+    lpl::bci::openvibe::MuscleRelaxationBox box(config);
 
     std::vector<std::vector<float>> psd(2, std::vector<float>(129, 0.01f));
 
@@ -31,10 +23,10 @@ TEST_CASE("MuscleRelaxationBox computes gamma ratio", "[openvibe][muscle]")
 
 TEST_CASE("MuscleRelaxationBox alerts on high gamma", "[openvibe][muscle]")
 {
-    MuscleRelaxationConfig config;
+    lpl::bci::openvibe::MuscleRelaxationConfig config;
     config.alertThreshold = 0.1f;
 
-    MuscleRelaxationBox box(config);
+    lpl::bci::openvibe::MuscleRelaxationBox box(config);
 
     std::vector<std::vector<float>> psd(1, std::vector<float>(129, 10.0f));
 
@@ -44,19 +36,19 @@ TEST_CASE("MuscleRelaxationBox alerts on high gamma", "[openvibe][muscle]")
 
 TEST_CASE("StabilityMonitorBox initial update returns default stability", "[openvibe][stability]")
 {
-    StabilityMonitorBox box;
+    lpl::bci::openvibe::StabilityMonitorBox box;
 
     Eigen::MatrixXf spd(2, 2);
     spd << 3, 1, 1, 3;
 
     auto result = box.update(spd);
     REQUIRE(result.has_value());
-    REQUIRE_THAT(static_cast<double>(result->smoothedStability), WithinAbs(0.5, 0.1));
+    REQUIRE_THAT(static_cast<double>(result->smoothedStability), Catch::Matchers::WithinAbs(0.5, 0.1));
 }
 
 TEST_CASE("StabilityMonitorBox stability converges for identical matrices", "[openvibe][stability]")
 {
-    StabilityMonitorBox box;
+    lpl::bci::openvibe::StabilityMonitorBox box;
 
     Eigen::MatrixXf spd(2, 2);
     spd << 3, 1, 1, 3;
@@ -72,7 +64,7 @@ TEST_CASE("StabilityMonitorBox stability converges for identical matrices", "[op
 
 TEST_CASE("StabilityMonitorBox reset returns to default", "[openvibe][stability]")
 {
-    StabilityMonitorBox box;
+    lpl::bci::openvibe::StabilityMonitorBox box;
 
     Eigen::MatrixXf spd(2, 2);
     spd << 3, 1, 1, 3;
@@ -81,7 +73,7 @@ TEST_CASE("StabilityMonitorBox reset returns to default", "[openvibe][stability]
     REQUIRE(res.has_value());
     box.reset();
 
-    REQUIRE_THAT(static_cast<double>(box.stability()), WithinAbs(0.5, 1e-5));
+    REQUIRE_THAT(static_cast<double>(box.stability()), Catch::Matchers::WithinAbs(0.5, 1e-5));
 }
 
 } // namespace lpl::bci
