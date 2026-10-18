@@ -194,6 +194,10 @@ public:
     /**
      * @brief Reads the host's settings, generates the world, and registers the creature systems.
      *
+     * A recipe whose grid is wider than kMaxSize is refused before anything is read
+     * or generated: the budgets are the kernel's, and a grid past them does not fit
+     * its heap.
+     *
      * The presentation knobs come from the Config, not from constants in this
      * file: how many LOD rings, how far props are drawn, whether the terrain
      * casts shadows and how many chunk masks a tick may refresh, which surface
@@ -244,6 +248,8 @@ public:
      * overwrites the scent impulse — the pack stops flanking, and nothing else
      * says why. This order used to be written out twice, here and in the map
      * viewer, and neither copy could tell you it was the same order.
+     *
+     * @return An error when the recipe's grid is wider than kMaxSize.
      */
     [[nodiscard]] inline core::Expected<void> onInit(engine::WorldContext &context) override;
 
@@ -365,7 +371,7 @@ private:
      * already rasterizes at a usable rate in QEMU.
      * @{
      */
-    /** Upper bound on the grid a cartridge may ask for, so the budgets hold. */
+    /** Upper bound on the grid a cartridge may ask for, so the budgets hold: onInit refuses a wider one. */
     static constexpr core::u32 kMaxSize = 96u;
     static constexpr core::u32 kRenderWidth = 480u;
     static constexpr core::u32 kRenderHeight = 300u;

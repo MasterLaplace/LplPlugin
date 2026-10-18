@@ -31,6 +31,9 @@ inline math::ReliefField makeRealReliefField(const procgen::WorldRecipe &recipe,
 
 inline core::Expected<void> TerrainWorld::onInit(engine::WorldContext &context)
 {
+    if (_recipe.width > kMaxSize || _recipe.depth > kMaxSize)
+        return core::makeError(core::ErrorCode::InvalidArgument, "TerrainWorld: the grid is wider than kMaxSize");
+
     _lodRings = context.config.lodRings();
     _viewDistance = context.config.viewDistance() > 0.0f ? context.config.viewDistance() : kPlantFarDistance;
     _terrainShadows = context.config.enableTerrainShadows();

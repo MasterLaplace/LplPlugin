@@ -101,6 +101,31 @@ void checkAGrazedPlantGrowsBack()
     check("a plant stands there again once its regrowth ran out", world.consumePlantAt(x, z));
 }
 
+/**
+ * @brief A recipe whose grid is wider than the world's budget is refused, on either axis.
+ *
+ * @details TerrainWorld::kMaxSize, 96, was documented as the upper bound on the grid a cartridge may ask for, and
+ *          nothing read it: a 97-cell grid was generated like any other. Both axes are tried, each with the other at
+ *          the parity size, so one test cannot pass on the branch the other exercises.
+ */
+void checkAGridPastTheBudgetIsRefused()
+{
+    std::printf("-- a grid past the budget is refused\n");
+    constexpr lpl::core::u32 kOnePastTheBudget = 97u;
+
+    lpl::procgen::WorldRecipe wide = lpl::procgen::parityWorldRecipe();
+    wide.width = kOnePastTheBudget;
+    Host wideHost;
+    lpl::samples::TerrainWorld wideWorld{wide};
+    check("a grid one cell too wide is refused", !wideWorld.onInit(wideHost.context).has_value());
+
+    lpl::procgen::WorldRecipe deep = lpl::procgen::parityWorldRecipe();
+    deep.depth = kOnePastTheBudget;
+    Host deepHost;
+    lpl::samples::TerrainWorld deepWorld{deep};
+    check("a grid one cell too deep is refused", !deepWorld.onInit(deepHost.context).has_value());
+}
+
 } // namespace
 
 /**
@@ -114,6 +139,7 @@ int main()
     std::printf("== the terrain world ==\n");
 
     checkAGrazedPlantGrowsBack();
+    checkAGridPastTheBudgetIsRefused();
 
     std::printf("\n%s (%d failures, %d checks)\n", gFailures == 0 ? "ALL PASS" : "FAILURES", gFailures, gChecks);
     return gFailures == 0 ? 0 : 1;
