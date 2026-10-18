@@ -1,12 +1,3 @@
-/**
- * @file Transfer.cpp
- * @brief The ramp, and the rescaling that keeps it meaning the same thing at every level.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/voxel/Transfer.hpp>
 
 namespace lpl::voxel {
@@ -15,6 +6,17 @@ namespace {
 
 constexpr core::f32 clamp01(core::f32 v) noexcept { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
+/**
+ * @brief Fills @p tf with the ramp from @p lowEdge to @p highEdge, and records the three.
+ *
+ * Smoothstep rather than linear: the edge of a sheet is where the scan is least certain,
+ * and a linear ramp puts its steepest change exactly there. This puts the steep part in
+ * the middle of the band, where the samples are least ambiguous.
+ *
+ * Cold and dim in the medium, warm and bright on a sheet. Two ends of one hue rather
+ * than a rainbow: a colour scale that runs through hues invites the reader to see
+ * categories the data does not have.
+ */
 void fill(TransferFunction &tf, core::f32 lowEdge, core::f32 highEdge, core::f32 peakAlpha) noexcept
 {
     if (highEdge <= lowEdge)
@@ -27,15 +29,9 @@ void fill(TransferFunction &tf, core::f32 lowEdge, core::f32 highEdge, core::f32
     for (core::u32 v = 0u; v < 256u; ++v)
     {
         const core::f32 t = clamp01((static_cast<core::f32>(v) - lowEdge) / (highEdge - lowEdge));
-        // Smoothstep rather than linear: the edge of a sheet is where the scan is least certain,
-        // and a linear ramp puts its steepest change exactly there. This puts the steep part in
-        // the middle of the band, where the samples are least ambiguous.
         const core::f32 s = t * t * (3.0f - 2.0f * t);
 
         tf.alpha[v] = s * peakAlpha;
-        // Cold and dim in the medium, warm and bright on a sheet. Two ends of one hue rather
-        // than a rainbow: a colour scale that runs through hues invites the reader to see
-        // categories the data does not have.
         tf.red[v] = 0.32f + 0.68f * s;
         tf.green[v] = 0.30f + 0.52f * s;
         tf.blue[v] = 0.34f + 0.20f * s;
@@ -61,8 +57,6 @@ core::f32 transparencyAfter(core::f32 perSample, core::f32 samples) noexcept
     if (perSample >= 1.0f)
         return 0.0f;
 
-    // Repeated squaring on the whole samples. An exp/log pair would be one line and would put a
-    // transcendental on the hot path of every sample, which this tree does not spend.
     const core::f32 keep = 1.0f - perSample;
     core::f32 left = 1.0f;
     core::f32 power = keep;
@@ -85,8 +79,6 @@ core::f32 alphaForOpaqueAfter(core::f32 samples, core::f32 opacity) noexcept
     if (opacity >= 1.0f)
         return 1.0f;
 
-    // Solve 1 - (1-a)^n = opacity for a, by bisection. A log/exp pair would be shorter and would
-    // put a transcendental in a module that is otherwise free of them; this runs once, at setup.
     core::f32 lo = 0.0f;
     core::f32 hi = 1.0f;
     for (int i = 0; i < 40; ++i)
@@ -109,9 +101,6 @@ TransferFunction TransferFunction::forLevel(const DensityProfile &profile, core:
     if (!(ratio > 0.0f) || ratio >= 1.0f)
         return *this;
 
-    // Squeeze the window toward the mean by the measured ratio: the samples have moved toward the
-    // mean, so the window has to move with them to keep the same matter visible. The edges are the
-    // stored ones.
     const core::f32 m = profile.mean;
     TransferFunction scaled{};
     fill(scaled, m + (lowEdge - m) * ratio, m + (highEdge - m) * ratio, peakAlpha);

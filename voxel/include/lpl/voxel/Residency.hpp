@@ -33,10 +33,10 @@ namespace lpl::voxel {
  * @brief How much detail, how far out, and how much of it may be held.
  */
 struct ResidencyParams final {
-    core::u32 finestLevel{0u};   ///< Best level anybody may ask for.
-    core::u32 coarsestLevel{5u}; ///< Level that covers the whole subject; always resident.
-    core::i32 ringRadius{2};     ///< Bricks around the eye, per level, in each direction.
-    core::u32 budget{256u};      ///< Hard cap on emitted requests.
+    core::u32 finestLevel{0u};   /**< Best level anybody may ask for. */
+    core::u32 coarsestLevel{5u}; /**< Level that covers the whole subject; always resident. */
+    core::i32 ringRadius{2};     /**< Bricks around the eye, per level, in each direction. */
+    core::u32 budget{256u};      /**< Hard cap on emitted requests. */
 };
 
 /**
@@ -46,6 +46,13 @@ struct ResidencyParams final {
  * finest levels cover the near field and the coarsest one still covers the whole subject. That is
  * what makes the far field cost almost nothing -- a coarse brick spans 2^level times more of the
  * world for the same two mebibytes.
+ *
+ * Shell by shell, and inside a shell every level: at radius zero that is the column straight
+ * through the eye at every resolution, so a truncated plan still has something everywhere and
+ * full detail underfoot. Emitting level by level instead would spend the whole budget on the
+ * finest level and leave the far field blank; emitting outward-in would drop the near field.
+ * Each radius emits only its shell: the interior was emitted by a smaller radius, and
+ * re-emitting it would let one duplicate push a real brick past the budget.
  *
  * @param geometry  The subject; bricks outside it are never requested.
  * @param params    Budget and reach.

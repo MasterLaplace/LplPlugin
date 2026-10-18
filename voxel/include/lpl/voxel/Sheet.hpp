@@ -51,66 +51,82 @@ namespace lpl::voxel {
  * The defaults are the ones this project measured while following real sheets, not preferences.
  */
 struct SheetTraceParams final {
+    /**
+     * Step length in level-0 samples. Longer than a sample steps over the structure being
+     * followed; much shorter pays for recentring that finds nothing new.
+     */
     core::f32 step{1.0f};
-    /**< Step length in level-0 samples. Longer than a sample steps over the structure being
-         followed; much shorter pays for recentring that finds nothing new. */
 
+    /**
+     * Window radius of the structure tensor, in samples. Too small and noise orients the normal;
+     * too large and the window spans two sheets, so the normal becomes their average.
+     */
     core::i32 tensorRadius{2};
-    /**< Window radius of the structure tensor, in samples. Too small and noise orients the normal;
-         too large and the window spans two sheets, so the normal becomes their average. */
 
+    /**
+     * @warning The safety property. Beyond this, a recentring is not a correction -- it is a
+     * change of sheet, and the walk stops rather than produce a smooth plausible lie.
+     *
+     * A crest found at the very edge of @ref searchRadius, with the field still rising there, is
+     * refused the same way whatever this says: the crest is farther than the search could see,
+     * and the walk would only have moved to the edge of its window. Under the defaults, where
+     * this equals the search radius and no correction can exceed it, that edge is the refusal
+     * that fires.
+     *
+     * ⚠ **The number that actually bounds safety is half the local spacing between sheets, and
+     * this is far below it on purpose.** On a Herculaneum roll the spacing is about 38 samples
+     * at 7.91 um, so anything under 19 cannot reach the neighbour; three is six times
+     * conservative. It is not two, which is the value this project's Python tracer uses,
+     * because that tracer runs on a smoothed PREDICTION and this one runs on the raw scan,
+     * where the ridge maximum jitters more. Measured (PR #207, 2026-10-03): at two, every row of
+     * a real patch ended "would have jumped" and the patch came back empty; at three, all
+     * sixty-six rows ran to their full length. That run still accepted a crest at the edge of
+     * the window, which is refused now. A limit tuned on one field is not a limit on another.
+     */
     core::f32 maximumRecentre{3.0f};
-    /**< @warning The safety property. Beyond this, a recentring is not a correction -- it is a
-         change of sheet, and the walk stops rather than produce a smooth plausible lie.
 
-         A crest found at the very edge of @ref searchRadius, with the field still rising there, is
-         refused the same way whatever this says: the crest is farther than the search could see,
-         and the walk would only have moved to the edge of its window. Under the defaults, where
-         this equals the search radius and no correction can exceed it, that edge is the refusal
-         that fires.
-
-         ⚠ **The number that actually bounds safety is half the local spacing between sheets, and
-         this is far below it on purpose.** On a Herculaneum roll the spacing is about 38 samples
-         at 7.91 um, so anything under 19 cannot reach the neighbour; three is six times
-         conservative. It is not two, which is the value this project's Python tracer uses,
-         because that tracer runs on a smoothed PREDICTION and this one runs on the raw scan,
-         where the ridge maximum jitters more. Measured (PR #207, 2026-10-03): at two, every row of
-         a real patch ended "would have jumped" and the patch came back empty; at three, all
-         sixty-six rows ran to their full length. That run still accepted a crest at the edge of
-         the window, which is refused now. A limit tuned on one field is not a limit on another. */
-
+    /**
+     * How far along the normal to look for the ridge when recentring, once the walk is on it, in
+     * whole samples: the fraction is dropped.
+     */
     core::f32 searchRadius{3.0f};
-    /**< How far along the normal to look for the ridge when recentring, once the walk is on it, in
-         whole samples: the fraction is dropped. */
 
+    /**
+     * @warning **Finding the sheet and staying on it are different problems, and using one radius
+     * for both makes the tracer useless on real data.** A seed dropped at an arbitrary point sits
+     * on average a third of the spacing away from any ridge -- about ten samples on a Herculaneum
+     * roll -- so a three-sample search finds nothing, the walk starts in the medium and stops on
+     * its first step. Measured (PR #207, 2026-10-03): with the step radius used for the seed,
+     * every row of a real patch ended "left the matter" and the patch came back empty. This
+     * radius applies to the FIRST snap only, and never searches less than @ref searchRadius;
+     * afterwards the tight one is what keeps the walk from wandering to a neighbour.
+     */
     core::f32 seedSearchRadius{10.0f};
-    /**< @warning **Finding the sheet and staying on it are different problems, and using one radius
-         for both makes the tracer useless on real data.** A seed dropped at an arbitrary point sits
-         on average a third of the spacing away from any ridge -- about ten samples on a Herculaneum
-         roll -- so a three-sample search finds nothing, the walk starts in the medium and stops on
-         its first step. Measured (PR #207, 2026-10-03): with the step radius used for the seed,
-         every row of a real patch ended "left the matter" and the patch came back empty. This
-         radius applies to the FIRST snap only, and never searches less than @ref searchRadius;
-         afterwards the tight one is what keeps the walk from wandering to a neighbour. */
 
+    /**
+     * Below this the walk stops: it has left the matter. Zero, the default, never stops a walk;
+     * set it from the scan, as @ref DensityProfile::floorSample is.
+     */
     core::u8 floorSample{0u};
-    /**< Below this the walk stops: it has left the matter. Zero, the default, never stops a walk;
-         set it from the scan, as @ref DensityProfile::floorSample is. */
 
+    /**
+     * Most points one walk writes, the seed included; the capacity it is given bounds it too.
+     * Zero still writes the seed.
+     */
     core::u32 maximumSteps{4096u};
-    /**< Most points one walk writes, the seed included; the capacity it is given bounds it too.
-         Zero still writes the seed. */
 
+    /**
+     * Radius, in samples, of the average taken when looking for the ridge.
+     *
+     * @warning **The jitter this removes is in the FIELD, not in the surface.** A tomographic
+     * ridge wobbles by a sample from one position to the next simply because the samples are
+     * noisy, and a recentring that chases every wobble writes that noise into the geometry: rows
+     * traced side by side then disagree by a few samples and the patch comes out corrugated,
+     * which reads as a crumpled sheet. Averaging a small window before looking for the maximum
+     * is not smoothing the result -- it is asking the question of a less noisy field. Zero turns
+     * it off.
+     */
     core::i32 ridgeSmoothing{1};
-    /**< Radius, in samples, of the average taken when looking for the ridge.
-
-         @warning **The jitter this removes is in the FIELD, not in the surface.** A tomographic
-         ridge wobbles by a sample from one position to the next simply because the samples are
-         noisy, and a recentring that chases every wobble writes that noise into the geometry: rows
-         traced side by side then disagree by a few samples and the patch comes out corrugated,
-         which reads as a crumpled sheet. Averaging a small window before looking for the maximum
-         is not smoothing the result -- it is asking the question of a less noisy field. Zero turns
-         it off. */
 };
 
 /**
@@ -118,15 +134,18 @@ struct SheetTraceParams final {
  * @brief Why a trace ended. Every reason is distinct because they mean different things.
  */
 enum class SheetStop : core::u8 {
-    Budget = 0,   ///< Ran out of steps. The sheet probably continues.
-    LeftMatter,   ///< Fell below the floor: the sheet ended, or the walk fell off it.
-    LeftResident, ///< Walked out of the bricks in memory. Not a fact about the scroll.
-    WouldJump,    ///< Recentring exceeded the limit, or found the crest beyond its search window.
-                  ///< **The sheet is still there; the walk refused.**
-    Degenerate,   ///< No usable normal: the field is flat here.
+    Budget = 0,   /**< Ran out of steps. The sheet probably continues. */
+    LeftMatter,   /**< Fell below the floor: the sheet ended, or the walk fell off it. */
+    LeftResident, /**< Walked out of the bricks in memory. Not a fact about the scroll. */
+    /**
+     * Recentring exceeded the limit, or found the crest beyond its search window.
+     * **The sheet is still there; the walk refused.**
+     */
+    WouldJump,
+    Degenerate, /**< No usable normal: the field is flat here. */
 };
 
-/// How many reasons @ref SheetStop names, for a table indexed by a SheetStop. Degenerate stays the last.
+/** How many reasons @ref SheetStop names, for a table indexed by a SheetStop. Degenerate stays the last. */
 inline constexpr core::u32 kSheetStopCount = static_cast<core::u32>(SheetStop::Degenerate) + 1u;
 
 /**
@@ -134,10 +153,10 @@ inline constexpr core::u32 kSheetStopCount = static_cast<core::u32>(SheetStop::D
  * @brief A traced path along one surface, and what happened to it.
  */
 struct SheetTrace final {
-    core::u32 count{0};            ///< Points written.
-    core::u32 recentrings{0};      ///< Steps that were pulled back onto the ridge.
-    core::u32 refusedJumps{0};     ///< Steps refused as sheet changes. Non-zero is informative, not a fault.
-    core::f32 totalRecentre{0.0f}; ///< Sum of recentring distances; the average says how well it fits.
+    core::u32 count{0};            /**< Points written. */
+    core::u32 recentrings{0};      /**< Steps that were pulled back onto the ridge. */
+    core::u32 refusedJumps{0};     /**< Steps refused as sheet changes. Non-zero is informative, not a fault. */
+    core::f32 totalRecentre{0.0f}; /**< Sum of recentring distances; the average says how well it fits. */
     SheetStop stop{SheetStop::Budget};
 };
 
@@ -154,6 +173,9 @@ struct SheetTrace final {
  * @return The points written and why the walk ended. No point at all, with @ref SheetStop::Degenerate,
  *         when @p heading is zero or the seed has no usable normal. Nothing either when @p out is
  *         null or @p capacity zero, and the stop, Budget, then means nothing.
+ *
+ * The seed is snapped with a WIDER search than the steps: finding the sheet and staying on it are
+ * different problems. See SheetTraceParams::seedSearchRadius.
  */
 [[nodiscard]] SheetTrace traceSheet(const BrickMosaic &mosaic, const math::Vec3<core::f32> &seed,
                                     const math::Vec3<core::f32> &heading, const SheetTraceParams &params,
@@ -167,6 +189,11 @@ struct SheetTrace final {
  * dominant eigenvector, which is stable exactly where the plain difference is not. The eigenvector
  * comes from power iteration rather than a closed form: no libm, and the answer is a direction, so
  * the sign is arbitrary and the caller must not read meaning into it.
+ *
+ * A closed form would need a cube root; the iteration needs multiplication and one square root a
+ * pass. It starts from a column of the tensor rather than a fixed direction: a fixed start that
+ * happens to be orthogonal to the normal multiplies into nothing. A neighbour that is not resident
+ * contributes nothing to the tensor rather than a false cliff.
  *
  * @return Whether a usable normal was found.
  */
@@ -185,7 +212,7 @@ struct SheetPatch final {
     core::u32 columns{0};
     core::u32 rows{0};
     core::u32 refusedJumps{0};
-    core::u32 shortRows{0}; ///< Rows that ended before the full width: the patch has a ragged edge.
+    core::u32 shortRows{0}; /**< Rows that ended before the full width: the patch has a ragged edge. */
 
     /**
      * How many walks ended for each reason, indexed by @ref SheetStop: two per row, and two for the
@@ -197,17 +224,28 @@ struct SheetPatch final {
      * the operator to guess, which is the thing this project keeps paying for.
      */
     core::u32 stops[kSheetStopCount]{};
-    /// Row-major, @ref rows * @ref columns points. Rows shorter than @ref columns are padded with
-    /// the last point they reached, and counted in @ref shortRows rather than left undefined.
+
+    /**
+     * Row-major, @ref rows * @ref columns points. Rows shorter than @ref columns are padded with
+     * the last point they reached, and counted in @ref shortRows rather than left undefined.
+     */
     math::Vec3<core::f32> *points{nullptr};
 
-    /// @pre @p row < @ref rows and @p column < @ref columns.
+    /**
+     * @brief The point at @p row and @p column.
+     *
+     * @pre @p row < @ref rows and @p column < @ref columns.
+     */
     [[nodiscard]] const math::Vec3<core::f32> &at(core::u32 row, core::u32 column) const noexcept
     {
         return points[static_cast<core::usize>(row) * columns + column];
     }
 
-    /// @pre @p row < @ref rows and @p column < @ref columns.
+    /**
+     * @brief The point at @p row and @p column, to write.
+     *
+     * @pre @p row < @ref rows and @p column < @ref columns.
+     */
     [[nodiscard]] math::Vec3<core::f32> &at(core::u32 row, core::u32 column) noexcept
     {
         return points[static_cast<core::usize>(row) * columns + column];
@@ -227,6 +265,24 @@ struct SheetPatch final {
  * @param out       Storage for @p rows * @p columns points, owned by the caller.
  * @return The patch, pointing into @p out; an empty one (no rows, no columns, null points) when
  *         @p out is null, a dimension is zero, or the seed has no usable normal.
+ *
+ * @warning The dimensions are published only once something has been written into them. An earlier
+ * version (PR #207, 2026-10-03) set them first and returned early when the seed had no normal, which handed back a
+ * patch that reported its full size with every point left at the origin -- a surface that
+ * looks valid, sits at the corner of the volume, and is entirely fictional.
+ *
+ * @warning **Every seed is reached by WALKING, never by stepping in a straight line.** A first
+ * version (PR #207, 2026-10-03) placed each row's start at a straight offset from the seed, and on a sheet with any
+ * curvature at all that lands in the medium a few samples away -- so the walk found no normal,
+ * returned nothing, and each row was padded with its own start. The patch came out as a grid
+ * of duplicated points: a surface with zero area that reported a full size and, on the fixture
+ * it was tested against, sat exactly on the sheet by coincidence of where the seed was. The
+ * test passed. Growing the patch by tracing is not a refinement; it is the only way the seeds
+ * stay on the surface.
+ *
+ * The row starts are walked into out[0, rows), row r's start at out[r]. Rows are then traced
+ * from the last to the first: row r fills out[r * columns, (r + 1) * columns), which begins at
+ * or after out[r], so it never covers a start still to be read -- those are below out[r].
  */
 [[nodiscard]] SheetPatch traceSheetPatch(const BrickMosaic &mosaic, const math::Vec3<core::f32> &seed,
                                          const SheetTraceParams &params, core::u32 rows, core::u32 columns,
@@ -283,6 +339,10 @@ void relaxPatch(SheetPatch &patch, core::f32 strength, core::u32 iterations) noe
  * off the crest and relaxed here, four passes at half strength, comes out at 0.30 (the test prints
  * both, 2026-10-03): this smooths a patch rougher than that, and roughens a smoother one, while
  * putting it back on the crest either way.
+ *
+ * Back onto the crest after every pass, and the search is TIGHT -- a wide one here would let a
+ * point that the smoothing nudged toward the neighbouring sheet settle on it, which is the
+ * jump this whole file exists to refuse, arriving by the back door.
  */
 void relaxPatchOnRidge(const BrickMosaic &mosaic, SheetPatch &patch, const SheetTraceParams &params, core::f32 strength,
                        core::u32 iterations) noexcept;

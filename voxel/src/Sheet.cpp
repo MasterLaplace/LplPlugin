@@ -1,12 +1,3 @@
-/**
- * @file Sheet.cpp
- * @brief Structure tensor, parabolic recentring, and the refusal that keeps a walk honest.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/std/cmath.hpp>
 #include <lpl/std/vector.hpp>
 #include <lpl/voxel/Sheet.hpp>
@@ -18,7 +9,9 @@ namespace lpl::voxel {
 
 namespace {
 
-/// Nearest sample, or -1 where nothing is resident. Negative is distinguishable from any density.
+/**
+ * @brief Nearest sample, or -1 where nothing is resident. Negative is distinguishable from any density.
+ */
 [[nodiscard]] core::f32 sampleAt(const BrickMosaic &mosaic, const math::Vec3<core::f32> &point) noexcept
 {
     const std::optional<core::u8> sample =
@@ -26,7 +19,11 @@ namespace {
     return sample.has_value() ? static_cast<core::f32>(*sample) : -1.0f;
 }
 
-/// Field value averaged over a small window: the same question, asked of a less noisy field.
+/**
+ * @brief Field value averaged over a small window: the same question, asked of a less noisy field.
+ *
+ * A missing neighbour contributes nothing rather than a false zero.
+ */
 [[nodiscard]] core::f32 smoothedSample(const BrickMosaic &mosaic, const math::Vec3<core::f32> &point,
                                        core::i32 radius) noexcept
 {
@@ -44,7 +41,7 @@ namespace {
                                                    static_cast<core::f32>(dz)};
                 const core::f32 v = sampleAt(mosaic, point + offset);
                 if (v < 0.0f)
-                    continue; // A missing neighbour contributes nothing rather than a false zero.
+                    continue;
                 total += v;
                 ++count;
             }
@@ -61,7 +58,9 @@ namespace {
     return true;
 }
 
-/// The central difference at @p point, or nothing when a neighbour is not resident.
+/**
+ * @brief The central difference at @p point, or nothing when a neighbour is not resident.
+ */
 [[nodiscard]] std::optional<math::Vec3<core::f32>> centralGradient(const BrickMosaic &mosaic,
                                                                    const math::Vec3<core::f32> &point) noexcept
 {
@@ -79,7 +78,7 @@ namespace {
     return math::Vec3<core::f32>{xp - xm, yp - ym, zp - zm};
 }
 
-/// The outer product of the gradient with itself, summed over a window. Symmetric: six terms.
+/** The outer product of the gradient with itself, summed over a window. Symmetric: six terms. */
 struct StructureTensor final {
     core::f32 xx{0.0f};
     core::f32 xy{0.0f};
@@ -105,8 +104,10 @@ struct StructureTensor final {
         return {xx * v.x + xy * v.y + xz * v.z, xy * v.x + yy * v.y + yz * v.z, xz * v.x + yz * v.y + zz * v.z};
     }
 
-    /// The column whose diagonal entry is largest: never zero when the trace is not, and never
-    /// orthogonal to the dominant eigenvector of a tensor that has one clear direction.
+    /**
+     * @brief The column whose diagonal entry is largest: never zero when the trace is not, and never
+     * orthogonal to the dominant eigenvector of a tensor that has one clear direction.
+     */
     [[nodiscard]] math::Vec3<core::f32> heaviestColumn() const noexcept
     {
         if (xx >= yy && xx >= zz)
@@ -117,69 +118,20 @@ struct StructureTensor final {
     }
 };
 
-} // namespace
-
-bool sheetNormal(const BrickMosaic &mosaic, const math::Vec3<core::f32> &at, core::i32 radius,
-                 math::Vec3<core::f32> &outNormal) noexcept
-{
-    if (radius < 1)
-        radius = 1;
-
-    // The structure tensor's dominant eigenvector is the direction the field changes fastest in,
-    // which across a sheet is its normal -- and unlike a single finite difference it does not wander
-    // with noise inside the matter, which is exactly where a walk needs it.
-    StructureTensor tensor{};
-    core::u32 samples = 0u;
-    for (core::i32 dz = -radius; dz <= radius; ++dz)
-    {
-        for (core::i32 dy = -radius; dy <= radius; ++dy)
-        {
-            for (core::i32 dx = -radius; dx <= radius; ++dx)
-            {
-                const math::Vec3<core::f32> offset{static_cast<core::f32>(dx), static_cast<core::f32>(dy),
-                                                   static_cast<core::f32>(dz)};
-                const std::optional<math::Vec3<core::f32>> gradient = centralGradient(mosaic, at + offset);
-                if (!gradient.has_value())
-                    continue; // A missing neighbour contributes nothing rather than a false cliff.
-                tensor.accumulate(*gradient);
-                ++samples;
-            }
-        }
-    }
-    if (samples == 0u || tensor.trace() < 1e-6f)
-        return false;
-
-    // Power iteration for the dominant eigenvector. A closed form would need a cube root; this
-    // needs multiplication and one square root a pass, and the answer is a direction so its sign
-    // is arbitrary.
-    // It starts from a column of the tensor rather than a fixed direction: a fixed start that
-    // happens to be orthogonal to the normal multiplies into nothing.
-    math::Vec3<core::f32> direction = tensor.heaviestColumn();
-    if (!normaliseInPlace(direction))
-        return false;
-    for (int i = 0; i < 24; ++i)
-    {
-        direction = tensor.times(direction);
-        if (!normaliseInPlace(direction))
-            return false;
-    }
-    outNormal = direction;
-    return true;
-}
-
-namespace {
-
-/// How far a recentring moved a point, and whether the crest was within the window searched.
+/** How far a recentring moved a point, and whether the crest was within the window searched. */
 struct Recentring final {
-    core::f32 distance{-1.0f};     ///< Along the normal. Negative when nothing in the window is resident.
-    bool crestBeyondWindow{false}; ///< The field still rises at the edge it moved to: the crest is farther.
+    core::f32 distance{-1.0f};     /**< Along the normal. Negative when nothing in the window is resident. */
+    bool crestBeyondWindow{false}; /**< The field still rises at the edge it moved to: the crest is farther. */
 };
 
 /**
- * Slides @p point along @p normal onto the local ridge, sub-sample by parabolic fit.
+ * @brief Slides @p point along @p normal onto the local ridge, sub-sample by parabolic fit.
  *
  * Only whole offsets up to @p searchRadius are looked at. A maximum at the last of them, still
  * rising, is reported as beyond the window: the point moves to that edge, and the crest is farther.
+ *
+ * The parabola goes through the peak and its two neighbours. Without it the walk quantises to
+ * whole samples and drifts off the sheet a fraction at a time.
  */
 [[nodiscard]] Recentring recentre(const BrickMosaic &mosaic, math::Vec3<core::f32> &point,
                                   const math::Vec3<core::f32> &normal, core::f32 searchRadius,
@@ -213,8 +165,6 @@ struct Recentring final {
     }
     else
     {
-        // Sub-sample by fitting a parabola through the peak and its two neighbours. Without it the
-        // walk quantises to whole samples and drifts off the sheet a fraction at a time.
         const core::f32 a = sampleAlong(offset - 1.0f);
         const core::f32 c = sampleAlong(offset + 1.0f);
         const core::f32 denominator = a - 2.0f * bestValue + c;
@@ -232,6 +182,8 @@ struct Recentring final {
 }
 
 /**
+ * @brief Tells whether a recentring is a change of sheet.
+ *
  * ⚠ The safety property. A correction of a fraction of a sample is a follow; a correction the
  * size of an interline is a change of sheet, and the path it produces is smooth, plausible and
  * about the wrong surface. A crest beyond the search window is the same change of sheet, seen
@@ -242,7 +194,9 @@ struct Recentring final {
     return recentring.crestBeyondWindow || recentring.distance > params.maximumRecentre;
 }
 
-/// Projects @p direction into the plane normal to @p normal. False when nothing of it is left.
+/**
+ * @brief Projects @p direction into the plane normal to @p normal. False when nothing of it is left.
+ */
 [[nodiscard]] bool projectIntoPlane(math::Vec3<core::f32> &direction, const math::Vec3<core::f32> &normal) noexcept
 {
     math::Vec3<core::f32> inPlane = direction - normal * direction.dot(normal);
@@ -252,15 +206,19 @@ struct Recentring final {
     return true;
 }
 
-/// Where one step of a walk landed and how far recentring pulled it, or why the walk stops there.
+/** Where one step of a walk landed and how far recentring pulled it, or why the walk stops there. */
 struct Step final {
     math::Vec3<core::f32> landing{};
     core::f32 pull{0.0f};
     std::optional<SheetStop> stop{};
 };
 
-/// One step from @p from along @p direction, which is re-projected into the sheet plane first and
-/// left there for the next step.
+/**
+ * @brief One step from @p from along @p direction, which is re-projected into the sheet plane first and
+ * left there for the next step.
+ *
+ * The pull of a step that lands is never negative: the landing is resident, and the search samples it.
+ */
 [[nodiscard]] Step stepAlongSheet(const BrickMosaic &mosaic, const math::Vec3<core::f32> &from,
                                   math::Vec3<core::f32> &direction, const SheetTraceParams &params) noexcept
 {
@@ -282,66 +240,20 @@ struct Step final {
     if (sampleAt(mosaic, step.landing) < static_cast<core::f32>(params.floorSample))
         return Step{.stop = SheetStop::LeftMatter};
 
-    // Never negative here: the landing is resident, and the search samples it.
     step.pull = recentring.distance;
     return step;
 }
 
-} // namespace
-
-SheetTrace traceSheet(const BrickMosaic &mosaic, const math::Vec3<core::f32> &seed,
-                      const math::Vec3<core::f32> &heading, const SheetTraceParams &params, math::Vec3<core::f32> *out,
-                      core::u32 capacity) noexcept
-{
-    SheetTrace trace{};
-    if (out == nullptr || capacity == 0u)
-        return trace;
-
-    math::Vec3<core::f32> direction = heading;
-    math::Vec3<core::f32> normal{};
-    if (!normaliseInPlace(direction) || !sheetNormal(mosaic, seed, params.tensorRadius, normal))
-    {
-        trace.stop = SheetStop::Degenerate;
-        return trace;
-    }
-
-    // Snap onto the ridge before the first step, with a WIDER search: finding the sheet and
-    // staying on it are different problems. See SheetTraceParams::seedSearchRadius.
-    const core::f32 seedSearchRadius =
-        params.seedSearchRadius > params.searchRadius ? params.seedSearchRadius : params.searchRadius;
-    math::Vec3<core::f32> point = seed;
-    (void) recentre(mosaic, point, normal, seedSearchRadius, params.ridgeSmoothing);
-    out[trace.count++] = point;
-
-    const core::u32 limit = params.maximumSteps < capacity ? params.maximumSteps : capacity;
-    while (trace.count < limit)
-    {
-        const Step step = stepAlongSheet(mosaic, point, direction, params);
-        if (step.stop.has_value())
-        {
-            trace.stop = *step.stop;
-            if (trace.stop == SheetStop::WouldJump)
-                ++trace.refusedJumps;
-            return trace;
-        }
-        if (step.pull > 1e-4f)
-            ++trace.recentrings;
-        trace.totalRecentre += step.pull;
-        point = step.landing;
-        out[trace.count++] = point;
-    }
-    return trace;
-}
-
-namespace {
-
-/// Two unit vectors spanning the plane normal to @p normal. Which two is arbitrary: a sheet has no
-/// preferred direction.
+/**
+ * @brief Two unit vectors spanning the plane normal to @p normal. Which two is arbitrary: a sheet has no
+ * preferred direction.
+ *
+ * The normal is crossed with X, unless it is close to X: the cross product of two aligned vectors
+ * vanishes.
+ */
 [[nodiscard]] bool inPlaneBasis(const math::Vec3<core::f32> &normal, math::Vec3<core::f32> &first,
                                 math::Vec3<core::f32> &second) noexcept
 {
-    // Crossed with X, unless the normal is close to X: the cross product of two aligned vectors
-    // vanishes.
     const math::Vec3<core::f32> helper =
         (normal.x > 0.9f || normal.x < -0.9f) ? math::Vec3<core::f32>::unitY() : math::Vec3<core::f32>::unitX();
     first = normal.cross(helper);
@@ -351,7 +263,7 @@ namespace {
     return normaliseInPlace(second);
 }
 
-/// What walking a line both ways from its middle produced.
+/** What walking a line both ways from its middle produced. */
 struct LineWalk final {
     SheetTrace backward{};
     SheetTrace forward{};
@@ -359,7 +271,7 @@ struct LineWalk final {
 };
 
 /**
- * A backward walk is written from line[0] outward, and the line reads toward its middle: reverses
+ * @brief A backward walk is written from line[0] outward, and the line reads toward its middle: reverses
  * the @p count points written so the first lands on line[@p middle], and repeats the farthest one
  * into the slots the walk did not reach, or @p seed when it reached none.
  *
@@ -378,8 +290,10 @@ void turnBackwardWalkAround(math::Vec3<core::f32> *line, core::u32 middle, core:
         line[i] = farthest;
 }
 
-/// Repeats the last of the @p count points of @p line into the rest of its @p length, or @p seed
-/// when there is none.
+/**
+ * @brief Repeats the last of the @p count points of @p line into the rest of its @p length, or @p seed
+ * when there is none.
+ */
 void repeatLastPoint(math::Vec3<core::f32> *line, core::u32 length, core::u32 count,
                      const math::Vec3<core::f32> &seed) noexcept
 {
@@ -389,7 +303,7 @@ void repeatLastPoint(math::Vec3<core::f32> *line, core::u32 length, core::u32 co
 }
 
 /**
- * Fills line[0, @p length) with one surface walked from @p seed both ways along @p axis: the snapped
+ * @brief Fills line[0, @p length) with one surface walked from @p seed both ways along @p axis: the snapped
  * seed at line[@p length / 2], the backward walk before it and the forward walk after it. Both walks
  * start with the same snapped seed, so the backward one is asked for one point more and its first
  * is the one the forward walk writes again.
@@ -422,58 +336,9 @@ void countWalks(SheetPatch &patch, const LineWalk &walk) noexcept
     countWalk(patch, walk.forward);
 }
 
-} // namespace
-
-SheetPatch traceSheetPatch(const BrickMosaic &mosaic, const math::Vec3<core::f32> &seed, const SheetTraceParams &params,
-                           core::u32 rows, core::u32 columns, math::Vec3<core::f32> *out) noexcept
-{
-    SheetPatch patch{};
-    if (out == nullptr || rows == 0u || columns == 0u)
-        return patch;
-
-    // ⚠ The dimensions are published only once something has been written into them. An earlier
-    // version (PR #207, 2026-10-03) set them first and returned early when the seed had no normal, which handed back a
-    // patch that reported its full size with every point left at the origin -- a surface that
-    // looks valid, sits at the corner of the volume, and is entirely fictional.
-    math::Vec3<core::f32> normal{};
-    math::Vec3<core::f32> alongRows{};
-    math::Vec3<core::f32> acrossRows{};
-    if (!sheetNormal(mosaic, seed, params.tensorRadius, normal) || !inPlaneBasis(normal, alongRows, acrossRows))
-        return patch;
-
-    // ⚠⚠ **Every seed is reached by WALKING, never by stepping in a straight line.** A first
-    // version (PR #207, 2026-10-03) placed each row's start at a straight offset from the seed, and on a sheet with any
-    // curvature at all that lands in the medium a few samples away -- so the walk found no normal,
-    // returned nothing, and each row was padded with its own start. The patch came out as a grid
-    // of duplicated points: a surface with zero area that reported a full size and, on the fixture
-    // it was tested against, sat exactly on the sheet by coincidence of where the seed was. The
-    // test passed. Growing the patch by tracing is not a refinement; it is the only way the seeds
-    // stay on the surface.
-    //
-    // The row starts are walked into out[0, rows), row r's start at out[r]. Rows are then traced
-    // from the last to the first: row r fills out[r * columns, (r + 1) * columns), which begins at
-    // or after out[r], so it never covers a start still to be read -- those are below out[r].
-    const LineWalk rowStarts = walkBothWays(mosaic, seed, acrossRows, params, out, rows);
-    countWalks(patch, rowStarts);
-    for (core::u32 row = rows; row > 0u; --row)
-    {
-        math::Vec3<core::f32> *line = &out[static_cast<core::usize>(row - 1u) * columns];
-        const math::Vec3<core::f32> rowStart = out[row - 1u];
-        const LineWalk walk = walkBothWays(mosaic, rowStart, alongRows, params, line, columns);
-        countWalks(patch, walk);
-        if (!walk.reachedBothEnds)
-            ++patch.shortRows;
-    }
-
-    patch.rows = rows;
-    patch.columns = columns;
-    patch.points = out;
-    return patch;
-}
-
-namespace {
-
-/// The average of the four neighbours of an interior point of a row-major grid.
+/**
+ * @brief The average of the four neighbours of an interior point of a row-major grid.
+ */
 [[nodiscard]] math::Vec3<core::f32> neighbourAverage(const math::Vec3<core::f32> *points, core::u32 columns,
                                                      core::u32 row, core::u32 column) noexcept
 {
@@ -484,7 +349,7 @@ namespace {
 }
 
 /**
- * One pass of relaxation over the interior of @p patch, with @p before as room for a copy of it.
+ * @brief One pass of relaxation over the interior of @p patch, with @p before as room for a copy of it.
  *
  * Jacobi, not Gauss-Seidel: reading points already moved this pass would make the result depend
  * on the order the grid is walked, and the same patch would relax differently depending on which
@@ -516,6 +381,119 @@ void relaxOnce(SheetPatch &patch, core::f32 strength, lpl::pmr::vector<math::Vec
 
 } // namespace
 
+bool sheetNormal(const BrickMosaic &mosaic, const math::Vec3<core::f32> &at, core::i32 radius,
+                 math::Vec3<core::f32> &outNormal) noexcept
+{
+    if (radius < 1)
+        radius = 1;
+
+    StructureTensor tensor{};
+    core::u32 samples = 0u;
+    for (core::i32 dz = -radius; dz <= radius; ++dz)
+    {
+        for (core::i32 dy = -radius; dy <= radius; ++dy)
+        {
+            for (core::i32 dx = -radius; dx <= radius; ++dx)
+            {
+                const math::Vec3<core::f32> offset{static_cast<core::f32>(dx), static_cast<core::f32>(dy),
+                                                   static_cast<core::f32>(dz)};
+                const std::optional<math::Vec3<core::f32>> gradient = centralGradient(mosaic, at + offset);
+                if (!gradient.has_value())
+                    continue;
+                tensor.accumulate(*gradient);
+                ++samples;
+            }
+        }
+    }
+    if (samples == 0u || tensor.trace() < 1e-6f)
+        return false;
+
+    math::Vec3<core::f32> direction = tensor.heaviestColumn();
+    if (!normaliseInPlace(direction))
+        return false;
+    for (int i = 0; i < 24; ++i)
+    {
+        direction = tensor.times(direction);
+        if (!normaliseInPlace(direction))
+            return false;
+    }
+    outNormal = direction;
+    return true;
+}
+
+SheetTrace traceSheet(const BrickMosaic &mosaic, const math::Vec3<core::f32> &seed,
+                      const math::Vec3<core::f32> &heading, const SheetTraceParams &params, math::Vec3<core::f32> *out,
+                      core::u32 capacity) noexcept
+{
+    SheetTrace trace{};
+    if (out == nullptr || capacity == 0u)
+        return trace;
+
+    math::Vec3<core::f32> direction = heading;
+    math::Vec3<core::f32> normal{};
+    if (!normaliseInPlace(direction) || !sheetNormal(mosaic, seed, params.tensorRadius, normal))
+    {
+        trace.stop = SheetStop::Degenerate;
+        return trace;
+    }
+
+    const core::f32 seedSearchRadius =
+        params.seedSearchRadius > params.searchRadius ? params.seedSearchRadius : params.searchRadius;
+    math::Vec3<core::f32> point = seed;
+    (void) recentre(mosaic, point, normal, seedSearchRadius, params.ridgeSmoothing);
+    out[trace.count++] = point;
+
+    const core::u32 limit = params.maximumSteps < capacity ? params.maximumSteps : capacity;
+    while (trace.count < limit)
+    {
+        const Step step = stepAlongSheet(mosaic, point, direction, params);
+        if (step.stop.has_value())
+        {
+            trace.stop = *step.stop;
+            if (trace.stop == SheetStop::WouldJump)
+                ++trace.refusedJumps;
+            return trace;
+        }
+        if (step.pull > 1e-4f)
+            ++trace.recentrings;
+        trace.totalRecentre += step.pull;
+        point = step.landing;
+        out[trace.count++] = point;
+    }
+    return trace;
+}
+
+SheetPatch traceSheetPatch(const BrickMosaic &mosaic, const math::Vec3<core::f32> &seed, const SheetTraceParams &params,
+                           core::u32 rows, core::u32 columns, math::Vec3<core::f32> *out) noexcept
+{
+    SheetPatch patch{};
+    if (out == nullptr || rows == 0u || columns == 0u)
+        return patch;
+
+    math::Vec3<core::f32> normal{};
+    math::Vec3<core::f32> alongRows{};
+    math::Vec3<core::f32> acrossRows{};
+    if (!sheetNormal(mosaic, seed, params.tensorRadius, normal) || !inPlaneBasis(normal, alongRows, acrossRows))
+        return patch;
+
+    const LineWalk rowStarts = walkBothWays(mosaic, seed, acrossRows, params, out, rows);
+    countWalks(patch, rowStarts);
+    for (core::u32 row = rows; row > 0u; --row)
+    {
+        math::Vec3<core::f32> *line = &out[static_cast<core::usize>(row - 1u) * columns];
+        const math::Vec3<core::f32> rowStart = out[row - 1u];
+        const LineWalk walk = walkBothWays(mosaic, rowStart, alongRows, params, line, columns);
+        countWalks(patch, walk);
+        if (!walk.reachedBothEnds)
+            ++patch.shortRows;
+    }
+
+    patch.rows = rows;
+    patch.columns = columns;
+    patch.points = out;
+    return patch;
+}
+
 void relaxPatchOnRidge(const BrickMosaic &mosaic, SheetPatch &patch, const SheetTraceParams &params, core::f32 strength,
                        core::u32 iterations) noexcept
 {
@@ -523,9 +501,6 @@ void relaxPatchOnRidge(const BrickMosaic &mosaic, SheetPatch &patch, const Sheet
         return;
     const core::f32 clamped = strength < 0.0f ? 0.0f : (strength > 1.0f ? 1.0f : strength);
 
-    // Back onto the crest after every pass. The search is TIGHT -- a wide one here would let a
-    // point that the smoothing nudged toward the neighbouring sheet settle on it, which is the
-    // jump this whole file exists to refuse, arriving by the back door.
     constexpr core::f32 kTightSearchRadius = 1.0f;
     lpl::pmr::vector<math::Vec3<core::f32>> before(pointCount(patch));
     for (core::u32 pass = 0u; pass < iterations; ++pass)
