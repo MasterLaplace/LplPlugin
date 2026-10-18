@@ -137,6 +137,7 @@ inline void TerrainWorld::onFixedStep(core::f32 dt)
     refreshCreatureView();
     engine::World::onFixedStep(dt);
     ++_ticks;
+    tickVegetation();
 
     if (_ticks % kWebPeriod == 0u)
     {
