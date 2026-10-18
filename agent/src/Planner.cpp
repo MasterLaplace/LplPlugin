@@ -1,12 +1,3 @@
-/**
- * @file Planner.cpp
- * @brief Implementation of the deterministic correction planner.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/Planner.hpp>
 
 #include <lpl/editor/Json.hpp>
@@ -29,12 +20,15 @@ void appendEscaped(std::string &out, std::string_view s)
     }
 }
 
-/// The arguments to send: the suggested patch, laid over the recipe in force.
+/**
+ * @brief The arguments to send: the suggested patch, laid over the recipe in force.
+ *
+ * Only generation carries a standing recipe worth preserving; every other tool's
+ * arguments stand alone.
+ */
 std::string argumentsFor(const Finding &finding, std::string_view lastRecipe)
 {
     const std::string patch = finding.suggestedArgs.empty() ? "{}" : finding.suggestedArgs;
-    // Only generation carries a standing recipe worth preserving; every other
-    // tool's arguments stand alone.
     if (lastRecipe.empty() || finding.suggestedTool != "generate_world")
         return patch;
 
@@ -48,7 +42,9 @@ std::string argumentsFor(const Finding &finding, std::string_view lastRecipe)
     return editor::detail::emit(base);
 }
 
-/// Builds one call object from a finding's suggestion.
+/**
+ * @brief Builds one call object from a finding's suggestion.
+ */
 std::string callFor(const Finding &finding, std::string_view lastRecipe)
 {
     std::string out = "{\"thought\":\"";
@@ -84,27 +80,14 @@ Act CorrectionPlanner::decide(const DecisionContext &context) noexcept
             continue;
         if (finding.suggestedTool.empty())
             continue;
-        // A capability that is not offered right now cannot be the fix, whatever
-        // the critic hoped: acting on it would earn a refusal and burn a turn.
         if (!alphabetOffers(context.available, context.availableBytes, finding.suggestedTool.c_str(),
                             static_cast<core::u32>(finding.suggestedTool.size())))
             continue;
 
         const std::string call = callFor(finding, _lastRecipe);
         if (call.size() > kActBytes)
-            continue; // A call that cannot be stated in a shared act cannot be made.
+            continue;
 
-        /* Skip a suggestion that is exactly what was just tried. Repeating it would
-           leave the anti-loop guard to end the session, which is a worse outcome than
-           trying the next defect on the list.
-
-           Compared on the ACT'S IDENTITY — the tool and its arguments — and never on
-           the serialised call, which also carries a thought the critic phrases anew
-           each turn. Comparing whole calls would make the guard depend on JSON
-           escaping and on wording, so it would silently stop matching and the loop
-           would spend its budget re-issuing one move. That is the same pair the
-           previous version compared, and it is what a transcript projection can carry
-           without a parser. */
         const std::string identity = finding.suggestedTool + argumentsFor(finding, _lastRecipe);
         bool repeatsLast = false;
         for (core::u32 i = context.transcriptLines; i > 0u && !repeatsLast; --i)
@@ -115,7 +98,7 @@ Act CorrectionPlanner::decide(const DecisionContext &context) noexcept
             repeatsLast = previous.bytes == identity.size();
             for (core::u32 b = 0u; b < previous.bytes && repeatsLast; ++b)
                 repeatsLast = previous.text[b] == identity[b];
-            break; // Only the LAST act counts, exactly as before.
+            break;
         }
         if (repeatsLast)
             continue;
@@ -127,8 +110,6 @@ Act CorrectionPlanner::decide(const DecisionContext &context) noexcept
         return act;
     }
 
-    // Nothing actionable is left. Concluding here rather than idling is what makes
-    // "the loop terminates" a property instead of a hope.
     return act;
 }
 

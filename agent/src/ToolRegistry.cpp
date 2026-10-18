@@ -1,12 +1,3 @@
-/**
- * @file ToolRegistry.cpp
- * @brief Implementation of the set of tools valid in the current world state.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/ToolRegistry.hpp>
 
 #include <lpl/ecs/Registry.hpp>
@@ -17,8 +8,6 @@ namespace lpl::agent {
 WorldState WorldState::observe(const ecs::Registry &registry)
 {
     WorldState state;
-    // editor::entityCount is the one live count in the tree; a second walk over
-    // partitions and chunks here would be a second answer to the same question.
     state.entityCount = editor::entityCount(registry);
     state.hasWorld = state.entityCount != 0u;
     return state;
@@ -54,8 +43,6 @@ ToolRegistry ToolRegistry::ungated()
     registry._tools.reserve(kToolCount);
     for (const ToolDesc &tool : kTools)
         registry._tools.push_back(&tool);
-    // A state that satisfies nothing in particular: this view exists to document
-    // the whole surface, and a caller that dispatched from it would earn refusals.
     registry._state = WorldState{};
     return registry;
 }

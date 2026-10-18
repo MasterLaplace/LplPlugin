@@ -1,12 +1,3 @@
-/**
- * @file ToolCall.cpp
- * @brief Implementation of a parsed, validated invocation.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/agent/ToolCall.hpp>
 
 #include <lpl/core/Error.hpp>
@@ -24,16 +15,19 @@ core::Error refuse(core::ErrorCode code, std::string_view what)
     return core::makeError(code, lpl::pmr::string{what.data(), what.size()}).error();
 }
 
-/// The JSON type a parsed value actually has, for comparison against a kind.
+/**
+ * @brief The JSON type a parsed value actually has, for comparison against a kind.
+ *
+ * JSON has no integer type; an integer is a number with nothing after the point.
+ * Checking the value rather than the token is what makes 3.0 and 3 both acceptable
+ * while 3.5 is not.
+ */
 bool matches(ParamKind kind, const editor::detail::JVal &value)
 {
     using T = editor::detail::JVal::T;
     switch (kind)
     {
     case ParamKind::Number: return value.t == T::Num;
-    // JSON has no integer type; an integer is a number with nothing after the
-    // point. Checking the value rather than the token is what makes 3.0 and 3
-    // both acceptable while 3.5 is not.
     case ParamKind::Integer:
         return value.t == T::Num && value.num == static_cast<double>(static_cast<long long>(value.num));
     case ParamKind::String: return value.t == T::Str;
@@ -48,9 +42,6 @@ bool matches(ParamKind kind, const editor::detail::JVal &value)
 
 std::string ToolCall::toCommandJson() const
 {
-    // Rebuilt through the JSON layer rather than by splicing braces: args came
-    // from a parser and goes to a parser, and a hand-rolled concatenation would
-    // be a third JSON implementation waiting to disagree with the other two.
     bool ok = false;
     editor::detail::JVal parsed = editor::detail::parse(args, &ok);
     editor::detail::JVal command;
@@ -82,9 +73,6 @@ core::Expected<ToolCall> parseToolCall(std::string_view json, const ToolRegistry
     const ToolDesc *tool = registry.find(name->str);
     if (tool == nullptr)
     {
-        // Two different refusals, because they teach different things: a tool
-        // that does not exist is a hallucination, a tool that exists but is not
-        // offered is a precondition the caller has not met yet.
         std::string message = findTool(name->str) != nullptr ?
                                   "tool \"" + name->str + "\" is not available in this world state" :
                                   "unknown tool \"" + name->str + "\"";
@@ -123,8 +111,6 @@ core::Expected<ToolCall> parseToolCall(std::string_view json, const ToolRegistry
                                               std::string{param.name} + "\""));
     }
 
-    // A parameter nobody declared is a typo, and a typo that silently succeeds is
-    // worse than one refused with a reason: the caller would keep making it.
     for (const auto &member : args->obj)
     {
         bool declared = false;

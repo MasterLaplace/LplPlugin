@@ -42,9 +42,15 @@ namespace lpl::agent {
  */
 struct WorldState {
     core::u32 entityCount{0u};
-    bool hasWorld{false}; ///< The world holds at least one entity.
+    bool hasWorld{false}; /**< The world holds at least one entity. */
 
-    /** @brief Reads the state out of a live registry. */
+    /**
+     * @brief Reads the state out of a live registry.
+     *
+     * The count is editor::entityCount, the one the editor's commands report: a
+     * second walk over partitions and chunks here would be a second answer to the
+     * same question.
+     */
     [[nodiscard]] static WorldState observe(const ecs::Registry &registry);
 };
 
@@ -73,11 +79,18 @@ public:
 
     /**
      * @brief Every capability, gating ignored. For documentation, not for a model.
+     *
+     * Its state is a default WorldState, one that satisfies nothing in particular:
+     * this view exists to document the whole surface, and a caller that dispatched
+     * from it would earn refusals.
+     *
      * @return A registry that offers every tool, regardless of world state.
      */
     [[nodiscard]] static ToolRegistry ungated();
 
-    /// The offered capabilities, in @ref kTools order.
+    /**
+     * @brief The offered capabilities, in @ref kTools order.
+     */
     [[nodiscard]] const std::vector<const ToolDesc *> &tools() const noexcept { return _tools; }
 
     /**

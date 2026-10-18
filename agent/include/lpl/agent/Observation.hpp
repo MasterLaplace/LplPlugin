@@ -6,8 +6,7 @@
  * bounded, always flagged when truncated, because an unbounded dump is precisely
  * what destroys a context window.
  *
- * ── Why these critics are deterministic, and not a vision model ───────────────
- *
+ * @par Why these critics are deterministic, and not a vision model
  * The founding report proposes the loop the other way round: capture a frame,
  * hand it to a small vision-language model, and let it say "the bridge floats two
  * metres above the ground". That is the right design WHEN YOU DO NOT HAVE THE
@@ -19,8 +18,8 @@
  * So the defect channel is a set of critics, each seeded from a defect this
  * repository actually shipped: props detached from the ground they stand on, a
  * scatter that collapsed to a point because a raw Fixed32 constructor was read as
- * a value, extents that make an entity uncollidable, coordinates saturated past
- * what Q16.16 can hold, and a generator that was asked for rivers and produced
+ * a value, extents that make an entity uncollidable, coordinates past what Q16.16
+ * can hold, and a generator that was asked for rivers and produced
  * none.
  *
  * The screenshot stays (see Vision.hpp), for the two things a critic cannot do:
@@ -53,9 +52,9 @@ namespace lpl::agent {
  * @brief How much a finding should change what happens next.
  */
 enum class Severity : core::u8 {
-    Info = 0, ///< Worth knowing, not worth acting on.
-    Warning,  ///< Probably wrong; a caller may reasonably ignore it.
-    Defect    ///< The world is not what was asked for. Fix or explain.
+    Info = 0, /**< Worth knowing, not worth acting on. */
+    Warning,  /**< Probably wrong; a caller may reasonably ignore it. */
+    Defect    /**< The world is not what was asked for. Fix or explain. */
 };
 
 /**
@@ -68,10 +67,10 @@ enum class Severity : core::u8 {
  */
 struct Finding {
     Severity severity{Severity::Info};
-    std::string code;    ///< Stable short identifier, e.g. "no-rivers".
-    std::string message; ///< One sentence, actionable, in the caller's terms.
+    std::string code;    /**< Stable short identifier, e.g. "no-rivers". */
+    std::string message; /**< One sentence, actionable, in the caller's terms. */
     std::string suggestedTool;
-    std::string suggestedArgs; ///< JSON object to merge into the next call; may be empty.
+    std::string suggestedArgs; /**< JSON object to merge into the next call; may be empty. */
 };
 
 /**
@@ -80,13 +79,17 @@ struct Finding {
  */
 struct Observations {
     std::vector<Finding> findings;
-    core::u32 total{0u};   ///< How many were found, before the bound.
-    bool truncated{false}; ///< Whether @c findings is shorter than @c total.
+    core::u32 total{0u};   /**< How many were found, before the bound. */
+    bool truncated{false}; /**< Whether @c findings is shorter than @c total. */
 
-    /// How many findings are @c Severity::Defect.
+    /**
+     * @brief How many findings are @c Severity::Defect.
+     */
     [[nodiscard]] core::u32 defects() const noexcept;
 
-    /// The findings as a JSON report, in the shape the command surface uses.
+    /**
+     * @brief The findings as a JSON report, in the shape the command surface uses.
+     */
     [[nodiscard]] std::string toJson() const;
 };
 
@@ -99,6 +102,14 @@ struct Observations {
  * report instead of re-deriving it — a second derivation of a number procgen
  * already computed is exactly the duplication this project keeps paying for.
  *
+ * Q16.16 ends a little past ±32767. A coordinate up against that is reported: it
+ * is not "far away", it is a value the arithmetic can no longer represent — the
+ * same trap that made an unbounded query box mean nothing.
+ *
+ * More than 16 entities on one spot is the Fixed32{10} signature: a scatter whose
+ * spacing was read as a raw Q16.16 word collapses every instance onto one square.
+ * A threshold rather than "any", because a small stack is a legitimate pile.
+ *
  * @param registry World to inspect.
  * @param limit    How many findings to return; the rest are counted, not carried.
  */
@@ -106,6 +117,14 @@ struct Observations {
 
 /**
  * @brief Critics that compare what was asked for with what came back.
+ *
+ * Asked-for versus got. Every one of these is a real failure mode: a pass that
+ * runs, succeeds and produces nothing looks exactly like a pass that worked, until
+ * somebody goes and looks.
+ *
+ * The playability gate is the one judgement the generator already makes.
+ * Re-deriving it here would be a second answer to a question procgen has
+ * answered, so this reads its verdict instead.
  *
  * @param recipeJson The `generate_world` command object that was issued.
  * @param reportJson The report it answered with.
