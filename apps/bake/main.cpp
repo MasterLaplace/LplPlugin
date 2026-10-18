@@ -1,39 +1,3 @@
-/**
- * @file main.cpp
- * @brief lpl-bake — turns an authored `.lplscene` into a loadable `.lplpak`.
- *
- * The oven, as a command. A build embeds the result as a GRUB module so a
- * kernel with no filesystem still loads a real game, and a server can bake a
- * freshly pulled game without stopping.
- *
- * Usage: lpl-bake [--ecc] <input.lplscene> <output.lplpak>
- *        lpl-bake --header <symbol> <input.lplscene|-> <output.hpp>
- *
- * `--ecc` attaches a transversal Reed-Solomon parity section, so the ring-0 reader
- * corrects a bad sector instead of refusing the cartridge. It is opt-in because it
- * costs image size and only a cartridge that will be STORED needs it — one baked into
- * a build that is about to be rebuilt does not.
- *
- * The second form is the missing half of the checked-in cartridges. Two packs live
- * in the tree as byte arrays — `ParityPackBlob.hpp` and `ViewerPackBlob.hpp` — because
- * the kernel build must need no host tool, and `test-game-pack` asserts they still
- * match what the oven emits so a stale blob fails a test rather than quietly shipping
- * last month's world. That guard had no counterpart: nothing could REFRESH them, so
- * every recipe change dead-ended on a hex dump pasted by hand. The two blobs had even
- * drifted into different formatting, which is what hand-pasting looks like after a
- * while.
- *
- * Only the array body is rewritten, between the symbol's `= {` and its `};`. The prose
- * around it says why the blob exists and is worth more than the bytes.
- *
- * An input of `-` means "the parity recipe", which comes from code rather than from a
- * document — that is exactly what makes it the reference.
- *
- * @author MasterLaplace
- * @version 0.1.0
- * @copyright MIT License
- */
-
 #include <lpl/editor/EccBaker.hpp>
 #include <lpl/editor/GamePackBaker.hpp>
 #include <lpl/procgen/WorldRecipe.hpp>
@@ -48,7 +12,9 @@
 
 namespace {
 
-/// Reads a whole file, or reports why it could not.
+/**
+ * @brief Reads a whole file, or reports that it could not.
+ */
 [[nodiscard]] bool readFile(const char *path, std::string &out)
 {
     std::ifstream input{path, std::ios::binary};
@@ -58,7 +24,9 @@ namespace {
     return true;
 }
 
-/// The bytes, sixteen per line, in the house style.
+/**
+ * @brief The bytes, sixteen per line, in the house style.
+ */
 [[nodiscard]] std::string formatBytes(const std::vector<lpl::core::u8> &bytes)
 {
     std::ostringstream out;
@@ -94,7 +62,9 @@ namespace {
     return true;
 }
 
-/// Bakes what @p source names: a document, or the parity recipe when it is "-".
+/**
+ * @brief Bakes what @p source names: a document, or the parity recipe when it is "-".
+ */
 [[nodiscard]] bool bakeSource(const char *source, std::vector<lpl::core::u8> &out)
 {
     if (std::strcmp(source, "-") == 0)
@@ -119,7 +89,9 @@ namespace {
     return true;
 }
 
-/// The `--header` form: refresh one checked-in blob in place.
+/**
+ * @brief The `--header` form: refresh one checked-in blob in place.
+ */
 [[nodiscard]] int emitHeader(const char *symbol, const char *source, const char *headerPath)
 {
     std::vector<lpl::core::u8> image;
@@ -158,6 +130,37 @@ namespace {
 
 } // namespace
 
+/**
+ * @brief lpl-bake — turns an authored `.lplscene` into a loadable `.lplpak`.
+ *
+ * The oven, as a command. A build embeds the result as a GRUB module so a
+ * kernel with no filesystem still loads a real game, and a server can bake a
+ * freshly pulled game without stopping.
+ *
+ * Usage: lpl-bake [--ecc] <input.lplscene> <output.lplpak>
+ *        lpl-bake --header <symbol> <input.lplscene|-> <output.hpp>
+ *
+ * `--ecc` attaches a transversal Reed-Solomon parity section, so the ring-0 reader
+ * corrects a bad sector instead of refusing the cartridge. It is opt-in because it
+ * costs image size and only a cartridge that will be STORED needs it — one baked into
+ * a build that is about to be rebuilt does not.
+ *
+ * The second form is the missing half of the checked-in cartridges. Two packs live
+ * in the tree as byte arrays — `ParityPackBlob.hpp` and `ViewerPackBlob.hpp` — because
+ * the kernel build must need no host tool, and `test-game-pack` asserts that the parity
+ * blob still matches what the oven emits, and that the viewer blob still holds the world
+ * its scene declares, so a stale blob fails a test rather than quietly shipping
+ * last month's world. That guard had no counterpart: nothing could REFRESH them, so
+ * every recipe change dead-ended on a hex dump pasted by hand. The two blobs had even
+ * drifted into different formatting, which is what hand-pasting looks like after a
+ * while.
+ *
+ * Only the array body is rewritten, between the symbol's `= {` and its `};`. The prose
+ * around it says why the blob exists and is worth more than the bytes.
+ *
+ * An input of `-` means "the parity recipe", which comes from code rather than from a
+ * document — that is exactly what makes it the reference.
+ */
 int main(int argc, char **argv)
 {
     if (argc == 5 && std::strcmp(argv[1], "--header") == 0)

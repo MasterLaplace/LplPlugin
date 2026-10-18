@@ -1,5 +1,14 @@
+#include <lpl/core/Assert.hpp>
+
+#include <lpl/engine/Engine.hpp>
+#include <lpl/history/Chronicle.hpp>
+#include <lpl/history/Divergence.hpp>
+#include <lpl/history/Era.hpp>
+#include <lpl/history/PossibleWorld.hpp>
+#include <lpl/history/Timeline.hpp>
+#include <lpl/pack/Cartridge.hpp>
+
 /**
- * @file main.cpp
  * @brief Run a constrained world across centuries, headless.
  *
  * Where the demon's score comes from. procgen builds a plausible world; the
@@ -13,39 +22,27 @@
  * is fenced out until the modules it names are implemented, and the entry point
  * fails loudly rather than returning success it has not earned.
  *
- * @author MasterLaplace
- * @copyright MIT License
+ * What the fenced-out usage says:
+ *  - one cartridge answers three questions: what the world IS (the recipe), what
+ *    it LOOKS like (the view profile), and what it REMEMBERS (the timeline);
+ *  - a century cannot be simulated at 60 Hz. An era is a gearing, not a different
+ *    engine: the same systems, stepped at a scale where populations move;
+ *  - one hypothesis is one World. Running "according to this source" is a mode,
+ *    not a fork of the code.
  */
-
-#include <lpl/core/Assert.hpp>
-
-#include <lpl/engine/Engine.hpp>
-#include <lpl/history/Chronicle.hpp>
-#include <lpl/history/Divergence.hpp>
-#include <lpl/history/Era.hpp>
-#include <lpl/history/PossibleWorld.hpp>
-#include <lpl/history/Timeline.hpp>
-#include <lpl/pack/Cartridge.hpp>
-
 int main(int argc, char **argv)
 {
     (void) argc;
     (void) argv;
 
-#if 0 // ── intended usage ─────────────────────────────────────────────────────
-    // One cartridge answers three questions: what the world IS (the recipe), what
-    // it LOOKS like (the view profile), and what it REMEMBERS (the timeline).
+#if 0
     const lpl::pack::Cartridge cartridge = lpl::pack::Cartridge::open(argv[1]);
     LPL_VERIFY(cartridge.valid());
 
     const lpl::history::Timeline timeline = lpl::history::Timeline::from(cartridge.history());
 
-    // A century cannot be simulated at 60 Hz. An era is a gearing, not a different
-    // engine: the same systems, stepped at a scale where populations move.
     const lpl::history::Era era = lpl::history::Era::ofYears(1000, 1400, 4u);
 
-    // One hypothesis is one World. Running "according to this source" is a mode,
-    // not a fork of the code.
     lpl::history::PossibleWorld world{cartridge.recipe(), timeline};
 
     lpl::engine::Engine engine{lpl::engine::HostProfile::dedicated().config(), world.build()};
@@ -60,7 +57,7 @@ int main(int argc, char **argv)
 
     engine.shutdown();
     return verdict.acceptable() ? 0 : 1;
-#endif // ─────────────────────────────────────────────────────────────────────
+#endif
 
     LPL_NOT_IMPLEMENTED("lpl-chronicle");
 }

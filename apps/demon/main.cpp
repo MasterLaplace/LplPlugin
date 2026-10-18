@@ -1,43 +1,3 @@
-/**
- * @file main.cpp
- * @brief `lpl-demon` — an intelligence directing a deterministic world.
- *
- * The inversion this project is built on, in one entry point: the demon decides
- * WHAT, the engine decides HOW, and the engine is the only thing that touches the
- * world. Every act goes through the command journal, so a session is undoable and
- * replayable; every act is validated against a grammar derived from the component
- * registry, so an act the engine cannot perform cannot be uttered.
- *
- * Usage:
- * @code
- *   lpl-demon [--intent "<sentence>"] [--turns N] [--out world.lplscene]
- *             [--shot frame.ppm] [--trace transcript.json] [--grammar out.gbnf]
- * @endcode
- *
- * ── What changed from the sketch that used to live here ──────────────────────
- *
- * This file was written caller-first, before any of the callee existed, which is
- * exactly what it was for. Two things it assumed turned out not to be true, and
- * the sketch is what gave way:
- *
- *   - `HostProfile::dedicated().withInference(...)` — HostProfile is an ENUM
- *     (Ring0Client / Ring0Server / DedicatedServer) applied to a Config::Builder,
- *     not a factory. And a budget expressed as a fraction of a frame is a wall
- *     clock in a replayable path, so InferenceBudget counts TURNS instead.
- *   - `while (engine.running()) { engine.tick(); demon.think(...); }` — Engine
- *     owns its loop (`run()`), and engine::Boot owns the whole boot. Opening the
- *     loop publicly to drive it from here would have duplicated `run()`. The
- *     demon attaches to a world, not to a hand-rolled loop.
- *
- * The demon here directs a world headlessly, which is the shape that is testable
- * today (`test-agent-loop`). Hosting one INSIDE a running Engine is the same
- * DemonHost with its `think()` called from the frame, and is what Config's
- * built-in-system flags will select.
- *
- * @author MasterLaplace
- * @copyright MIT License
- */
-
 #include <lpl/agent/Grammar.hpp>
 #include <lpl/agent/Observation.hpp>
 #include <lpl/agent/Planner.hpp>
@@ -77,7 +37,9 @@ void usage()
     std::puts("  --grammar <file>        write the GBNF a model would be constrained to");
 }
 
-/// Reads @p argv into @p out; returns false when the arguments make no sense.
+/**
+ * @brief Reads @p argv into @p out; returns false when the arguments make no sense.
+ */
 bool parseArguments(int argc, char **argv, Options &out)
 {
     const auto value = [&](int &i) -> const char * { return (i + 1 < argc) ? argv[++i] : nullptr; };
@@ -129,6 +91,45 @@ const char *outcomeName(lpl::engine::ThinkOutcome outcome)
 
 } // namespace
 
+/**
+ * @brief `lpl-demon` — an intelligence directing a deterministic world.
+ *
+ * The inversion this project is built on, in one entry point: the demon decides
+ * WHAT, the engine decides HOW, and the engine is the only thing that touches the
+ * world. Every act goes through the command journal, so a session is undoable and
+ * replayable; every act is validated against a grammar derived from the component
+ * registry, so an act the engine cannot perform cannot be uttered.
+ *
+ * Usage:
+ * @code
+ *   lpl-demon [--intent "<sentence>"] [--turns N] [--out world.lplscene]
+ *             [--shot frame.ppm] [--trace transcript.json] [--grammar out.gbnf]
+ * @endcode
+ *
+ * Dialogue is deliberately not a tool. Tools are how the demon acts on its world;
+ * the dialogue is how it addresses the sovereign, who is outside it. Whatever the
+ * demon could not fix is printed plainly rather than reported as a success the world
+ * does not have, and a world the critics still object to exits with 2: saying so is
+ * the difference between a tool that reports outcomes and one that reports effort.
+ *
+ * What changed from the sketch that used to live here: this file was written
+ * caller-first, before any of the callee existed, which is exactly what it was for.
+ * Two things it assumed turned out not to be true, and the sketch is what gave way:
+ *
+ *   - `HostProfile::dedicated().withInference(...)` — HostProfile is an ENUM
+ *     (Ring0Client / Ring0Server / DesktopClient / DedicatedServer) applied to a
+ *     Config::Builder, not a factory. And a budget expressed as a fraction of a frame
+ *     is a wall clock in a replayable path, so InferenceBudget counts TURNS instead.
+ *   - `while (engine.running()) { engine.tick(); demon.think(...); }` — Engine
+ *     owns its loop (`run()`), and engine::Boot owns the whole boot. Opening the
+ *     loop publicly to drive it from here would have duplicated `run()`. The
+ *     demon attaches to a world, not to a hand-rolled loop.
+ *
+ * The demon here directs a world headlessly, which is the shape that is testable
+ * today (`test-agent-loop`). Hosting one INSIDE a running Engine is the same
+ * DemonHost with its `think()` called from the frame, and is what Config's
+ * built-in-system flags will select.
+ */
 int main(int argc, char **argv)
 {
     Options options;
@@ -143,8 +144,6 @@ int main(int argc, char **argv)
     lpl::agent::CorrectionPlanner planner;
     lpl::engine::DemonHost demon{world, journal, planner};
 
-    // Dialogue is deliberately not a tool. Tools are how the demon acts on its
-    // world; this is how it addresses the sovereign, who is outside it.
     lpl::agent::Dialogue &channel = demon.openDialogue();
     channel.offer(options.intent);
     if (const auto intent = channel.poll())
@@ -169,8 +168,6 @@ int main(int argc, char **argv)
     std::printf("  defects %u -> %u, %u entities\n", result.defectsBefore, result.defectsAfter,
                 lpl::editor::entityCount(world));
 
-    // Whatever the demon could not fix, say so plainly rather than reporting a
-    // success the world does not have.
     const lpl::agent::Observations remaining = demon.observe();
     for (const lpl::agent::Finding &finding : remaining.findings)
         std::printf("  still wrong: [%s] %s\n", finding.code.c_str(), finding.message.c_str());
@@ -200,7 +197,5 @@ int main(int argc, char **argv)
             std::printf("  shot    -> %s  (FAILED)\n", options.shotPath.c_str());
     }
 
-    // A world the critics still object to is not a success, and saying so is the
-    // difference between a tool that reports outcomes and one that reports effort.
     return result.sound() ? 0 : 2;
 }
