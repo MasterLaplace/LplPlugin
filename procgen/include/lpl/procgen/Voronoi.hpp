@@ -10,8 +10,8 @@
  * Sites are placed by jittering one point per coarse cell rather than scattering
  * them freely. Free scattering needs a global search to find the nearest site;
  * a jittered grid bounds the search to the 3x3 block of coarse cells around a
- * query, which turns an O(sites) lookup into O(1) and removes the only reason
- * this would have been expensive.
+ * query, or the 5x5 block under a strong jitter, which turns an O(sites) lookup
+ * into O(1) and removes the only reason this would have been expensive.
  *
  * Distances are compared without ever taking a square root — squared for the
  * Euclidean metric, directly for the other two — which keeps this exact in
@@ -98,7 +98,7 @@ struct VoronoiParams {
     core::u32 depth{64u};                             /**< Cells along Z. */
     core::u32 seed{1337u};                            /**< Determinism anchor. */
     core::u32 cellSize{12u};                          /**< Coarse cell edge; larger means bigger regions. */
-    core::f32 jitter{0.8f};                           /**< How far a site may stray in its coarse cell, in [0, 1]. */
+    core::f32 jitter{0.8f};                           /**< How far a site strays in its cell, clamped to [0, 1]. */
     DistanceMetric metric{DistanceMetric::Euclidean}; /**< Which distance decides ownership. */
     core::f32 warpStrength{0.0f};                     /**< Domain warp in cells; 0 leaves borders polygonal. */
 };
@@ -124,7 +124,9 @@ struct VoronoiDiagram {
  * Refusing outright beats producing a diagram whose region 65535 is invisible.
  *
  * Each cell compares only the sites of the coarse cells around its home coarse
- * cell, a jittered site never leaving its own cell; the block is widened by
+ * cell, a jittered site never leaving its own cell: one ring of them, or two
+ * when the jitter lets a site two cells away be the nearest (above about 0.657
+ * under the Euclidean metric, above 1/3 under Manhattan). The block is widened by
  * however many coarse cells the warp can displace the query point. A site wins
  * only when strictly nearer: ties go to the first in scan order, so the
  * partition is the same on every target.
@@ -154,7 +156,9 @@ struct VoronoiDiagram {
  *
  * @param diagram Partition to measure.
  * @param metric  Distance to measure with; pass the one the diagram was built on.
- * @return A Fixed32 grid of distances (squared, for the Euclidean metric).
+ * @return A Fixed32 grid of distances (squared, for the Euclidean metric, and then
+ *         Fixed32::max() for a cell about 181 units or more from its site, whose
+ *         square Q16.16 cannot hold).
  */
 [[nodiscard]] Grid<math::Fixed32> regionDistanceField(const VoronoiDiagram &diagram,
                                                       DistanceMetric metric = DistanceMetric::Euclidean);
