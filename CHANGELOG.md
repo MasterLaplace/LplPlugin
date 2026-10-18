@@ -9,6 +9,8 @@ what the history gives.
 
 ### Fixed
 
+- **codec**: Peeling refuses a table built for other blocks (#495)
+- **image**: The PPM reader never reads past its buffer (#494)
 - **core**: The kernel's event bus takes a subscriber (#463)
 
 ### Performance
@@ -20,6 +22,8 @@ what the history gives.
 
 ### Changed
 
+- **ecology**: Follow the shared C++ rules on comments and headers (#500)
+- **ai**: Follow the shared C++ rules on comments and headers (#499)
 - **codec**: Follow the shared C++ rules on comments and headers (#493)
 - **rosetta**: Follow the shared C++ rules on comments and headers (#492)
 - **pack**: Follow the shared C++ rules on comments and headers (#490)
