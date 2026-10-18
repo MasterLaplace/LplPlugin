@@ -36,6 +36,13 @@ target("test-threadpool")
     add_files("parity/test_threadpool.cpp")
 target_end()
 
+target("test-job-system")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-concurrency")
+    add_files("parity/test_job_system.cpp")
+target_end()
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Morton encoding/decoding roundtrip
 -- ─────────────────────────────────────────────────────────────────────────────

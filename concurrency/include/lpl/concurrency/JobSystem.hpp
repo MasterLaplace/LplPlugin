@@ -59,7 +59,10 @@ public:
     explicit JobSystem(core::u32 workerCount = 0);
 
     /**
-     * @brief Stops the workers and joins them, without draining the jobs still pending.
+     * @brief Stops the workers and joins them, then runs on the calling thread every job still pending.
+     *
+     * The jobs left in the workers' deques run first, then those of the submission queue in the order
+     * they were submitted, a job they kick included, so every handle reaches the count it waits for.
      */
     ~JobSystem();
 
@@ -98,11 +101,16 @@ private:
     };
 
     /**
+     * @brief Runs @p job, counts it done on its handle and frees it.
+     */
+    static void runAndRelease(Job *job);
+
+    /**
      * @brief Runs jobs until the system stops.
      *
      * Each turn moves one job, if any, from the shared submission queue into the worker's local
-     * deque, then runs the job its deque pops or, when the deque is empty, one stolen from another
-     * worker.
+     * deque, unless the deque is full, then runs the job its deque pops or, when the deque is empty,
+     * one stolen from another worker.
      *
      * @param workerIndex The worker this thread is.
      */

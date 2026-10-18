@@ -37,6 +37,19 @@ JobSystem::~JobSystem()
             w.join();
         }
     }
+
+    for (auto &data : _workerData)
+    {
+        while (Job *job = data->localQueue.pop())
+        {
+            runAndRelease(job);
+        }
+    }
+    for (std::size_t i = 0; i < _submissionQueue.size(); ++i)
+    {
+        runAndRelease(_submissionQueue[i]);
+    }
+    _submissionQueue.clear();
 }
 
 void JobSystem::kickJob(std::function<void()> job, JobHandle &handle)
@@ -61,6 +74,13 @@ void JobSystem::waitForCounter(const JobHandle &handle, core::i32 targetValue) c
 
 core::u32 JobSystem::workerCount() const noexcept { return static_cast<core::u32>(_workers.size()); }
 
+void JobSystem::runAndRelease(Job *job)
+{
+    job->func();
+    job->handle->counter.fetch_sub(1, std::memory_order_acq_rel);
+    delete job;
+}
+
 void JobSystem::workerLoop(core::u32 workerIndex)
 {
     auto &data = *_workerData[workerIndex];
@@ -69,9 +89,8 @@ void JobSystem::workerLoop(core::u32 workerIndex)
     {
         {
             std::lock_guard lock{_submissionMutex};
-            if (!_submissionQueue.empty())
+            if (!_submissionQueue.empty() && data.localQueue.push(_submissionQueue.back()))
             {
-                data.localQueue.push(_submissionQueue.back());
                 _submissionQueue.pop_back();
             }
         }
@@ -89,9 +108,7 @@ void JobSystem::workerLoop(core::u32 workerIndex)
 
         if (job)
         {
-            job->func();
-            job->handle->counter.fetch_sub(1, std::memory_order_acq_rel);
-            delete job;
+            runAndRelease(job);
         }
     }
 }

@@ -13,12 +13,15 @@ inline ChaseLevDeque<T>::ChaseLevDeque(core::u32 capacity) : _mask(capacity - 1)
     }
 }
 
-template <typename T> inline void ChaseLevDeque<T>::push(T item)
+template <typename T> inline bool ChaseLevDeque<T>::push(T item)
 {
     core::i64 b = _bottom.load(std::memory_order_relaxed);
+    if (b - _top.load(std::memory_order_acquire) > _mask)
+        return false;
     _buffer[b & _mask].store(item, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);
     _bottom.store(b + 1, std::memory_order_relaxed);
+    return true;
 }
 
 template <typename T> inline T ChaseLevDeque<T>::pop()
