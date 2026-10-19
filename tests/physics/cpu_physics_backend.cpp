@@ -160,6 +160,123 @@ lpl::core::u32 seedClosing(PartitionSpan partitions)
     return seeded;
 }
 
+/** @brief Boxes in each stack of stackedSpeeds. */
+constexpr lpl::core::u32 kStackHeight = 4u;
+
+/**
+ * @brief What the bodies of a world of stacks did by the end of a run.
+ */
+struct StackRest {
+    lpl::core::u32 bodies = 0u;   /**< Bodies read. */
+    lpl::core::u32 moving = 0u;   /**< Bodies whose squared speed is at or over the sleep threshold, 0.01. */
+    lpl::core::u32 sunk = 0u;     /**< Bodies more than 1/64 below the height their stack puts them at. */
+    lpl::math::Fixed32 fastest{}; /**< The largest squared speed. */
+};
+
+/**
+ * @brief Puts @p stacks columns of kStackHeight unit boxes of unit mass on the ground, each box
+ *        touching the one under it, the columns three units apart along x.
+ *
+ * @details Position and velocity go into the buffer the integrator writes; the mass and the box go
+ *          into both buffers, because the resolver reads them from the other one.
+ *
+ * @return Bodies seeded.
+ */
+lpl::core::u32 seedStacks(PartitionSpan partitions, lpl::core::u32 stacks)
+{
+    lpl::core::u32 seeded = 0u;
+    const FixedVector box{lpl::math::Fixed32::one(), lpl::math::Fixed32::one(), lpl::math::Fixed32::one()};
+
+    for (const auto &partition : partitions)
+    {
+        for (const auto &chunk : partition->chunks())
+        {
+            auto *positions = static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+            auto *velocities = static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Velocity));
+            auto *masses = static_cast<lpl::math::Fixed32 *>(chunk->writeComponent(lpl::ecs::ComponentId::Mass));
+            auto *readMasses = static_cast<lpl::math::Fixed32 *>(
+                const_cast<void *>(chunk->readComponent(lpl::ecs::ComponentId::Mass)));
+            auto *boxes = static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::AABB));
+            auto *readBoxes =
+                static_cast<FixedVector *>(const_cast<void *>(chunk->readComponent(lpl::ecs::ComponentId::AABB)));
+
+            if (positions == nullptr || velocities == nullptr || masses == nullptr || readMasses == nullptr ||
+                boxes == nullptr || readBoxes == nullptr)
+                continue;
+            for (lpl::core::u32 index = 0u; index < chunk->count() && seeded < stacks * kStackHeight; ++index)
+            {
+                const lpl::core::i32 column = static_cast<lpl::core::i32>(seeded / kStackHeight);
+                const lpl::core::i32 level = static_cast<lpl::core::i32>(seeded % kStackHeight);
+                positions[index] =
+                    FixedVector{lpl::math::Fixed32::fromInt(3 * column),
+                                lpl::math::Fixed32::fromRaw(32768 + 65536 * level), lpl::math::Fixed32::zero()};
+                velocities[index] =
+                    FixedVector{lpl::math::Fixed32::zero(), lpl::math::Fixed32::zero(), lpl::math::Fixed32::zero()};
+                masses[index] = lpl::math::Fixed32::one();
+                readMasses[index] = lpl::math::Fixed32::one();
+                boxes[index] = box;
+                readBoxes[index] = box;
+                ++seeded;
+            }
+        }
+    }
+    return seeded;
+}
+
+/**
+ * @brief Reads how still the stacks of seedStacks stand.
+ */
+[[nodiscard]] StackRest readStacks(PartitionSpan partitions)
+{
+    StackRest rest;
+    const lpl::math::Fixed32 threshold = lpl::math::Fixed32::fromFloat(0.01f);
+    const lpl::math::Fixed32 sinking = lpl::math::Fixed32::fromRaw(1024);
+
+    for (const auto &partition : partitions)
+    {
+        for (const auto &chunk : partition->chunks())
+        {
+            auto *positions = static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+            auto *velocities = static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Velocity));
+            if (positions == nullptr || velocities == nullptr)
+                continue;
+            for (lpl::core::u32 index = 0u; index < chunk->count(); ++index)
+            {
+                const lpl::math::Fixed32 speed = velocities[index].lengthSquared();
+                const lpl::math::Fixed32 standing = lpl::math::Fixed32::fromRaw(
+                    32768 + 65536 * static_cast<lpl::core::i32>(rest.bodies % kStackHeight));
+                rest.moving += speed >= threshold ? 1u : 0u;
+                rest.sunk += positions[index].y < standing - sinking ? 1u : 0u;
+                rest.fastest = speed > rest.fastest ? speed : rest.fastest;
+                ++rest.bodies;
+            }
+        }
+    }
+    return rest;
+}
+
+/**
+ * @brief Runs @p stacks stacks of seedStacks for two seconds of 1/60 s steps and reads how still they
+ *        stand.
+ */
+[[nodiscard]] StackRest runStacks(lpl::core::u32 stacks)
+{
+    const lpl::ecs::ComponentId components[] = {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::Velocity,
+                                                lpl::ecs::ComponentId::Mass, lpl::ecs::ComponentId::AABB};
+    lpl::ecs::Archetype archetype{components};
+    lpl::ecs::Registry registry;
+    for (lpl::core::u32 body = 0u; body < stacks * kStackHeight; ++body)
+        (void) registry.createEntity(archetype);
+    if (seedStacks(registry.partitions(), stacks) != stacks * kStackHeight)
+        return StackRest{};
+
+    lpl::physics::CpuPhysicsBackend backend{registry};
+    (void) backend.init();
+    for (lpl::core::u32 step = 0u; step < 120u; ++step)
+        (void) backend.step(1.0f / 60.0f);
+    return readStacks(registry.partitions());
+}
+
 } // namespace
 
 /**
@@ -240,4 +357,26 @@ LPL_TEST(a_contact_reaches_a_subscriber)
     test.check(contacts.impulse > 0.0f, "with a positive impulse");
 
     test.measure("contacts_published", contacts.published);
+}
+
+/**
+ * @brief A stack of four boxes on the ground stands still: every box ends each step under the sleep
+ *        threshold, at the height the stack puts it.
+ *
+ * @details One stack is solved pair by pair, and nine stacks, 36 bodies, take their pairs from the
+ *          neighbour lists. The velocities were corrected only while two boxes overlapped, and the
+ *          position correction separated them in the first iteration: every box above the bottom one
+ *          kept one step of gravity, a sixth of a unit a second, and could never sleep.
+ */
+LPL_TEST(a_stack_at_rest_keeps_no_speed)
+{
+    const StackRest alone = runStacks(1u);
+    const StackRest crowd = runStacks(9u);
+
+    test.check(alone.bodies == kStackHeight && crowd.bodies == 9u * kStackHeight, "the stacks are built");
+    test.check(alone.moving == 0u, "every box of a lone stack is under the sleep threshold");
+    test.check(crowd.moving == 0u, "and so is every box of nine stacks, paired through the lists");
+    test.check(alone.sunk == 0u && crowd.sunk == 0u, "and no box sank into the one under it");
+    test.measureHexadecimal("fastest_alone", static_cast<lpl::core::u32>(alone.fastest.raw()));
+    test.measureHexadecimal("fastest_crowd", static_cast<lpl::core::u32>(crowd.fastest.raw()));
 }
