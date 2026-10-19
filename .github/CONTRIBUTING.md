@@ -52,9 +52,11 @@ reason.
   or an address is never measured. A test of what only the kernel compiles goes in
   `tests/<module>/kernel/`, and runs in ring 0 alone. `xmake run test-engine 'relief.*'` runs one
   suite.
-- Any other test is a `test-*` target of `tests/xmake.lua`, and it ends on
-  `ALL PASS (0 failures, N checks)`. A target that prints no verdict counts as a failure, so a test
-  target is declared by the change that fills it.
+- Any other test is a `test-*` target of `tests/xmake.lua`. It ends on `ALL PASS (0 failures, N checks)`
+  and exits non-zero when a claim did not hold. `xmake test` builds and runs every `test-*` target,
+  `test-engine` included, from the repository root, and judges each by its exit status. A target that
+  prints no verdict counts as a failure in the full validation, so a test target is declared by the
+  change that fills it.
 - A generator or a simulation step earns three tests: it reproduces bit for bit, it changes with its
   seed, and it keeps an invariant stated as a property (the steep erodes more than the flat), not as a
   folded signature. A signature that stays stable proves nothing about what it folds.

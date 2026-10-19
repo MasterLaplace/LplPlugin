@@ -2,6 +2,17 @@
 -- tests/ build configuration — Parity (determinism / regression) tests
 -- /////////////////////////////////////////////////////////////////////////////
 
+-- Every test-* binary is a test of `xmake test`, run from the repository root and judged by its exit
+-- status: `xmake test` builds and runs them all, `xmake test 'test-procgen*/*'` the ones it names.
+rule("laplace.test_binary")
+    on_load(function (target)
+        if target:kind() == "binary" and target:name():startswith("test-") then
+            target:add("tests", "default", {rundir = os.projectdir()})
+        end
+    end)
+rule_end()
+add_rules("laplace.test_binary")
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Fixed32 arithmetic parity
 -- ─────────────────────────────────────────────────────────────────────────────

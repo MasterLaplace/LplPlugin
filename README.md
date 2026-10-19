@@ -75,10 +75,9 @@ The project uses **[xmake](https://xmake.io)** exclusively.
 xmake f -c
 xmake build -j$(nproc)
 
-# Run parity regression tests (must all pass before any commit)
-xmake run test-fixed32-parity
-xmake run test-morton-parity
-xmake run test-physics-parity
+# Run every test (must all pass before any commit), or the ones a pattern names
+xmake test
+xmake test 'test-procgen*/*'
 
 # Run the engine
 xmake run lpl-server         # terminal 1
