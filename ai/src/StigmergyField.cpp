@@ -135,6 +135,11 @@ math::Fixed32 StigmergyField::value(core::u32 channel, core::u32 x, core::u32 z)
     return _cells[index(channel, x, z)];
 }
 
+bool StigmergyField::passable(core::u32 x, core::u32 z) const noexcept
+{
+    return x < _width && z < _depth && _blocked[static_cast<core::usize>(z) * _width + x] == 0u;
+}
+
 core::u32 StigmergyField::gradientDirection(core::u32 channel, core::u32 x, core::u32 z, bool uphill) const
 {
     if (channel >= _channels || x >= _width || z >= _depth)
