@@ -82,6 +82,16 @@ struct AiMapParams {
 };
 
 /**
+ * @struct PathSearchStats
+ * @brief What one search did, for a test or a profile to read.
+ */
+struct PathSearchStats {
+    core::u32 reached{0u};  /**< States the search gave a cost to. */
+    core::u32 expanded{0u}; /**< States whose neighbours it relaxed: each one at most once. */
+    core::u32 skipped{0u};  /**< Entries popped after a cheaper one for the same state, and dropped. */
+};
+
+/**
  * @class AiMap
  * @brief Per-cell capability masks, and pathfinding over (cell, facing).
  */
@@ -134,6 +144,10 @@ public:
      * through any incoming direction: the search stops at the first arrival it
      * expands, and if it never expands one, every arrival is checked.
      *
+     * A state pushed again at a lower cost leaves its older entries in the heap.
+     * Each is dropped when it comes out, so a state is expanded once, from its
+     * best cost, and a search that runs dry expands exactly the states it reached.
+     *
      * @param startX  Start column.
      * @param startZ  Start row.
      * @param goalX   Goal column.
@@ -141,11 +155,12 @@ public:
      * @param mask    The body's locomotion modes.
      * @param params  Costs.
      * @param outPath Receives the route as flat cell indices, start first.
+     * @param outStats Receives what the search did, when not null.
      * @return Total cost, or @ref kNoPath when unreachable.
      */
     [[nodiscard]] core::u32 findPath(core::u32 startX, core::u32 startZ, core::u32 goalX, core::u32 goalZ,
-                                     core::u8 mask, const AiMapParams &params,
-                                     lpl::pmr::vector<core::u32> &outPath) const;
+                                     core::u8 mask, const AiMapParams &params, lpl::pmr::vector<core::u32> &outPath,
+                                     PathSearchStats *outStats = nullptr) const;
 
     /** Returned by @ref findPath when no route exists. */
     static constexpr core::u32 kNoPath = 0xFFFFFFFFu;
