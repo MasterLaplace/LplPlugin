@@ -31,6 +31,9 @@ inline math::ReliefField makeRealReliefField(const procgen::WorldRecipe &recipe,
 
 inline core::Expected<void> TerrainWorld::onInit(engine::WorldContext &context)
 {
+    if (_recipe.width > kMaxSize || _recipe.depth > kMaxSize)
+        return core::makeError(core::ErrorCode::InvalidArgument, "TerrainWorld: the grid is wider than kMaxSize");
+
     _lodRings = context.config.lodRings();
     _viewDistance = context.config.viewDistance() > 0.0f ? context.config.viewDistance() : kPlantFarDistance;
     _terrainShadows = context.config.enableTerrainShadows();
@@ -137,6 +140,7 @@ inline void TerrainWorld::onFixedStep(core::f32 dt)
     refreshCreatureView();
     engine::World::onFixedStep(dt);
     ++_ticks;
+    tickVegetation();
 
     if (_ticks % kWebPeriod == 0u)
     {
@@ -280,26 +284,6 @@ inline void TerrainWorld::generate()
             });
     }
 
-    _living.scent().open(_gridWidth < _gridDepth ? _gridWidth : _gridDepth, 2u);
-    _living.scent().centreOn(0, 0);
-    _living.scent().field().setObstacles(_blocked);
-
-    _plants.clear();
-    math::Random thin{_seed ^ 0x5EED11u};
-    for (core::u32 z = 0u; z < _gridDepth; ++z)
-        for (core::u32 x = 0u; x < _gridWidth; ++x)
-        {
-            const procgen::BiomeId biome = _biomes.at(x, z);
-            const bool wooded = biome == procgen::BiomeId::Forest || biome == procgen::BiomeId::Taiga ||
-                                biome == procgen::BiomeId::Rainforest;
-            if (!wooded || _blocked.at(x, z) != 0u || thin.below(2u) != 0u)
-                continue;
-            Plant plant;
-            plant.cellX = static_cast<core::i32>(x);
-            plant.cellZ = static_cast<core::i32>(z);
-            _plants.push_back(plant);
-        }
-
     _living.configure(livingParams(), _livingRecipe, _seed);
     _living.seedWeb(static_cast<core::u32>(_plants.size()));
     _living.openScent(_gridWidth < _gridDepth ? _gridWidth : _gridDepth, _living.params().scentLayers);
@@ -374,9 +358,6 @@ inline void TerrainWorld::setInfinite(bool infinite)
     _camera.setFocus(0.0f, 0.0f);
     _bodySpawned = false;
     _camera.setEyeHeight(_bodyParams.eyeHeight.toFloat());
-
-    _living.scent().open(kFieldSpan, 2u);
-    _living.scent().centreOn(0, 0);
 
     _living.configure(livingParams(), _livingRecipe, _seed);
     _living.seedWeb(0u);

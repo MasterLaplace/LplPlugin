@@ -567,6 +567,15 @@ target("test-chronicle-world")
     set_default(false)
 target_end()
 
+target("test-terrain-world")
+    set_kind("binary")
+    set_group("tests")
+    add_deps("lpl-core", "lpl-math", "lpl-render", "lpl-procgen", "lpl-ecs", "lpl-ecology", "lpl-ai", "lpl-engine",
+             "lpl-samples", "lpl-platform")
+    add_files("parity/test_terrain_world.cpp")
+    set_default(false)
+target_end()
+
 target("test-terrain-render")
     set_kind("binary")
     set_group("tests")
