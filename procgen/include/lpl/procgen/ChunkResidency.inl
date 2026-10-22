@@ -35,10 +35,21 @@ inline const Chunk *ChunkResidency<Chunk>::find(core::i32 chunkX, core::i32 chun
 }
 
 template <typename Chunk>
-inline const Chunk *ChunkResidency<Chunk>::findByCell(core::i32 worldX, core::i32 worldZ) const noexcept
+inline const Chunk *ChunkResidency<Chunk>::findByCell(core::i32 worldX, core::i32 worldZ,
+                                                      core::u32 *hint) const noexcept
 {
     const core::i32 span = static_cast<core::i32>(_chunkParams.size);
-    return find(floorDivChunk(worldX, span), floorDivChunk(worldZ, span));
+    const core::i32 chunkX = floorDivChunk(worldX, span);
+    const core::i32 chunkZ = floorDivChunk(worldZ, span);
+
+    if (hint != nullptr && *hint < _chunks.size() && _chunks[*hint].coord.x == chunkX &&
+        _chunks[*hint].coord.z == chunkZ)
+        return &_chunks[*hint];
+
+    const Chunk *found = find(chunkX, chunkZ);
+    if (found != nullptr && hint != nullptr)
+        *hint = static_cast<core::u32>(found - &_chunks[0]);
+    return found;
 }
 
 template <typename Chunk>
@@ -91,9 +102,10 @@ inline void ChunkResidency<Chunk>::stream(core::f32 focusCellX, core::f32 focusC
 
 template <typename Chunk>
 template <typename HeightOf>
-inline core::f32 ChunkResidency<Chunk>::groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const
+inline core::f32 ChunkResidency<Chunk>::groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf,
+                                                 core::u32 *hint) const
 {
-    if (const Chunk *chunk = findByCell(worldX, worldZ); chunk != nullptr)
+    if (const Chunk *chunk = findByCell(worldX, worldZ, hint); chunk != nullptr)
     {
         core::u32 localX = 0u;
         core::u32 localZ = 0u;

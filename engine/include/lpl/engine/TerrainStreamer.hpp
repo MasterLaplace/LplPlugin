@@ -176,8 +176,12 @@ public:
 
     /**
      * @brief Ground height at a world cell — the resident field first, then the noise.
+     *
+     * @param hint nullptr, or the chunk to look in first, for a caller that walks the ground cell
+     *             by cell as a shadow ray does: in, the index the previous lookup found, any value
+     *             being accepted; out, the index found, unchanged past the resident ring.
      */
-    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ) const;
+    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, core::u32 *hint = nullptr) const;
 
     /**
      * @brief The same height, in Fixed32, for a caller whose result is authoritative.

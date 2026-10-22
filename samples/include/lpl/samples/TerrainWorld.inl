@@ -407,27 +407,17 @@ inline void TerrainWorld::stepBody(core::f32 dt)
 
 inline void TerrainWorld::refreshShadows(ResidentChunk &chunk) const
 {
-    render::HeightfieldPatchParams patch;
-    patch.size = kChunkSize;
-    patch.stride = 1u;
-    patch.originX = chunk.coord.x * static_cast<core::i32>(kChunkSize);
-    patch.originZ = chunk.coord.z * static_cast<core::i32>(kChunkSize);
-
-    const procgen::ChunkParams &params = _streamer.chunkParams();
-    _terrainSurface.fillShadowMask(
-        patch, [&params](core::i32 x, core::i32 z) { return procgen::sampleWorldHeight(params, x, z).toFloat(); },
-        [this, &chunk](auto &&emit) {
-            for (core::u32 i = 0u; i < chunk.plants.size(); ++i)
-            {
-                if (!chunk.plants[i].standing)
-                    continue;
-                core::f32 height = 0.0f;
-                core::f32 spread = 0.0f;
-                _props.plantExtent(chunk.plants[i].cellX, chunk.plants[i].cellZ, height, spread);
-                emit(chunk.plants[i].cellX, chunk.plants[i].cellZ, height, spread);
-            }
-        },
-        chunk.shade);
+    engine::castChunkShadows(_streamer, _terrainSurface, chunk, [this, &chunk](auto &&emit) {
+        for (core::u32 i = 0u; i < chunk.plants.size(); ++i)
+        {
+            if (!chunk.plants[i].standing)
+                continue;
+            core::f32 height = 0.0f;
+            core::f32 spread = 0.0f;
+            _props.plantExtent(chunk.plants[i].cellX, chunk.plants[i].cellZ, height, spread);
+            emit(chunk.plants[i].cellX, chunk.plants[i].cellZ, height, spread);
+        }
+    });
 }
 
 inline engine::LivingLayerParams TerrainWorld::livingParams() const noexcept
