@@ -11,13 +11,13 @@ constexpr lpl::core::u32 kTicksBetweenFolds = 60u;
 
 /**
  * @brief The pile's state folded every 60 ticks, from tick 60 to tick 600, by the solver of sequential
- *        impulses (LplPlugin#560).
+ *        impulses and its islands (LplPlugin#560).
  */
-constexpr lpl::core::u32 kRecordedFolds[] = {0x55824A16u, 0x81D4D152u, 0xF37B7C13u, 0xF37B7C13u, 0xF37B7C13u,
-                                             0xF37B7C13u, 0xF37B7C13u, 0xF37B7C13u, 0xF37B7C13u, 0xF37B7C13u};
+constexpr lpl::core::u32 kRecordedFolds[] = {0x55824A16u, 0x822B5FAAu, 0x822B5FAAu, 0x822B5FAAu, 0x822B5FAAu,
+                                             0x822B5FAAu, 0x822B5FAAu, 0x822B5FAAu, 0x822B5FAAu, 0x822B5FAAu};
 
-/** @brief The fold by which the pile has settled and sleeps: tick 180. */
-constexpr lpl::core::u32 kSettledFold = 2u;
+/** @brief The fold by which the pile has settled and sleeps: tick 120. */
+constexpr lpl::core::u32 kSettledFold = 1u;
 
 } // namespace
 
@@ -68,12 +68,12 @@ int main()
     }
 
     const bool moving = unchanged == 0u;
-    std::printf("  %s every fold until tick 180 differs from the one before it\n", moving ? "PASS" : "FAIL");
+    std::printf("  %s every fold until tick 120 differs from the one before it\n", moving ? "PASS" : "FAIL");
     if (!moving)
         ++failures;
 
     const bool asleep = changed == 0u;
-    std::printf("  %s every fold after tick 180 is the same: the pile sleeps\n", asleep ? "PASS" : "FAIL");
+    std::printf("  %s every fold after tick 120 is the same: the pile sleeps\n", asleep ? "PASS" : "FAIL");
     if (!asleep)
         ++failures;
 

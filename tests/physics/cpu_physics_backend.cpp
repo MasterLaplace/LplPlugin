@@ -277,6 +277,40 @@ lpl::core::u32 seedStacks(PartitionSpan partitions, lpl::core::u32 stacks)
     return readStacks(registry.partitions());
 }
 
+/**
+ * @brief Puts the body of index @p body, counted across the chunks, at @p position with @p velocity,
+ *        a unit box of unit mass.
+ *
+ * @details Position and velocity go into the buffer the integrator writes; the mass and the box go
+ *          into both buffers, because the resolver reads them from the other one.
+ */
+void placeBox(PartitionSpan partitions, lpl::core::u32 body, const FixedVector &position, const FixedVector &velocity)
+{
+    const FixedVector box{lpl::math::Fixed32::one(), lpl::math::Fixed32::one(), lpl::math::Fixed32::one()};
+    lpl::core::u32 seen = 0u;
+
+    for (const auto &partition : partitions)
+    {
+        for (const auto &chunk : partition->chunks())
+        {
+            for (lpl::core::u32 index = 0u; index < chunk->count(); ++index, ++seen)
+            {
+                if (seen != body)
+                    continue;
+                static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Position))[index] = position;
+                static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Velocity))[index] = velocity;
+                static_cast<lpl::math::Fixed32 *>(chunk->writeComponent(lpl::ecs::ComponentId::Mass))[index] =
+                    lpl::math::Fixed32::one();
+                static_cast<lpl::math::Fixed32 *>(const_cast<void *>(
+                    chunk->readComponent(lpl::ecs::ComponentId::Mass)))[index] = lpl::math::Fixed32::one();
+                static_cast<FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::AABB))[index] = box;
+                static_cast<FixedVector *>(
+                    const_cast<void *>(chunk->readComponent(lpl::ecs::ComponentId::AABB)))[index] = box;
+            }
+        }
+    }
+}
+
 } // namespace
 
 /**
@@ -379,4 +413,62 @@ LPL_TEST(a_stack_at_rest_keeps_no_speed)
     test.check(alone.sunk == 0u && crowd.sunk == 0u, "and no box sank into the one under it");
     test.measureHexadecimal("fastest_alone", static_cast<lpl::core::u32>(alone.fastest.raw()));
     test.measureHexadecimal("fastest_crowd", static_cast<lpl::core::u32>(crowd.fastest.raw()));
+}
+
+/**
+ * @brief Two stacks fall asleep, and a box dropped on the first wakes all of it, its bottom box
+ *        included, and nothing of the second.
+ *
+ * @details Bodies that touch form an island, which sleeps and wakes whole, as in Box2D. A box asleep
+ *          on its own under a woken one would hold still while the box above it moved: the drop
+ *          woke only the box it hit.
+ */
+LPL_TEST(a_dropped_box_wakes_the_island_it_hits_and_only_that_one)
+{
+    const lpl::ecs::ComponentId components[] = {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::Velocity,
+                                                lpl::ecs::ComponentId::Mass, lpl::ecs::ComponentId::AABB};
+    lpl::ecs::Archetype archetype{components};
+    lpl::ecs::Registry registry;
+    lpl::ecs::EntityId stacked[2u * kStackHeight];
+    for (lpl::ecs::EntityId &body : stacked)
+    {
+        const auto created = registry.createEntity(archetype);
+        if (!test.check(created.has_value(), "a stacked box is made"))
+            return;
+        body = created.value();
+    }
+    const lpl::math::Fixed32 zero = lpl::math::Fixed32::zero();
+
+    if (!test.check(seedStacks(registry.partitions(), 2u) == 2u * kStackHeight, "two stacks are built"))
+        return;
+
+    lpl::physics::CpuPhysicsBackend backend{registry};
+    (void) backend.init();
+    for (lpl::core::u32 step = 0u; step < 120u; ++step)
+        (void) backend.step(1.0f / 60.0f);
+
+    lpl::core::u32 asleep = 0u;
+    for (const lpl::ecs::EntityId body : stacked)
+        asleep += backend.isAwake(body) ? 0u : 1u;
+    test.check(asleep == 2u * kStackHeight, "every box of both stacks sleeps once it has been still");
+
+    const auto dropped = registry.createEntity(archetype);
+    if (!test.check(dropped.has_value(), "a box to drop is made"))
+        return;
+    placeBox(registry.partitions(), 2u * kStackHeight, FixedVector{zero, lpl::math::Fixed32::fromInt(5), zero},
+             FixedVector{zero, lpl::math::Fixed32::fromInt(-3), zero});
+    for (lpl::core::u32 step = 0u; step < 20u; ++step)
+        (void) backend.step(1.0f / 60.0f);
+
+    lpl::core::u32 firstAwake = 0u;
+    lpl::core::u32 secondAwake = 0u;
+    for (lpl::core::u32 level = 0u; level < kStackHeight; ++level)
+    {
+        firstAwake += backend.isAwake(stacked[level]) ? 1u : 0u;
+        secondAwake += backend.isAwake(stacked[kStackHeight + level]) ? 1u : 0u;
+    }
+    test.check(backend.isAwake(dropped.value()), "the dropped box is awake");
+    test.check(firstAwake == kStackHeight, "every box of the stack it landed on woke, the bottom one too");
+    test.check(secondAwake == 0u, "and the other stack still sleeps");
+    test.measure("first_stack_awake", firstAwake);
 }

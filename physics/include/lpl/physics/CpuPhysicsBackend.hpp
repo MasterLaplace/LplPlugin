@@ -65,6 +65,18 @@ public:
     void shutdown() override;
     [[nodiscard]] const char *name() const noexcept override;
 
+    /**
+     * @brief Whether @p entity is awake: moving, or still for fewer steps than its island needs to
+     *        fall asleep.
+     *
+     * Bodies that touch form an island, and an island sleeps and wakes whole, as in Box2D: an awake
+     * body that touches a sleeper wakes it, and every sleeper it reaches through touching boxes.
+     *
+     * @param entity The body.
+     * @return False while it sleeps.
+     */
+    [[nodiscard]] bool isAwake(ecs::EntityId entity) const noexcept;
+
 private:
     /**
      * @brief The velocities of a step, before any contact: gravity on a body with mass, then damping.
@@ -131,16 +143,20 @@ private:
     void resolveCollisionsWorld(math::Fixed32 inverseDt) const noexcept;
 
     /**
-     * @brief Sleeping detection: sleep after 30 frames below threshold.
+     * @brief Counts, for each awake body, the steps in a row it has spent under the sleep threshold,
+     *        and puts to sleep after 30 of them a body that collides with nothing.
      *
-     * The speed counts all three axes: the legacy one left out y, and froze bodies in free fall.
+     * The speed counts all three axes: the legacy one left out y, and froze bodies in free fall. A
+     * body that collides sleeps with its island instead, once every body of the island has spent 30
+     * steps under the threshold: see the islands of the backend's state.
      *
-     * @param entities List of entity IDs.
+     * @param entities   List of entity IDs.
      * @param velocities List of velocities.
-     * @param count Number of entities.
+     * @param count      Number of entities.
+     * @param alone      Whether the chunk's bodies have no box, and so no island.
      */
-    void updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *velocities,
-                             core::u32 count) const noexcept;
+    void updateSleepingChunk(const ecs::EntityId *entities, math::Vec3<math::Fixed32> *velocities, core::u32 count,
+                             bool alone) const noexcept;
 
     struct Impl;
     lpl::pmr::unique_ptr<Impl> _impl;
