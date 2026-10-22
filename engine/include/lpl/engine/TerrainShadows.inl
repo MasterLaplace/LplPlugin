@@ -15,10 +15,8 @@ inline void castChunkShadows(const TerrainStreamer &streamer, const TerrainSurfa
     patch.originX = chunk.coord.x * static_cast<core::i32>(size);
     patch.originZ = chunk.coord.z * static_cast<core::i32>(size);
 
-    const procgen::ChunkParams &params = streamer.chunkParams();
     surface.fillShadowMask(
-        patch, [&params](core::i32 x, core::i32 z) { return procgen::sampleWorldHeight(params, x, z).toFloat(); },
-        forEachProp, chunk.shade);
+        patch, [&streamer](core::i32 x, core::i32 z) { return streamer.groundAt(x, z); }, forEachProp, chunk.shade);
 }
 
 } // namespace lpl::engine
