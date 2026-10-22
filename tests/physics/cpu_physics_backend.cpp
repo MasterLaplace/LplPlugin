@@ -311,6 +311,32 @@ void placeBox(PartitionSpan partitions, lpl::core::u32 body, const FixedVector &
     }
 }
 
+/**
+ * @brief An FNV-1a fold of the positions of the first @p count bodies, counted across the chunks.
+ */
+[[nodiscard]] lpl::core::u32 foldPositions(PartitionSpan partitions, lpl::core::u32 count)
+{
+    lpl::core::u32 fold = 0x811C9DC5u;
+    lpl::core::u32 seen = 0u;
+
+    for (const auto &partition : partitions)
+    {
+        for (const auto &chunk : partition->chunks())
+        {
+            const auto *positions =
+                static_cast<const FixedVector *>(chunk->writeComponent(lpl::ecs::ComponentId::Position));
+            for (lpl::core::u32 index = 0u; index < chunk->count() && seen < count; ++index, ++seen)
+            {
+                const lpl::core::i32 words[3] = {positions[index].x.raw(), positions[index].y.raw(),
+                                                 positions[index].z.raw()};
+                for (const lpl::core::i32 word : words)
+                    fold = (fold ^ static_cast<lpl::core::u32>(word)) * 0x01000193u;
+            }
+        }
+    }
+    return fold;
+}
+
 } // namespace
 
 /**
@@ -471,4 +497,54 @@ LPL_TEST(a_dropped_box_wakes_the_island_it_hits_and_only_that_one)
     test.check(firstAwake == kStackHeight, "every box of the stack it landed on woke, the bottom one too");
     test.check(secondAwake == 0u, "and the other stack still sleeps");
     test.measure("first_stack_awake", firstAwake);
+}
+
+/**
+ * @brief A body asleep through a step reports that it did not move, and it did not; a falling one
+ *        reports that it moved.
+ *
+ * @details The spatial index skips the bodies the backend says did not move, so the claim has to be
+ *          true to the word: the sleepers' positions are read before and after the step.
+ */
+LPL_TEST(a_body_asleep_through_a_step_reports_that_it_did_not_move)
+{
+    const lpl::ecs::ComponentId components[] = {lpl::ecs::ComponentId::Position, lpl::ecs::ComponentId::Velocity,
+                                                lpl::ecs::ComponentId::Mass, lpl::ecs::ComponentId::AABB};
+    lpl::ecs::Archetype archetype{components};
+    lpl::ecs::Registry registry;
+    lpl::ecs::EntityId stacked[kStackHeight];
+    for (lpl::ecs::EntityId &body : stacked)
+    {
+        const auto created = registry.createEntity(archetype);
+        if (!test.check(created.has_value(), "a stacked box is made"))
+            return;
+        body = created.value();
+    }
+    const lpl::math::Fixed32 zero = lpl::math::Fixed32::zero();
+
+    if (!test.check(seedStacks(registry.partitions(), 1u) == kStackHeight, "a stack is built"))
+        return;
+
+    lpl::physics::CpuPhysicsBackend backend{registry};
+    (void) backend.init();
+    for (lpl::core::u32 step = 0u; step < 120u; ++step)
+        (void) backend.step(1.0f / 60.0f);
+
+    const auto falling = registry.createEntity(archetype);
+    if (!test.check(falling.has_value(), "a box to drop is made"))
+        return;
+    placeBox(registry.partitions(), kStackHeight,
+             FixedVector{lpl::math::Fixed32::fromInt(10), lpl::math::Fixed32::fromInt(5), zero},
+             FixedVector{zero, zero, zero});
+
+    const lpl::core::u32 before = foldPositions(registry.partitions(), kStackHeight);
+    (void) backend.step(1.0f / 60.0f);
+    const lpl::core::u32 after = foldPositions(registry.partitions(), kStackHeight);
+
+    lpl::core::u32 movedSleepers = 0u;
+    for (const lpl::ecs::EntityId body : stacked)
+        movedSleepers += backend.movedLastStep(body) ? 1u : 0u;
+    test.check(movedSleepers == 0u, "every box of the sleeping stack says it did not move");
+    test.check(before == after, "and none of them moved");
+    test.check(backend.movedLastStep(falling.value()), "the falling box says it moved");
 }

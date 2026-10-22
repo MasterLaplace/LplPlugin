@@ -15,6 +15,7 @@
 
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/ecs/Entity.hpp>
 
 namespace lpl::physics {
 
@@ -54,6 +55,18 @@ public:
      * @brief Returns a human-readable name for this backend.
      */
     [[nodiscard]] virtual const char *name() const noexcept = 0;
+
+    /**
+     * @brief Whether @p entity can have moved during the last step.
+     *
+     * A caller that files bodies by position, as the spatial index does, skips the ones that cannot
+     * have moved: a body asleep through the whole step.
+     *
+     * @param entity The body.
+     * @return False only when the backend knows the body did not move: true for a backend without
+     *         sleep, which is what this default says.
+     */
+    [[nodiscard]] virtual bool movedLastStep([[maybe_unused]] ecs::EntityId entity) const noexcept { return true; }
 };
 
 } // namespace lpl::physics

@@ -46,12 +46,14 @@ public:
     [[nodiscard]] const ecs::SystemDescriptor &descriptor() const noexcept override;
 
     /**
-     * @brief Steps the backend, then re-files every entity in its spatial cell.
+     * @brief Steps the backend, then re-files in its spatial cell every entity that can have moved.
      *
      * The backend runs integration, collision and sleeping on all chunks. The spatial
      * migration then walks every partition that has a Position and updates the spatial
      * index from the write buffer — the post-physics positions, already authoritative
-     * Fixed32, with no float conversion. insertOrUpdate is a no-op when the entity's
+     * Fixed32, with no float conversion. An entity the backend says did not move, asleep
+     * through the step, is skipped: once a pile sleeps, filing it again was the largest
+     * cost left in the server's tick. insertOrUpdate is a no-op when the entity's
      * cell has not changed (fast early-exit). WorldPartition::step() comes last, for the
      * GPU dispatch (future).
      */

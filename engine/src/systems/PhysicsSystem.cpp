@@ -57,6 +57,8 @@ void PhysicsSystem::execute(core::f32 dt)
 
             for (core::u32 i = 0; i < count; ++i)
             {
+                if (!_impl->backend.movedLastStep(entityIds[i]))
+                    continue;
                 [[maybe_unused]] auto migRes = _impl->world.insertOrUpdate(entityIds[i], positions[i]);
             }
         }

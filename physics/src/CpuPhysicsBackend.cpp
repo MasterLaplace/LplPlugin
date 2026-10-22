@@ -215,8 +215,9 @@ struct CpuPhysicsBackend::Impl {
 
     ecs::Registry &registry;
 
-    lpl::pmr::vector<bool> sleeping;                    /**< Per entity slot, not per chunk: whether it sleeps. */
-    lpl::pmr::vector<core::u16> sleepCounter;           /**< Per slot: the steps in a row under the sleep threshold. */
+    lpl::pmr::vector<bool> sleeping;          /**< Per entity slot, not per chunk: whether it sleeps. */
+    lpl::pmr::vector<core::u16> sleepCounter; /**< Per slot: the steps in a row under the sleep threshold. */
+    lpl::pmr::vector<bool> sleptThrough;      /**< Per slot: asleep since the step began, never woken in it. */
     lpl::pmr::vector<PhysicsEntityRef> physicsEntities; /**< Every body of the world, gathered again each step. */
     lpl::pmr::unique_ptr<Octree> broadPhase;            /**< Made once, refilled in place when a listing needs it. */
     lpl::pmr::vector<Contact> contacts;                 /**< The step's contacts, the ground's first. */
@@ -717,6 +718,7 @@ struct CpuPhysicsBackend::Impl {
         if (overlap >= math::Fixed32::zero() && asleepA != asleepB)
         {
             sleeping[asleepA ? refA.id.slot() : refB.id.slot()] = false;
+            sleptThrough[asleepA ? refA.id.slot() : refB.id.slot()] = false;
             wokeASleeper = true;
             return;
         }
@@ -860,6 +862,18 @@ struct CpuPhysicsBackend::Impl {
     }
 
     /**
+     * @brief Marks every body asleep as the step begins as having slept through it, until something
+     *        wakes it.
+     */
+    void rememberTheSleepers()
+    {
+        const core::u32 slots = static_cast<core::u32>(sleeping.size());
+        sleptThrough.resize(slots);
+        for (core::u32 slot = 0u; slot < slots; ++slot)
+            sleptThrough[slot] = sleeping[slot];
+    }
+
+    /**
      * @brief Ensures sleeping vectors are large enough for a given entity slot.
      */
     void ensureSleepCapacity(core::u32 entitySlot)
@@ -895,6 +909,8 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
     auto &registry = _impl->registry;
     const auto partitions = registry.partitions();
     const math::Fixed32 fdt = math::Fixed32::fromFloat(dt);
+
+    _impl->rememberTheSleepers();
 
     for (const auto &partition : partitions)
     {
@@ -1042,6 +1058,13 @@ void CpuPhysicsBackend::shutdown()
 }
 
 bool CpuPhysicsBackend::isAwake(ecs::EntityId entity) const noexcept { return !_impl->isSleeping(entity.slot()); }
+
+bool CpuPhysicsBackend::movedLastStep(ecs::EntityId entity) const noexcept
+{
+    const core::u32 slot = entity.slot();
+    return slot >= static_cast<core::u32>(_impl->sleptThrough.size()) || !_impl->sleptThrough[slot] ||
+           !_impl->isSleeping(slot);
+}
 
 const char *CpuPhysicsBackend::name() const noexcept { return "CpuPhysicsBackend (legacy-ported)"; }
 

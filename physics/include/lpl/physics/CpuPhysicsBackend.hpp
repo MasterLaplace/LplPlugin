@@ -77,6 +77,14 @@ public:
      */
     [[nodiscard]] bool isAwake(ecs::EntityId entity) const noexcept;
 
+    /**
+     * @copydoc IPhysicsBackend::movedLastStep
+     *
+     * A body asleep when the step began, and not woken during it, did not move: a sleeper is neither
+     * integrated nor pushed, since it holds still in its contacts.
+     */
+    [[nodiscard]] bool movedLastStep(ecs::EntityId entity) const noexcept override;
+
 private:
     /**
      * @brief The velocities of a step, before any contact: gravity on a body with mass, then damping.
