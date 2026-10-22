@@ -46,6 +46,7 @@
 #    include <lpl/engine/LivingLayer.hpp>
 #    include <lpl/engine/PropLibrary.hpp>
 #    include <lpl/engine/TerrainRenderer.hpp>
+#    include <lpl/engine/TerrainShadows.hpp>
 #    include <lpl/engine/TerrainStreamer.hpp>
 #    include <lpl/engine/TerrainSurface.hpp>
 #    include <lpl/engine/ViewProfile.hpp>
@@ -704,13 +705,11 @@ private:
     }
 
     /**
-     * @brief Fills a chunk's shadow mask through the engine's surface layer.
+     * @brief Fills a chunk's shadow mask through engine::castChunkShadows.
      *
-     * The ray march over the height field and the prop-shadow arithmetic are
-     * TerrainSurface's. What this world contributes is the two things only it
-     * knows: how to sample the WORLD's height (not the chunk's — a ridge one chunk
-     * over still casts here, and a shadow that stopped at a border would be the most
-     * visible seam in the scene) and which props stand on this chunk, how tall.
+     * The rays, the ground they read and the prop-shadow arithmetic are the engine's.
+     * What this world contributes is the one thing only it knows: which props stand on
+     * this chunk, and how tall.
      */
     void refreshShadows(ResidentChunk &chunk) const;
 
