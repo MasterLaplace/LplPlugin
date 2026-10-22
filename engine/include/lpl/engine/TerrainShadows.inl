@@ -17,7 +17,7 @@ inline void castChunkShadows(const TerrainStreamer &streamer, const TerrainSurfa
 
     core::u32 hint = 0u;
     surface.fillShadowMask(
-        patch, [&streamer, &hint](core::i32 x, core::i32 z) { return streamer.groundAt(x, z, hint); }, forEachProp,
+        patch, [&streamer, &hint](core::i32 x, core::i32 z) { return streamer.groundAt(x, z, &hint); }, forEachProp,
         chunk.shade);
 }
 

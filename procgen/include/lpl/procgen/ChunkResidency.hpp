@@ -81,19 +81,14 @@ public:
 
     /**
      * @brief The record covering a WORLD cell, or nullptr.
-     */
-    [[nodiscard]] const Chunk *findByCell(core::i32 worldX, core::i32 worldZ) const noexcept;
-
-    /**
-     * @brief The record covering a WORLD cell, looked up from @p hint first, or nullptr.
      *
-     * A ray or a scan asks for cells side by side, and they mostly lie in the chunk found last: the
+     * A ray or a scan asks for cells side by side, and they mostly lie in the chunk found last: a
      * hint spares the walk over every resident chunk then.
      *
-     * @param hint In, the index the previous lookup found; any value is accepted. Out, the index
-     *             found, unchanged when no chunk covers the cell.
+     * @param hint nullptr, or in, the index the previous lookup found, any value being accepted; out,
+     *             the index found, unchanged when no chunk covers the cell.
      */
-    [[nodiscard]] const Chunk *findByCell(core::i32 worldX, core::i32 worldZ, core::u32 &hint) const noexcept;
+    [[nodiscard]] const Chunk *findByCell(core::i32 worldX, core::i32 worldZ, core::u32 *hint = nullptr) const noexcept;
 
     /**
      * @brief Local cell of a world cell inside its chunk.
@@ -126,17 +121,11 @@ public:
      * DRAWN. Two answers to this question is a bug with a picture.
      *
      * @tparam HeightOf Called as @c heightOf(chunk, localX, localZ) -> f32.
-     */
-    template <typename HeightOf>
-    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf) const;
-
-    /**
-     * @brief @ref groundAt, the chunk looked up from @p hint first.
-     *
      * @param hint As @ref findByCell takes it.
      */
     template <typename HeightOf>
-    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf, core::u32 &hint) const;
+    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, HeightOf &&heightOf,
+                                     core::u32 *hint = nullptr) const;
 
     /**
      * @brief The same lookup, in Fixed32, for a caller whose result is AUTHORITATIVE.

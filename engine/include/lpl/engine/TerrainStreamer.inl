@@ -15,13 +15,7 @@ inline void TerrainStreamer::configure(const procgen::ChunkParams &chunkParams,
     _shadowCursor = 0u;
 }
 
-inline core::f32 TerrainStreamer::groundAt(core::i32 worldX, core::i32 worldZ) const
-{
-    core::u32 hint = 0u;
-    return groundAt(worldX, worldZ, hint);
-}
-
-inline core::f32 TerrainStreamer::groundAt(core::i32 worldX, core::i32 worldZ, core::u32 &hint) const
+inline core::f32 TerrainStreamer::groundAt(core::i32 worldX, core::i32 worldZ, core::u32 *hint) const
 {
     return _residency.groundAt(
         worldX, worldZ,
