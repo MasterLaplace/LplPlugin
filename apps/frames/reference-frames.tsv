@@ -1,0 +1,15 @@
+# The reference frames lpl-frames draws, one per line, tab-separated:
+# name, settle (fixed steps before the keys, while the ground streams in), keys (- for none),
+# ticks (fixed steps after the keys), and what the frame shows. Each frame is drawn in a world of
+# its own, built from the built-in cartridge.
+settled	600	-	1	the first-person view the client starts on, once the ground streamed in
+half-a-minute	600	-	1800	the same view thirty seconds later: the herd and the sun moved
+turned	600	llllllllllllllll	300	the body turned by about a quarter turn, and the ground there
+sky	600	kkkkkkkkkk	1	the eye tilted up, mostly sky
+orbit	600	f	1	the orbit camera behind the body
+orbit-far	600	feeeee	300	the orbit camera backed off over the streamed chunks
+bounded	600	o	1	the bounded map instead of the endless world
+reflection-probe	600	r	1	the water's reflection probe switched
+physically-based	600	g	1	the physically based surface switched
+per-pixel	600	t	1	the per-pixel surface switched
+sky-block	600	y	1	the sky shaded in blocks of another size

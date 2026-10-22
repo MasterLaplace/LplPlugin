@@ -23,6 +23,18 @@ target("lpl-client")
 target_end()
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Frames: the client's world drawn from the keys and ticks of apps/frames/reference-frames.tsv,
+-- the HUD left out, so two builds can be compared frame by frame.
+-- ─────────────────────────────────────────────────────────────────────────────
+target("lpl-frames")
+    set_kind("binary")
+    set_group("apps")
+    add_deps("lpl-engine", "lpl-samples", "lpl-pack", "lpl-platform", "lpl-image", "lpl-render")
+    add_files("frames/main.cpp")
+    set_rundir("$(projectdir)")
+target_end()
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Editor (deterministic scene command REPL — human twin of the Caine AI bridge)
 -- ─────────────────────────────────────────────────────────────────────────────
 target("lpl-bake")
