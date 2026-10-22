@@ -180,3 +180,45 @@ LPL_TEST(a_ridge_of_the_resident_ground_casts_its_shadow)
     world.cast(*chunk);
     test.check(chunk->shade.at(litX, litZ) == kFullShadow, "the ridge puts the cell in its shadow");
 }
+
+/**
+ * @brief A hint from another chunk, or past the resident chunks, still reads the cell's own chunk.
+ *
+ * @details The rays look the ground up from the chunk they found last. A hint that points elsewhere has
+ *          to cost a walk over the resident chunks, never a height read from the wrong one.
+ */
+LPL_TEST(a_stale_hint_still_reads_the_cells_own_chunk)
+{
+    Shadowed world;
+    const lpl::core::u32 resident = world.streamer.size();
+
+    test.check(resident > 1u, "several chunks are resident");
+
+    lpl::core::u32 wrongHeights = 0u;
+    lpl::core::u32 wrongHints = 0u;
+    for (lpl::core::u32 i = 0u; i < resident; ++i)
+    {
+        const lpl::engine::TerrainChunk &chunk = world.streamer.at(i);
+        const lpl::core::i32 x = chunk.coord.x * static_cast<lpl::core::i32>(kChunkSize) + 5;
+        const lpl::core::i32 z = chunk.coord.z * static_cast<lpl::core::i32>(kChunkSize) + 7;
+        const lpl::core::u32 hints[] = {0u, resident - 1u, resident + 5u, i};
+
+        for (const lpl::core::u32 given : hints)
+        {
+            lpl::core::u32 hint = given;
+            if (world.streamer.groundAt(x, z, hint) != chunk.height.at(5u, 7u).toFloat())
+                ++wrongHeights;
+            if (hint != i)
+                ++wrongHints;
+        }
+    }
+    test.check(wrongHeights == 0u, "every hint reads the height of the cell's own chunk");
+    test.check(wrongHints == 0u, "and comes back pointing at that chunk");
+
+    const lpl::core::i32 far = 1000 * static_cast<lpl::core::i32>(kChunkSize);
+    lpl::core::u32 hint = 1u;
+    test.check(world.streamer.groundAt(far, far, hint) ==
+                   lpl::procgen::sampleWorldHeight(world.streamer.chunkParams(), far, far).toFloat(),
+               "past the resident ring the world's height answers");
+    test.check(hint == 1u, "and the hint is left as it was");
+}

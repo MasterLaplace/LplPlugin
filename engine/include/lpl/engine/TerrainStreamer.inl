@@ -17,9 +17,18 @@ inline void TerrainStreamer::configure(const procgen::ChunkParams &chunkParams,
 
 inline core::f32 TerrainStreamer::groundAt(core::i32 worldX, core::i32 worldZ) const
 {
-    return _residency.groundAt(worldX, worldZ, [](const TerrainChunk &chunk, core::u32 x, core::u32 z) {
-        return chunk.height.empty() ? 0.0f : chunk.height.at(x, z).toFloat();
-    });
+    core::u32 hint = 0u;
+    return groundAt(worldX, worldZ, hint);
+}
+
+inline core::f32 TerrainStreamer::groundAt(core::i32 worldX, core::i32 worldZ, core::u32 &hint) const
+{
+    return _residency.groundAt(
+        worldX, worldZ,
+        [](const TerrainChunk &chunk, core::u32 x, core::u32 z) {
+            return chunk.height.empty() ? 0.0f : chunk.height.at(x, z).toFloat();
+        },
+        hint);
 }
 
 inline math::Fixed32 TerrainStreamer::groundHeightAt(core::i32 worldX, core::i32 worldZ) const

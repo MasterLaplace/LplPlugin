@@ -180,6 +180,15 @@ public:
     [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ) const;
 
     /**
+     * @brief @ref groundAt, the chunk looked up from @p hint first: for a caller that walks the
+     *        ground cell by cell, as a shadow ray does.
+     *
+     * @param hint In, the index the previous lookup found; any value is accepted. Out, the index
+     *             found, unchanged past the resident ring.
+     */
+    [[nodiscard]] core::f32 groundAt(core::i32 worldX, core::i32 worldZ, core::u32 &hint) const;
+
+    /**
      * @brief The same height, in Fixed32, for a caller whose result is authoritative.
      *
      * @ref groundAt rounds to float because shading and projection want float. A
