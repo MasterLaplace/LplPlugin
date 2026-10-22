@@ -208,6 +208,35 @@ void qualifiedName(const Case &testCase, char (&buffer)[kQualifiedNameCapacity])
     }
 }
 
+/**
+ * @brief The patterns of @p patterns, comma-separated and ending at a space or at the end of the
+ *        string, that name @p testCase: one bit per pattern, from the first, up to
+ *        kMostRequiredPatterns.
+ */
+[[nodiscard]] core::u32 patternsNaming(const char *patterns, const Case &testCase) noexcept
+{
+    char name[kQualifiedNameCapacity];
+
+    qualifiedName(testCase, name);
+
+    core::u32 naming = 0u;
+    const char *pattern = patterns;
+
+    for (core::u32 index = 0u; index < kMostRequiredPatterns; ++index)
+    {
+        const char *patternEnd = pattern;
+
+        while (*patternEnd != '\0' && *patternEnd != ',' && *patternEnd != ' ')
+            ++patternEnd;
+        if (patternEnd > pattern && patternMatches(pattern, patternEnd, name))
+            naming |= 1u << index;
+        if (*patternEnd != ',')
+            break;
+        pattern = patternEnd + 1;
+    }
+    return naming;
+}
+
 void writeResult(Sink &sink, std::string_view indent, bool passed, core::u32 number, const char *name,
                  const char *skipReason) noexcept
 {
@@ -230,9 +259,12 @@ void writeResult(Sink &sink, std::string_view indent, bool passed, core::u32 num
  * @brief Runs one test, or reports why it does not run, and writes its result line.
  */
 [[nodiscard]] Outcome runOne(Sink &sink, const Case &testCase, core::u32 number, const char *selection,
-                             Totals &totals) noexcept
+                             const char *required, Totals &totals) noexcept
 {
     Test test(testCase, sink);
+    const core::u32 requiredBy = (required != nullptr) ? patternsNaming(required, testCase) : 0u;
+
+    totals.required |= requiredBy;
 
     if (selection != nullptr && !isSelectedBy(selection, testCase))
     {
@@ -245,6 +277,12 @@ void writeResult(Sink &sink, std::string_view indent, bool passed, core::u32 num
         totals.checks += test.checks();
         if (test.skipReason() == nullptr && test.checks() == 0u)
             test.note("checked nothing, so it could not have failed");
+    }
+    if (requiredBy != 0u && test.skipReason() != nullptr)
+    {
+        test.note(test.skipReason());
+        ++totals.checks;
+        (void) test.check(false, "a required test runs");
     }
 
     const bool checkedSomething = (test.skipReason() != nullptr || test.checks() > 0u);
@@ -270,8 +308,8 @@ void writeResult(Sink &sink, std::string_view indent, bool passed, core::u32 num
  *
  * @return The first test of the next suite, or nullptr after the last.
  */
-[[nodiscard]] const Case *runSuite(Sink &sink, const Case *first, const char *selection, core::u32 suiteNumber,
-                                   Totals &totals) noexcept
+[[nodiscard]] const Case *runSuite(Sink &sink, const Case *first, const char *selection, const char *required,
+                                   core::u32 suiteNumber, Totals &totals) noexcept
 {
     const Suite *suite = first->suite;
     char digits[kNumberCapacity];
@@ -293,7 +331,7 @@ void writeResult(Sink &sink, std::string_view indent, bool passed, core::u32 num
 
     for (; testCase != nullptr && testCase->suite == suite; testCase = after(testCase))
     {
-        const Outcome outcome = runOne(sink, *testCase, ++number, selection, totals);
+        const Outcome outcome = runOne(sink, *testCase, ++number, selection, required, totals);
 
         failed += (outcome == Outcome::kFailed) ? 1u : 0u;
         skipped += (outcome == Outcome::kSkipped) ? 1u : 0u;
@@ -388,12 +426,45 @@ core::u32 suiteCount() noexcept
 
 Totals run(Sink &sink, const char *selection, core::u32 firstSuiteNumber) noexcept
 {
+    return run(sink, selection, nullptr, firstSuiteNumber);
+}
+
+Totals run(Sink &sink, const char *selection, const char *required, core::u32 firstSuiteNumber) noexcept
+{
     Totals totals;
     core::u32 suiteNumber = firstSuiteNumber;
 
     for (const Case *first = after(nullptr); first != nullptr;)
-        first = runSuite(sink, first, selection, suiteNumber++, totals);
+        first = runSuite(sink, first, selection, required, suiteNumber++, totals);
     return totals;
+}
+
+core::u32 reportUnnamed(Sink &sink, const char *required, core::u32 named) noexcept
+{
+    if (required == nullptr)
+        return 0u;
+
+    core::u32 unnamed = 0u;
+    const char *pattern = required;
+
+    for (core::u32 index = 0u; index < kMostRequiredPatterns; ++index)
+    {
+        const char *patternEnd = pattern;
+
+        while (*patternEnd != '\0' && *patternEnd != ',' && *patternEnd != ' ')
+            ++patternEnd;
+        if (patternEnd > pattern && (named & (1u << index)) == 0u)
+        {
+            sink.write("# the required pattern ");
+            sink.write(std::string_view{pattern, static_cast<std::size_t>(patternEnd - pattern)});
+            sink.write(" named no test\n");
+            ++unnamed;
+        }
+        if (*patternEnd != ',')
+            break;
+        pattern = patternEnd + 1;
+    }
+    return unnamed;
 }
 
 } // namespace lpl::testing
