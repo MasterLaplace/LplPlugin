@@ -5,6 +5,17 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.13.0] - 2026-10-22
+
+### Fixed
+
+- **engine**: Shadow rays read the ground the world is drawn from (#570)
+- **physics**: A box dropped on a sleeping pile wakes the island it hits (#565)
+
+### Performance
+
+- **engine**: The spatial index skips the bodies that slept through the step (#568)
+
 ## [0.12.0] - 2026-10-22
 
 ### Added
