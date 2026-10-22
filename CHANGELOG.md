@@ -5,6 +5,23 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.12.0] - 2026-10-22
+
+### Added
+
+- **tests**: Xmake test runs every test binary and judges it by its exit status (#563)
+- **testing**: A required list fails the tests it names that did not run (#562)
+
+### Fixed
+
+- **physics**: Contacts are solved by sequential impulses, and a resting pile sleeps (#561)
+- **samples**: TerrainWorld regrows what is grazed, plants once, and keeps to its budget (#559)
+- **ai**: The A* search drops its stale heap entries (#558)
+- **ai**: An exploring ant stays out of walls and on the field (#557)
+- **net**: A state broadcast is one datagram, and a longer one is refused (#556)
+- **procgen**: Chunk streaming releases the furthest chunks first (#554)
+- **procgen**: The world builder reports only what it did (#553)
+
 ## [0.11.0] - 2026-10-18
 
 ### Added

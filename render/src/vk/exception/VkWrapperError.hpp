@@ -50,7 +50,7 @@ namespace lpl::render::vk {
  */
 class VkWrapperError : public std::exception {
 public:
-    explicit VkWrapperError(const std::string &message) : msg("VkWrapper error: " + message){};
+    explicit VkWrapperError(const std::string &message) : msg("VkWrapper error: " + message) {};
 
     const char *what() const throw() override { return this->msg.c_str(); };
 
