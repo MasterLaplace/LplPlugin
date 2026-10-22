@@ -223,6 +223,17 @@ struct CpuPhysicsBackend::Impl {
     lpl::pmr::vector<Contact> previousContacts;         /**< The last step's, whose impulses warm the new ones. */
 
     /**
+     * @name Islands: the bodies the step's contacts link, which sleep together and wake together.
+     * @{
+     */
+    lpl::pmr::vector<core::u32> islandParent; /**< Per body of the step: its parent in the union of the islands. */
+    lpl::pmr::vector<core::u16> islandLeast;  /**< Per island's root: the smallest sleep counter of its bodies. */
+    bool wokeASleeper{false};                 /**< Whether looking for the step's contacts woke a sleeper. */
+    core::u32 awakeBodies{0u};                /**< Bodies awake once the step's contacts are found. */
+    core::u32 stillEnough{0u};                /**< Awake bodies with a box still for kSleepFramesThreshold steps. */
+    /** @} */
+
+    /**
      * @name Neighbour lists, made when a step finds them stale: see kNeighbourMargin.
      * @{
      */
@@ -516,10 +527,37 @@ struct CpuPhysicsBackend::Impl {
             previousContacts.reserve(most);
         }
         contacts.swap(previousContacts);
-        contacts.clear();
+        do
+        {
+            wokeASleeper = false;
+            collectContacts(inverseDt, everyPair);
+        } while (wokeASleeper);
+    }
 
+    /**
+     * @brief Collects the contacts of the bodies as they stand: the ground's first, then the pairs.
+     *
+     * A sleeper that an awake body touches wakes, and the collection is made again, since the
+     * sleeper's own contacts were skipped while it slept: findContacts does it until a collection
+     * wakes nothing, so a touch wakes every sleeper it reaches through touching boxes, the island it
+     * hit, and none other.
+     *
+     * @param inverseDt One over the step, in seconds.
+     * @param everyPair Whether every pair is tried, rather than the listed ones.
+     */
+    void collectContacts(math::Fixed32 inverseDt, bool everyPair)
+    {
+        const core::u32 count = static_cast<core::u32>(physicsEntities.size());
+
+        contacts.clear();
+        awakeBodies = 0u;
         for (core::u32 body = 0u; body < count; ++body)
+        {
+            if (isSleeping(physicsEntities[body].id.slot()))
+                continue;
+            ++awakeBodies;
             considerGround(body, inverseDt);
+        }
         if (everyPair)
         {
             for (core::u32 a = 0u; a < count; ++a)
@@ -533,8 +571,89 @@ struct CpuPhysicsBackend::Impl {
     }
 
     /**
-     * @brief Adds the contact of @p body with the ground when it stands within kSpeculativeDistance
-     *        of it, awake and light enough to move.
+     * @brief The root of @p body's island, halving the path to it on the way.
+     */
+    [[nodiscard]] core::u32 islandRoot(core::u32 body) noexcept
+    {
+        while (islandParent[body] != body)
+        {
+            islandParent[body] = islandParent[islandParent[body]];
+            body = islandParent[body];
+        }
+        return body;
+    }
+
+    /**
+     * @brief Links the bodies of every contact in which both move into one island: a union of
+     *        islands whose root is always the smaller body, so the islands do not depend on the order
+     *        of the contacts.
+     *
+     * The ground, a body too heavy to move and a sleeper across a gap hold still in their contacts,
+     * and link nothing: through the ground, every pile would be one island (Catto, Simulation Islands).
+     */
+    void linkIslands()
+    {
+        const core::u32 count = static_cast<core::u32>(physicsEntities.size());
+
+        islandParent.resize(count);
+        for (core::u32 body = 0u; body < count; ++body)
+            islandParent[body] = body;
+        for (const Contact &contact : contacts)
+        {
+            if (contact.b == kGround || contact.inverseMassA.raw() == 0 || contact.inverseMassB.raw() == 0)
+                continue;
+            const core::u32 rootA = islandRoot(contact.a);
+            const core::u32 rootB = islandRoot(contact.b);
+            if (rootA < rootB)
+                islandParent[rootB] = rootA;
+            else if (rootB < rootA)
+                islandParent[rootA] = rootB;
+        }
+    }
+
+    /**
+     * @brief Puts to sleep every island whose bodies have all been under the sleep threshold for
+     *        kSleepFramesThreshold steps, its velocities zeroed.
+     *
+     * A body asleep alone while an island partner moved would sit in its partner's way, a still
+     * obstacle that does not yield (Catto, Simulation Islands): the island sleeps on its smallest
+     * counter, as Box2D's does on its smallest timer. The islands are linked only on a step where
+     * some awake body has been still long enough: on any other, none of them could sleep.
+     */
+    void sleepIslands() noexcept
+    {
+        if (awakeBodies == 0u || stillEnough == 0u)
+            return;
+        linkIslands();
+
+        const core::u32 count = static_cast<core::u32>(islandParent.size());
+
+        islandLeast.resize(count);
+        for (core::u32 body = 0u; body < count; ++body)
+            islandLeast[body] = kSleepFramesThreshold;
+        for (core::u32 body = 0u; body < count; ++body)
+        {
+            const core::u32 slot = physicsEntities[body].id.slot();
+            if (sleeping[slot])
+                continue;
+            const core::u32 root = islandRoot(body);
+            if (sleepCounter[slot] < islandLeast[root])
+                islandLeast[root] = sleepCounter[slot];
+        }
+        for (core::u32 body = 0u; body < count; ++body)
+        {
+            const core::u32 slot = physicsEntities[body].id.slot();
+            if (sleeping[slot] || islandLeast[islandRoot(body)] < kSleepFramesThreshold)
+                continue;
+            sleeping[slot] = true;
+            *physicsEntities[body].velocity =
+                FVec3{math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::zero()};
+        }
+    }
+
+    /**
+     * @brief Adds the contact of @p body, awake, with the ground when it stands within
+     *        kSpeculativeDistance of it and is light enough to move.
      *
      * @param body      The body.
      * @param inverseDt One over the step, in seconds.
@@ -543,7 +662,7 @@ struct CpuPhysicsBackend::Impl {
     {
         const PhysicsEntityRef &ref = physicsEntities[body];
         const math::Fixed32 gap = ref.position->y - kDefaultHalfHeight;
-        if (gap > kSpeculativeDistance || ref.inverseMass < kMassEpsilon || isSleeping(ref.id.slot()))
+        if (gap > kSpeculativeDistance || ref.inverseMass < kMassEpsilon)
             return;
         contacts.push_back(Contact{body, kGround, ref.id, ref.id, &FVec3::y, true, ref.inverseMass,
                                    math::Fixed32::zero(), ref.mass, targetSpeed(gap, ref.velocity->y, inverseDt),
@@ -554,8 +673,10 @@ struct CpuPhysicsBackend::Impl {
      * @brief Adds the contact of bodies @p a and @p b when their boxes come within
      *        kSpeculativeDistance of each other across one face, unless both sleep.
      *
-     * The normal is the axis of least overlap, from @p b to @p a. Boxes that overlap wake each other;
-     * across a gap, a sleeper stays asleep and holds still, with no inverse mass in the contact.
+     * The normal is the axis of least overlap, from @p b to @p a. An awake body that touches or
+     * overlaps a sleeper wakes it, its sleep counter kept, and the contact is left to the collection
+     * that follows; across a gap, a sleeper stays asleep and holds still, with no inverse mass in the
+     * contact.
      *
      * @param a         The first body.
      * @param b         The second body, after it.
@@ -593,12 +714,11 @@ struct CpuPhysicsBackend::Impl {
         if (across <= math::Fixed32::zero() || overlap < -kSpeculativeDistance)
             return;
 
-        if (overlap > math::Fixed32::zero())
+        if (overlap >= math::Fixed32::zero() && asleepA != asleepB)
         {
-            wake(refA.id.slot());
-            wake(refB.id.slot());
-            asleepA = false;
-            asleepB = false;
+            sleeping[asleepA ? refA.id.slot() : refB.id.slot()] = false;
+            wokeASleeper = true;
+            return;
         }
         const math::Fixed32 inverseMassA = asleepA ? math::Fixed32::zero() : refA.inverseMass;
         const math::Fixed32 inverseMassB = asleepB ? math::Fixed32::zero() : refB.inverseMass;
@@ -758,18 +878,6 @@ struct CpuPhysicsBackend::Impl {
     {
         return slot < static_cast<core::u32>(sleeping.size()) && sleeping[slot];
     }
-
-    /**
-     * @brief Wake an entity by its slot.
-     */
-    void wake(core::u32 slot) noexcept
-    {
-        if (slot < static_cast<core::u32>(sleeping.size()))
-        {
-            sleeping[slot] = false;
-            sleepCounter[slot] = 0;
-        }
-    }
 };
 
 CpuPhysicsBackend::CpuPhysicsBackend(ecs::Registry &registry) : _impl{lpl::pmr::make_unique<Impl>(registry)} {}
@@ -917,9 +1025,11 @@ core::Expected<void> CpuPhysicsBackend::step(core::f32 dt)
             }
 
             const ecs::EntityId *entities = chunk->entities().data();
-            updateSleepingChunk(entities, velocities, count);
+            updateSleepingChunk(entities, velocities, count, !archetype.has(ecs::ComponentId::AABB));
         }
     }
+    _impl->sleepIslands();
+    _impl->stillEnough = 0u;
 
     return {};
 }
@@ -930,6 +1040,8 @@ void CpuPhysicsBackend::shutdown()
     _impl->sleeping.clear();
     _impl->sleepCounter.clear();
 }
+
+bool CpuPhysicsBackend::isAwake(ecs::EntityId entity) const noexcept { return !_impl->isSleeping(entity.slot()); }
 
 const char *CpuPhysicsBackend::name() const noexcept { return "CpuPhysicsBackend (legacy-ported)"; }
 
@@ -1057,6 +1169,8 @@ void CpuPhysicsBackend::resolveCollisionsWorld(math::Fixed32 inverseDt) const no
     if (_impl->physicsEntities.empty())
     {
         _impl->contacts.clear();
+        _impl->islandParent.clear();
+        _impl->awakeBodies = 0u;
         return;
     }
 
@@ -1079,8 +1193,8 @@ void CpuPhysicsBackend::resolveCollisionsWorld(math::Fixed32 inverseDt) const no
     }
 }
 
-void CpuPhysicsBackend::updateSleepingChunk(const ecs::EntityId *entities, FVec3 *velocities,
-                                            core::u32 count) const noexcept
+void CpuPhysicsBackend::updateSleepingChunk(const ecs::EntityId *entities, FVec3 *velocities, core::u32 count,
+                                            bool alone) const noexcept
 {
     for (core::u32 i = 0; i < count; ++i)
     {
@@ -1095,8 +1209,11 @@ void CpuPhysicsBackend::updateSleepingChunk(const ecs::EntityId *entities, FVec3
 
         if (speedSq < kSleepVelocitySqThreshold)
         {
-            _impl->sleepCounter[slot]++;
-            if (_impl->sleepCounter[slot] >= kSleepFramesThreshold)
+            if (_impl->sleepCounter[slot] < kSleepFramesThreshold)
+                _impl->sleepCounter[slot]++;
+            if (!alone && _impl->sleepCounter[slot] >= kSleepFramesThreshold)
+                ++_impl->stillEnough;
+            if (alone && _impl->sleepCounter[slot] >= kSleepFramesThreshold)
             {
                 _impl->sleeping[slot] = true;
                 velocities[i] = {math::Fixed32::zero(), math::Fixed32::zero(), math::Fixed32::zero()};
