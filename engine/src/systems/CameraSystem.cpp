@@ -17,6 +17,7 @@ static const ecs::ComponentAccess kCameraAccesses[] = {
 static const ecs::SystemDescriptor kCameraSystemDesc{"CameraSystem", ecs::SchedulePhase::Render,
                                                      std::span<const ecs::ComponentAccess>{kCameraAccesses}};
 
+#ifdef LPL_HAS_RENDERER
 static void updateCameraDirection(CameraData &cam)
 {
     float frontX = std::cos(cam.yaw * (3.14159f / 180.f)) * std::cos(cam.pitch * (3.14159f / 180.f));
@@ -72,6 +73,7 @@ static bool getEntityPosition(ecs::Registry &registry, core::u32 id, math::Vec3<
     }
     return false;
 }
+#endif
 
 CameraSystem::CameraSystem(CameraData &cameraData, ecs::Registry &registry, GLFWwindow *window,
                            const core::u32 &myEntityId, const bool &connected)
@@ -81,7 +83,7 @@ CameraSystem::CameraSystem(CameraData &cameraData, ecs::Registry &registry, GLFW
 
 const ecs::SystemDescriptor &CameraSystem::descriptor() const noexcept { return kCameraSystemDesc; }
 
-void CameraSystem::execute(core::f32 dt)
+void CameraSystem::execute([[maybe_unused]] core::f32 dt)
 {
 #ifdef LPL_HAS_RENDERER
     if (!_window)
