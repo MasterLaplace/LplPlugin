@@ -43,10 +43,20 @@ struct Shadowed {
     lpl::engine::TerrainStreamer streamer{};
     lpl::engine::TerrainSurface surface{};
 
+    /**
+     * @brief Streams the chunks around the origin.
+     *
+     * @details Without rivers, which nothing here checks: their calibration and their trunk level cost
+     *          46 billion instructions per world in ring 0, nearly all of a debug kernel's boot.
+     */
     Shadowed()
     {
-        const lpl::procgen::EndlessPlan plan =
-            lpl::procgen::endlessPlanFromRecipe(lpl::procgen::parityWorldRecipe(), kChunkSize);
+        lpl::procgen::WalkScale scale;
+        scale.targetRiverShare = 0.0f;
+        lpl::procgen::EndlessPlan plan =
+            lpl::procgen::endlessPlanFromRecipe(lpl::procgen::parityWorldRecipe(), kChunkSize, scale);
+        plan.rivers.trunks = false;
+        plan.rivers.riverThreshold = 0xFFFFFFFFu;
 
         lpl::procgen::StreamingParams stream;
         stream.generateRadius = 1u;
