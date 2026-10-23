@@ -55,7 +55,7 @@ jobs:
 
       - name: Decide what to compare
         id: scope
-        uses: MasterLaplace/.github/actions/compare-images/scope@1f0fe35fd38d668a13ee8983960e72b4faed7bfd # main
+        uses: MasterLaplace/.github/actions/compare-images/scope@f6d6866b2af00d294ba4463c6d13a0f8728d531f # main
         with:
           paths: '^(ai|apps/frames|core|ecology|ecs|engine|image|math|memory|pack|platform|procgen|render|samples)/|^xmake\.lua$|^\.github/workflows/frames\.yml$'
           label: frames
@@ -80,7 +80,7 @@ jobs:
 
       - name: Compare the frames
         if: steps.scope.outputs.run == 'true' || steps.scope.outputs.closed == 'true'
-        uses: MasterLaplace/.github/actions/compare-images@1f0fe35fd38d668a13ee8983960e72b4faed7bfd # main
+        uses: MasterLaplace/.github/actions/compare-images@f6d6866b2af00d294ba4463c6d13a0f8728d531f # main
         with:
           title: Reference frames
           before: ${{ steps.scope.outputs.before }}
