@@ -362,6 +362,46 @@ public:
 
     [[nodiscard]] const char *name() const noexcept override { return "TerrainWorld"; }
 
+    /**
+     * @name The frame
+     *
+     * The scene is drawn at this size, then scaled to the screen: a small frame is what lets
+     * QEMU keep up.
+     * @{
+     */
+    static constexpr core::u32 kRenderWidth = 480u;
+    static constexpr core::u32 kRenderHeight = 300u;
+    /** @} */
+
+    /**
+     * @brief One frame, handed to engine::TerrainRenderer.
+     *
+     * What this world supplies is the three things a renderer cannot know: its
+     * palette, how high its ground is, and — in the bounded case — what a cell looks
+     * like in the data view the player selected.
+     *
+     * The creatures' colours are content too: a world of white hares and one of
+     * black wolves are two worlds, and neither is a host budget.
+     * A jumping body is not on the ground, so the eye may not be derived from
+     * the terrain under it.
+     *
+     * The river surface rise is the same number the generator carved with, from the same plan —
+     * see TerrainDrawParams::riverSurfaceRise for why it may not be a second answer. The cave
+     * mouth drop is the same number the generator cut with. See TerrainDrawParams::caveMouthDrop.
+     *
+     * No `underground` here any more, and it is worth saying why rather than just
+     * deleting it: it used to be `_embodied && _body.isEnclosed()`, and detaching
+     * the camera made `_embodied` false — so in the orbit view the cave path was
+     * switched off entirely, sky and all, with the eye sixty cells back and often
+     * inside a hill. The renderer asks the streamer about the EYE now, which is the
+     * thing it actually needs to know.
+     *
+     * Public so a tool can draw the frame into a target of its own: lpl-frames compares the
+     * same frame from two commits (#572). The HUD is not part of it, since it carries cycle
+     * counts that differ from run to run.
+     */
+    void renderScene(const render::RenderTarget &rt) const noexcept;
+
 private:
     /**
      * @name Budgets
@@ -374,8 +414,6 @@ private:
      */
     /** Upper bound on the grid a cartridge may ask for, so the budgets hold: onInit refuses a wider one. */
     static constexpr core::u32 kMaxSize = 96u;
-    static constexpr core::u32 kRenderWidth = 480u;
-    static constexpr core::u32 kRenderHeight = 300u;
     static constexpr core::u32 kMaxCreatures = 48u;
     static constexpr core::u32 kWebPeriod = 60u;
     core::u32 _caveDrawRadius{0u};
@@ -811,31 +849,6 @@ private:
      * @brief Bed height under a world point, for the water's depth tint.
      */
     [[nodiscard]] core::f32 bedHeightAt(core::f32 worldX, core::f32 worldZ) const noexcept;
-
-    /**
-     * @brief One frame, handed to engine::TerrainRenderer.
-     *
-     * What this world supplies is the three things a renderer cannot know: its
-     * palette, how high its ground is, and — in the bounded case — what a cell looks
-     * like in the data view the player selected.
-     *
-     * The creatures' colours are content too: a world of white hares and one of
-     * black wolves are two worlds, and neither is a host budget.
-     * A jumping body is not on the ground, so the eye may not be derived from
-     * the terrain under it.
-     *
-     * The river surface rise is the same number the generator carved with, from the same plan —
-     * see TerrainDrawParams::riverSurfaceRise for why it may not be a second answer. The cave
-     * mouth drop is the same number the generator cut with. See TerrainDrawParams::caveMouthDrop.
-     *
-     * No `underground` here any more, and it is worth saying why rather than just
-     * deleting it: it used to be `_embodied && _body.isEnclosed()`, and detaching
-     * the camera made `_embodied` false — so in the orbit view the cave path was
-     * switched off entirely, sky and all, with the eye sixty cells back and often
-     * inside a hill. The renderer asks the streamer about the EYE now, which is the
-     * thing it actually needs to know.
-     */
-    void renderScene(const render::RenderTarget &rt) const noexcept;
 
     /**
      * @brief The palette, which is very nearly the whole identity of a world.
