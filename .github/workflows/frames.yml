@@ -1,0 +1,91 @@
+name: Frames
+
+# The reference frames of lpl-frames, compared with MasterLaplace/.github's compare-images action:
+# - a pull request that touches code which can change a frame, or carries the label frames, is
+#   compared with main, and gets a comment with the images;
+# - a comment "/compare-images" on a pull request asks for it again; "/compare-images start"
+#   compares with where the pull request branched, "/compare-images v0.12.0" with any commit,
+#   branch or tag;
+# - a push to main keeps its frames as the reference of its commit;
+# - a release compares with the previous one, in its notes;
+# - a manual run compares the branch it runs on with its before input.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, closed]
+  issue_comment:
+    types: [created]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      before:
+        description: A commit, branch or tag to compare with
+        default: main
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: frames-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  compare:
+    name: Compare the reference frames
+    if: >-
+      github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository ||
+      github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/compare-images') ||
+      github.event_name == 'push' || github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: >-
+            ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/merge', github.event.issue.number) ||
+            github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+
+      - name: Decide what to compare
+        id: scope
+        uses: MasterLaplace/.github/actions/compare-images/scope@1f0fe35fd38d668a13ee8983960e72b4faed7bfd # main
+        with:
+          paths: '^(ai|apps/frames|core|ecology|ecs|engine|image|math|memory|pack|platform|procgen|render|samples)/|^xmake\.lua$|^\.github/workflows/frames\.yml$'
+          label: frames
+          before: ${{ inputs.before }}
+
+      - name: Install the compiler
+        if: steps.scope.outputs.run == 'true'
+        run: sudo apt-get update && sudo apt-get install -y g++-14
+
+      - uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1.2.5
+        if: steps.scope.outputs.run == 'true'
+        with:
+          xmake-version: v3.1.1
+
+      - name: Restore the xmake packages
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.xmake/packages
+          key: xmake-packages-${{ runner.os }}-${{ hashFiles('xmake.lua', '*/xmake.lua') }}
+          restore-keys: xmake-packages-${{ runner.os }}-
+
+      - name: Compare the frames
+        if: steps.scope.outputs.run == 'true' || steps.scope.outputs.closed == 'true'
+        uses: MasterLaplace/.github/actions/compare-images@1f0fe35fd38d668a13ee8983960e72b4faed7bfd # main
+        with:
+          title: Reference frames
+          before: ${{ steps.scope.outputs.before }}
+          comment-when: ${{ steps.scope.outputs.labelled == 'true' && 'always' || 'changed' }}
+          draw: >-
+            if [ -f apps/frames/main.cpp ]; then
+            xmake f -m release -y --renderer=n --cc=gcc-14 --cxx=g++-14 --ld=g++-14 --sh=g++-14 &&
+            xmake build lpl-frames && xmake run lpl-frames --write "$IMAGES_DIR"; fi

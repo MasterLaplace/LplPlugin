@@ -87,6 +87,22 @@ xmake run lpl-client         # terminal 2
 xmake run lpl-benchmark
 xmake run lpl-benchmark --json "$PWD/before.jsonl"   # one JSON row per measurement
 tools/bench-diff.py before.jsonl after.jsonl         # two runs, row by row
+
+# Frames: the client's world drawn from apps/frames/reference-frames.tsv, the HUD left out
+xmake run lpl-frames --write "$PWD/frames"           # one PPM per frame, and its fold
+```
+
+A pull request that touches code which can change a frame gets its frames compared with main's, with
+the images in a comment (`.github/workflows/frames.yml`, which calls the `compare-images` action of
+[MasterLaplace/.github](https://github.com/MasterLaplace/.github)). The label `frames` asks for it on
+any other pull request, and a comment `/compare-images` asks again: `/compare-images start` compares
+with where the pull request branched, `/compare-images v0.12.0` with any commit, branch or tag. Each
+push to main keeps its frames as a reference, and each release adds the comparison with the previous
+one to its notes. The same comparison runs from a checkout:
+
+```bash
+python3 ../.github/tools/compare-images.py --before main \
+    --draw 'xmake f -m release -y && xmake build lpl-frames && xmake run lpl-frames --write "$IMAGES_DIR"'
 ```
 
 ### Build Options
