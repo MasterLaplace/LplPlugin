@@ -27,15 +27,14 @@ inline BitReader::BitReader(std::span<const core::byte> source, core::u32 bitCou
 
 inline bool BitReader::holds(core::u32 bitCount) const noexcept { return bitCount <= _bitCount - _cursor; }
 
-inline core::u32 BitReader::loadTopBytes(const core::byte *first, core::usize room) noexcept
+inline core::u32 BitReader::loadTopBytes(std::span<const core::byte> rest) noexcept
 {
-    if (room >= 4u)
-        return (static_cast<core::u32>(first[0]) << 24u) | (static_cast<core::u32>(first[1]) << 16u) |
-               (static_cast<core::u32>(first[2]) << 8u) | static_cast<core::u32>(first[3]);
+    const core::usize count = rest.size() < 4u ? rest.size() : 4u;
     core::u32 word = 0u;
-    for (core::usize index = 0u; index < 4u; ++index)
-        word = (word << 8u) | (index < room ? static_cast<core::u32>(first[index]) : 0u);
-    return word;
+
+    for (core::usize index = 0u; index < count; ++index)
+        word = (word << 8u) | static_cast<core::u32>(rest[index]);
+    return count == 0u ? 0u : word << (8u * (4u - count));
 }
 
 inline core::u32 BitReader::take(core::u32 bitCount) noexcept
@@ -44,7 +43,7 @@ inline core::u32 BitReader::take(core::u32 bitCount) noexcept
     const core::u32 end = used + bitCount;
     const core::usize byteIndex = _cursor >> 3u;
     const core::byte *const first = _source.data() + byteIndex;
-    const core::u32 head = (loadTopBytes(first, _source.size() - byteIndex) << used) >> (32u - bitCount);
+    const core::u32 head = (loadTopBytes(_source.subspan(byteIndex)) << used) >> (32u - bitCount);
 
     _cursor += bitCount;
     if (end <= 32u)

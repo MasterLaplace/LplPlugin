@@ -144,7 +144,7 @@ public:
 private:
     [[nodiscard]] static constexpr core::u32 bitsHeld(core::usize bytes, core::u32 bitCount) noexcept;
     [[nodiscard]] bool holds(core::u32 bitCount) const noexcept;
-    [[nodiscard]] static core::u32 loadTopBytes(const core::byte *first, core::usize room) noexcept;
+    [[nodiscard]] static core::u32 loadTopBytes(std::span<const core::byte> rest) noexcept;
     [[nodiscard]] core::u32 take(core::u32 bitCount) noexcept;
 
     std::span<const core::byte> _source; /**< Where the fields are read. */
