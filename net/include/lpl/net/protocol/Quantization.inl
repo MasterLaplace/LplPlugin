@@ -10,7 +10,7 @@ constexpr core::u32 quantizationCeiling(core::u32 bits) noexcept
 
 inline core::u32 quantize(float value, float minimum, float maximum, core::u32 bits) noexcept
 {
-    const float clamped = (value < minimum) ? minimum : (value > maximum ? maximum : value);
+    const float clamped = !(value >= minimum) ? minimum : (value > maximum ? maximum : value);
     const core::u32 ceiling = quantizationCeiling(bits);
     const float share = (clamped - minimum) / (maximum - minimum);
     const core::u32 step = static_cast<core::u32>(share * static_cast<float>(ceiling) + 0.5f);

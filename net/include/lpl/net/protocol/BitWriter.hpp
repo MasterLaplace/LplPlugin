@@ -117,8 +117,8 @@ public:
      *
      * @param value   Value to write.
      * @param minimum Lower bound of the range.
-     * @param maximum Upper bound; one that does not exceed @p minimum is refused with
-     *                BitError::kInvalidRange.
+     * @param maximum Upper bound; one that does not exceed @p minimum, or whose distance to it passes the
+     *                largest float, is refused with BitError::kInvalidRange.
      * @param bits    Width in 1..32.
      */
     void writeQuantizedFloat(float value, float minimum, float maximum, core::u32 bits) noexcept;

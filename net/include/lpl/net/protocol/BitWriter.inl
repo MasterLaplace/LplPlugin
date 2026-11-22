@@ -4,6 +4,7 @@
 #include <lpl/net/protocol/Quantization.hpp>
 
 #include <bit>
+#include <limits>
 
 namespace lpl::net::protocol {
 
@@ -120,7 +121,7 @@ inline void BitWriter::writeQuantizedFloat(float value, float minimum, float max
         refuse(BitError::kInvalidWidth);
         return;
     }
-    if (!(maximum > minimum))
+    if (!(maximum > minimum) || !(maximum - minimum <= std::numeric_limits<float>::max()))
     {
         refuse(BitError::kInvalidRange);
         return;
