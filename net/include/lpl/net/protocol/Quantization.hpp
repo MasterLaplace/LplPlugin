@@ -38,6 +38,8 @@ inline constexpr float kTwoPi = 6.28318530717958647692f;
  * @details The value is clamped to the range, then mapped to the nearest step. NaN takes step 0, as a
  *          value below the range does, on every target: no NaN reaches the conversion to an integer, whose
  *          result the language leaves undefined and which x86-64 and i686 answer differently.
+ *          The top of the range takes the top step on every width, 32 bits included, where the
+ *          float of the top step is 2^32 and would not convert.
  *
  * @param value   Value to quantize.
  * @param minimum Lower bound of the range.
