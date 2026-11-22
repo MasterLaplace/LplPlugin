@@ -51,19 +51,38 @@ inline bool BitWriter::admit(core::u32 bitCount) noexcept
     return false;
 }
 
+inline void BitWriter::storeTopBytes(core::byte *first, core::usize room, core::u32 word, core::u32 count) noexcept
+{
+    if (room >= 4u)
+    {
+        first[0] = static_cast<core::byte>(static_cast<core::u8>(word >> 24u));
+        first[1] = static_cast<core::byte>(static_cast<core::u8>(word >> 16u));
+        first[2] = static_cast<core::byte>(static_cast<core::u8>(word >> 8u));
+        first[3] = static_cast<core::byte>(static_cast<core::u8>(word));
+        return;
+    }
+    for (core::u32 index = 0u; index < count; ++index)
+        first[index] = static_cast<core::byte>(static_cast<core::u8>(word >> (24u - 8u * index)));
+}
+
 inline void BitWriter::put(core::u32 value, core::u32 bitCount) noexcept
 {
     const core::u32 used = _cursor & 7u;
-    const core::u32 bytes = (used + bitCount + 7u) >> 3u;
-    const core::u64 window = static_cast<core::u64>(value & (0xFFFFFFFFu >> (32u - bitCount)))
-                             << (40u - used - bitCount);
-    core::byte *const first = _destination.data() + (_cursor >> 3u);
-    const core::u32 kept = static_cast<core::u32>(first[0]) & (0xFF00u >> used);
+    const core::u32 end = used + bitCount;
+    const core::usize byteIndex = _cursor >> 3u;
+    core::byte *const first = _destination.data() + byteIndex;
+    const core::usize room = _destination.size() - byteIndex;
+    const core::u32 field = value & (0xFFFFFFFFu >> (32u - bitCount));
+    const core::u32 kept = (static_cast<core::u32>(first[0]) & (0xFF00u >> used)) << 24u;
 
-    first[0] = static_cast<core::byte>(kept | static_cast<core::u32>(window >> 32u));
-    for (core::u32 index = 1u; index < bytes; ++index)
-        first[index] = static_cast<core::byte>(static_cast<core::u8>(window >> (32u - 8u * index)));
     _cursor += bitCount;
+    if (end <= 32u)
+    {
+        storeTopBytes(first, room, kept | (field << (32u - end)), (end + 7u) >> 3u);
+        return;
+    }
+    storeTopBytes(first, room, kept | (field >> (end - 32u)), 4u);
+    first[4] = static_cast<core::byte>(static_cast<core::u8>(field << (40u - end)));
 }
 
 inline void BitWriter::writeBits(core::u32 value, core::u32 bitCount) noexcept

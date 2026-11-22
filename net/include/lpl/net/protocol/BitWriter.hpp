@@ -160,6 +160,7 @@ private:
     [[nodiscard]] static constexpr core::u32 capacityInBits(core::usize bytes) noexcept;
     [[nodiscard]] static constexpr core::u32 varintBytes(core::u32 value) noexcept;
     [[nodiscard]] bool admit(core::u32 bitCount) noexcept;
+    static void storeTopBytes(core::byte *first, core::usize room, core::u32 word, core::u32 count) noexcept;
     void refuse(BitError error) noexcept;
     void put(core::u32 value, core::u32 bitCount) noexcept;
 
