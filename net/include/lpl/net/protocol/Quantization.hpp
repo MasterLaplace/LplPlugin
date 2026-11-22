@@ -77,7 +77,7 @@ inline constexpr float kTwoPi = 6.28318530717958647692f;
  * @brief @p radians wrapped into one turn, so any real angle quantizes.
  *
  * @details The result is in [0, 2*pi], 2*pi included: an angle a hair below a whole number of turns
- *          rounds to it (-2.4e-7 rad comes back as 2*pi). Past a great many turns, the rounding of the
+ *          rounds to it (-1e-8 rad comes back as 2*pi). Past a great many turns, the rounding of the
  *          turns themselves can leave it outside [0, 2*pi] (1e9 rad comes back as -57.7), and quantize()
  *          clamps it to the range. An angle whose count of turns does not fit 32 bits, infinity or NaN
  *          comes back as it is, and quantize() clamps it too: counting its turns would convert out of the
