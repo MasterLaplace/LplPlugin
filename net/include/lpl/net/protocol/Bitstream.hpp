@@ -16,11 +16,9 @@
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/std/vector.hpp>
 
-#    include <cstddef>
-#    include <cstring>
 #    include <span>
-#    include <vector>
 
 namespace lpl::net::protocol {
 
@@ -31,6 +29,12 @@ namespace lpl::net::protocol {
  * Packs fields at arbitrary bit widths for minimal bandwidth. All
  * operations are deterministic and endian-safe (values stored big-endian
  * in the bit buffer).
+ *
+ * It owns a buffer that grows as fields are written, and leaves the packing
+ * to BitWriter and BitReader, so the wire layout has one implementation, the
+ * one the kernel compiles. A reader that reads a datagram where it lies, or a
+ * writer into memory the caller owns, without the copy and the heap this
+ * class needs, is BitReader or BitWriter itself.
  */
 class Bitstream final : public core::NonCopyable<Bitstream> {
 public:
@@ -41,8 +45,8 @@ public:
 
     /**
      * @brief Constructs a read-only bitstream from existing data.
-     * @param data   Raw bytes.
-     * @param bitCount Number of valid bits in @p data.
+     * @param data   Raw bytes, copied.
+     * @param bitCount Number of valid bits in @p data, cut to the bits @p data holds.
      */
     Bitstream(std::span<const core::byte> data, core::u32 bitCount) noexcept;
 
@@ -193,7 +197,7 @@ public:
     /**
      * @brief Reads @p count raw bytes.
      */
-    [[nodiscard]] core::Expected<std::vector<core::byte>> readBytes(core::u32 count);
+    [[nodiscard]] core::Expected<lpl::pmr::vector<core::byte>> readBytes(core::u32 count);
     /** @} */
 
     /**
@@ -222,11 +226,14 @@ public:
     /** @} */
 
 private:
-    std::vector<core::byte> _buffer;
-    core::u32 _writeBit{0};
-    core::u32 _readBit{0};
-    core::u32 _totalBits{0};
-    bool _readOnly{false};
+    template <typename Write> void writeThroughCore(core::u64 maximumBits, Write write);
+    template <typename Value, typename Read> [[nodiscard]] core::Expected<Value> readThroughCore(Read read);
+
+    lpl::pmr::vector<core::byte> _buffer; /**< The bytes written, or a copy of the ones read. */
+    core::u32 _writeBit{0};               /**< Bits written. */
+    core::u32 _readBit{0};                /**< Bits read. */
+    core::u32 _totalBits{0};              /**< Valid bits, which a read never passes. */
+    bool _readOnly{false};                /**< Whether the stream was built from bytes to read. */
 };
 
 } // namespace lpl::net::protocol
