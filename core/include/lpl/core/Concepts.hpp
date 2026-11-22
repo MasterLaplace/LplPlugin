@@ -29,7 +29,7 @@ template <typename T>
 concept Arithmetic = std::is_arithmetic_v<T> || requires(T a, T b) {
     { a + b } -> std::convertible_to<T>;
     { a - b } -> std::convertible_to<T>;
-    { a *b } -> std::convertible_to<T>;
+    { a * b } -> std::convertible_to<T>;
     { a / b } -> std::convertible_to<T>;
 };
 

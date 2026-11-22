@@ -105,7 +105,7 @@ std::string hypervisorVendor()
 std::string osDescription()
 {
 #if defined(LPL_OS_LINUX) || defined(LPL_OS_MACOS)
-    struct utsname uts {};
+    struct utsname uts{};
     if (uname(&uts) == 0)
         return std::string(uts.sysname) + " (" + uts.release + ") " + uts.machine;
     return "Unix (unknown release)";

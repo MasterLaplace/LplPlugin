@@ -43,7 +43,7 @@ void GameLoop::run(const LoopCallbacks &callbacks)
 
 #if !LPL_TARGET_KERNEL
     s_activeLoop.store(this, std::memory_order_relaxed);
-    struct sigaction sa {};
+    struct sigaction sa{};
     sa.sa_handler = sigintHandler;
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
