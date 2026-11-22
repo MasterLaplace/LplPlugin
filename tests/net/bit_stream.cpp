@@ -64,7 +64,7 @@ struct Field {
 };
 
 /** Fields of the fixed message after its 32 kBits fields, one per width. */
-constexpr lpl::core::u32 kFixedFields = 31u;
+constexpr lpl::core::u32 kFixedFields = 35u;
 
 /** Fields of the fixed message. */
 constexpr lpl::core::u32 kMessageFields = 32u + kFixedFields;
@@ -76,7 +76,9 @@ constexpr lpl::core::u32 kMessageFields = 32u + kFixedFields;
  *          quantized field carries the step it must take, worked out by hand from the range and not
  *          read from the code: 500 over [0, 1000] on 16 bits is 0.5 * 65535 + 0.5 = 32768, 250 on 10
  *          bits is 0.25 * 1023 + 0.5 = 256.25, an angle of 0.5 rad on 10 bits is 0.0795775 * 1023 +
- *          0.5 = 81.9 and one of -0.5 rad wraps to 5.7831855, 0.920423 * 1023 + 0.5 = 942.1.
+ *          0.5 = 81.9 and one of -0.5 rad wraps to 5.7831855, 0.920423 * 1023 + 0.5 = 942.1. NaN takes
+ *          the bottom step, the top of a range the top one on 32 bits too, and an angle of 1e11 rad the
+ *          top step, its turns being too many to count.
  */
 [[nodiscard]] constexpr std::array<Field, kMessageFields> fixedMessage() noexcept
 {
@@ -113,6 +115,10 @@ constexpr lpl::core::u32 kMessageFields = 32u + kFixedFields;
          {FieldKind::kAngle, 81u, 10u, 0.5f},
          {FieldKind::kAngle, 81u, 10u, 0.5f + lpl::net::protocol::kTwoPi},
          {FieldKind::kAngle, 942u, 10u, -0.5f},
+         {FieldKind::kQuantized, 0u, 16u, std::numeric_limits<float>::quiet_NaN(), 0.0f, 1000.0f},
+         {FieldKind::kQuantized, 0xFFFFFFFFu, 32u, 1.0f, 0.0f, 1.0f},
+         {FieldKind::kAngle, 1023u, 10u, 1.0e11f},
+         {FieldKind::kAngle, 0u, 10u, std::numeric_limits<float>::quiet_NaN()},
          }
     };
     std::array<Field, kMessageFields> message{};
