@@ -1,4 +1,5 @@
 #include <lpl/math/Cordic.hpp>
+#include <lpl/math/FixedMath.hpp>
 #include <lpl/math/FixedPoint.hpp>
 #include <lpl/testing/Test.hpp>
 
@@ -32,7 +33,78 @@ constexpr lpl::core::i32 kEdgeReciprocals[] = {1,     2,      3,          4,  5,
 constexpr lpl::core::i32 kEdgeDivisors[] = {1,      -1,    2,      -2,     3,     -3,     7,          65536,
                                             -65536, 65537, 123457, -98765, 32768, -32768, 2147483647, -2147483647 - 1};
 
+constexpr lpl::core::u64 kLastSquare = 0xFFFFFFFE00000001ull; ///< (2^32 - 1)^2, the largest square a u64 holds.
+
+constexpr lpl::core::u64 kWeylStep = 0x9E3779B97F4A7C15ull; ///< Weyl's step, spreading the draws over the range.
+
+constexpr lpl::core::u32 kRootDraws = 4096u; ///< Values the tests of the roots draw.
+
+/**
+ * @brief Whether @p root is the floor of the square root of @p value, computed apart from the root under test.
+ */
+[[nodiscard]] bool isFloorRoot(lpl::core::u64 value, lpl::core::u32 root)
+{
+    const lpl::core::u64 square = static_cast<lpl::core::u64>(root) * root;
+    const lpl::core::u64 next = static_cast<lpl::core::u64>(root) + 1u;
+    return square <= value && (root == 0xFFFFFFFFu || next * next > value);
+}
+
 } // namespace
+
+/**
+ * @brief The root of a 64-bit radicand is the exact floor of its square root, from 0 to 2^64 - 1, the last square
+ *        and the value below it included.
+ *
+ * @details Each draw is checked by squaring, apart from the root: r^2 <= v < (r + 1)^2. The roots are folded so
+ *          that both targets compare them.
+ */
+LPL_TEST(the_root_of_a_64_bit_radicand_is_its_exact_floor_up_to_the_last_value)
+{
+    test.check(lpl::math::integerSqrt(lpl::core::u64{0}) == 0u && lpl::math::integerSqrt(lpl::core::u64{3}) == 1u &&
+                   lpl::math::integerSqrt(lpl::core::u64{4}) == 2u,
+               "0, 3 and 4");
+    test.check(lpl::math::integerSqrt(lpl::core::u64{1} << 32) == 65536u &&
+                   lpl::math::integerSqrt((lpl::core::u64{1} << 32) - 1u) == 65535u,
+               "2^32 and the value below it");
+    test.check(lpl::math::integerSqrt(lpl::core::u64{1} << 62) == 0x80000000u, "2^62");
+    test.check(lpl::math::integerSqrt(kLastSquare) == 0xFFFFFFFFu &&
+                   lpl::math::integerSqrt(kLastSquare - 1u) == 0xFFFFFFFEu,
+               "(2^32 - 1)^2 and the value below it");
+    test.check(lpl::math::integerSqrt(~lpl::core::u64{0}) == 0xFFFFFFFFu, "2^64 - 1");
+
+    bool exact = true;
+    lpl::core::u32 fold = 0x811C9DC5u;
+    for (lpl::core::u32 draw = 0u; draw < kRootDraws; ++draw)
+    {
+        const lpl::core::u64 value = static_cast<lpl::core::u64>(draw) * kWeylStep >> (draw % 64u);
+        const lpl::core::u32 root = lpl::math::integerSqrt(value);
+        exact = exact && isFloorRoot(value, root);
+        fold = (fold ^ root) * 0x01000193u;
+    }
+    test.check(exact, "every draw over the range is the floor of its root");
+    test.measureHexadecimal("root_signature", fold);
+}
+
+/**
+ * @brief The root of a Fixed32 is the floor of the square root of its raw word shifted by 16, a Q32 value, on both
+ *        sides of a raw unit and up to the largest word.
+ */
+LPL_TEST(the_root_of_a_fixed32_is_the_floor_root_of_its_raw_word_in_q32)
+{
+    bool exact = lpl::math::fixedSqrt(lpl::math::Fixed32::fromRaw(-1)) == lpl::math::Fixed32::zero();
+    lpl::core::u32 fold = 0x811C9DC5u;
+    for (lpl::core::u32 draw = 0u; draw < kRootDraws; ++draw)
+    {
+        const lpl::core::i32 raw =
+            static_cast<lpl::core::i32>((static_cast<lpl::core::u64>(draw) * kWeylStep >> (draw % 31u + 33u)));
+        const lpl::core::i32 root = lpl::math::fixedSqrt(lpl::math::Fixed32::fromRaw(raw)).raw();
+        exact = exact && root >= 0 &&
+                isFloorRoot(static_cast<lpl::core::u64>(raw) << 16, static_cast<lpl::core::u32>(root));
+        fold = (fold ^ static_cast<lpl::core::u32>(root)) * 0x01000193u;
+    }
+    test.check(exact, "every draw from a raw unit to the largest word is the floor of its root in Q32");
+    test.measureHexadecimal("fixed_root_signature", fold);
+}
 
 /**
  * @brief Gate P0: Fixed32 arithmetic and CORDIC give the same Q16.16 words on both targets.

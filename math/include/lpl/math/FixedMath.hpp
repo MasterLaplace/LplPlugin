@@ -23,6 +23,7 @@
 #ifndef LPL_MATH_FIXEDMATH_HPP
 #    define LPL_MATH_FIXEDMATH_HPP
 
+#    include <bit>
 #    include <lpl/core/Types.hpp>
 #    include <lpl/math/FixedPoint.hpp>
 
@@ -46,6 +47,18 @@ inline const Fixed32 kInvSqrt2 = Fixed32::fromRaw(46341);
  * @return floor(sqrt(value)).
  */
 [[nodiscard]] constexpr core::u32 integerSqrt(core::u32 value) noexcept;
+
+/**
+ * @brief Integer square root of a 64-bit radicand.
+ *
+ * The same restoring shift-and-subtract as the 32-bit root, started at the highest even power of four the radicand
+ * holds. Exact for every 64-bit input and free of division, so the root of a sum of squares taken in Q32 keeps its
+ * low bits: the root of a Q32 value is a Q16.16 one.
+ *
+ * @param value Radicand.
+ * @return floor(sqrt(value)), at most 2^32 - 1.
+ */
+[[nodiscard]] constexpr core::u32 integerSqrt(core::u64 value) noexcept;
 
 /**
  * @brief Base-two logarithm of a positive integer, in Fixed32.

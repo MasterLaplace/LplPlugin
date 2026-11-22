@@ -84,17 +84,14 @@ constexpr Fixed32 fixedExp2(Fixed32 value) noexcept
     return Fixed32::fromRaw(static_cast<core::i32>(series >> (-integerPart)));
 }
 
-constexpr Fixed32 fixedSqrt(Fixed32 value) noexcept
+constexpr core::u32 integerSqrt(core::u64 value) noexcept
 {
-    if (value.raw() <= 0)
-        return Fixed32::zero();
+    if (value == 0u)
+        return 0u;
 
-    core::u64 remainder = static_cast<core::u64>(static_cast<core::u32>(value.raw())) << 16;
+    core::u64 remainder = value;
     core::u64 root = 0u;
-    core::u64 bit = core::u64{1} << 46;
-
-    while (bit > remainder)
-        bit >>= 2;
+    core::u64 bit = core::u64{1} << ((static_cast<core::u32>(std::bit_width(value)) - 1u) & ~1u);
 
     while (bit != 0u)
     {
@@ -109,7 +106,15 @@ constexpr Fixed32 fixedSqrt(Fixed32 value) noexcept
         }
         bit >>= 2;
     }
-    return Fixed32::fromRaw(static_cast<core::i32>(root));
+    return static_cast<core::u32>(root);
+}
+
+constexpr Fixed32 fixedSqrt(Fixed32 value) noexcept
+{
+    if (value.raw() <= 0)
+        return Fixed32::zero();
+    return Fixed32::fromRaw(
+        static_cast<core::i32>(integerSqrt(static_cast<core::u64>(static_cast<core::u32>(value.raw())) << 16)));
 }
 
 } // namespace lpl::math
