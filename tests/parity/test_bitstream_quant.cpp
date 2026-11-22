@@ -4,11 +4,45 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <new>
 #include <span>
 
 namespace {
 
 int g_failures = 0;
+
+/** Whether operator new counts what it allocates. */
+bool g_counting = false;
+
+/** Allocations counted while g_counting was on. */
+unsigned long g_allocations = 0;
+
+} // namespace
+
+/**
+ * @brief Allocates with malloc, and counts the allocation while counting is on.
+ *
+ * @details lpl::pmr::vector is std::vector over std::allocator on the host, which allocates through this
+ *          operator. The engine builds -fno-exceptions, so a failed new aborts rather than throws.
+ */
+void *operator new(std::size_t size)
+{
+    if (g_counting)
+        ++g_allocations;
+    void *p = std::malloc(size ? size : 1);
+    if (p == nullptr)
+        std::abort();
+    return p;
+}
+
+void *operator new[](std::size_t size) { return ::operator new(size); }
+void operator delete(void *p) noexcept { std::free(p); }
+void operator delete[](void *p) noexcept { std::free(p); }
+void operator delete(void *p, std::size_t) noexcept { std::free(p); }
+void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+
+namespace {
 
 void check(bool cond, const char *what)
 {
@@ -181,6 +215,33 @@ void checkBitstreamWritesWhatBitWriterWrites()
     check(same, "Bitstream and BitWriter write the same bytes for the same fields");
 }
 
+/**
+ * @brief A count of bytes the stream does not hold is refused before anything is allocated for it.
+ *
+ * @details The count comes from the wire, as StateSnapshot reads a blob's size: a forged one must cost
+ *          nothing. Nine bytes asked of eight show it without asking the machine for a large block, and
+ *          the eight read whole show that the counter sees the vector Bitstream allocates.
+ */
+void checkABytesCountPastTheStreamAllocatesNothing()
+{
+    const std::array<lpl::core::byte, 8> eight{};
+    lpl::net::protocol::Bitstream refused{eight, 64};
+    lpl::net::protocol::Bitstream accepted{eight, 64};
+
+    g_allocations = 0;
+    g_counting = true;
+    const bool nineRefused = !refused.readBytes(9u).has_value();
+    const unsigned long allocationsRefused = g_allocations;
+    g_allocations = 0;
+    const bool eightRead = accepted.readBytes(8u).has_value();
+    const unsigned long allocationsAccepted = g_allocations;
+    g_counting = false;
+
+    check(nineRefused, "nine bytes are refused from a stream of eight");
+    check(allocationsRefused == 0, "the refused count allocates nothing");
+    check(eightRead && allocationsAccepted == 1, "the eight bytes the stream holds are read into one allocation");
+}
+
 } // namespace
 
 /**
@@ -202,6 +263,7 @@ int main()
     checkAWidthOutsideOneToThirtyTwoIsRefused();
     checkABitCountLargerThanItsBytesIsCut();
     checkBitstreamWritesWhatBitWriterWrites();
+    checkABytesCountPastTheStreamAllocatesNothing();
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);
     return g_failures == 0 ? 0 : 1;
