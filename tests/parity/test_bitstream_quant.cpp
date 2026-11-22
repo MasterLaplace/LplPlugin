@@ -254,6 +254,20 @@ void checkABytesCountPastTheStreamAllocatesNothingForIt()
           "the eight bytes the stream holds are read into one allocation of eight bytes");
 }
 
+/**
+ * @brief A field Bitstream refuses stops the fields after it, so nothing after it lands one field early.
+ */
+void checkARefusedFieldStopsTheFieldsAfterIt()
+{
+    lpl::net::protocol::Bitstream stream;
+
+    stream.writeU8(0x11u);
+    stream.writeQuantizedFloat(0.5f, 1.0f, 1.0f, 16u);
+    stream.writeU8(0xABu);
+
+    check(stream.bitsWritten() == 8, "after a refused field, no later field is written, so nothing shifts");
+}
+
 } // namespace
 
 /**
@@ -276,6 +290,7 @@ int main()
     checkABitCountLargerThanItsBytesIsCut();
     checkBitstreamWritesWhatBitWriterWrites();
     checkABytesCountPastTheStreamAllocatesNothingForIt();
+    checkARefusedFieldStopsTheFieldsAfterIt();
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);
     return g_failures == 0 ? 0 : 1;
