@@ -27,7 +27,12 @@ inline float dequantize(core::u32 step, float minimum, float maximum, core::u32 
 
 inline float wrapAngle(float radians) noexcept
 {
-    const float wrapped = radians - kTwoPi * static_cast<float>(static_cast<core::i32>(radians / kTwoPi));
+    constexpr float kCountableTurns = 2147483648.0f;
+    const float turns = radians / kTwoPi;
+
+    if (!(turns > -kCountableTurns && turns < kCountableTurns))
+        return radians;
+    const float wrapped = radians - kTwoPi * static_cast<float>(static_cast<core::i32>(turns));
 
     return wrapped < 0.0f ? wrapped + kTwoPi : wrapped;
 }

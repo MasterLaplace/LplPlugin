@@ -64,8 +64,11 @@ inline constexpr float kTwoPi = 6.28318530717958647692f;
 /**
  * @brief @p radians wrapped into the turn [0, 2*pi), so any real angle quantizes.
  *
+ * @details An angle whose count of turns does not fit 32 bits, infinity or NaN comes back as it is, and
+ *          quantize() clamps it: counting its turns would convert out of the range of an integer.
+ *
  * @param radians An angle.
- * @return The same angle within one turn.
+ * @return The same angle within one turn, or @p radians when its turns cannot be counted.
  */
 [[nodiscard]] inline float wrapAngle(float radians) noexcept;
 
