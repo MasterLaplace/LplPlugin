@@ -27,28 +27,40 @@ inline BitReader::BitReader(std::span<const core::byte> source, core::u32 bitCou
 
 inline bool BitReader::holds(core::u32 bitCount) const noexcept { return bitCount <= _bitCount - _cursor; }
 
+/**
+ * @brief The first four bytes of @p rest, big-endian, as one word, zeros past its end.
+ *
+ * @details When four bytes are left, they are loaded as one word, which GCC turns into a byte swap and a
+ *          single load on both targets. GCC 14 and 15 read that load as reaching past a source shorter
+ *          than four bytes, on a path the size check excludes (seen on the two-byte source of the varint
+ *          test); the false positive of -Warray-bounds is silenced for this function alone, since a
+ *          byte loop in its place costs 1.9 times the instructions to read a snapshot entity in ring 0.
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
 inline core::u32 BitReader::loadTopBytes(std::span<const core::byte> rest) noexcept
 {
-    const core::usize count = rest.size() < 4u ? rest.size() : 4u;
+    if (rest.size() >= 4u)
+        return (static_cast<core::u32>(rest[0]) << 24u) | (static_cast<core::u32>(rest[1]) << 16u) |
+               (static_cast<core::u32>(rest[2]) << 8u) | static_cast<core::u32>(rest[3]);
     core::u32 word = 0u;
-
-    for (core::usize index = 0u; index < count; ++index)
-        word = (word << 8u) | static_cast<core::u32>(rest[index]);
-    return count == 0u ? 0u : word << (8u * (4u - count));
+    for (core::usize index = 0u; index < rest.size(); ++index)
+        word |= static_cast<core::u32>(rest[index]) << (24u - 8u * index);
+    return word;
 }
+#pragma GCC diagnostic pop
 
 inline core::u32 BitReader::take(core::u32 bitCount) noexcept
 {
     const core::u32 used = _cursor & 7u;
     const core::u32 end = used + bitCount;
-    const core::usize byteIndex = _cursor >> 3u;
-    const core::byte *const first = _source.data() + byteIndex;
-    const core::u32 head = (loadTopBytes(_source.subspan(byteIndex)) << used) >> (32u - bitCount);
+    const std::span<const core::byte> rest = _source.subspan(_cursor >> 3u);
+    const core::u32 head = (loadTopBytes(rest) << used) >> (32u - bitCount);
 
     _cursor += bitCount;
     if (end <= 32u)
         return head;
-    return head | (static_cast<core::u32>(first[4]) >> (40u - end));
+    return head | (static_cast<core::u32>(rest[4]) >> (40u - end));
 }
 
 inline std::expected<core::u32, BitError> BitReader::readBits(core::u32 bitCount) noexcept

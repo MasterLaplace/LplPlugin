@@ -71,7 +71,7 @@ inline void BitWriter::put(core::u32 value, core::u32 bitCount) noexcept
     const core::u32 end = used + bitCount;
     const core::usize byteIndex = _cursor >> 3u;
     core::byte *const first = _destination.data() + byteIndex;
-    const core::usize room = byteIndex < _destination.size() ? _destination.size() - byteIndex : 0u;
+    const core::usize room = _destination.size() - byteIndex;
     const core::u32 field = value & (0xFFFFFFFFu >> (32u - bitCount));
     const core::u32 kept = (static_cast<core::u32>(first[0]) & (0xFF00u >> used)) << 24u;
 
