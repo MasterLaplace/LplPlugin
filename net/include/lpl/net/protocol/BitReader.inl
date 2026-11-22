@@ -7,13 +7,21 @@
 
 namespace lpl::net::protocol {
 
+constexpr core::u32 BitReader::bitsHeld(core::usize bytes, core::u32 bitCount) noexcept
+{
+    const core::usize bytesNeeded = bitCount / 8u + ((bitCount & 7u) != 0u ? 1u : 0u);
+
+    return bytes >= bytesNeeded ? bitCount : static_cast<core::u32>(bytes) * 8u;
+}
+
 inline BitReader::BitReader(std::span<const core::byte> source, core::u32 bitCount) noexcept
     : BitReader{source, bitCount, 0u}
 {
 }
 
 inline BitReader::BitReader(std::span<const core::byte> source, core::u32 bitCount, core::u32 bitOffset) noexcept
-    : _source{source}, _bitCount{bitCount}, _cursor{bitOffset < bitCount ? bitOffset : bitCount}
+    : _source{source}, _bitCount{bitsHeld(source.size(), bitCount)},
+      _cursor{bitOffset < _bitCount ? bitOffset : _bitCount}
 {
 }
 

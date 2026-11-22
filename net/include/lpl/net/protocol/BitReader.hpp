@@ -37,7 +37,8 @@ public:
      * @brief Reads from the first bit of @p source.
      *
      * @param source   Bytes to read, which must outlive the reader.
-     * @param bitCount Valid bits in @p source, from its first bit.
+     * @param bitCount Valid bits in @p source, from its first bit. A count larger than @p source holds
+     *                 is cut to its bytes, so no read goes past them.
      */
     BitReader(std::span<const core::byte> source, core::u32 bitCount) noexcept;
 
@@ -45,7 +46,7 @@ public:
      * @brief Reads from bit @p bitOffset of @p source.
      *
      * @param source    Bytes to read, which must outlive the reader.
-     * @param bitCount  Valid bits in @p source, from its first bit.
+     * @param bitCount  Valid bits in @p source, from its first bit, cut to the bits @p source holds.
      * @param bitOffset Bits already read. Past @p bitCount, nothing is left to read.
      */
     BitReader(std::span<const core::byte> source, core::u32 bitCount, core::u32 bitOffset) noexcept;
@@ -141,6 +142,7 @@ public:
     /** @} */
 
 private:
+    [[nodiscard]] static constexpr core::u32 bitsHeld(core::usize bytes, core::u32 bitCount) noexcept;
     [[nodiscard]] bool holds(core::u32 bitCount) const noexcept;
     [[nodiscard]] core::u32 take(core::u32 bitCount) noexcept;
 
