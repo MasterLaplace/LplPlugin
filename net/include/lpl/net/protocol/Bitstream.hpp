@@ -127,7 +127,7 @@ public:
     [[nodiscard]] core::Expected<float> readQuantizedFloat(float min, float max, core::u32 bits);
 
     /**
-     * @brief Writes an angle in radians quantized into @p bits over [0, 2*pi).
+     * @brief Writes an angle in radians quantized into @p bits over [0, 2*pi].
      *
      * Wraps @p radians into the circle first, so any real angle encodes. Ten
      * bits give ~0.35 degrees, enough for gameplay orientation at a third of a
@@ -136,7 +136,7 @@ public:
     void writeAngle(float radians, core::u32 bits);
 
     /**
-     * @brief Reads an angle written by @ref writeAngle, in [0, 2*pi).
+     * @brief Reads an angle written by @ref writeAngle, in [0, 2*pi].
      */
     [[nodiscard]] core::Expected<float> readAngle(core::u32 bits);
 

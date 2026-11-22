@@ -126,7 +126,7 @@ public:
     void writeQuantizedFloat(float value, float minimum, float maximum, core::u32 bits) noexcept;
 
     /**
-     * @brief Writes @p radians wrapped into [0, 2*pi), quantized on @p bits bits.
+     * @brief Writes @p radians wrapped by wrapAngle(), quantized on @p bits bits over [0, 2*pi].
      *
      * @details Ten bits give a step of about 0.35 degree.
      */

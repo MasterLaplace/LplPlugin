@@ -74,13 +74,17 @@ inline constexpr float kTwoPi = 6.28318530717958647692f;
 [[nodiscard]] inline float dequantize(core::u32 step, float minimum, float maximum, core::u32 bits) noexcept;
 
 /**
- * @brief @p radians wrapped into the turn [0, 2*pi), so any real angle quantizes.
+ * @brief @p radians wrapped into one turn, so any real angle quantizes.
  *
- * @details An angle whose count of turns does not fit 32 bits, infinity or NaN comes back as it is, and
- *          quantize() clamps it: counting its turns would convert out of the range of an integer.
+ * @details The result is in [0, 2*pi], 2*pi included: an angle a hair below a whole number of turns
+ *          rounds to it (-2.4e-7 rad comes back as 2*pi). Past a great many turns, the rounding of the
+ *          turns themselves can leave it outside [0, 2*pi] (1e9 rad comes back as -57.7), and quantize()
+ *          clamps it to the range. An angle whose count of turns does not fit 32 bits, infinity or NaN
+ *          comes back as it is, and quantize() clamps it too: counting its turns would convert out of the
+ *          range of an integer.
  *
  * @param radians An angle.
- * @return The same angle within one turn, or @p radians when its turns cannot be counted.
+ * @return The angle within one turn as rounding leaves it, or @p radians when its turns cannot be counted.
  */
 [[nodiscard]] inline float wrapAngle(float radians) noexcept;
 
