@@ -22,7 +22,7 @@ namespace {
     case BitError::kVarintTooLong: return core::makeError(core::ErrorCode::CorruptedData, "Varint too long");
     case BitError::kInvalidWidth:
         return core::makeError(core::ErrorCode::kInvalidArgument, "Bitstream width outside 1..32");
-    case BitError::kInvalidRange: return core::makeError(core::ErrorCode::kInvalidArgument, "Bitstream range empty");
+    case BitError::kInvalidRange: return core::makeError(core::ErrorCode::kInvalidArgument, "Bitstream range invalid");
     case BitError::kOverflow: return core::makeError(core::ErrorCode::kBufferOverflow, "Bitstream overflow");
     }
     return core::makeError(core::ErrorCode::kInternalError, "Bitstream refusal unnamed");

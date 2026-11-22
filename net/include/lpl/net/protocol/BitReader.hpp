@@ -113,9 +113,11 @@ public:
      * @brief Reads a value written by BitWriter::writeQuantizedFloat() with the same parameters.
      *
      * @param minimum Lower bound of the range.
-     * @param maximum Upper bound of the range.
+     * @param maximum Upper bound of the range: a range read from the wire is checked here, as the
+     *                writer checks it, by isQuantizationRange().
      * @param bits    Width in 1..32: a width read from the wire is checked here.
-     * @return The value, BitError::kInvalidWidth or BitError::kUnderflow.
+     * @return The value, BitError::kInvalidWidth, BitError::kInvalidRange or BitError::kUnderflow, the
+     *         cursor left where it was on a refusal.
      */
     [[nodiscard]] std::expected<float, BitError> readQuantizedFloat(float minimum, float maximum,
                                                                     core::u32 bits) noexcept;

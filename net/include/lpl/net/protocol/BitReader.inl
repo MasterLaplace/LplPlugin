@@ -136,6 +136,10 @@ inline std::expected<core::u32, BitError> BitReader::readVarint() noexcept
 inline std::expected<float, BitError> BitReader::readQuantizedFloat(float minimum, float maximum,
                                                                     core::u32 bits) noexcept
 {
+    if (bits == 0u || bits > 32u)
+        return std::unexpected(BitError::kInvalidWidth);
+    if (!isQuantizationRange(minimum, maximum))
+        return std::unexpected(BitError::kInvalidRange);
     return readBits(bits).transform([=](core::u32 step) { return dequantize(step, minimum, maximum, bits); });
 }
 

@@ -1,11 +1,18 @@
 #ifndef LPL_NET_PROTOCOL_QUANTIZATION_INL
 #define LPL_NET_PROTOCOL_QUANTIZATION_INL
 
+#include <limits>
+
 namespace lpl::net::protocol {
 
 constexpr core::u32 quantizationCeiling(core::u32 bits) noexcept
 {
     return (bits >= 32u) ? 0xFFFFFFFFu : ((1u << bits) - 1u);
+}
+
+constexpr bool isQuantizationRange(float minimum, float maximum) noexcept
+{
+    return maximum > minimum && maximum - minimum <= std::numeric_limits<float>::max();
 }
 
 inline core::u32 quantize(float value, float minimum, float maximum, core::u32 bits) noexcept

@@ -27,7 +27,7 @@ enum class BitError : core::u8 {
     kOverflow = 1,  /**< A write would pass the end of the destination. */
     kUnderflow,     /**< A read would pass the last valid bit of the source. */
     kInvalidWidth,  /**< A width outside 1..32 bits. */
-    kInvalidRange,  /**< A quantization range that is empty, or wider than the largest float. */
+    kInvalidRange,  /**< A quantization range that is empty, reversed, not a number or wider than a float. */
     kVarintTooLong, /**< A varint of more than five bytes, or whose value does not fit 32 bits. */
 };
 

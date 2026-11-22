@@ -33,6 +33,19 @@ inline constexpr float kTwoPi = 6.28318530717958647692f;
 [[nodiscard]] constexpr core::u32 quantizationCeiling(core::u32 bits) noexcept;
 
 /**
+ * @brief Whether [@p minimum, @p maximum] is a range a value can be quantized over.
+ *
+ * @details The maximum exceeds the minimum, and their distance is a finite float: an empty, reversed
+ *          or NaN range, or one wider than the largest float, whose share would be inf / inf, is not.
+ *          The writer and the reader both check it, since a range can come from the wire.
+ *
+ * @param minimum Lower bound of the range.
+ * @param maximum Upper bound of the range.
+ * @return Whether it is a range.
+ */
+[[nodiscard]] constexpr bool isQuantizationRange(float minimum, float maximum) noexcept;
+
+/**
  * @brief The step of [0, 2^bits - 1] that @p value takes over the range [@p minimum, @p maximum].
  *
  * @details The value is clamped to the range, then mapped to the nearest step. NaN takes step 0, as a
@@ -43,8 +56,7 @@ inline constexpr float kTwoPi = 6.28318530717958647692f;
  *
  * @param value   Value to quantize.
  * @param minimum Lower bound of the range.
- * @param maximum Upper bound of the range, which the caller has checked exceeds @p minimum by a finite
- *                width.
+ * @param maximum Upper bound of the range, which the caller has checked with isQuantizationRange().
  * @param bits    Width of the step, which the caller has checked is in 1..32.
  * @return The step.
  */
