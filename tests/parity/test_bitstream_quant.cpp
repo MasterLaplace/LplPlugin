@@ -1,11 +1,54 @@
+#include <lpl/net/protocol/BitWriter.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <new>
+#include <span>
 
 namespace {
 
 int g_failures = 0;
+
+/** Whether operator new counts what it allocates. */
+bool g_counting = false;
+
+/** Allocations counted while g_counting was on. */
+unsigned long g_allocations = 0;
+
+/** The largest allocation counted while g_counting was on, in bytes. */
+std::size_t g_largestAllocation = 0;
+
+} // namespace
+
+/**
+ * @brief Allocates with malloc, and counts the allocation while counting is on.
+ *
+ * @details lpl::pmr::vector is std::vector over std::allocator on the host, which allocates through this
+ *          operator. The engine builds -fno-exceptions, so a failed new aborts rather than throws.
+ */
+void *operator new(std::size_t size)
+{
+    if (g_counting)
+    {
+        ++g_allocations;
+        g_largestAllocation = size > g_largestAllocation ? size : g_largestAllocation;
+    }
+    void *p = std::malloc(size ? size : 1);
+    if (p == nullptr)
+        std::abort();
+    return p;
+}
+
+void *operator new[](std::size_t size) { return ::operator new(size); }
+void operator delete(void *p) noexcept { std::free(p); }
+void operator delete[](void *p) noexcept { std::free(p); }
+void operator delete(void *p, std::size_t) noexcept { std::free(p); }
+void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+
+namespace {
 
 void check(bool cond, const char *what)
 {
@@ -115,6 +158,137 @@ void checkVarintSmallIdsAreOneByteBigIdsGrowGracefully()
     check(big.data().size() == 5, "a full 32-bit id costs 5 varint bytes");
 }
 
+/**
+ * @brief A width read from the wire, as PacketDispatch passes a StateDelta's posBits, is refused.
+ */
+void checkAWidthOutsideOneToThirtyTwoIsRefused()
+{
+    const std::array<lpl::core::byte, 8> bytes{};
+    lpl::net::protocol::Bitstream r{bytes, 64};
+
+    check(!r.readQuantizedFloat(-1.0f, 1.0f, 0u).has_value(),
+          "a quantized position on 0 bits is refused, not read as 0/0");
+    check(!r.readBits(33u).has_value(), "33 bits are refused though the stream holds them");
+}
+
+/**
+ * @brief A bit count larger than the bytes given never takes a read past them.
+ */
+void checkABitCountLargerThanItsBytesIsCut()
+{
+    std::array<lpl::core::byte, 8> memory{};
+    memory.fill(lpl::core::byte{0x11u});
+    lpl::net::protocol::Bitstream r{
+        std::span<const lpl::core::byte>{memory.data(), 2u},
+         64
+    };
+
+    check(r.bitsRemaining() == 16u, "a count of 64 bits over 2 bytes holds 16");
+    check(!r.readU32().has_value(), "32 bits are refused rather than read past the copy of 2 bytes");
+}
+
+/**
+ * @brief Bitstream writes, for the same fields, the bytes BitWriter writes, and both write the bytes the
+ *        layout gives.
+ *
+ * @details Bitstream writes through BitWriter, so comparing the two alone proves nothing; the 16 bytes
+ *          are worked out apart from both, by laying the bits of each field end to end, top bit first:
+ *          101, 0xABCD, 1, the varint 300 as 0xAC 0x02, -0.0f as 0x80000000, the step 32768 of 500 over
+ *          [0, 1000] on 16 bits, the step 942 of -0.5 rad on 10 bits, -2 as 0xFFFFFFFE, then two zero
+ *          bits of padding: 126 bits.
+ */
+void checkBitstreamWritesWhatBitWriterWrites()
+{
+    constexpr std::array<lpl::core::u8, 16> kLayout{0xB5u, 0x79u, 0xBAu, 0xC0u, 0x28u, 0x00u, 0x00u, 0x00u,
+                                                    0x08u, 0x00u, 0x0Eu, 0xBBu, 0xFFu, 0xFFu, 0xFFu, 0xF8u};
+    lpl::net::protocol::Bitstream stream;
+    std::array<lpl::core::byte, 32> wire{};
+    lpl::net::protocol::BitWriter writer{wire};
+
+    stream.writeBits(0b101u, 3u);
+    writer.writeBits(0b101u, 3u);
+    stream.writeU16(0xABCDu);
+    writer.writeU16(0xABCDu);
+    stream.writeBool(true);
+    writer.writeBool(true);
+    stream.writeVarint(300u);
+    writer.writeVarint(300u);
+    stream.writeFloat(-0.0f);
+    writer.writeFloat(-0.0f);
+    stream.writeQuantizedFloat(500.0f, 0.0f, 1000.0f, 16u);
+    writer.writeQuantizedFloat(500.0f, 0.0f, 1000.0f, 16u);
+    stream.writeAngle(-0.5f, 10u);
+    writer.writeAngle(-0.5f, 10u);
+    stream.writeI32(-2);
+    writer.writeI32(-2);
+
+    const auto streamBytes = stream.data();
+    const auto writerBytes = writer.bytes();
+    bool same = stream.bitsWritten() == writer.bitsWritten() && streamBytes.size() == writerBytes.size();
+    for (std::size_t i = 0; same && i < streamBytes.size(); ++i)
+        same = streamBytes[i] == writerBytes[i];
+    check(same, "Bitstream and BitWriter write the same bytes for the same fields");
+
+    bool asLaidOut = stream.bitsWritten() == 126 && streamBytes.size() == kLayout.size();
+    for (std::size_t i = 0; asLaidOut && i < kLayout.size(); ++i)
+        asLaidOut = streamBytes[i] == lpl::core::byte{kLayout[i]};
+    check(asLaidOut, "the bytes are the 16 the layout gives, worked out apart from both");
+}
+
+/**
+ * @brief A count of bytes the stream does not hold is refused before anything is allocated for it.
+ *
+ * @details The count comes from the wire, as StateSnapshot reads a blob's size: a forged one must cost
+ *          nothing. The refusal itself allocates its message on the host, a string longer than the short
+ *          strings std::string holds inline, so the check is on size: 64 KiB asked of eight bytes allocate
+ *          no block that large, without asking the machine for a large one, and the eight bytes read whole
+ *          show that the counter sees the vector Bitstream allocates.
+ */
+void checkABytesCountPastTheStreamAllocatesNothingForIt()
+{
+    constexpr lpl::core::u32 kForgedCount = 64u * 1024u;
+    const std::array<lpl::core::byte, 8> eight{};
+    lpl::net::protocol::Bitstream refused{eight, 64};
+    lpl::net::protocol::Bitstream accepted{eight, 64};
+
+    g_largestAllocation = 0;
+    g_counting = true;
+    const bool forgedRefused = !refused.readBytes(kForgedCount).has_value();
+    const std::size_t largestRefused = g_largestAllocation;
+    g_largestAllocation = 0;
+    g_allocations = 0;
+    const bool eightRead = accepted.readBytes(8u).has_value();
+    const std::size_t largestAccepted = g_largestAllocation;
+    const unsigned long allocationsAccepted = g_allocations;
+    g_counting = false;
+
+    check(forgedRefused, "64 KiB are refused from a stream of eight bytes");
+    check(largestRefused < kForgedCount, "the refused count allocates no block of its size");
+    check(eightRead && allocationsAccepted == 1 && largestAccepted == 8,
+          "the eight bytes the stream holds are read into one allocation of eight bytes");
+}
+
+/**
+ * @brief A field Bitstream refuses stops the fields after it, so nothing after it lands one field early.
+ */
+void checkARefusedFieldStopsTheFieldsAfterIt()
+{
+    lpl::net::protocol::Bitstream stream;
+
+    stream.writeU8(0x11u);
+    stream.writeQuantizedFloat(0.5f, 1.0f, 1.0f, 16u);
+    stream.writeU8(0xABu);
+
+    check(stream.bitsWritten() == 8, "after a refused field, no later field is written, so nothing shifts");
+    check(stream.failure() == lpl::net::protocol::BitError::kInvalidRange,
+          "the stream keeps the refusal of the empty range, the first one");
+    check(stream.data().size() == 1 && stream.data()[0] == lpl::core::byte{0x11u}, "the byte before it is kept");
+
+    stream.reset();
+    stream.writeU8(0xCDu);
+    check(!stream.failure().has_value() && stream.bitsWritten() == 8, "reset() lets the stream write again");
+}
+
 } // namespace
 
 /**
@@ -133,6 +307,11 @@ int main()
     checkEndpointsAreExactAndOutOfRangeClamps();
     checkTenBitAngleWrapsAnyRealAngle();
     checkVarintSmallIdsAreOneByteBigIdsGrowGracefully();
+    checkAWidthOutsideOneToThirtyTwoIsRefused();
+    checkABitCountLargerThanItsBytesIsCut();
+    checkBitstreamWritesWhatBitWriterWrites();
+    checkABytesCountPastTheStreamAllocatesNothingForIt();
+    checkARefusedFieldStopsTheFieldsAfterIt();
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);
     return g_failures == 0 ? 0 : 1;
