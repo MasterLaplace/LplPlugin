@@ -53,16 +53,17 @@ inline bool BitWriter::admit(core::u32 bitCount) noexcept
 
 inline void BitWriter::put(core::u32 value, core::u32 bitCount) noexcept
 {
-    for (core::u32 i = 0u; i < bitCount; ++i)
-    {
-        const core::u32 byteIndex = _cursor >> 3u;
-        const core::u32 bitIndex = _cursor & 7u;
-        const core::u32 bit = (value >> (bitCount - 1u - i)) & 1u;
-        const core::u32 kept = bitIndex == 0u ? 0u : static_cast<core::u32>(_destination[byteIndex]);
+    const core::u32 used = _cursor & 7u;
+    const core::u32 bytes = (used + bitCount + 7u) >> 3u;
+    const core::u64 window = static_cast<core::u64>(value & (0xFFFFFFFFu >> (32u - bitCount)))
+                             << (40u - used - bitCount);
+    core::byte *const first = _destination.data() + (_cursor >> 3u);
+    const core::u32 kept = static_cast<core::u32>(first[0]) & (0xFF00u >> used);
 
-        _destination[byteIndex] = static_cast<core::byte>(kept | (bit << (7u - bitIndex)));
-        ++_cursor;
-    }
+    first[0] = static_cast<core::byte>(kept | static_cast<core::u32>(window >> 32u));
+    for (core::u32 index = 1u; index < bytes; ++index)
+        first[index] = static_cast<core::byte>(static_cast<core::u8>(window >> (32u - 8u * index)));
+    _cursor += bitCount;
 }
 
 inline void BitWriter::writeBits(core::u32 value, core::u32 bitCount) noexcept

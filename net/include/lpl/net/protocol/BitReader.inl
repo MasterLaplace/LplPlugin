@@ -29,18 +29,15 @@ inline bool BitReader::holds(core::u32 bitCount) const noexcept { return bitCoun
 
 inline core::u32 BitReader::take(core::u32 bitCount) noexcept
 {
-    core::u32 result = 0u;
+    const core::u32 used = _cursor & 7u;
+    const core::u32 bytes = (used + bitCount + 7u) >> 3u;
+    const core::byte *const first = _source.data() + (_cursor >> 3u);
+    core::u64 window = 0u;
 
-    for (core::u32 i = 0u; i < bitCount; ++i)
-    {
-        const core::u32 byteIndex = _cursor >> 3u;
-        const core::u32 bitIndex = _cursor & 7u;
-        const core::u32 bit = (static_cast<core::u32>(_source[byteIndex]) >> (7u - bitIndex)) & 1u;
-
-        result = (result << 1u) | bit;
-        ++_cursor;
-    }
-    return result;
+    for (core::u32 index = 0u; index < bytes; ++index)
+        window = (window << 8u) | static_cast<core::u64>(first[index]);
+    _cursor += bitCount;
+    return static_cast<core::u32>(window >> (8u * bytes - used - bitCount)) & (0xFFFFFFFFu >> (32u - bitCount));
 }
 
 inline std::expected<core::u32, BitError> BitReader::readBits(core::u32 bitCount) noexcept
