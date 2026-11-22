@@ -51,6 +51,11 @@ public:
     /**
      * @brief Writes from bit @p bitOffset of @p destination, keeping the bits before it.
      *
+     * @details It keeps nothing after it: a field written where four bytes are left is stored as one word,
+     *          which zeroes up to three bytes past the field. A writer that resumes to rewrite a field in
+     *          place, a count back-patched before fields already written, erases the two or three bytes
+     *          that follow it (a 16-bit count at offset 0 erases bytes 2 and 3).
+     *
      * @param destination Memory the fields are written into, which must outlive the writer.
      * @param bitOffset   Bits already written there. Past the end of @p destination, the writer
      *                    starts failed, with BitError::kOverflow.
