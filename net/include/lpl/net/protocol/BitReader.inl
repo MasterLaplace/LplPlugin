@@ -37,6 +37,8 @@ inline core::u32 BitReader::take(core::u32 bitCount) noexcept
 
 inline std::expected<core::u32, BitError> BitReader::readBits(core::u32 bitCount) noexcept
 {
+    if (bitCount == 0u || bitCount > 32u)
+        return std::unexpected(BitError::kInvalidWidth);
     if (!holds(bitCount))
         return std::unexpected(BitError::kUnderflow);
     return take(bitCount);
