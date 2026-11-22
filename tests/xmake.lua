@@ -651,7 +651,7 @@ target("test-engine")
     set_group("tests")
     add_deps("lpl-testing", "lpl-core", "lpl-math", "lpl-memory", "lpl-concurrency", "lpl-ecs", "lpl-physics",
              "lpl-image", "lpl-scene", "lpl-render", "lpl-samples", "lpl-procgen", "lpl-ai", "lpl-ecology",
-             "lpl-codec", "lpl-rosetta", "lpl-history", "lpl-pack", "lpl-engine")
+             "lpl-codec", "lpl-rosetta", "lpl-history", "lpl-pack", "lpl-net", "lpl-engine")
     add_files("../testing/host/main.cpp", "*/*.cpp|parity/*.cpp")
 target_end()
 
