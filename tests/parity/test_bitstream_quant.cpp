@@ -1,7 +1,10 @@
+#include <lpl/net/protocol/BitWriter.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <span>
 
 namespace {
 
@@ -115,6 +118,69 @@ void checkVarintSmallIdsAreOneByteBigIdsGrowGracefully()
     check(big.data().size() == 5, "a full 32-bit id costs 5 varint bytes");
 }
 
+/**
+ * @brief A width read from the wire, as PacketDispatch passes a StateDelta's posBits, is refused.
+ */
+void checkAWidthOutsideOneToThirtyTwoIsRefused()
+{
+    const std::array<lpl::core::byte, 8> bytes{};
+    lpl::net::protocol::Bitstream r{bytes, 64};
+
+    check(!r.readQuantizedFloat(-1.0f, 1.0f, 0u).has_value(),
+          "a quantized position on 0 bits is refused, not read as 0/0");
+    check(!r.readBits(33u).has_value(), "33 bits are refused though the stream holds them");
+}
+
+/**
+ * @brief A bit count larger than the bytes given never takes a read past them.
+ */
+void checkABitCountLargerThanItsBytesIsCut()
+{
+    std::array<lpl::core::byte, 8> memory{};
+    memory.fill(lpl::core::byte{0x11u});
+    lpl::net::protocol::Bitstream r{
+        std::span<const lpl::core::byte>{memory.data(), 2u},
+         64
+    };
+
+    check(r.bitsRemaining() == 16u, "a count of 64 bits over 2 bytes holds 16");
+    check(!r.readU32().has_value(), "32 bits are refused rather than read past the copy of 2 bytes");
+}
+
+/**
+ * @brief Bitstream writes, for the same fields, the bytes BitWriter writes.
+ */
+void checkBitstreamWritesWhatBitWriterWrites()
+{
+    lpl::net::protocol::Bitstream stream;
+    std::array<lpl::core::byte, 32> wire{};
+    lpl::net::protocol::BitWriter writer{wire};
+
+    stream.writeBits(0b101u, 3u);
+    writer.writeBits(0b101u, 3u);
+    stream.writeU16(0xABCDu);
+    writer.writeU16(0xABCDu);
+    stream.writeBool(true);
+    writer.writeBool(true);
+    stream.writeVarint(300u);
+    writer.writeVarint(300u);
+    stream.writeFloat(-0.0f);
+    writer.writeFloat(-0.0f);
+    stream.writeQuantizedFloat(500.0f, 0.0f, 1000.0f, 16u);
+    writer.writeQuantizedFloat(500.0f, 0.0f, 1000.0f, 16u);
+    stream.writeAngle(-0.5f, 10u);
+    writer.writeAngle(-0.5f, 10u);
+    stream.writeI32(-2);
+    writer.writeI32(-2);
+
+    const auto streamBytes = stream.data();
+    const auto writerBytes = writer.bytes();
+    bool same = stream.bitsWritten() == writer.bitsWritten() && streamBytes.size() == writerBytes.size();
+    for (std::size_t i = 0; same && i < streamBytes.size(); ++i)
+        same = streamBytes[i] == writerBytes[i];
+    check(same, "Bitstream and BitWriter write the same bytes for the same fields");
+}
+
 } // namespace
 
 /**
@@ -133,6 +199,9 @@ int main()
     checkEndpointsAreExactAndOutOfRangeClamps();
     checkTenBitAngleWrapsAnyRealAngle();
     checkVarintSmallIdsAreOneByteBigIdsGrowGracefully();
+    checkAWidthOutsideOneToThirtyTwoIsRefused();
+    checkABitCountLargerThanItsBytesIsCut();
+    checkBitstreamWritesWhatBitWriterWrites();
 
     std::printf(g_failures == 0 ? "\nALL PASS (0 failures)\n" : "\n%d FAILURE(S)\n", g_failures);
     return g_failures == 0 ? 0 : 1;
