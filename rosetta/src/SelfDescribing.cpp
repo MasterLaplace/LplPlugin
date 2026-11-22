@@ -52,7 +52,7 @@ core::u32 emitSpecification(core::u8 *out, core::u32 size) noexcept
         out[cursor++] = static_cast<core::u8>(i);
         out[cursor++] = static_cast<core::u8>(operandCount(opcode));
 
-        const char(&mnemonic)[kMnemonicBytes] = kOpcodeMnemonics[i];
+        const char (&mnemonic)[kMnemonicBytes] = kOpcodeMnemonics[i];
         for (core::u32 c = 0u; c < kMnemonicBytes; ++c)
             out[cursor + c] = static_cast<core::u8>(mnemonic[c]);
         cursor += kMnemonicBytes;
