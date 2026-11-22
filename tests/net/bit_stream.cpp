@@ -9,6 +9,7 @@
 #include <array>
 #include <bit>
 #include <expected>
+#include <limits>
 #include <span>
 
 LPL_TEST_SUITE(bit_stream);
@@ -20,6 +21,9 @@ constexpr lpl::core::u8 kStaleByte = 0xA5u;
 
 /** A word whose cut at each width differs from the cuts at the widths around it. */
 constexpr lpl::core::u32 kWidthPattern = 0xB5E3D2A7u;
+
+/** What a refused read of a step stands for: no step a check here expects. */
+constexpr lpl::core::u32 kNoStep = 0xDEADBEEFu;
 
 /** Entities of the snapshot the cost of writing and reading one is counted on. */
 constexpr lpl::core::u32 kSnapshotEntities = 64u;
@@ -670,4 +674,114 @@ LPL_TEST(an_input_frame_comes_back_field_for_field)
     test.check(matching == kInputFrames, "every frame reads back field for field");
     test.measure("frames", matching);
     test.measureHexadecimal("frames_signature", foldBytes(writer.bytes()));
+}
+
+LPL_TEST(not_a_number_takes_the_bottom_step_on_every_target)
+{
+    constexpr float kNotANumber = std::numeric_limits<float>::quiet_NaN();
+    std::array<lpl::core::byte, 16> wire{};
+    lpl::net::protocol::BitWriter writer{wire};
+
+    writer.writeQuantizedFloat(kNotANumber, 0.0f, 1000.0f, 16u);
+    writer.writeQuantizedFloat(kNotANumber, -1.0f, 1.0f, 32u);
+    writer.writeAngle(kNotANumber, 10u);
+    lpl::net::protocol::BitReader reader{writer.bytes(), writer.bitsWritten()};
+    const lpl::core::u32 sixteen = reader.readBits(16u).value_or(kNoStep);
+    const lpl::core::u32 thirtyTwo = reader.readBits(32u).value_or(kNoStep);
+    const lpl::core::u32 angle = reader.readBits(10u).value_or(kNoStep);
+
+    std::array<lpl::core::byte, 4> unbounded{};
+    lpl::net::protocol::BitWriter overflowing{unbounded};
+    overflowing.writeQuantizedFloat(3.0e38f, -3.0e38f, 3.0e38f, 16u);
+
+    test.check(!writer.failure().has_value(), "a NaN is written, not refused");
+    test.check(sixteen == 0u, "NaN takes the bottom step on 16 bits");
+    test.check(thirtyTwo == 0u, "NaN takes the bottom step on 32 bits");
+    test.check(angle == 0u, "a NaN angle takes the bottom step");
+    test.check(overflowing.failure() == lpl::net::protocol::BitError::kInvalidRange && overflowing.bitsWritten() == 0u,
+               "a range whose width passes the largest float is refused, so no NaN share reaches a step");
+    test.measure("nan_step_16", sixteen);
+    test.measure("nan_step_32", thirtyTwo);
+    test.measure("nan_angle_step", angle);
+}
+
+LPL_TEST(the_top_of_a_range_takes_the_top_step_at_every_width)
+{
+    lpl::core::u32 wrong = 0u;
+    lpl::core::u32 firstWrongWidth = 0u;
+
+    for (lpl::core::u32 bits = 1u; bits <= 32u; ++bits)
+    {
+        std::array<lpl::core::byte, 4> wire{};
+        lpl::net::protocol::BitWriter writer{wire};
+        writer.writeQuantizedFloat(1000.0f, 0.0f, 1000.0f, bits);
+        lpl::net::protocol::BitReader reader{writer.bytes(), writer.bitsWritten()};
+        const auto step = reader.readBits(bits);
+        if (step.has_value() && *step == lowBits(0xFFFFFFFFu, bits))
+            continue;
+        ++wrong;
+        firstWrongWidth = firstWrongWidth == 0u ? bits : firstWrongWidth;
+    }
+
+    test.check(wrong == 0u, "the maximum of the range takes the top step on every width from 1 to 32 bits");
+    test.measure("wrong_widths", wrong);
+    test.measure("first_wrong_width", firstWrongWidth);
+}
+
+LPL_TEST(an_angle_too_large_to_count_its_turns_is_clamped_by_the_range)
+{
+    constexpr float kInfinity = std::numeric_limits<float>::infinity();
+    std::array<lpl::core::byte, 8> wire{};
+    lpl::net::protocol::BitWriter writer{wire};
+
+    writer.writeAngle(1.0e11f, 10u);
+    writer.writeAngle(-1.0e11f, 10u);
+    writer.writeAngle(kInfinity, 10u);
+    writer.writeAngle(-kInfinity, 10u);
+    lpl::net::protocol::BitReader reader{writer.bytes(), writer.bitsWritten()};
+    const lpl::core::u32 large = reader.readBits(10u).value_or(kNoStep);
+    const lpl::core::u32 negativeLarge = reader.readBits(10u).value_or(kNoStep);
+    const lpl::core::u32 infinite = reader.readBits(10u).value_or(kNoStep);
+    const lpl::core::u32 negativeInfinite = reader.readBits(10u).value_or(kNoStep);
+
+    test.check(large == 1023u && infinite == 1023u, "an angle past 2^31 turns takes the top step");
+    test.check(negativeLarge == 0u && negativeInfinite == 0u, "an angle below -2^31 turns takes the bottom step");
+}
+
+LPL_TEST(a_width_read_from_the_wire_outside_one_to_thirty_two_is_refused)
+{
+    constexpr std::array<lpl::core::byte, 8> kSource{};
+    lpl::net::protocol::BitReader reader{kSource, 64u};
+
+    const auto zero = reader.readBits(0u);
+    const auto wide = reader.readBits(33u);
+    const auto quantized = reader.readQuantizedFloat(-1.0f, 1.0f, 0u);
+    const auto angle = reader.readAngle(40u);
+
+    test.check(!zero.has_value() && zero.error() == lpl::net::protocol::BitError::kInvalidWidth,
+               "a width of 0 bits is refused");
+    test.check(!wide.has_value() && wide.error() == lpl::net::protocol::BitError::kInvalidWidth,
+               "a width of 33 bits is refused, though the source holds them");
+    test.check(!quantized.has_value() && quantized.error() == lpl::net::protocol::BitError::kInvalidWidth,
+               "a quantized field on 0 bits is refused, not read as 0/0");
+    test.check(!angle.has_value() && angle.error() == lpl::net::protocol::BitError::kInvalidWidth,
+               "an angle on 40 bits is refused");
+    test.check(reader.bitsRead() == 0u, "a refused width moves nothing");
+}
+
+LPL_TEST(a_reader_holds_no_more_bits_than_its_source)
+{
+    std::array<lpl::core::byte, 8> memory{};
+    memory.fill(lpl::core::byte{0x11u});
+    const std::span<const lpl::core::byte> twoBytes{memory.data(), 2u};
+    lpl::net::protocol::BitReader reader{twoBytes, 64u};
+
+    const lpl::core::u32 remaining = reader.bitsRemaining();
+    const auto pastTheSource = reader.readU32();
+
+    test.check(remaining == 16u, "a count of 64 bits over a source of 2 bytes holds 16");
+    test.check(!pastTheSource.has_value() && pastTheSource.error() == lpl::net::protocol::BitError::kUnderflow,
+               "32 bits are refused rather than read past the source");
+    test.check(reader.readU16().value_or(0u) == 0x1111u, "the 16 bits the source holds still read");
+    test.measure("bits_held", remaining);
 }
