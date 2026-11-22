@@ -5,6 +5,17 @@ What changed in each release, generated from the commit titles on `main`. Regene
 an edit by hand is lost at the next release, whose check refuses a file that differs from
 what the history gives.
 
+## [0.14.0] - 2026-11-22
+
+### Added
+
+- **math**: An exact integer square root of a 64-bit radicand, the one fixedSqrt runs (#588)
+- **tools**: The same frame from two commits, and where the pixels changed (#577)
+
+### Fixed
+
+- **engine**: The headless build compiles again (#578)
+
 ## [0.13.0] - 2026-10-22
 
 ### Fixed
