@@ -28,7 +28,9 @@ namespace lpl::net::protocol {
  * The wire layout is the one Bitstream has always written: the first bit written is the top bit of
  * the first byte, and a value goes out from its top bit down, so a field is big-endian whatever the
  * machine. The bits after the last field, up to the end of its byte, are zero, whatever the
- * destination held before.
+ * destination held before. A field is stored as one word when four bytes are left from its first
+ * one, so up to three bytes past bytes() may be written with zeros: what the destination holds after
+ * the cursor is not kept, and nothing past the destination is touched.
  *
  * A field is written whole or not at all. The first field refused (no room, a width outside 1..32, a
  * range that is not one) is kept as the writer's failure, and every write after it is refused too:
