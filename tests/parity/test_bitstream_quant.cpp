@@ -188,10 +188,19 @@ void checkABitCountLargerThanItsBytesIsCut()
 }
 
 /**
- * @brief Bitstream writes, for the same fields, the bytes BitWriter writes.
+ * @brief Bitstream writes, for the same fields, the bytes BitWriter writes, and both write the bytes the
+ *        layout gives.
+ *
+ * @details Bitstream writes through BitWriter, so comparing the two alone proves nothing; the 16 bytes
+ *          are worked out apart from both, by laying the bits of each field end to end, top bit first:
+ *          101, 0xABCD, 1, the varint 300 as 0xAC 0x02, -0.0f as 0x80000000, the step 32768 of 500 over
+ *          [0, 1000] on 16 bits, the step 942 of -0.5 rad on 10 bits, -2 as 0xFFFFFFFE, then two zero
+ *          bits of padding: 126 bits.
  */
 void checkBitstreamWritesWhatBitWriterWrites()
 {
+    constexpr std::array<lpl::core::u8, 16> kLayout{0xB5u, 0x79u, 0xBAu, 0xC0u, 0x28u, 0x00u, 0x00u, 0x00u,
+                                                    0x08u, 0x00u, 0x0Eu, 0xBBu, 0xFFu, 0xFFu, 0xFFu, 0xF8u};
     lpl::net::protocol::Bitstream stream;
     std::array<lpl::core::byte, 32> wire{};
     lpl::net::protocol::BitWriter writer{wire};
@@ -219,6 +228,11 @@ void checkBitstreamWritesWhatBitWriterWrites()
     for (std::size_t i = 0; same && i < streamBytes.size(); ++i)
         same = streamBytes[i] == writerBytes[i];
     check(same, "Bitstream and BitWriter write the same bytes for the same fields");
+
+    bool asLaidOut = stream.bitsWritten() == 126 && streamBytes.size() == kLayout.size();
+    for (std::size_t i = 0; asLaidOut && i < kLayout.size(); ++i)
+        asLaidOut = streamBytes[i] == lpl::core::byte{kLayout[i]};
+    check(asLaidOut, "the bytes are the 16 the layout gives, worked out apart from both");
 }
 
 /**
