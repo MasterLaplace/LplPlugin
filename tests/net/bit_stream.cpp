@@ -566,6 +566,9 @@ LPL_TEST(a_writer_refuses_a_field_it_cannot_hold_whole_and_keeps_refusing)
     writer.writeU8(0x9Au);
     test.check(writer.bitsWritten() == 16u && writer.failure() == lpl::net::protocol::BitError::kOverflow,
                "after a refusal, a field that would fit is refused too, and the first failure is kept");
+    writer.writeBits(1u, 0u);
+    test.check(writer.failure() == lpl::net::protocol::BitError::kOverflow,
+               "a later refusal of another kind does not replace the first");
 
     std::array<lpl::core::byte, 4> four{};
     lpl::net::protocol::BitWriter varint{four};
@@ -591,6 +594,33 @@ LPL_TEST(a_writer_refuses_a_field_it_cannot_hold_whole_and_keeps_refusing)
     emptyRange.writeQuantizedFloat(0.5f, 1.0f, 1.0f, 8u);
     test.check(emptyRange.failure() == lpl::net::protocol::BitError::kInvalidRange && emptyRange.bitsWritten() == 0u,
                "a range whose maximum does not exceed its minimum is refused");
+}
+
+LPL_TEST(a_writer_touches_no_byte_past_its_destination)
+{
+    constexpr lpl::core::u8 kCanary = 0x5Au;
+    std::array<lpl::core::byte, 8> memory{};
+    memory.fill(lpl::core::byte{kCanary});
+    lpl::net::protocol::BitWriter three{
+        std::span<lpl::core::byte>{memory.data(), 3u}
+    };
+
+    three.writeU16(0xFFFFu);
+    three.writeU8(0xFFu);
+    const bool threeKept = memory[3] == lpl::core::byte{kCanary} && memory[7] == lpl::core::byte{kCanary};
+
+    memory.fill(lpl::core::byte{kCanary});
+    lpl::net::protocol::BitWriter five{
+        std::span<lpl::core::byte>{memory.data(), 5u}
+    };
+    five.writeBits(0xFu, 4u);
+    five.writeU32(0xFFFFFFFFu);
+    const bool fiveKept = memory[5] == lpl::core::byte{kCanary} && memory[7] == lpl::core::byte{kCanary};
+
+    test.check(!three.failure().has_value() && three.bitsWritten() == 24u, "three bytes take 24 bits exactly");
+    test.check(threeKept, "a writer that fills three bytes leaves the byte after them as it was");
+    test.check(!five.failure().has_value() && five.bitsWritten() == 36u, "a 32-bit field crosses into a fifth byte");
+    test.check(fiveKept, "a field that crosses into a fifth byte leaves the byte after it as it was");
 }
 
 LPL_TEST(a_writer_that_resumes_keeps_the_bits_before_its_offset)
