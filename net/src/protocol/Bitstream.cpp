@@ -153,9 +153,11 @@ core::Expected<float> Bitstream::readFloat()
 
 core::Expected<lpl::pmr::vector<core::byte>> Bitstream::readBytes(core::u32 count)
 {
-    lpl::pmr::vector<core::byte> out(count);
     BitReader reader{_buffer, _totalBits, _readBit};
 
+    if (count > reader.bitsRemaining() / 8u)
+        return refusal(BitError::kUnderflow);
+    lpl::pmr::vector<core::byte> out(count);
     if (const auto read = reader.readBytes(out); !read.has_value())
         return refusal(read.error());
     _readBit = reader.bitsRead();

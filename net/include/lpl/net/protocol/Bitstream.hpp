@@ -196,6 +196,9 @@ public:
 
     /**
      * @brief Reads @p count raw bytes.
+     *
+     * @details A count the stream does not hold, as a forged size from the wire asks, is refused before
+     *          anything is allocated for it.
      */
     [[nodiscard]] core::Expected<lpl::pmr::vector<core::byte>> readBytes(core::u32 count);
     /** @} */
