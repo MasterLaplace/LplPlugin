@@ -62,7 +62,7 @@ FetchResult FileStore::read(const char *key, std::span<core::u8> buffer) noexcep
     const File file{std::fopen(path, "rb")};
     if (file == nullptr)
         return FetchResult{errno == ENOENT ? FetchStatus::Absent : FetchStatus::Failed, 0u};
-    struct stat info {};
+    struct stat info{};
     if (::fstat(::fileno(file.get()), &info) != 0 || !S_ISREG(info.st_mode))
         return FetchResult{FetchStatus::Failed, 0u};
     const auto bytes = static_cast<core::usize>(info.st_size);

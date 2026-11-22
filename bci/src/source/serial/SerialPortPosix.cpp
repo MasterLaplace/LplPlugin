@@ -62,7 +62,7 @@ ExpectedVoid SerialPort::open(const SerialConfig &config)
             Error::make(ErrorCode::kSerialPortConfigFailed, "Failed to set exclusive access on " + config.portPath));
     }
 
-    struct termios tty {};
+    struct termios tty{};
     if (::tcgetattr(_impl->fd, &tty) != 0)
     {
         ::close(_impl->fd);
