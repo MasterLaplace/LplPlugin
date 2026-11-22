@@ -811,6 +811,29 @@ LPL_TEST(a_width_read_from_the_wire_outside_one_to_thirty_two_is_refused)
     test.check(reader.bitsRead() == 0u, "a refused width moves nothing");
 }
 
+LPL_TEST(a_range_read_from_the_wire_that_is_not_one_is_refused)
+{
+    constexpr std::array<lpl::core::byte, 8> kSource{lpl::core::byte{0xABu}, lpl::core::byte{0xCDu}};
+    const std::array<float, 5> extents{std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+                                       0.0f, -5.0f, 3.0e38f};
+    lpl::core::u32 refused = 0u;
+    lpl::core::u32 moved = 0u;
+
+    for (const float extent : extents)
+    {
+        lpl::net::protocol::BitReader reader{kSource, 64u};
+        const float half = atRunTime(extent);
+        const auto position = reader.readQuantizedFloat(-half, half, 16u);
+        refused += !position.has_value() && position.error() == lpl::net::protocol::BitError::kInvalidRange ? 1u : 0u;
+        moved += reader.bitsRead() != 0u ? 1u : 0u;
+    }
+
+    test.check(refused == extents.size(),
+               "an extent of NaN, infinity, 0, -5 or 3e38, as a forged StateDelta sends it, is refused as no range");
+    test.check(moved == 0u, "a refused range moves nothing");
+    test.measure("ranges_refused", refused);
+}
+
 LPL_TEST(a_reader_holds_no_more_bits_than_its_source)
 {
     std::array<lpl::core::byte, 8> memory{};
