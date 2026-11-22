@@ -190,6 +190,12 @@ readField(lpl::net::protocol::BitReader &reader, const Field &field) noexcept
 }
 
 /**
+ * @brief @p value, which the compiler cannot see through: the arithmetic the test exercises runs on the
+ *        target, as it does for a value from the simulation, instead of being folded at compile time.
+ */
+[[gnu::noipa]] float atRunTime(float value) noexcept { return value; }
+
+/**
  * @brief The FNV-1a fold of @p bytes, one byte a step.
  */
 [[nodiscard]] lpl::core::u32 foldBytes(std::span<const lpl::core::byte> bytes) noexcept
@@ -682,9 +688,9 @@ LPL_TEST(not_a_number_takes_the_bottom_step_on_every_target)
     std::array<lpl::core::byte, 16> wire{};
     lpl::net::protocol::BitWriter writer{wire};
 
-    writer.writeQuantizedFloat(kNotANumber, 0.0f, 1000.0f, 16u);
-    writer.writeQuantizedFloat(kNotANumber, -1.0f, 1.0f, 32u);
-    writer.writeAngle(kNotANumber, 10u);
+    writer.writeQuantizedFloat(atRunTime(kNotANumber), atRunTime(0.0f), atRunTime(1000.0f), 16u);
+    writer.writeQuantizedFloat(atRunTime(kNotANumber), atRunTime(-1.0f), atRunTime(1.0f), 32u);
+    writer.writeAngle(atRunTime(kNotANumber), 10u);
     lpl::net::protocol::BitReader reader{writer.bytes(), writer.bitsWritten()};
     const lpl::core::u32 sixteen = reader.readBits(16u).value_or(kNoStep);
     const lpl::core::u32 thirtyTwo = reader.readBits(32u).value_or(kNoStep);
@@ -692,7 +698,7 @@ LPL_TEST(not_a_number_takes_the_bottom_step_on_every_target)
 
     std::array<lpl::core::byte, 4> unbounded{};
     lpl::net::protocol::BitWriter overflowing{unbounded};
-    overflowing.writeQuantizedFloat(3.0e38f, -3.0e38f, 3.0e38f, 16u);
+    overflowing.writeQuantizedFloat(atRunTime(3.0e38f), atRunTime(-3.0e38f), atRunTime(3.0e38f), 16u);
 
     test.check(!writer.failure().has_value(), "a NaN is written, not refused");
     test.check(sixteen == 0u, "NaN takes the bottom step on 16 bits");
@@ -714,7 +720,7 @@ LPL_TEST(the_top_of_a_range_takes_the_top_step_at_every_width)
     {
         std::array<lpl::core::byte, 4> wire{};
         lpl::net::protocol::BitWriter writer{wire};
-        writer.writeQuantizedFloat(1000.0f, 0.0f, 1000.0f, bits);
+        writer.writeQuantizedFloat(atRunTime(1000.0f), atRunTime(0.0f), atRunTime(1000.0f), bits);
         lpl::net::protocol::BitReader reader{writer.bytes(), writer.bitsWritten()};
         const auto step = reader.readBits(bits);
         if (step.has_value() && *step == lowBits(0xFFFFFFFFu, bits))
@@ -734,10 +740,10 @@ LPL_TEST(an_angle_too_large_to_count_its_turns_is_clamped_by_the_range)
     std::array<lpl::core::byte, 8> wire{};
     lpl::net::protocol::BitWriter writer{wire};
 
-    writer.writeAngle(1.0e11f, 10u);
-    writer.writeAngle(-1.0e11f, 10u);
-    writer.writeAngle(kInfinity, 10u);
-    writer.writeAngle(-kInfinity, 10u);
+    writer.writeAngle(atRunTime(1.0e11f), 10u);
+    writer.writeAngle(atRunTime(-1.0e11f), 10u);
+    writer.writeAngle(atRunTime(kInfinity), 10u);
+    writer.writeAngle(atRunTime(-kInfinity), 10u);
     lpl::net::protocol::BitReader reader{writer.bytes(), writer.bitsWritten()};
     const lpl::core::u32 large = reader.readBits(10u).value_or(kNoStep);
     const lpl::core::u32 negativeLarge = reader.readBits(10u).value_or(kNoStep);
