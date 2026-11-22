@@ -16,8 +16,10 @@
 #    include <lpl/core/Expected.hpp>
 #    include <lpl/core/NonCopyable.hpp>
 #    include <lpl/core/Types.hpp>
+#    include <lpl/net/protocol/BitError.hpp>
 #    include <lpl/std/vector.hpp>
 
+#    include <optional>
 #    include <span>
 
 namespace lpl::net::protocol {
@@ -223,7 +225,16 @@ public:
     [[nodiscard]] std::span<const core::byte> data() const noexcept;
 
     /**
-     * @brief Resets read/write cursors to the beginning.
+     * @brief The first field this stream refused to write, or nothing.
+     *
+     * @details A field refused by the core, a width outside 1..32 or a quantization range that is not
+     *          one, is logged and kept here, and every field written after it is refused too: nothing
+     *          lands where the refused field should have been. reset() clears it.
+     */
+    [[nodiscard]] std::optional<BitError> failure() const noexcept;
+
+    /**
+     * @brief Resets read/write cursors to the beginning, and a writable stream's failure.
      */
     void reset() noexcept;
     /** @} */
@@ -237,6 +248,7 @@ private:
     core::u32 _readBit{0};                /**< Bits read. */
     core::u32 _totalBits{0};              /**< Valid bits, which a read never passes. */
     bool _readOnly{false};                /**< Whether the stream was built from bytes to read. */
+    std::optional<BitError> _failure;     /**< The first field refused, which stops every later write. */
 };
 
 } // namespace lpl::net::protocol

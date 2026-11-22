@@ -1,4 +1,5 @@
 #include <lpl/core/Assert.hpp>
+#include <lpl/core/Log.hpp>
 #include <lpl/net/protocol/BitReader.hpp>
 #include <lpl/net/protocol/BitWriter.hpp>
 #include <lpl/net/protocol/Bitstream.hpp>
@@ -44,13 +45,18 @@ template <typename Write> void Bitstream::writeThroughCore(core::u64 maximumBits
 {
     LPL_ASSERT(!_readOnly);
 
+    if (_failure.has_value())
+        return;
     _buffer.resize(bytesFor(_writeBit + maximumBits));
     BitWriter writer{_buffer, _writeBit};
     write(writer);
-    LPL_ASSERT(!writer.failure().has_value());
     _writeBit = writer.bitsWritten();
     _totalBits = _writeBit;
     _buffer.resize(bytesFor(_writeBit));
+    if (!writer.failure().has_value())
+        return;
+    _failure = writer.failure();
+    core::Log::error("Bitstream", "a field was refused, and every field written after it is refused too");
 }
 
 template <typename Value, typename Read> core::Expected<Value> Bitstream::readThroughCore(Read read)
@@ -178,7 +184,10 @@ void Bitstream::reset() noexcept
         _writeBit = 0;
         _totalBits = 0;
         _buffer.clear();
+        _failure.reset();
     }
 }
+
+std::optional<BitError> Bitstream::failure() const noexcept { return _failure; }
 
 } // namespace lpl::net::protocol

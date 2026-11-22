@@ -266,6 +266,13 @@ void checkARefusedFieldStopsTheFieldsAfterIt()
     stream.writeU8(0xABu);
 
     check(stream.bitsWritten() == 8, "after a refused field, no later field is written, so nothing shifts");
+    check(stream.failure() == lpl::net::protocol::BitError::kInvalidRange,
+          "the stream keeps the refusal of the empty range, the first one");
+    check(stream.data().size() == 1 && stream.data()[0] == lpl::core::byte{0x11u}, "the byte before it is kept");
+
+    stream.reset();
+    stream.writeU8(0xCDu);
+    check(!stream.failure().has_value() && stream.bitsWritten() == 8, "reset() lets the stream write again");
 }
 
 } // namespace
