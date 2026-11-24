@@ -45,7 +45,8 @@ void buildCorpus(lpl::core::u32 bytes, lpl::core::u32 seed, lpl::pmr::vector<lpl
 /**
  * @brief Decodes a corpus after losing droplets in a given shape.
  *
- * @details The encoder emits plenty; the test decides what ARRIVES. It builds an ARRIVAL ORDER per shape, then
+ * @details The encoder emits plenty, at least the K + 32 droplets of the largest delivery a claim asks for: 3 K once K
+ *          reaches 16, more below it. The test decides what ARRIVES. It builds an ARRIVAL ORDER per shape, then
  *          delivers the first `keep` of it. Building the order first is what makes the shapes comparable:
  *          every one of them then delivers exactly the same NUMBER of droplets, which is the variable the
  *          claim is about.
@@ -55,18 +56,19 @@ void buildCorpus(lpl::core::u32 bytes, lpl::core::u32 seed, lpl::pmr::vector<lpl
  *          harness never fetched. The codec was fine; the measurement was not.
  *
  * @param shape       How the loss is distributed.
+ * @param blocks      The blocks of 32 bytes the corpus is cut into, K.
  * @param keep        Droplets to deliver.
  * @param trialSeed   Which trial this is.
  * @return true when the corpus came back byte for byte.
  */
-[[nodiscard]] bool survives(LossShape shape, lpl::core::u32 keep, lpl::core::u32 trialSeed)
+[[nodiscard]] bool survives(LossShape shape, lpl::core::u32 blocks, lpl::core::u32 keep, lpl::core::u32 trialSeed)
 {
     lpl::pmr::vector<lpl::core::u8> corpus;
-    buildCorpus(1024u, 0xC0FFEEu + trialSeed, corpus);
+    buildCorpus(blocks * 32u, 0xC0FFEEu + trialSeed, corpus);
 
     lpl::codec::ErasureParams params;
     params.blockBytes = 32u;
-    params.overheadPermille = 2000u;
+    params.overheadPermille = blocks * 3u >= blocks + 32u ? 2000u : 1000u * ((blocks + 32u) / blocks);
     params.firstSeed = 0x5EEDu + trialSeed * 7919u;
 
     lpl::codec::ErasureShape form{};
@@ -153,8 +155,8 @@ void checkMoreArrivalsNeverDecodeLessOften(lpl::core::u32 kBlocks, lpl::core::u3
     {
         lpl::core::u32 ok = 0u;
         for (lpl::core::u32 t = 0u; t < kTrials; ++t)
-            ok += survives(LossShape::Stride, keep, t) ? 1u : 0u;
-        std::printf("    %2u droplets for %u blocks: %2u/%u decoded\n", keep, kBlocks, ok, kTrials);
+            ok += survives(LossShape::Stride, kBlocks, keep, t) ? 1u : 0u;
+        std::printf("    %2u droplets for %u blocks: %3u/%u decoded\n", keep, kBlocks, ok, kTrials);
         monotone = monotone && ok >= previous;
         previous = ok;
     }
@@ -181,7 +183,7 @@ void checkWhichDropletsWereLostDoesNotMatter(lpl::core::u32 kBlocks, lpl::core::
     for (lpl::core::u32 s = 0u; s < 4u; ++s)
     {
         for (lpl::core::u32 t = 0u; t < kTrials; ++t)
-            perShape[s] += survives(static_cast<LossShape>(s), keep, t) ? 1u : 0u;
+            perShape[s] += survives(static_cast<LossShape>(s), kBlocks, keep, t) ? 1u : 0u;
         std::printf("    %-20s %2u/%u decoded\n", names[s], perShape[s], kTrials);
     }
     bool shapeBlind = true;
@@ -242,8 +244,9 @@ void checkRejectingADropletCostsEffortNotBits(lpl::core::u32 kBlocks)
  *
  *          Every claim here is comparative or monotone. No absolute threshold: the decode probability of an LT
  *          code at small K is a distribution, and a fixed number chosen so that today's tuning passes is the
- *          mistake this repository has paid for most. The corpus is 1024 bytes in blocks of 32, so
- *          K = 1024/32 = 32 blocks.
+ *          mistake this repository has paid for most. The corpus is K blocks of 32 bytes: K = 32 for every
+ *          claim, and K = 4 and 8 for the first one too, the blocks of one game message, where what it prints says
+ *          how many droplets past K a fountain needs before it decodes every time (LplPlugin#239).
  */
 int main()
 {
@@ -252,7 +255,11 @@ int main()
     constexpr lpl::core::u32 kBlocks = 32u;
     constexpr lpl::core::u32 kTrials = 32u;
 
+    constexpr lpl::core::u32 kMessageTrials = 200u;
+
     checkMoreArrivalsNeverDecodeLessOften(kBlocks, kTrials);
+    checkMoreArrivalsNeverDecodeLessOften(4u, kMessageTrials);
+    checkMoreArrivalsNeverDecodeLessOften(8u, kMessageTrials);
     checkWhichDropletsWereLostDoesNotMatter(kBlocks, kTrials);
     checkRejectingADropletCostsEffortNotBits(kBlocks);
 
