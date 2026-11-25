@@ -10,6 +10,7 @@ what the history gives.
 ### Added
 
 - **math**: An exact integer square root of a 64-bit radicand, the one fixedSqrt runs (#588)
+- **net**: A freestanding bit writer and reader, which Bitstream packs through (#586)
 - **tools**: The same frame from two commits, and where the pixels changed (#577)
 
 ### Fixed
